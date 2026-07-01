@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiniCity — Portfolio</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="day">
+
+  <canvas id="c"></canvas>
+  <div class="labels-wrap" id="labelsWrap"></div>
+
+  <!-- UI Chrome -->
+  <header class="ui-header">
+    <div class="logo">
+      <span class="logo-dot"></span>
+      <span class="logo-name">Your Name</span>
+      <span class="logo-user" id="logoUser"></span>
+    </div>
+    <nav class="ui-nav">
+      <a href="/about"   class="nav-link">About</a>
+      <a href="/contact" class="nav-link">Contact</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle day/night">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>  <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>  <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </nav>
+  </header>
+
+  <div class="welcome-block">
+    <p class="welcome-main">welcome.<br>explore the city.</p>
+    <p class="welcome-sub">click on a building to explore.</p>
+    <div class="welcome-accent"></div>
+  </div>
+
+  <div class="you-block">
+    <div class="you-person">
+      <div class="yp-head"></div>
+      <div class="yp-body"></div>
+    </div>
+    <div class="you-text">
+      <span class="you-label">YOU ARE HERE</span>
+      <span class="you-sub">move your cursor to explore</span>
+    </div>
+  </div>
+
+  <!-- Population filter -->
+  <div class="pop-filter" id="popFilter">
+    <span class="pf-label">CITIZENS</span>
+    <button class="pf-btn active" data-filter="bots">Bots</button>
+    <button class="pf-btn" data-filter="friends">Friends</button>
+    <button class="pf-btn" data-filter="all">All</button>
+  </div>
+
+  <!-- Unlock toast -->
+  <div class="unlock-toast" id="unlockToast" aria-live="polite">
+    <span class="ut-dot"></span>
+    <span class="ut-text" id="utText">area unlocked</span>
+  </div>
+
+  <div class="transition-overlay" id="transitionOverlay"></div>
+
+  <!-- Stats panel (right drawer) -->
+  <div class="stats-panel" id="statsPanel" role="dialog" aria-label="City Stats">
+    <div class="sp-head">
+      <span class="sp-title">CITY STATS</span>
+      <div class="sp-modes">
+        <button class="sp-mode active" id="spModeClean">Overview</button>
+        <button class="sp-mode" id="spModeRaw">Raw</button>
+      </div>
+      <button class="sp-close" id="spClose" aria-label="Close stats panel">✕</button>
+    </div>
+    <div class="sp-body" id="spBody"></div>
+  </div>
+
+  <!-- Login overlay -->
+  <div class="login-overlay hidden" id="loginOverlay" role="dialog" aria-label="Welcome to MiniCity" style="display:none">
+    <div class="login-box">
+      <span class="login-dot"></span>
+      <p class="login-title">welcome to minicity.</p>
+      <p class="login-sub">what should we call you?</p>
+      <input class="login-input" id="loginInput" type="text" placeholder="your name"
+             maxlength="20" autocomplete="off" spellcheck="false" />
+      <button class="login-btn" id="loginBtn">enter the city →</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

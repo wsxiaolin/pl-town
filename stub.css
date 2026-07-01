@@ -1,0 +1,80 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #F1F0EE;
+  --blue: #3B6FE0;
+  --text-dark: #2A2A2A;
+  --text-mid: #888884;
+  --text-light: #AEADA9;
+}
+
+body {
+  background: var(--bg);
+  font-family: -apple-system, 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.back-link {
+  position: fixed;
+  top: 24px; left: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-mid);
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color 0.2s;
+}
+
+.back-link:hover { color: var(--blue); }
+
+.back-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex-shrink: 0;
+}
+
+.stub-page {
+  text-align: center;
+  max-width: 480px;
+}
+
+.stub-number {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--text-light);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+
+.stub-title {
+  font-size: 48px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--text-dark);
+  margin-bottom: 20px;
+}
+
+.stub-body {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-mid);
+  margin-bottom: 28px;
+}
+
+.stub-accent {
+  width: 36px; height: 2px;
+  background: var(--blue);
+  border-radius: 1px;
+  margin: 0 auto;
+}
