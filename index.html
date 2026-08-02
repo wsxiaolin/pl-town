@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MiniCity — Portfolio</title>
+  <title>物实小城 — MiniCity</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="day">
@@ -15,12 +15,10 @@
   <header class="ui-header">
     <div class="logo">
       <span class="logo-dot"></span>
-      <span class="logo-name">Your Name</span>
+      <span class="logo-name">物实小城</span>
       <span class="logo-user" id="logoUser"></span>
     </div>
     <nav class="ui-nav">
-      <a href="/about"   class="nav-link">About</a>
-      <a href="/contact" class="nav-link">Contact</a>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle day/night">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="5"/>
@@ -91,6 +89,28 @@
       <input class="login-input" id="loginInput" type="text" placeholder="your name"
              maxlength="20" autocomplete="off" spellcheck="false" />
       <button class="login-btn" id="loginBtn">enter the city →</button>
+    </div>
+  </div>
+
+  <!-- CG Animation overlay -->
+  <div class="cg-overlay" id="cgOverlay" style="display:none">
+    <div class="cg-scene-wrap" id="cgSceneWrap"></div>
+    <button class="cg-skip" id="cgSkip">跳过 ›</button>
+  </div>
+
+  <!-- Building Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-paper" id="modalPaper">
+      <div class="modal-header">
+        <span class="modal-num" id="modalNum"></span>
+        <h2 class="modal-title" id="modalTitle"></h2>
+      </div>
+      <p class="modal-slogan" id="modalSlogan"></p>
+      <div class="modal-divider"></div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="modal-close" id="modalClose">合上</button>
+      </div>
     </div>
   </div>
 

@@ -1,4 +1,4 @@
-/* MiniCity — main.js */
+/* MiniCity — main.js · 物实小城改造版 */
 'use strict';
 
 const MOBILE  = () => window.innerWidth <= 680;
@@ -12,6 +12,8 @@ const P = {
   BUILDING_WHITE: 0xFFFFFF,  BUILDING_BASE:  0xEAE9E6,
   ROOF_RIM:       0xF8F7F5,  BLUE:           0x3B6FE0,
   FOUNTAIN_RIM:   0xECEBE8,  FOUNTAIN_WATER: 0xC8DAFC,
+  GOLD:           0xE8A838,  PARCHMENT:      0xE8D5A8,
+  DARK_TOWER:     0x4A4A52,  RUIN_GREY:      0xB5B2AC,
 };
 
 // ── Globals ───────────────────────────────────────────────────────────────────
@@ -22,6 +24,7 @@ let isNight    = localStorage.getItem('minicityTheme') === 'night';
 let hoveredB   = null, mouseOnScene = false;
 let currentFilter = 'bots';
 let statsMode = 'clean';
+let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -31,18 +34,194 @@ const cursorWorld = new THREE.Vector3();
 // ── Building config ───────────────────────────────────────────────────────────
 const PLH = 0.3;
 
+const I = (svg) => `<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
+
 const BUILDING_DEFS = [
-  { id:'about',       num:'01', label:'ABOUT',       url:'/about',       x: 0,    z:-7.5, shape:'tower',
-    icon:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/></svg>` },
-  { id:'projects',    num:'02', label:'PROJECTS',    url:'/projects',    x:-7.5,  z: 0,   shape:'campus',
-    icon:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>` },
-  { id:'experiments', num:'03', label:'EXPERIMENTS', url:'/experiments', x: 7.5,  z: 0,   shape:'lab',
-    icon:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>` },
-  { id:'contact',     num:'04', label:'CONTACT',     url:'/contact',     x: 0,    z: 7.5, shape:'pavilion',
-    icon:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3,5 12,13 21,5"/></svg>` },
-  { id:'stats', num:'05', label:'STATS', url:null, isStats:true, x:-5.5, z:-5.5, shape:'observatory',
-    icon:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>` },
+  { id:'activity',   num:'01', label:'活动区',     x: 4,  z:-9, shape:'bank',
+    icon:I(`<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>`) },
+  { id:'bulletin',   num:'02', label:'公告板',     x:-4,  z:-9, shape:'board',
+    icon:I(`<rect x="4" y="5" width="16" height="14" rx="1"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>`) },
+  { id:'techhalf',   num:'03', label:'技术半城',   x: 9,  z:-3, shape:'tower',
+    icon:I(`<polyline points="8 6 4 12 8 18"/><polyline points="16 6 20 12 16 18"/>`) },
+  { id:'blackhole',  num:'04', label:'黑洞半城',   x:-9,  z:-3, shape:'darktower',
+    icon:I(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2" fill="#3B6FE0"/>`) },
+  { id:'laws',       num:'05', label:'城的法则',   x: 4,  z: 3, shape:'pavilion',
+    icon:I(`<path d="M12 3v18"/><path d="M6 8h12"/><path d="M6 8l-2 6h4z"/><path d="M18 8l-2 6h4z"/>`) },
+  { id:'library',    num:'06', label:'图书馆',     x:-4,  z: 3, shape:'library',
+    icon:I(`<path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M4 19a2 2 0 0 1 2-2h12"/>`) },
+  { id:'litreview',  num:'07', label:'文学审核部', x:-9,  z: 3, shape:'ruins',
+    icon:I(`<path d="M4 20V8l5-4 5 4v8"/><path d="M14 20V12l6-3v11"/><line x1="4" y1="20" x2="20" y2="20"/>`) },
+  { id:'catcafe',    num:'08', label:'猫咖馆',     x: 9,  z: 3, shape:'skyscraper',
+    icon:I(`<path d="M6 8V5l3 2"/><path d="M18 8V5l-3 2"/><path d="M5 10c0-2 2-3 7-3s7 1 7 3v5c0 3-3 5-7 5s-7-2-7-5z"/>`) },
+  { id:'academy',    num:'09', label:'物实学院',   x: 4,  z: 9, shape:'campus',
+    icon:I(`<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1 2.5 3 6 3s6-2 6-3v-5"/>`) },
+  { id:'news',       num:'10', label:'星尘报社',   x:-4,  z: 9, shape:'kiosk',
+    icon:I(`<rect x="3" y="5" width="18" height="14" rx="1"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/><line x1="7" y1="17" x2="13" y2="17"/>`) },
+  { id:'mutualaid',  num:'11', label:'互助团',     x:-9,  z: 9, shape:'kiosk',
+    icon:I(`<path d="M12 21s-7-5-7-11a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 6-7 11-7 11z"/>`) },
+  { id:'screen',     num:'12', label:'大屏幕',     x: 9,  z: 9, shape:'screen',
+    icon:I(`<rect x="3" y="4" width="18" height="13" rx="1"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/>`) },
+  { id:'elevator',   num:'13', label:'电梯',       x: 9,  z:-9, shape:'shaft',
+    icon:I(`<rect x="6" y="3" width="12" height="18" rx="1"/><line x1="10" y1="8" x2="12" y2="6"/><line x1="12" y1="6" x2="14" y2="8"/><line x1="10" y1="16" x2="12" y2="18"/><line x1="12" y1="18" x2="14" y2="16"/>`) },
+  { id:'residentid', num:'14', label:'居民证',     x:-9,  z:-9, shape:'altar',
+    icon:I(`<rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="8" cy="12" r="2"/><line x1="13" y1="11" x2="18" y2="11"/><line x1="13" y1="14" x2="16" y2="14"/>`) },
+  { id:'stats',      num:'15', label:'STATS',      x:-5.5,z:-5.5,shape:'observatory', isStats:true,
+    icon:I(`<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>`) },
 ];
+
+// ── Building dialog content (from copywriting) ────────────────────────────────
+const BUILDING_CONTENT = {
+  activity: {
+    name:'活动区', slogan:'在这里领取你的货币吧。',
+    dialog:[
+      '钱袋落在柜台上，发出一声闷响。',
+      '"在这里想要生存，没钱可不行。"柜台后面的人头也没抬，"必要的时候买些东西，以及……贿赂。"',
+      '你会有越来越多的追随者，没钱给他们可不行。',
+      '「马内的力量，还是大的。」'
+    ]
+  },
+  bulletin: {
+    name:'公告板', slogan:'一块镶了铁框、加了雨棚的木板。',
+    dialog:[
+      '一块普通的大木板，用铁镶了框，还安了雨棚。很明显，这里最近有人来修过。',
+      '纸页都有些发黄了，不过还牢牢粘在上面，不掉下来。凑近一点好好看看——并非传单或小报，而是一堆公告。写这些公告的人做事一定特别有条理，句句分明，就是潦草了些。',
+      '你正看着，一个空旷的声音忽然响起：',
+      '「一座城市，怎么会没有管理人员呢？」',
+      '——哦？难道这里还有"管理人员"？'
+    ]
+  },
+  techhalf: {
+    name:'技术半城', slogan:'你完全可以相信这里。',
+    dialog:[
+      '这里的所有居民都是知识居民，都是很友善的。',
+      '但它对你没有那么友好——在你真正成为居民之前，也就是当你不再需要这本手册时，你才会体会到这里的乐趣。',
+      '也就是说，在别的地方，可能会有危险。',
+      '也有一些新居民偏偏喜欢这里，我们称他们为"新知者"。总有一些另一个半城的居民混进来，管理人员的部分工作，就是把他们请回去。他们居住的房子，我们叫"水实验"。',
+      '「建议：熟悉这里之前，少接触这个区。」'
+    ]
+  },
+  blackhole: {
+    name:'黑洞半城', slogan:'这里包容一切。',
+    dialog:[
+      '正如名字所说的，这里包容一切。你会找到朋友，也会发现……黑暗。',
+      '这里的人鱼龙混杂，尽量避免和坏人接触。什么是坏人？那些被"封禁"的人，他们的"居民权限"失效了——有些只是暂时的，有些是永远的。',
+      '不过，我们允许你展示自己的存在，你可以在半城发布你的作品。在这个半城，你可以做作家、数学家、历史学家……某些方面，它比技术半城更多元。',
+      '「无论在哪一个半城，那些发布\'水作品\'极多的人，都被称为\'伪用户\'。」'
+    ]
+  },
+  laws: {
+    name:'城的法则', slogan:'你违反的每一条法则，都会化作你不甘的泪水。',
+    dialog:[
+      '一卷羊皮纸摊在石台上，字迹工整得近乎冰冷。',
+      '谨记，认真思考管理人员的每一次警告，他们对你的生活有很大影响。',
+      '你要做一个好公民。',
+      '「法则不是束缚，是这座城还在运转的理由。」'
+    ]
+  },
+  library: {
+    name:'图书馆', slogan:'这里是珍藏知识的地方。',
+    dialog:[
+      '推门进去，空气里是旧纸和木头的味道。',
+      '技术半城的人们绞尽脑汁，为大家做出了一些优质作品，他们为了让更多人居住在技术半城而努力贡献。如果你选择住在技术半城，一些基本的知识你要明白——《实验记录》会给予你很大帮助。',
+      '黑洞半城的人们也不落后，有些大佬就出现在这个半城。《这都是知识》里收录了他们的智慧。',
+      '想当管理人员？翻开《志愿者要求一览》——志愿者是管理人员的基础。怀念外部世界吗？了解一下法律吧，这对你回去有很大帮助。',
+      '角落里，一本厚厚的《物实百科全书》静静躺着，记载着这座城的历史与文化。旁边的小说合集，则承诺"文学可以带给你乐趣"。',
+      '「招募图书管理员、收集员，欢迎大家。」',
+      '待收集：杂文　未完整：小说'
+    ]
+  },
+  litreview: {
+    name:'文学审核部', slogan:'「已废弃」',
+    dialog:[
+      '你看到一行脚印，顺着它走了过去。脚印越来越杂乱。',
+      '一栋古里古气的大房子，门前脚印十分杂乱，管理者似乎匆匆忙忙地离开的。门前挂着褪色的牌匾：文学审核部。',
+      '原来所有书进图书馆之前都要经过他们的审核。权力还是蛮大的，或许他们有一部分人员就是管理人员。',
+      '真令人痛心，这么气宇轩昂的组织……',
+      '「已废弃。」',
+      '告示板上的字迹还没干透。'
+    ]
+  },
+  catcafe: {
+    name:'物实猫咖馆', slogan:'闲暇时光来撸猫也不错。',
+    dialog:[
+      '一栋高得看不到顶的楼，门牌上画着一只打哈欠的猫。',
+      '趁着三月的暖阳，和着微风听听风铃吧。',
+      '不过，这可是高达 15000 多层的楼哦。',
+      '还有——小心军火！',
+      '「猫在窗台上眯着眼，像是已经在这里等了你很久。」'
+    ]
+  },
+  academy: {
+    name:'物实学院', slogan:'文化一条街。',
+    dialog:[
+      '现代化的大楼立在老街尽头，玻璃幕墙反着光。',
+      '这貌似是一个学校，不知道里面是什么样子。咦，这里面的课程好像对我们的生存很有帮助。',
+      '面前出现了一个五角星。这里可以收藏吗？拿着这些课，以后或许有用。',
+      '「知识不是必需品，是奢侈品——但在物实，它两者都是。」'
+    ]
+  },
+  news: {
+    name:'星尘报社', slogan:'隶属于 SNO.星尘报社总部。',
+    dialog:[
+      '"拿着这份报纸吧！"',
+      '你抬起头，想问他是哪个报社的。可那个人已经消失了。',
+      '你看了看手中的报纸。报纸上写着：',
+      '「隶属于 SNO.星尘报社总部」',
+      '真有意思，连这都有。看起来，要在这里待一段时间了。',
+      '「新闻是这座城里唯一比法则跑得更快的东西。」'
+    ]
+  },
+  mutualaid: {
+    name:'互助团', slogan:'你有什么需要吗？',
+    dialog:[
+      '一张广告贴在墙上，边角被风掀起。',
+      '互助团成立了！你有什么需要吗？快来这里投稿吧，我们会尽所可能的帮助你！',
+      '你对着空气说："我怎么能离开这里？"',
+      '「抱歉，我们属于这里，无法帮你离开。」',
+      '不要灰心。这个组织还是很有用的。',
+      '「能帮的，他们都会帮。不能帮的，只有你自己。」'
+    ]
+  },
+  screen: {
+    name:'大屏幕', slogan:'闪着荧荧的光。',
+    dialog:[
+      '这条街竟然有尽头。尽头的墙上夹着一块大屏幕，闪着荧荧的光。',
+      '屏幕亮起：',
+      '你好，欢迎来到物实！',
+      '有几点你需要注意：',
+      '1. 一定要尊敬管理员们，尤其是紫兰斋。',
+      '2. 不要理会那些骂人、刷屏的居民。',
+      '3. 如果你是管理人员，记住，你的责任就是"移水"和"处理事件"，不要借着管理人员的名义去……（模糊）',
+      '4. 尽量发布一些有意义的作品，否则你会失去一些货币。',
+      '5. 请一定把这个大屏幕拆下来揣在兜里。不要担心它会消失——下一个来这里的人，同样也会看到它。',
+      '「屏幕可以带走，规则要留下。」'
+    ]
+  },
+  elevator: {
+    name:'电梯', slogan:'我们会尽快修复其他按钮。',
+    dialog:[
+      '你拆下了大屏幕，却发现它后面藏着一架电梯。',
+      '门缓缓打开，内部的按钮泛着幽光：',
+      '⑤　④　③　②　①　-①',
+      '「我们会尽快修复其他按钮。」',
+      '一张便签贴在按钮旁，字迹潦草：每一层都是一座城的一部分，但不是每一层都还在。',
+      '「选择你的楼层。」'
+    ]
+  },
+  residentid: {
+    name:'居民证', slogan:'请撕下这张纸，作为你的居民证。',
+    dialog:[
+      '一张纸静静躺在石台上，边角整齐。',
+      '——————————————————',
+      '{Visitor}',
+      '我会遵守《这个城的法则》，我已阅读《居民生存指南》。',
+      '——————————————————',
+      '如你遇到 Bug 类困难，请联系 turtlesim。',
+      '你要参与这个故事的话，就请签上你的名字。',
+      '「签名之后，你就是这座城的人了。」'
+    ]
+  },
+};
 
 const WAYPOINTS = [
   new THREE.Vector3( 0,   0,-6), new THREE.Vector3( 0,   0,-4), new THREE.Vector3( 0,   0,-2),
@@ -53,7 +232,7 @@ const WAYPOINTS = [
   new THREE.Vector3(-1.2, 0, 1.2), new THREE.Vector3(1.2, 0, 1.2),
 ];
 
-// Progression unlock tiers — each spawns a new decoration when threshold is crossed
+// Progression unlock tiers
 const UNLOCK_TIERS = [
   { threshold:2,  label:'a lamp post appeared',  fn: () => addLamps([[4.5,0,-6.8]]) },
   { threshold:5,  label:'a new tree sprouted',   fn: () => addTrees([[7.2,0,7.0]]) },
@@ -68,15 +247,18 @@ function init() {
   addBuildings(); addDecorations(); addCharacters();
   addLabels(); applyRenames();
   setupEvents(); setupFilter();
+  setupModal();
   applyTheme(isNight, true);
   initAnimations();
-  entranceAnimation();
-  startTimeTracking();
-  checkLogin();
+  document.getElementById('labelsWrap').classList.add('hidden');
   requestAnimationFrame(loop);
+
+  checkLogin();
+  if (localStorage.getItem('minicityUser')) afterLogin();
+  // If no user, afterLogin is called from doLogin
 }
 
-// ── Renderer / Camera / Scene / Lighting (unchanged) ─────────────────────────
+// ── Renderer / Camera / Scene / Lighting ──────────────────────────────────────
 function setupRenderer() {
   const canvas = document.getElementById('c');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -117,27 +299,39 @@ function addGround() {
   m.rotation.x = -Math.PI/2; m.receiveShadow = true; scene.add(m);
 }
 
-// ── Paths (+ diagonal to Stats building) ─────────────────────────────────────
+// ── Paths (grid layout for expanded city) ─────────────────────────────────────
 function addPaths() {
   const col = isNight ? P.NIGHT_PATH : P.DAY_PATH;
 
-  // Main cross roads
-  [[1.7,0.03,20,0,0.015,0],[20,0.03,1.7,0,0.015,0]].forEach(([w,h,d,x,y,z]) => {
+  // Main cross roads (wider: 1.7, length 24)
+  [[1.7,0.03,24,0,0.015,0],[24,0.03,1.7,0,0.015,0]].forEach(([w,h,d,x,y,z]) => {
     const mat = stdMat({ color:col, roughness:1 });
     pathMats.push(mat);
     const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
     m.position.set(x,y,z); m.receiveShadow = true; scene.add(m);
   });
 
+  // Secondary roads (narrower: 1.1) at ±3 and ±9
+  [-9,-3,3,9].forEach(pos => {
+    // Horizontal (along z=pos)
+    const hMat = stdMat({ color:col, roughness:1 });
+    pathMats.push(hMat);
+    const h = new THREE.Mesh(new THREE.BoxGeometry(1.1,0.025,24), hMat);
+    h.position.set(0,0.012,pos); h.receiveShadow = true; scene.add(h);
+    // Vertical (along x=pos)
+    const vMat = stdMat({ color:col, roughness:1 });
+    pathMats.push(vMat);
+    const v = new THREE.Mesh(new THREE.BoxGeometry(24,0.025,1.1), vMat);
+    v.position.set(pos,0.012,0); v.receiveShadow = true; scene.add(v);
+  });
+
   // Diagonal branch to Stats building at (-5.5, 0, -5.5)
-  // Runs from (-1.5,0,-1.5) to (-5.5,0,-5.5), length ≈ 5.66, rotated 45°
   const diagMat = stdMat({ color:col, roughness:1 });
   pathMats.push(diagMat);
   const diag = new THREE.Mesh(new THREE.BoxGeometry(1.3,0.03,5.66), diagMat);
   diag.position.set(-3.5, 0.015, -3.5);
   diag.rotation.y = Math.PI/4;
-  diag.receiveShadow = true;
-  scene.add(diag);
+  diag.receiveShadow = true; scene.add(diag);
 }
 
 // ── Fountain ──────────────────────────────────────────────────────────────────
@@ -154,14 +348,61 @@ function addFountain() {
 function tagMeshes(g, id) {
   g.traverse(c => { if (c.isMesh) c.userData.buildingId = id; });
 }
+function mkBodyMat() {
+  const m = stdMat({color:P.BUILDING_WHITE,roughness:0.08});
+  m.emissive = new THREE.Color(P.BLUE); m.emissiveIntensity = 0;
+  return m;
+}
 
-// 01 ABOUT — tall elegant tower
+// 01 ACTIVITY — treasury / bank with columns and gold dome
+function buildBank(cfg) {
+  const g = new THREE.Group();
+  const bw=2.2, bh=1.8;
+  part(g, new THREE.BoxGeometry(2.8,PLH,2.4), {color:P.BUILDING_BASE,roughness:0.8}, [0,PLH/2,0]);
+  const bodyMat = mkBodyMat();
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = PLH+bh;
+  // Pediment
+  part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.5}, [0,top+0.05,0]);
+  // Columns at front
+  [-0.7,-0.23,0.23,0.7].forEach(cx =>
+    part(g, new THREE.CylinderGeometry(0.07,0.08,bh*0.85,10), {color:0xF8F7F5,roughness:0.3}, [cx,PLH+bh*0.425,bw/2+0.12]));
+  // Gold dome
+  part(g, new THREE.SphereGeometry(0.42,16,8,0,Math.PI*2,0,Math.PI/2), {color:0xF0EFEC,roughness:0.12}, [0,top+0.1,0]);
+  part(g, new THREE.SphereGeometry(0.07,10,10), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.35}, [0,top+0.1+0.42+0.07,0], false);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.1+0.42+0.5};
+}
+
+// 02 BULLETIN — board with two posts and small roof
+function buildBoard(cfg) {
+  const g = new THREE.Group();
+  part(g, new THREE.BoxGeometry(2.0,0.15,0.7), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.075,0]);
+  const boardMat = stdMat({color:P.PARCHMENT,roughness:0.85});
+  boardMat.emissive = new THREE.Color(P.BLUE); boardMat.emissiveIntensity = 0;
+  [-0.6,0.6].forEach(cx =>
+    part(g, new THREE.BoxGeometry(0.1,1.6,0.1), {color:0xC4A86D,roughness:0.7}, [cx,0.15+0.8,0]));
+  const board = mk(new THREE.BoxGeometry(1.5,1.0,0.08), boardMat);
+  board.position.y = 0.15+1.1; board.castShadow = true; g.add(board);
+  // Roof slats
+  part(g, new THREE.BoxGeometry(1.75,0.06,0.55), {color:0xB8956B,roughness:0.6}, [0,0.15+1.64,0]);
+  part(g, new THREE.BoxGeometry(1.75,0.04,0.1), {color:0xA8855B,roughness:0.6}, [0,0.15+1.67,0.22]);
+  // Posted papers
+  part(g, new THREE.BoxGeometry(0.4,0.3,0.02), {color:0xF8F4E8,roughness:0.9}, [-0.3,0.15+1.15,0.05]);
+  part(g, new THREE.BoxGeometry(0.35,0.25,0.02), {color:0xF5F0E0,roughness:0.9}, [0.25,0.15+1.05,0.05]);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.15+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body:board, bodyMat:boardMat, labelEl:null, labelY:0.15+1.64+0.5};
+}
+
+// 03 TECHHALF — tall elegant tower (reuse existing tower design)
 function buildTower(cfg) {
   const g = new THREE.Group();
   const bw=1.85, bh=4.6;
   part(g, new THREE.BoxGeometry(2.55,PLH,2.55), {color:P.BUILDING_BASE,roughness:0.8}, [0,PLH/2,0]);
-  const bodyMat = stdMat({color:P.BUILDING_WHITE,roughness:0.08});
-  bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+  const bodyMat = mkBodyMat();
   const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
   body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
   const top = PLH+bh;
@@ -176,13 +417,131 @@ function buildTower(cfg) {
   return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:tipY+0.5};
 }
 
-// 02 PROJECTS — wide campus with annex
+// 04 BLACKHOLE — dark tower with swirling aura
+function buildDarkTower(cfg) {
+  const g = new THREE.Group();
+  const bw=1.7, bh=4.0;
+  part(g, new THREE.BoxGeometry(2.4,PLH,2.4), {color:0x3A3A3E,roughness:0.8}, [0,PLH/2,0]);
+  const bodyMat = stdMat({color:P.DARK_TOWER,roughness:0.15,metalness:0.3});
+  bodyMat.emissive = new THREE.Color(0x1a1a2e); bodyMat.emissiveIntensity = 0;
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = PLH+bh;
+  // Dark cone roof
+  part(g, new THREE.ConeGeometry(1.0,1.4,6), {color:0x2A2A30,roughness:0.2}, [0,top+0.7,0]);
+  // Purple aura ring
+  part(g, new THREE.TorusGeometry(0.9,0.04,8,24), {color:0x6B4FE8,emissive:0x6B4FE8,emissiveIntensity:0.3}, [0,PLH+bh*0.35,0], false).rotation.x = Math.PI/2;
+  // Dark orb on top
+  part(g, new THREE.SphereGeometry(0.15,12,12), {color:0x1a1a2e,emissive:0x4B3FE8,emissiveIntensity:0.15}, [0,top+1.4+0.15,0], false);
+  // Blue entrance disc
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+1.4+0.5};
+}
+
+// 05 LAWS — pavilion with cone roof (reuse existing pavilion)
+function buildPavilion(cfg) {
+  const g = new THREE.Group();
+  const bw=2.4, bh=2.3;
+  part(g, new THREE.BoxGeometry(3.1,0.25,3.1), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.125,0]);
+  const bodyMat = mkBodyMat();
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const bodyTop = 0.25+bh;
+  part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.5}, [0,bodyTop+0.05,0]);
+  const coneH=1.05;
+  part(g, new THREE.CylinderGeometry(0.08,1.38,coneH,24), {color:0xF0EFEC,roughness:0.35}, [0,bodyTop+0.1+coneH/2,0]);
+  part(g, new THREE.SphereGeometry(0.1,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.3}, [0,bodyTop+0.1+coneH+0.1,0], false);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:bodyTop+0.1+coneH+0.6};
+}
+
+// 06 LIBRARY — wide classical building with pediment and columns
+function buildLibrary(cfg) {
+  const g = new THREE.Group();
+  const bw=3.0, bh=2.0;
+  part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.125,0]);
+  const bodyMat = mkBodyMat();
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = 0.25+bh;
+  // Cornice
+  part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.4}, [0,top+0.05,0]);
+  // Triangular pediment
+  part(g, new THREE.CylinderGeometry(0.01,1.5,0.5,3), {color:0xF5F4F1,roughness:0.2}, [0,top+0.1+0.25,0]).rotation.z = 0;
+  const ped = mk(new THREE.ConeGeometry(1.55, 0.55, 3), stdMat({color:0xF5F4F1,roughness:0.2}));
+  ped.rotation.y = Math.PI/6; ped.position.y = top+0.1+0.275; g.add(ped);
+  // Columns at front (4)
+  [-0.9,-0.3,0.3,0.9].forEach(cx =>
+    part(g, new THREE.CylinderGeometry(0.08,0.09,bh*0.9,10), {color:0xF8F7F5,roughness:0.3}, [cx,0.25+bh*0.45,bw/2+0.15]));
+  // Book silo (round reading room on roof)
+  part(g, new THREE.CylinderGeometry(0.5,0.5,0.7,16), {color:0xF0EFEC,roughness:0.15}, [0,top+0.1+0.35,0]);
+  part(g, new THREE.SphereGeometry(0.5,16,8,0,Math.PI*2,0,Math.PI/2), {color:0xEEEDEA,roughness:0.1}, [0,top+0.1+0.7,0]);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.1+0.7+0.5+0.4};
+}
+
+// 07 LITREVIEW — abandoned ruins with broken top
+function buildRuins(cfg) {
+  const g = new THREE.Group();
+  const bw=2.2, bh=1.6;
+  part(g, new THREE.BoxGeometry(2.7,0.22,2.3), {color:0x9A988E,roughness:0.9}, [0,0.11,0]);
+  const bodyMat = stdMat({color:P.RUIN_GREY,roughness:0.85});
+  bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = 0.22+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = 0.22+bh;
+  // Broken/jagged top — several uneven blocks
+  part(g, new THREE.BoxGeometry(0.6,0.4,0.6), {color:P.RUIN_GREY,roughness:0.85}, [-0.6,top+0.2,0]);
+  part(g, new THREE.BoxGeometry(0.4,0.25,0.4), {color:0xA5A29A,roughness:0.85}, [0.1,top+0.12,0.3]);
+  part(g, new THREE.BoxGeometry(0.35,0.15,0.35), {color:0x9A988E,roughness:0.85}, [0.7,top+0.07,-0.2]);
+  // Faded sign (desaturated board)
+  part(g, new THREE.BoxGeometry(0.8,0.4,0.04), {color:0xC8C2B0,roughness:0.9}, [0,0.22+bh*0.6,bw/2+0.03]);
+  // Overgrown vine
+  part(g, new THREE.SphereGeometry(0.18,8,8), {color:0x8A8870,roughness:0.95}, [-0.8,0.22+0.3,0.8]);
+  part(g, new THREE.SphereGeometry(0.15,8,8), {color:0x7A7860,roughness:0.95}, [0.9,0.22+0.2,-0.6]);
+  // Faded entrance disc
+  part(g, new THREE.CylinderGeometry(0.12,0.12,0.04,16), {color:0x7A7A82,emissive:0x4A4A52,emissiveIntensity:0.1}, [0,0.22+0.022,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.6};
+}
+
+// 08 CATCAFE — very tall thin skyscraper with banded floors
+function buildSkyscraper(cfg) {
+  const g = new THREE.Group();
+  const bw=1.3, bh=6.5;
+  part(g, new THREE.BoxGeometry(2.0,PLH,2.0), {color:P.BUILDING_BASE,roughness:0.8}, [0,PLH/2,0]);
+  const bodyMat = stdMat({color:0xFDFCFA,roughness:0.06});
+  bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = PLH+bh;
+  // Floor banding (horizontal lines every ~1 unit)
+  for (let i = 1; i < 7; i++) {
+    part(g, new THREE.BoxGeometry(bw+0.04,0.06,bw+0.04), {color:0xE8E7E4,roughness:0.4}, [0,PLH+i*0.95,0]);
+  }
+  // Rooftop
+  part(g, new THREE.BoxGeometry(bw+0.1,0.1,bw+0.1), {color:P.ROOF_RIM,roughness:0.4}, [0,top+0.05,0]);
+  // Cat silhouette on roof (small sphere + cones for ears)
+  part(g, new THREE.SphereGeometry(0.15,10,10), {color:0xE8A838,emissive:0xE8A838,emissiveIntensity:0.12}, [0,top+0.1+0.15,0]);
+  part(g, new THREE.ConeGeometry(0.06,0.12,4), {color:0xE8A838,emissive:0xE8A838,emissiveIntensity:0.12}, [-0.07,top+0.1+0.3,0]);
+  part(g, new THREE.ConeGeometry(0.06,0.12,4), {color:0xE8A838,emissive:0xE8A838,emissiveIntensity:0.12}, [0.07,top+0.1+0.3,0]);
+  // Wind chimes
+  part(g, new THREE.CylinderGeometry(0.02,0.02,0.3,6), {color:0xD4D3D0,roughness:0.5}, [-0.5,top+0.1+0.15,0]);
+  part(g, new THREE.CylinderGeometry(0.02,0.02,0.25,6), {color:0xD4D3D0,roughness:0.5}, [0.5,top+0.1+0.12,0]);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
+}
+
+// 09 ACADEMY — wide campus with annex (reuse existing campus)
 function buildCampus(cfg) {
   const g = new THREE.Group();
   const mw=2.9, mh=2.1, md=2.1;
   part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.125,0]);
-  const bodyMat = stdMat({color:P.BUILDING_WHITE,roughness:0.09});
-  bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+  const bodyMat = mkBodyMat();
   const body = mk(new THREE.BoxGeometry(mw,mh,md), bodyMat);
   body.position.y = 0.25+mh/2; body.castShadow = body.receiveShadow = true; g.add(body);
   const mainTop = 0.25+mh;
@@ -199,79 +558,148 @@ function buildCampus(cfg) {
   return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:mainTop+0.7};
 }
 
-// 03 EXPERIMENTS — block + cylinder silo + stepped top
-function buildLab(cfg) {
+// 10/11 KIOSK — small square structure with awning (for news & mutualaid)
+function buildKiosk(cfg) {
   const g = new THREE.Group();
-  const bw=2.0, bh=2.8;
-  part(g, new THREE.BoxGeometry(2.85,PLH,2.85), {color:P.BUILDING_BASE,roughness:0.8}, [0,PLH/2,0]);
-  const bodyMat = stdMat({color:P.BUILDING_WHITE,roughness:0.08});
+  const bw=1.6, bh=1.5;
+  const accentColor = cfg.id === 'news' ? 0xD4A838 : 0x6B8FE8;
+  part(g, new THREE.BoxGeometry(2.1,0.2,1.8), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.1,0]);
+  const bodyMat = mkBodyMat();
+  const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+  body.position.y = 0.2+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = 0.2+bh;
+  // Flat roof
+  part(g, new THREE.BoxGeometry(bw+0.4,0.08,bw+0.4), {color:P.ROOF_RIM,roughness:0.4}, [0,top+0.04,0]);
+  // Striped awning (alternating color bands)
+  for (let i = 0; i < 5; i++) {
+    const x = -bw/2 - 0.1 + i * (bw+0.2)/5;
+    part(g, new THREE.BoxGeometry((bw+0.2)/5-0.02, 0.06, 0.4), {color: i%2===0 ? accentColor : 0xF5F4F1, roughness:0.5}, [x+0.1, top+0.02, bw/2+0.2]);
+  }
+  // Window cutout (simulated with darker box)
+  part(g, new THREE.BoxGeometry(bw*0.7,bh*0.5,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.3}, [0,0.2+bh*0.5,bw/2+0.02]);
+  // Sign on top
+  part(g, new THREE.BoxGeometry(bw*0.6,0.3,0.05), {color:accentColor,roughness:0.4}, [0,top+0.08+0.15,0]);
+  // Blue accent disc
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
+}
+
+// 12 SCREEN — wall structure with glowing blue screen
+function buildScreen(cfg) {
+  const g = new THREE.Group();
+  const bw=2.8, bh=3.2;
+  part(g, new THREE.BoxGeometry(3.4,0.25,1.0), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.125,0]);
+  const bodyMat = mkBodyMat();
+  const body = mk(new THREE.BoxGeometry(bw,bh,0.6), bodyMat);
+  body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = 0.25+bh;
+  // Roof slab
+  part(g, new THREE.BoxGeometry(bw+0.3,0.12,1.0), {color:P.ROOF_RIM,roughness:0.4}, [0,top+0.06,0]);
+  // Glowing screen on front face
+  const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1});
+  part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.04), screenMat, [0,0.25+bh*0.5,0.32], false);
+  // Screen frame
+  part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.06), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.30], false);
+  // Screen glow lines
+  for (let i = 0; i < 4; i++) {
+    part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.02), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2}, [0,0.25+bh*0.3+i*0.4,0.34], false);
+  }
+  // Antenna on top
+  part(g, new THREE.CylinderGeometry(0.03,0.03,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0,top+0.12+0.25,0]);
+  part(g, new THREE.SphereGeometry(0.06,8,8), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.3}, [0,top+0.12+0.5,0], false);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+  g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.12+0.5+0.5};
+}
+
+// 13 ELEVATOR — tall narrow shaft with door and button panel
+function buildShaft(cfg) {
+  const g = new THREE.Group();
+  const bw=1.3, bh=3.8;
+  part(g, new THREE.BoxGeometry(2.0,PLH,1.8), {color:P.BUILDING_BASE,roughness:0.8}, [0,PLH/2,0]);
+  const bodyMat = stdMat({color:0xE8E7E4,roughness:0.2,metalness:0.4});
   bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
   const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
   body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
-  const bodyTop = PLH+bh;
-  part(g, new THREE.BoxGeometry(bw+0.18,0.1,bw+0.18), {color:P.ROOF_RIM,roughness:0.4}, [0,bodyTop+0.05,0]);
-  part(g, new THREE.BoxGeometry(1.3,0.42,1.3), {color:0xF6F5F2,roughness:0.08}, [0,bodyTop+0.1+0.21,0]);
-  part(g, new THREE.BoxGeometry(0.72,0.32,0.72), {color:0xFAF9F7,roughness:0.06}, [0,bodyTop+0.1+0.42+0.16,0]);
-  const cylR=0.52, cylH=3.3;
-  part(g, new THREE.CylinderGeometry(cylR,cylR,cylH,20), {color:0xF5F4F1,roughness:0.1}, [0.72,PLH+cylH/2,0.72]);
-  part(g, new THREE.SphereGeometry(cylR,18,9,0,Math.PI*2,0,Math.PI/2), {color:0xEEEDEA,roughness:0.25}, [0.72,PLH+cylH,0.72], false);
+  const top = PLH+bh;
+  // Roof
+  part(g, new THREE.BoxGeometry(bw+0.15,0.1,bw+0.15), {color:P.ROOF_RIM,roughness:0.3}, [0,top+0.05,0]);
+  // Elevator door (split design)
+  part(g, new THREE.BoxGeometry(bw*0.7,1.6,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.6}, [0,PLH+0.8,bw/2+0.02], false);
+  part(g, new THREE.BoxGeometry(0.02,1.6,0.04), {color:0x2A2A30,roughness:0.3}, [0,PLH+0.8,bw/2+0.03], false);
+  // Button panel
+  part(g, new THREE.BoxGeometry(0.15,0.4,0.03), {color:0x2A2A30,roughness:0.3}, [bw/2-0.1,PLH+1.2,bw/2+0.02], false);
+  // Floor indicator (glowing)
+  part(g, new THREE.BoxGeometry(0.1,0.08,0.02), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.3}, [0,PLH+bh-0.4,bw/2+0.02], false);
+  // Top indicator light
+  part(g, new THREE.SphereGeometry(0.06,8,8), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.4}, [0,top+0.1+0.06,0], false);
   part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
   g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
-  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:PLH+cylH+cylR+0.45};
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
 }
 
-// 04 CONTACT — wide block with cone roof
-function buildPavilion(cfg) {
+// 14 RESIDENTID — stone altar with paper on top
+function buildAltar(cfg) {
   const g = new THREE.Group();
-  const bw=2.4, bh=2.3;
-  part(g, new THREE.BoxGeometry(3.1,0.25,3.1), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.125,0]);
-  const bodyMat = stdMat({color:P.BUILDING_WHITE,roughness:0.09});
+  const bw=2.0, bh=1.2;
+  part(g, new THREE.BoxGeometry(2.6,0.2,1.8), {color:0xD4D3D0,roughness:0.85}, [0,0.1,0]);
+  const bodyMat = stdMat({color:0xE8E7E4,roughness:0.6});
   bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
   const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
-  body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
-  const bodyTop = 0.25+bh;
-  part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.5}, [0,bodyTop+0.05,0]);
-  const coneH=1.05;
-  part(g, new THREE.CylinderGeometry(0.08,1.38,coneH,24), {color:0xF0EFEC,roughness:0.35}, [0,bodyTop+0.1+coneH/2,0]);
-  part(g, new THREE.SphereGeometry(0.1,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.3}, [0,bodyTop+0.1+coneH+0.1,0], false);
-  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+  body.position.y = 0.2+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = 0.2+bh;
+  // Stone table top (wider slab)
+  part(g, new THREE.BoxGeometry(bw+0.4,0.12,bw+0.4), {color:0xF0EFEC,roughness:0.5}, [0,top+0.06,0]);
+  // Paper/certificate on top
+  part(g, new THREE.BoxGeometry(1.2,0.04,0.8), {color:0xF8F4E8,roughness:0.9}, [0,top+0.12+0.02,0]);
+  // Wax seal (gold dot)
+  part(g, new THREE.CylinderGeometry(0.08,0.08,0.03,12), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.2}, [0,top+0.12+0.04,0], false);
+  // Pillars at corners
+  [[-0.8,-0.8],[-0.8,0.8],[0.8,-0.8],[0.8,0.8]].forEach(([cx,cz]) =>
+    part(g, new THREE.CylinderGeometry(0.07,0.08,bh,8), {color:0xDEDDE0,roughness:0.5}, [cx,0.2+bh/2,cz]));
+  // Decorative arch
+  part(g, new THREE.BoxGeometry(1.6,0.08,0.1), {color:0xE8E7E4,roughness:0.5}, [0,top+0.5,0]);
+  part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0xD0CFCC,roughness:0.5}, [-0.7,top+0.3,0]);
+  part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0.7,top+0.3,0]);
+  // Quill pen
+  part(g, new THREE.CylinderGeometry(0.02,0.02,0.4,6), {color:0xE8E7E4,roughness:0.5}, [0.3,top+0.12+0.2,0.2]);
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
   g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
-  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:bodyTop+0.1+coneH+0.6};
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5+0.3};
 }
 
-// 05 STATS — octagonal observatory with pulsing glow ring
+// 15 STATS — octagonal observatory with pulsing glow ring
 function buildObservatory(cfg) {
   const g = new THREE.Group();
-  // Octagonal plinth
   part(g, new THREE.CylinderGeometry(1.65,1.65,0.22,8), {color:P.BUILDING_BASE,roughness:0.8}, [0,0.11,0]);
-  // Octagonal body
-  const bodyMat = stdMat({color:P.BUILDING_WHITE,roughness:0.08});
-  bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+  const bodyMat = mkBodyMat();
   const body = mk(new THREE.CylinderGeometry(1.1,1.22,2.1,8), bodyMat);
   body.position.y = 0.22+1.05; body.castShadow = body.receiveShadow = true; g.add(body);
-  // Decorative mid band
   part(g, new THREE.CylinderGeometry(1.28,1.28,0.09,24), {color:P.ROOF_RIM,roughness:0.5}, [0,0.22+1.05,0]);
   const bodyTop = 0.22+2.1;
-  // Roof rim
   part(g, new THREE.CylinderGeometry(1.3,1.3,0.1,24), {color:P.ROOF_RIM,roughness:0.4}, [0,bodyTop+0.05,0]);
-  // Pulsing blue glow ring
   const glowMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.2,roughness:0.2});
   part(g, new THREE.CylinderGeometry(1.12,1.12,0.06,24), glowMat, [0,bodyTop+0.1+0.03,0], false);
-  // Dome (upper hemisphere)
   const domeY = bodyTop+0.1+0.06;
   part(g, new THREE.SphereGeometry(1.1,20,10,0,Math.PI*2,0,Math.PI/2), {color:0xF8F7F5,roughness:0.06,metalness:0.05}, [0,domeY,0]);
-  // Entrance disc
   part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.026,0], false);
   g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
   const labelY = domeY+1.1+0.5;
   return {...cfg, group:g, body, bodyMat, glowMat, labelEl:null, labelY};
 }
 
-const SHAPE_FNS = { tower:buildTower, campus:buildCampus, lab:buildLab, pavilion:buildPavilion, observatory:buildObservatory };
+const SHAPE_FNS = {
+  bank:buildBank, board:buildBoard, tower:buildTower, darktower:buildDarkTower,
+  pavilion:buildPavilion, library:buildLibrary, ruins:buildRuins,
+  skyscraper:buildSkyscraper, campus:buildCampus, kiosk:buildKiosk,
+  screen:buildScreen, shaft:buildShaft, altar:buildAltar, observatory:buildObservatory
+};
 
 function addBuildings() {
   BUILDING_DEFS.forEach(cfg => {
     const b = SHAPE_FNS[cfg.shape](cfg);
+    b.group.position.y = -3; // Start hidden below ground for entrance animation
     scene.add(b.group); buildings.push(b);
   });
 }
@@ -452,12 +880,11 @@ function addLabels() {
   const wrap=document.getElementById('labelsWrap');
   buildings.forEach(b=>{
     const el=document.createElement('a');
-    el.className='b-label-item'; el.href=b.url||'#'; el.tabIndex=0;
-    el.setAttribute('aria-label',`${b.label}${b.isStats?' — open stats panel':' — navigate to '+b.id+' page'}`);
+    el.className='b-label-item'; el.href='#'; el.tabIndex=0;
+    el.setAttribute('aria-label',`${b.label}${b.isStats?' — open stats panel':' — 查看详情'}`);
     el.innerHTML=`<span class="bl-num">${b.num}</span><span class="bl-icon">${b.icon}</span><span class="bl-name">${b.label}</span>`;
     el.addEventListener('click',e=>{e.preventDefault();navigateTo(b);});
     el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigateTo(b);}});
-    // Double-click to rename (non-stats buildings)
     if (!b.isStats) {
       el.querySelector('.bl-name').addEventListener('dblclick',e=>{
         e.preventDefault(); e.stopPropagation(); startRename(b, el.querySelector('.bl-name'));
@@ -511,15 +938,17 @@ function setupEvents() {
     applyTheme(isNight,false);
   });
 
-  // Stats panel controls
   document.getElementById('spClose').addEventListener('click',closeStatsPanel);
   document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'));
   document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeStatsPanel();});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){closeStatsPanel();closeModal();}
+  });
 
-  // Login
   document.getElementById('loginBtn').addEventListener('click',doLogin);
   document.getElementById('loginInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+  document.getElementById('cgSkip').addEventListener('click',skipCG);
 
   window.addEventListener('resize',()=>{
     const w=window.innerWidth,h=window.innerHeight,a=w/h,vs=13;
@@ -551,25 +980,29 @@ function onCanvasClick() {
 // ── Hover / Navigate ──────────────────────────────────────────────────────────
 function hover(b) {
   hoveredB=b;
-  gsap.to(b.group.position,{y:0.22,duration:0.28,ease:'power2.out'});
+  gsap.to(b.group.position,{y:-3+0.22,duration:0.28,ease:'power2.out'});
   gsap.to(b.bodyMat,{emissiveIntensity:0.08,duration:0.28});
   b.labelEl&&b.labelEl.classList.add('hovered');
 }
 function unhover(b) {
-  gsap.to(b.group.position,{y:0,duration:0.38,ease:'power2.out'});
+  gsap.to(b.group.position,{y:-3,duration:0.38,ease:'power2.out'});
   gsap.to(b.bodyMat,{emissiveIntensity:0,duration:0.38});
   b.labelEl&&b.labelEl.classList.remove('hovered');
 }
 function navigateTo(b) {
-  // Stats building opens panel instead of navigating
   if (b.isStats) { openStatsPanel(); trackInteraction('stats'); return; }
   trackInteraction(b.id);
-  if (REDUCED) { window.location.href=b.url; return; }
+  if (REDUCED) { openModal(b); return; }
   const overlay=document.getElementById('transitionOverlay');
   const v=b.group.position.clone(); v.y=1.5; v.project(camera);
   const sx=(v.x*0.5+0.5)*window.innerWidth, sy=((-v.y)*0.5+0.5)*window.innerHeight;
   gsap.set(overlay,{left:sx,top:sy,xPercent:-50,yPercent:-50,scale:0.04,opacity:1,borderRadius:'50%',pointerEvents:'all'});
-  gsap.to(overlay,{scale:55,borderRadius:'0%',duration:0.62,ease:'power3.in',onComplete:()=>{window.location.href=b.url;}});
+  gsap.to(overlay,{scale:55,borderRadius:'0%',duration:0.62,ease:'power3.in',onComplete:()=>{
+    openModal(b);
+    gsap.to(overlay,{opacity:0,duration:0.35,delay:0.05,onComplete:()=>{
+      gsap.set(overlay,{scale:0.04,pointerEvents:'none'});
+    }});
+  }});
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -592,12 +1025,12 @@ function tweenColor(c,hex,dur) {
 // ── Entrance + loop animations ────────────────────────────────────────────────
 function entranceAnimation() {
   buildings.forEach((b,i)=>{
-    b.group.position.y=-3;
-    gsap.to(b.group.position,{y:0,duration:0.85,delay:0.25+i*0.12,ease:'back.out(1.6)'});
+    gsap.to(b.group.position,{y:0,duration:0.85,delay:0.1+i*0.06,ease:'back.out(1.6)'});
   });
   gsap.from('.welcome-block',{opacity:0,y:8,duration:0.9,delay:0.2,ease:'power2.out'});
   gsap.from('.ui-header',{opacity:0,y:-6,duration:0.7,delay:0.1,ease:'power2.out'});
   gsap.from('.you-block',{opacity:0,y:8,duration:0.9,delay:0.4,ease:'power2.out'});
+  document.getElementById('labelsWrap').classList.remove('hidden');
 }
 function initAnimations() {
   if (REDUCED) return;
@@ -687,7 +1120,6 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 }
 
-// ── Time tracking ─────────────────────────────────────────────────────────────
 function startTimeTracking() {
   setInterval(()=>{
     const t=parseInt(localStorage.getItem('minicityTime')||'0')+1;
@@ -723,12 +1155,29 @@ function doLogin() {
   applyUsername(name);
   const overlay=document.getElementById('loginOverlay');
   overlay.classList.add('hidden');
-  setTimeout(()=>{overlay.style.display='none';},550);
+  setTimeout(()=>{
+    overlay.style.display='none';
+    afterLogin();
+  },550);
 }
 
 function applyUsername(name) {
   const el=document.getElementById('logoUser');
   if(el) el.textContent='— '+name;
+}
+
+// Called after login (or if already logged in) to show CG or enter city
+function afterLogin() {
+  if (shouldShowCG()) {
+    startCG();
+  } else {
+    proceedToCity();
+  }
+}
+
+function proceedToCity() {
+  entranceAnimation();
+  startTimeTracking();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -760,6 +1209,7 @@ function renderClean() {
   const time=parseInt(localStorage.getItem('minicityTime')||'0');
   const visited=(s.buildingsVisited||[]).length;
   const earned=s.unlockLevel||0;
+  const totalBuildings=BUILDING_DEFS.length;
 
   const nextTier=UNLOCK_TIERS.find(t=>s.interactions<t.threshold);
   const prevThresh=UNLOCK_TIERS.slice().reverse().find(t=>s.interactions>=t.threshold)?.threshold||0;
@@ -784,7 +1234,7 @@ function renderClean() {
     <div class="sp-cards">
       <div class="sp-card"><div class="sc-val">${formatTime(time)}</div><div class="sc-lbl">TIME IN CITY</div></div>
       <div class="sp-card"><div class="sc-val">${s.interactions}</div><div class="sc-lbl">INTERACTIONS</div></div>
-      <div class="sp-card"><div class="sc-val">${visited}&thinsp;/&thinsp;5</div><div class="sc-lbl">BUILDINGS VISITED</div></div>
+      <div class="sp-card"><div class="sc-val">${visited}&thinsp;/&thinsp;${totalBuildings}</div><div class="sc-lbl">BUILDINGS VISITED</div></div>
       <div class="sp-card"><div class="sc-val">${earned}</div><div class="sc-lbl">UNLOCKS EARNED</div></div>
     </div>
     <div class="sp-prog-section">
@@ -808,7 +1258,7 @@ function renderRaw() {
   const joined=s.joinDate?new Date(s.joinDate).toISOString().split('T')[0]:new Date().toISOString().split('T')[0];
   const level=calcLevel(s.interactions);
 
-  const F=20, V=17; // column widths
+  const F=20, V=17;
   const sep='+'+'-'.repeat(F+2)+'+'+'-'.repeat(V+2)+'+';
   const hdr='| '+('field').padEnd(F)+' | '+('value').padEnd(V)+' |';
   const row=(f,v)=>'| '+String(f).padEnd(F)+' | '+String(v).padEnd(V)+' |';
@@ -841,10 +1291,158 @@ function setupFilter() {
 function setFilter(filter) {
   currentFilter=filter;
   document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
-  // Bots / All → show NPCs; Friends → hide (no real friends in MVP)
   const showNPCs=(filter!=='friends');
   npcList.forEach(npc=>{ npc.mesh.visible=showNPCs; });
   if(!showNPCs) showUnlockToast('no friends online yet — invite someone!');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CG ANIMATION SYSTEM — 5-scene opening cinematic
+// ══════════════════════════════════════════════════════════════════════════════
+
+function shouldShowCG() {
+  return !localStorage.getItem('minicityCGSeen');
+}
+
+function startCG() {
+  const overlay = document.getElementById('cgOverlay');
+  const wrap = document.getElementById('cgSceneWrap');
+  overlay.style.display = 'flex';
+  requestAnimationFrame(() => overlay.classList.add('active'));
+  cgScene5Shown = false;
+
+  if (REDUCED) { endCG(); return; }
+
+  const visitor = localStorage.getItem('minicityUser') || '旅人';
+
+  cgTimeline = gsap.timeline();
+
+  // Scene 1: Falling (0–4s)
+  cgTimeline.call(() => scene1(wrap, visitor), [], 0)
+           .to({}, {duration: 4}, 0);
+
+  // Scene 2: Opening eyes (4–8s)
+  cgTimeline.call(() => scene2(wrap, visitor), [], 4)
+           .to({}, {duration: 4}, 4);
+
+  // Scene 3: Book (8–12s)
+  cgTimeline.call(() => scene3(wrap, visitor), [], 8)
+           .to({}, {duration: 4}, 8);
+
+  // Scene 4: Self-confirmation (12–15s)
+  cgTimeline.call(() => scene4(wrap, visitor), [], 12)
+           .to({}, {duration: 3}, 12);
+
+  // Scene 5: Enter city (15s+)
+  cgTimeline.call(() => scene5(wrap, visitor), [], 15);
+}
+
+function scene1(wrap, visitor) {
+  wrap.innerHTML = `
+    <div class="cg-bg cg-bg-falling"></div>
+    <div class="cg-text-block">
+      <p class="cg-line">坠落……坠落……</p>
+      <p class="cg-line" style="animation-delay:1.5s">没有撞到地面。</p>
+    </div>`;
+}
+
+function scene2(wrap, visitor) {
+  wrap.innerHTML = `
+    <div class="cg-bg cg-bg-eyes"></div>
+    <div class="cg-text-block">
+      <p class="cg-line">你睁开眼睛，发现自己来到了一个陌生的地方。</p>
+      <p class="cg-line cg-highlight" style="animation-delay:2s">「你好，${visitor}，欢迎来到物实」</p>
+    </div>`;
+}
+
+function scene3(wrap, visitor) {
+  wrap.innerHTML = `
+    <div class="cg-bg cg-bg-book"></div>
+    <div class="cg-book">
+      <div class="cg-book-cover">居民生存指南</div>
+    </div>
+    <div class="cg-text-block">
+      <p class="cg-line">你的手中多出了一本书。</p>
+      <p class="cg-line cg-book-title" style="animation-delay:1.8s">《居民生存指南》</p>
+    </div>`;
+}
+
+function scene4(wrap, visitor) {
+  wrap.innerHTML = `
+    <div class="cg-bg cg-bg-dark"></div>
+    <div class="cg-text-block">
+      <p class="cg-line cg-quote">"这么说，我现在就是居民了？"</p>
+      <p class="cg-line" style="animation-delay:1.5s">生存？这个地方有点诡异。</p>
+    </div>`;
+}
+
+function scene5(wrap, visitor) {
+  if (cgScene5Shown) return;
+  cgScene5Shown = true;
+  wrap.innerHTML = `
+    <div class="cg-bg cg-bg-gate"></div>
+    <div class="cg-text-block">
+      <p class="cg-line cg-gate-text">—— 前方，是一座城。</p>
+      <button class="cg-enter-btn" id="cgEnterBtn">推开门，走进去</button>
+    </div>`;
+  const btn = document.getElementById('cgEnterBtn');
+  if (btn) btn.addEventListener('click', endCG);
+  cgAutoEnterTimer = setTimeout(endCG, 8000);
+}
+
+function skipCG() {
+  if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
+  if (cgAutoEnterTimer) { clearTimeout(cgAutoEnterTimer); cgAutoEnterTimer = null; }
+  const wrap = document.getElementById('cgSceneWrap');
+  const visitor = localStorage.getItem('minicityUser') || '旅人';
+  scene5(wrap, visitor);
+}
+
+function endCG() {
+  if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
+  if (cgAutoEnterTimer) { clearTimeout(cgAutoEnterTimer); cgAutoEnterTimer = null; }
+  localStorage.setItem('minicityCGSeen', 'true');
+  const overlay = document.getElementById('cgOverlay');
+  overlay.classList.remove('active');
+  setTimeout(() => { overlay.style.display = 'none'; }, 600);
+  proceedToCity();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL SYSTEM — ancient paper dialog
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setupModal() {
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.getElementById('modalOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
+  });
+}
+
+function openModal(b) {
+  const content = BUILDING_CONTENT[b.id];
+  if (!content) return;
+  const visitor = localStorage.getItem('minicityUser') || '旅人';
+
+  document.getElementById('modalNum').textContent = b.num;
+  document.getElementById('modalTitle').textContent = content.name;
+  document.getElementById('modalSlogan').textContent = content.slogan;
+
+  const body = document.getElementById('modalBody');
+  body.innerHTML = '';
+  content.dialog.forEach((line, i) => {
+    const p = document.createElement('p');
+    p.className = 'modal-line';
+    p.textContent = line.replace(/\{Visitor\}/g, visitor);
+    p.style.animationDelay = (0.35 + i * 0.22) + 's';
+    body.appendChild(p);
+  });
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
