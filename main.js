@@ -2,7 +2,7 @@
 'use strict';
 
 const MOBILE  = () => window.innerWidth <= 680;
-const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const REDUCED = false;
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const P = {
@@ -980,12 +980,12 @@ function onCanvasClick() {
 // ── Hover / Navigate ──────────────────────────────────────────────────────────
 function hover(b) {
   hoveredB=b;
-  gsap.to(b.group.position,{y:-3+0.22,duration:0.28,ease:'power2.out'});
+  gsap.to(b.group.position,{y:0.22,duration:0.28,ease:'power2.out'});
   gsap.to(b.bodyMat,{emissiveIntensity:0.08,duration:0.28});
   b.labelEl&&b.labelEl.classList.add('hovered');
 }
 function unhover(b) {
-  gsap.to(b.group.position,{y:-3,duration:0.38,ease:'power2.out'});
+  gsap.to(b.group.position,{y:0,duration:0.38,ease:'power2.out'});
   gsap.to(b.bodyMat,{emissiveIntensity:0,duration:0.38});
   b.labelEl&&b.labelEl.classList.remove('hovered');
 }
