@@ -20,16 +20,27 @@ const P = {
 let renderer, scene, camera, groundMat;
 const pathMats = [], lampGlobes = [], buildings = [], npcList = [];
 let cursorChar = null;
+let playerPath = [];
+let lastFrameTime = performance.now();
 let isNight    = localStorage.getItem('minicityTheme') === 'night';
 let hoveredB   = null, mouseOnScene = false;
 let currentFilter = 'bots';
 let statsMode = 'clean';
+let mapMode = false;
+const cameraTarget = new THREE.Vector3(0,0,0);
 let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
+const ROAD_COORDS = [-18, -12, -6, 0, 6, 12, 18];
+const CITY_LIMIT = 22;
+const PLAYER_SPEED = 4.2;
+const CAMERA_NEAR_SIZE = 14;
+const CAMERA_MAP_SIZE = 25;
+const CAMERA_EDGE = 0.58;
+const CAMERA_OFFSET = new THREE.Vector3(18,30,18);
 
 // ── Building config ───────────────────────────────────────────────────────────
 const PLH = 0.3;
@@ -67,6 +78,26 @@ const BUILDING_DEFS = [
     icon:I(`<rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="8" cy="12" r="2"/><line x1="13" y1="11" x2="18" y2="11"/><line x1="13" y1="14" x2="16" y2="14"/>`) },
   { id:'stats',      num:'15', label:'STATS',      x:-5.5,z:-5.5,shape:'observatory', isStats:true,
     icon:I(`<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>`) },
+  { id:'knowledgebase', num:'16', label:'知识库',   x:-15, z:-15, shape:'library',
+    icon:I(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/><path d="M11 8h5"/><path d="M11 12h4"/>`) },
+  { id:'newsstand',     num:'17', label:'报摊',     x:-9,  z:-15, shape:'kiosk',
+    icon:I(`<path d="M4 7h16v11H4z"/><path d="M4 7l2-3h12l2 3"/><path d="M8 11h4"/><path d="M8 14h8"/>`) },
+  { id:'community',     num:'18', label:'社区中心', x: 15, z:-15, shape:'campus',
+    icon:I(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M7 11h2"/><path d="M15 11h2"/>`) },
+  { id:'research',      num:'19', label:'研究院',   x: 15, z:-9,  shape:'tower',
+    icon:I(`<path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M8 3h8"/><path d="M8 15h8"/>`) },
+  { id:'commons',       num:'20', label:'众议院',   x:-15, z: 3,  shape:'pavilion',
+    icon:I(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/><path d="M12 10v8"/><path d="M17 10v8"/><path d="M4 18h16"/>`) },
+  { id:'senate',        num:'21', label:'参议院',   x:-15, z: 9,  shape:'observatory',
+    icon:I(`<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/><path d="M4 12h16"/>`) },
+  { id:'writingclub',   num:'22', label:'文训社',   x:-15, z: 15, shape:'ruins',
+    icon:I(`<path d="M4 20l4-1 10-10a3 3 0 0 0-4-4L4 15z"/><path d="M13 6l5 5"/>`) },
+  { id:'lab',           num:'23', label:'实验楼',   x: 15, z: 3,  shape:'shaft',
+    icon:I(`<path d="M9 3h6"/><path d="M10 3v5l-4 9a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-4-9V3"/><path d="M8 16h8"/>`) },
+  { id:'culturehall',   num:'24', label:'文化馆',   x: 15, z: 9,  shape:'screen',
+    icon:I(`<path d="M4 5h16v14H4z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="M6 19l3-4"/><path d="M18 19l-3-4"/>`) },
+  { id:'teahouse',      num:'25', label:'茶馆',     x: 15, z: 15, shape:'kiosk',
+    icon:I(`<path d="M5 10h12v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 11h1a2 2 0 0 1 0 4h-1"/><path d="M8 6c0-1 1-1 1-2"/><path d="M12 6c0-1 1-1 1-2"/>`) },
 ];
 
 // ── Building dialog content (from copywriting) ────────────────────────────────
@@ -221,6 +252,46 @@ const BUILDING_CONTENT = {
       '「签名之后，你就是这座城的人了。」'
     ]
   },
+  knowledgebase: {
+    name:'知识库', slogan:'所有被保存的东西，都在这里继续发光。',
+    dialog:['墙面像索引一样延伸，抽屉里收着旧讨论、旧作品和被反复引用的词。','管理员给每一类知识都留了入口，免得后来的人在城里迷路。','「先查，再问。能留下来的东西，总会帮助下一个人。」']
+  },
+  newsstand: {
+    name:'报摊', slogan:'消息比路灯亮得更早。',
+    dialog:['报纸叠在木箱上，墨迹还没完全干。','摊主说今天的头条换了三次，因为这座城总有人突然出现，也总有人突然消失。','「拿一份吧。知道发生了什么，至少能少走一点弯路。」']
+  },
+  community: {
+    name:'社区中心', slogan:'居民在这里互相确认彼此存在。',
+    dialog:['大厅里挂着很多便签，有求助，有招募，也有一句简单的“我在”。','这里没有宏大的仪式，只有人们把零散的需要放到同一张桌子上。','「一座城不是建筑堆出来的，是回应堆出来的。」']
+  },
+  research: {
+    name:'研究院', slogan:'把未知拆开，再小心地装回去。',
+    dialog:['白色塔楼里传来低频的嗡鸣，像某种机器正在思考。','研究员们不急着给答案，他们先把问题写得更清楚。','「别害怕复杂。复杂只是还没有被命名。」']
+  },
+  commons: {
+    name:'众议院', slogan:'每一种声音都能短暂停在这里。',
+    dialog:['半圆形的座位围着中央讲台，纸页、脚步和争论声混在一起。','有人在讨论道路，有人在讨论规则，还有人在讨论一只猫是否拥有通行权。','「发言吧。城市会记住被认真说出口的话。」']
+  },
+  senate: {
+    name:'参议院', slogan:'慢一点，才能决定更重的事。',
+    dialog:['圆顶下的声音被压低，像每句话都要先经过墙壁审查。','这里不处理喧哗，只处理喧哗之后还剩下的问题。','「决定不是结束，是责任开始的地方。」']
+  },
+  writingclub: {
+    name:'文训社', slogan:'把想法磨成能被别人读懂的形状。',
+    dialog:['旧屋还亮着灯，桌上摊满修改过的稿纸。','有人划掉形容词，有人补上结尾，也有人只是安静读完。','「写得更清楚，不代表写得更安全。」']
+  },
+  lab: {
+    name:'实验楼', slogan:'失败会被记录，成功也一样。',
+    dialog:['玻璃门后是整齐的仪器和不太整齐的便签。','每一次实验都会留下编号，哪怕结果只是证明这条路不通。','「不要把异常丢掉。异常有时候是入口。」']
+  },
+  culturehall: {
+    name:'文化馆', slogan:'城的记忆在这里被展出。',
+    dialog:['展厅里有模型、照片、手稿，还有一些无法归类的小东西。','它们不一定重要，但它们共同证明：这座城曾经被很多人认真使用过。','「文化不是纪念品，是居民留下的痕迹。」']
+  },
+  teahouse: {
+    name:'茶馆', slogan:'暂时坐下，也是一种前进。',
+    dialog:['茶香从窗缝里慢慢散出来，把街上的急促脚步按慢了一拍。','人们在这里交换传闻，也交换沉默。','「有些答案不会在奔跑时出现。坐一会儿。」']
+  },
 };
 
 const WAYPOINTS = [
@@ -254,8 +325,6 @@ function init() {
   requestAnimationFrame(loop);
 
   checkLogin();
-  if (localStorage.getItem('minicityUser')) afterLogin();
-  // If no user, afterLogin is called from doLogin
 }
 
 // ── Renderer / Camera / Scene / Lighting ──────────────────────────────────────
@@ -271,9 +340,10 @@ function setupRenderer() {
   if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 }
 function setupCamera() {
-  const a = window.innerWidth/window.innerHeight, vs = 13;
-  camera = new THREE.OrthographicCamera(-vs*a,vs*a,vs,-vs,0.1,200);
-  camera.position.set(10,18,10); camera.lookAt(0,0,0);
+  const vs = CAMERA_NEAR_SIZE;
+  camera = new THREE.OrthographicCamera(-vs,vs,vs,-vs,0.1,200);
+  updateCameraProjection(vs);
+  setCameraTarget(0,0,true);
 }
 function setupScene() {
   scene = new THREE.Scene();
@@ -295,7 +365,7 @@ function setupLighting() {
 }
 function addGround() {
   groundMat = stdMat({ color: isNight?P.NIGHT_GROUND:P.DAY_GROUND, roughness:1, metalness:0 });
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(70,70), groundMat);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(110,110), groundMat);
   m.rotation.x = -Math.PI/2; m.receiveShadow = true; scene.add(m);
 }
 
@@ -303,27 +373,22 @@ function addGround() {
 function addPaths() {
   const col = isNight ? P.NIGHT_PATH : P.DAY_PATH;
 
-  // Main cross roads (wider: 1.7, length 24)
-  [[1.7,0.03,24,0,0.015,0],[24,0.03,1.7,0,0.015,0]].forEach(([w,h,d,x,y,z]) => {
-    const mat = stdMat({ color:col, roughness:1 });
-    pathMats.push(mat);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
-    m.position.set(x,y,z); m.receiveShadow = true; scene.add(m);
+  ROAD_COORDS.forEach(pos => {
+    const width = pos === 0 ? 1.9 : 1.2;
+    [[width,0.03,44,pos,0.015,0],[44,0.03,width,0,0.015,pos]].forEach(([w,h,d,x,y,z]) => {
+      const mat = stdMat({ color:col, roughness:1 });
+      pathMats.push(mat);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z); m.receiveShadow = true; scene.add(m);
+    });
   });
 
-  // Secondary roads (narrower: 1.1) at ±3 and ±9
-  [-9,-3,3,9].forEach(pos => {
-    // Horizontal (along z=pos)
-    const hMat = stdMat({ color:col, roughness:1 });
-    pathMats.push(hMat);
-    const h = new THREE.Mesh(new THREE.BoxGeometry(1.1,0.025,24), hMat);
-    h.position.set(0,0.012,pos); h.receiveShadow = true; scene.add(h);
-    // Vertical (along x=pos)
-    const vMat = stdMat({ color:col, roughness:1 });
-    pathMats.push(vMat);
-    const v = new THREE.Mesh(new THREE.BoxGeometry(24,0.025,1.1), vMat);
-    v.position.set(pos,0.012,0); v.receiveShadow = true; scene.add(v);
-  });
+  ROAD_COORDS.forEach(x => ROAD_COORDS.forEach(z => {
+    const mat = stdMat({ color:col, roughness:1 });
+    pathMats.push(mat);
+    const plaza = new THREE.Mesh(new THREE.CylinderGeometry(0.96,0.96,0.034,16), mat);
+    plaza.position.set(x,0.018,z); plaza.receiveShadow = true; scene.add(plaza);
+  }));
 
   // Diagonal branch to Stats building at (-5.5, 0, -5.5)
   const diagMat = stdMat({ color:col, roughness:1 });
@@ -706,6 +771,7 @@ function addBuildings() {
 
 // ── Decorations ───────────────────────────────────────────────────────────────
 function addDecorations() {
+  addDistrictBuildings();
   addTrees([[-4.2,0,-3.8],[3.6,0,-5.2],[4.2,0,3.4]]);
   addLamps([[-2.2,0,-3.0],[2.4,0,2.8]]);
   addBench(-3.9,0,2.4,0); addObelisk(3.3,0,-3.6); addSignpost(-4.0,0,-5.0);
@@ -718,6 +784,39 @@ function addDecorations() {
   addBollards(2.0,0,-2.8); addBench(5.1,0,-1.8,Math.PI/2);
   addStackedColumn(-5.5,0,2.0); addWallSection(5.5,0,-2.0,0);
   addBushCluster(-4.8,0,-0.5); addPavers();
+  ROAD_COORDS.forEach(p=>{
+    addLamps([[p+1.9,0,-18.9],[p-1.9,0,18.9],[-18.9,0,p+1.9],[18.9,0,p-1.9]]);
+  });
+}
+
+function addDistrictBuildings() {
+  const centers=[-21,-15,-9,-3,3,9,15,21], lots=[];
+  centers.forEach(x=>centers.forEach(z=>{
+    if(Math.hypot(x,z)<4.8)return;
+    [[0,0],[-1.35,1.15],[1.25,-1.2]].forEach(([dx,dz],k)=>{
+      const lx=x+dx, lz=z+dz;
+      if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
+      const blocked=buildings.some(b=>Math.hypot(b.x-lx,b.z-lz)<2.8);
+      if(!blocked) lots.push([lx,lz,(Math.abs(Math.round(lx+lz))+k)%3]);
+    });
+  }));
+  lots.forEach(([x,z,t],i)=>addSmallBlock(x,0,z,t,i));
+}
+
+function addSmallBlock(x,y,z,type,i) {
+  const g = new THREE.Group();
+  const w = type===2 ? 1.2 : 1.6, d = type===1 ? 1.1 : 1.55, h = 0.9 + ((i%5)*0.24);
+  part(g,new THREE.BoxGeometry(w+0.35,0.12,d+0.35),{color:P.BUILDING_BASE,roughness:0.86},[0,0.06,0]);
+  part(g,new THREE.BoxGeometry(w,h,d),{color:type===1?0xF2F1EE:0xECEBE8,roughness:0.32},[0,0.12+h/2,0]);
+  part(g,new THREE.BoxGeometry(w+0.12,0.08,d+0.12),{color:type===2?0xDAD9D5:P.ROOF_RIM,roughness:0.6},[0,0.12+h+0.04,0]);
+  if(type===0) part(g,new THREE.ConeGeometry(Math.max(w,d)*0.55,0.48,4),{color:0xE6E5E2,roughness:0.5},[0,0.12+h+0.28,0]).rotation.y=Math.PI/4;
+  if(type===1) part(g,new THREE.CylinderGeometry(0.32,0.32,0.44,14),{color:0xF7F6F3,roughness:0.22},[0,0.12+h+0.3,0]);
+  const windows = type===2 ? 4 : 2;
+  for(let n=0;n<windows;n++){
+    const wx=-w/2+0.35+(n%2)*0.7, wy=0.42+Math.floor(n/2)*0.42;
+    part(g,new THREE.BoxGeometry(0.22,0.16,0.03),{color:0xB8CCEA,emissive:0xA8C8F8,emissiveIntensity:isNight?0.12:0.02,roughness:0.2},[wx,wy,d/2+0.02],false);
+  }
+  g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2; scene.add(g);
 }
 
 function addTrees(positions) {
@@ -937,6 +1036,7 @@ function setupEvents() {
     localStorage.setItem('minicityTheme',isNight?'night':'day');
     applyTheme(isNight,false);
   });
+  document.getElementById('mapToggle').addEventListener('click',toggleMapMode);
 
   document.getElementById('spClose').addEventListener('click',closeStatsPanel);
   document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'));
@@ -951,10 +1051,9 @@ function setupEvents() {
   document.getElementById('cgSkip').addEventListener('click',skipCG);
 
   window.addEventListener('resize',()=>{
-    const w=window.innerWidth,h=window.innerHeight,a=w/h,vs=13;
+    const w=window.innerWidth,h=window.innerHeight,vs=mapMode?CAMERA_MAP_SIZE:CAMERA_NEAR_SIZE;
     renderer.setSize(w,h);
-    camera.left=-vs*a; camera.right=vs*a; camera.top=vs; camera.bottom=-vs;
-    camera.updateProjectionMatrix();
+    updateCameraProjection(vs);
   });
 }
 
@@ -975,6 +1074,7 @@ function onCanvasClick() {
   raycaster.setFromCamera(mouse2D,camera);
   const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
   if(hits.length){const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);if(b)navigateTo(b);}
+  else movePlayerTo(cursorWorld);
 }
 
 // ── Hover / Navigate ──────────────────────────────────────────────────────────
@@ -1054,14 +1154,111 @@ function updateLabels() {
 // ── Loop ──────────────────────────────────────────────────────────────────────
 function loop() {
   requestAnimationFrame(loop);
-  if(cursorChar&&mouseOnScene){
-    cursorChar.position.x+=(cursorWorld.x-cursorChar.position.x)*0.09;
-    cursorChar.position.z+=(cursorWorld.z-cursorChar.position.z)*0.09;
-    cursorChar.position.y=0;
-  }
+  const now=performance.now();
+  const delta=Math.min((now-lastFrameTime)/1000,0.05);
+  lastFrameTime=now;
+  updatePlayerMovement(delta);
+  updateCameraFollow(delta);
   updateLabels();
   renderer.render(scene,camera);
 }
+
+function toggleMapMode() {
+  mapMode=!mapMode;
+  const btn=document.getElementById('mapToggle');
+  btn&&btn.classList.toggle('active',mapMode);
+  const size=mapMode?CAMERA_MAP_SIZE:CAMERA_NEAR_SIZE;
+  animateCameraSize(size);
+  if(mapMode) setCameraTarget(0,0,false);
+  else if(cursorChar) setCameraTarget(cursorChar.position.x,cursorChar.position.z,false);
+}
+
+function updateCameraFollow(delta) {
+  if(!cursorChar||mapMode)return;
+  const v=cursorChar.position.clone();
+  v.y=0.4; v.project(camera);
+  if(Math.abs(v.x)>CAMERA_EDGE||Math.abs(v.y)>CAMERA_EDGE){
+    const t=1-Math.pow(0.001,delta);
+    setCameraTarget(
+      cameraTarget.x+(cursorChar.position.x-cameraTarget.x)*t,
+      cameraTarget.z+(cursorChar.position.z-cameraTarget.z)*t,
+      true
+    );
+  }
+}
+
+function setCameraTarget(x,z,instant) {
+  const nx=clamp(x,-10,10), nz=clamp(z,-10,10);
+  if(instant){
+    cameraTarget.set(nx,0,nz);
+    camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+    camera.lookAt(cameraTarget);
+    return;
+  }
+  gsap.to(cameraTarget,{x:nx,z:nz,duration:0.55,ease:'power2.out',onUpdate:()=>{
+    camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+    camera.lookAt(cameraTarget);
+  }});
+}
+
+function updateCameraProjection(vs) {
+  const a=window.innerWidth/window.innerHeight;
+  camera.left=-vs*a; camera.right=vs*a; camera.top=vs; camera.bottom=-vs;
+  camera.updateProjectionMatrix();
+}
+
+function animateCameraSize(size) {
+  const state={v:camera.top};
+  gsap.to(state,{v:size,duration:0.55,ease:'power2.out',onUpdate:()=>updateCameraProjection(state.v)});
+}
+
+function movePlayerTo(target) {
+  if(!cursorChar)return;
+  cursorChar.visible=true;
+  playerPath = buildRoadPath(cursorChar.position, target);
+}
+
+function updatePlayerMovement(delta) {
+  if(!cursorChar||!playerPath.length)return;
+  const target=playerPath[0];
+  const dx=target.x-cursorChar.position.x, dz=target.z-cursorChar.position.z;
+  const dist=Math.hypot(dx,dz);
+  const step=PLAYER_SPEED*delta;
+  if(dist<=step){
+    cursorChar.position.set(target.x,0,target.z);
+    playerPath.shift();
+    return;
+  }
+  cursorChar.position.x+=dx/dist*step;
+  cursorChar.position.z+=dz/dist*step;
+  cursorChar.position.y=0;
+  cursorChar.rotation.y=Math.atan2(dx,dz);
+}
+
+function buildRoadPath(from, rawTarget) {
+  const start=nearestRoadPoint(from);
+  const end=nearestRoadPoint(rawTarget);
+  const mid1=new THREE.Vector3(start.x,0,end.z);
+  const mid2=new THREE.Vector3(end.x,0,start.z);
+  const useMid1=isRoadPoint(mid1)?mid1:mid2;
+  return [start,useMid1,end].filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
+}
+
+function nearestRoadPoint(p) {
+  const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
+  const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
+  return Math.abs(x-rx)<Math.abs(z-rz) ? new THREE.Vector3(rx,0,z) : new THREE.Vector3(x,0,rz);
+}
+
+function nearestRoadCoord(v) {
+  return ROAD_COORDS.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,ROAD_COORDS[0]);
+}
+
+function isRoadPoint(p) {
+  return ROAD_COORDS.some(c=>Math.abs(p.x-c)<0.01)||ROAD_COORDS.some(c=>Math.abs(p.z-c)<0.01);
+}
+
+function clamp(v,min,max) { return Math.max(min,Math.min(max,v)); }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STATS / PROGRESSION SYSTEM
@@ -1134,14 +1331,18 @@ function startTimeTracking() {
 function checkLogin() {
   const overlay=document.getElementById('loginOverlay');
   const name=localStorage.getItem('minicityUser');
-  if(!name){
-    overlay.style.display='flex';
-    requestAnimationFrame(()=>requestAnimationFrame(()=>overlay.classList.remove('hidden')));
-    setTimeout(()=>document.getElementById('loginInput').focus(),300);
-  } else {
-    overlay.style.display='none';
-    applyUsername(name);
-  }
+  overlay.style.display='none';
+  if(name) applyUsername(name);
+  if(shouldShowCG()) startCG();
+  else if(name) proceedToCity();
+  else showLogin();
+}
+
+function showLogin() {
+  const overlay=document.getElementById('loginOverlay');
+  overlay.style.display='flex';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>overlay.classList.remove('hidden')));
+  setTimeout(()=>document.getElementById('loginInput').focus(),300);
 }
 
 function doLogin() {
@@ -1157,22 +1358,13 @@ function doLogin() {
   overlay.classList.add('hidden');
   setTimeout(()=>{
     overlay.style.display='none';
-    afterLogin();
+    proceedToCity();
   },550);
 }
 
 function applyUsername(name) {
   const el=document.getElementById('logoUser');
   if(el) el.textContent='— '+name;
-}
-
-// Called after login (or if already logged in) to show CG or enter city
-function afterLogin() {
-  if (shouldShowCG()) {
-    startCG();
-  } else {
-    proceedToCity();
-  }
 }
 
 function proceedToCity() {
@@ -1301,7 +1493,7 @@ function setFilter(filter) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function shouldShowCG() {
-  return !localStorage.getItem('minicityCGSeen');
+  return !localStorage.getItem('minicityCGSeenV2');
 }
 
 function startCG() {
@@ -1313,77 +1505,74 @@ function startCG() {
 
   if (REDUCED) { endCG(); return; }
 
-  const visitor = localStorage.getItem('minicityUser') || '旅人';
-
   cgTimeline = gsap.timeline();
 
-  // Scene 1: Falling (0–4s)
-  cgTimeline.call(() => scene1(wrap, visitor), [], 0)
+  cgTimeline.call(() => scene1(wrap), [], 0)
            .to({}, {duration: 4}, 0);
-
-  // Scene 2: Opening eyes (4–8s)
-  cgTimeline.call(() => scene2(wrap, visitor), [], 4)
+  cgTimeline.call(() => scene2(wrap), [], 4)
            .to({}, {duration: 4}, 4);
-
-  // Scene 3: Book (8–12s)
-  cgTimeline.call(() => scene3(wrap, visitor), [], 8)
+  cgTimeline.call(() => scene3(wrap), [], 8)
            .to({}, {duration: 4}, 8);
-
-  // Scene 4: Self-confirmation (12–15s)
-  cgTimeline.call(() => scene4(wrap, visitor), [], 12)
-           .to({}, {duration: 3}, 12);
-
-  // Scene 5: Enter city (15s+)
-  cgTimeline.call(() => scene5(wrap, visitor), [], 15);
+  cgTimeline.call(() => scene4(wrap), [], 12)
+           .to({}, {duration: 4}, 12);
+  cgTimeline.call(() => scene5(wrap), [], 16);
 }
 
-function scene1(wrap, visitor) {
+function scene1(wrap) {
   wrap.innerHTML = `
-    <div class="cg-bg cg-bg-falling"></div>
+    <div class="cg-bg cg-bg-void"><div class="cg-fall-lines"></div></div>
+    <div class="cg-frame"></div>
     <div class="cg-text-block">
-      <p class="cg-line">坠落……坠落……</p>
-      <p class="cg-line" style="animation-delay:1.5s">没有撞到地面。</p>
+      <span class="cg-kicker">UNKNOWN ALTITUDE</span>
+      <p class="cg-line cg-line-large">坠落。</p>
+      <p class="cg-line" style="animation-delay:1.7s">可地面始终没有到来。</p>
     </div>`;
 }
 
-function scene2(wrap, visitor) {
+function scene2(wrap) {
   wrap.innerHTML = `
-    <div class="cg-bg cg-bg-eyes"></div>
+    <div class="cg-bg cg-bg-wake"><div class="cg-horizon"></div></div>
+    <div class="cg-frame"></div>
     <div class="cg-text-block">
-      <p class="cg-line">你睁开眼睛，发现自己来到了一个陌生的地方。</p>
-      <p class="cg-line cg-highlight" style="animation-delay:2s">「你好，${visitor}，欢迎来到物实」</p>
+      <span class="cg-kicker">SIGNAL ACQUIRED</span>
+      <p class="cg-line">你睁开眼睛。</p>
+      <p class="cg-line cg-highlight" style="animation-delay:1.8s">陌生的天际线正在苏醒。</p>
     </div>`;
 }
 
-function scene3(wrap, visitor) {
+function scene3(wrap) {
   wrap.innerHTML = `
-    <div class="cg-bg cg-bg-book"></div>
-    <div class="cg-book">
-      <div class="cg-book-cover">居民生存指南</div>
-    </div>
+    <div class="cg-bg cg-bg-city"><div class="cg-city-silhouette"></div><div class="cg-searchlight"></div></div>
+    <div class="cg-frame"></div>
     <div class="cg-text-block">
-      <p class="cg-line">你的手中多出了一本书。</p>
-      <p class="cg-line cg-book-title" style="animation-delay:1.8s">《居民生存指南》</p>
+      <span class="cg-kicker">SECTOR 00 / MINICITY</span>
+      <p class="cg-line">道路把城市切成两半。</p>
+      <p class="cg-line" style="animation-delay:1.6s">一半明亮，一半吞没所有回声。</p>
     </div>`;
 }
 
-function scene4(wrap, visitor) {
+function scene4(wrap) {
   wrap.innerHTML = `
-    <div class="cg-bg cg-bg-dark"></div>
+    <div class="cg-bg cg-bg-approach"><div class="cg-gate"></div></div>
+    <div class="cg-frame"></div>
     <div class="cg-text-block">
-      <p class="cg-line cg-quote">"这么说，我现在就是居民了？"</p>
-      <p class="cg-line" style="animation-delay:1.5s">生存？这个地方有点诡异。</p>
+      <span class="cg-kicker">CITY LIMIT</span>
+      <p class="cg-line cg-quote">「一座城市，怎么会没有管理人员呢？」</p>
+      <p class="cg-line" style="animation-delay:1.8s">空旷的声音，像是在回答你。</p>
     </div>`;
 }
 
-function scene5(wrap, visitor) {
+function scene5(wrap) {
   if (cgScene5Shown) return;
   cgScene5Shown = true;
   wrap.innerHTML = `
-    <div class="cg-bg cg-bg-gate"></div>
-    <div class="cg-text-block">
-      <p class="cg-line cg-gate-text">—— 前方，是一座城。</p>
-      <button class="cg-enter-btn" id="cgEnterBtn">推开门，走进去</button>
+    <div class="cg-bg cg-bg-title"></div>
+    <div class="cg-frame"></div>
+    <div class="cg-title-block">
+      <span class="cg-kicker">A CITY AWAITS</span>
+      <h1 class="cg-title">物实小城</h1>
+      <p class="cg-title-en">MINICITY</p>
+      <button class="cg-enter-btn" id="cgEnterBtn">进入边界</button>
     </div>`;
   const btn = document.getElementById('cgEnterBtn');
   if (btn) btn.addEventListener('click', endCG);
@@ -1394,18 +1583,20 @@ function skipCG() {
   if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
   if (cgAutoEnterTimer) { clearTimeout(cgAutoEnterTimer); cgAutoEnterTimer = null; }
   const wrap = document.getElementById('cgSceneWrap');
-  const visitor = localStorage.getItem('minicityUser') || '旅人';
-  scene5(wrap, visitor);
+  scene5(wrap);
 }
 
 function endCG() {
   if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
   if (cgAutoEnterTimer) { clearTimeout(cgAutoEnterTimer); cgAutoEnterTimer = null; }
-  localStorage.setItem('minicityCGSeen', 'true');
+  localStorage.setItem('minicityCGSeenV2', 'true');
   const overlay = document.getElementById('cgOverlay');
   overlay.classList.remove('active');
-  setTimeout(() => { overlay.style.display = 'none'; }, 600);
-  proceedToCity();
+  setTimeout(() => {
+    overlay.style.display = 'none';
+    if(localStorage.getItem('minicityUser')) proceedToCity();
+    else showLogin();
+  }, 600);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

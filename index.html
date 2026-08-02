@@ -19,6 +19,7 @@
       <span class="logo-user" id="logoUser"></span>
     </div>
     <nav class="ui-nav">
+      <button class="map-toggle" id="mapToggle" type="button">底图</button>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle day/night">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="5"/>
@@ -47,7 +48,7 @@
     </div>
     <div class="you-text">
       <span class="you-label">YOU ARE HERE</span>
-      <span class="you-sub">move your cursor to explore</span>
+      <span class="you-sub">click a road to walk</span>
     </div>
   </div>
 
@@ -84,11 +85,11 @@
   <div class="login-overlay hidden" id="loginOverlay" role="dialog" aria-label="Welcome to MiniCity" style="display:none">
     <div class="login-box">
       <span class="login-dot"></span>
-      <p class="login-title">welcome to minicity.</p>
-      <p class="login-sub">what should we call you?</p>
-      <input class="login-input" id="loginInput" type="text" placeholder="your name"
+      <p class="login-title">边界已经开启。</p>
+      <p class="login-sub">留下你的名字，成为这座城的居民。</p>
+      <input class="login-input" id="loginInput" type="text" placeholder="你的名字"
              maxlength="20" autocomplete="off" spellcheck="false" />
-      <button class="login-btn" id="loginBtn">enter the city →</button>
+      <button class="login-btn" id="loginBtn">签下名字，进入小城</button>
     </div>
   </div>
 
