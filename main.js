@@ -370,7 +370,7 @@ let playerPath = [];
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
-let currentFilter = 'bots';
+let currentFilter = 'all';
 let statsMode = 'clean';
 let mapMode = false;
 const cameraTarget = new THREE.Vector3(0,0,0);
@@ -1847,6 +1847,10 @@ function npcRoutine(npc) {
 
 function updateNpcSchedules() {
   npcList.forEach(npc=>{
+    if (currentFilter==='friends') {
+      if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } }
+      return;
+    }
     const behavior=npc.profile.behavior||'field';
     if (behavior==='rare') {
       npc.spawnTimer-=1;
@@ -2538,9 +2542,12 @@ function setupFilter() {
 function setFilter(filter) {
   currentFilter=filter;
   document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
-  const showNPCs=(filter!=='friends');
-  npcList.forEach(npc=>{ npc.mesh.visible=showNPCs; });
-  if(!showNPCs) showUnlockToast('no friends online yet — invite someone!');
+  if(filter==='friends'){
+    npcList.forEach(npc=>{ if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } } });
+    showUnlockToast('no friends online yet — invite someone!');
+  } else {
+    updateNpcSchedules();
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
