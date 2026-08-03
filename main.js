@@ -1711,11 +1711,22 @@ function scheduleWalk(npc) {
   do{ ni=Math.floor(Math.random()*pool.length); }
   while(pool[ni].distanceTo(npc.mesh.position)<0.1);
   const target=pool[ni];
+  walkAlongPath(npc, buildRoadPath(npc.mesh.position, target));
+}
+
+function walkAlongPath(npc, path) {
+  if (npc.walking===false) return;
+  if (!path.length) {
+    npc.tween=null;
+    if(npc.walking!==false) gsap.delayedCall(0.5+Math.random()*2.0,()=>scheduleWalk(npc));
+    return;
+  }
+  const target=path.shift();
   const from=npc.mesh.position.clone();
-  const dur=Math.max(1.0,from.distanceTo(target)/1.4)+Math.random()*0.8;
-  gsap.to(npc.mesh.rotation,{y:Math.atan2(target.x-from.x,target.z-from.z),duration:0.35,ease:'power1.out'});
+  const dur=Math.max(0.6,from.distanceTo(target)/1.4);
+  gsap.to(npc.mesh.rotation,{y:Math.atan2(target.x-from.x,target.z-from.z),duration:0.3,ease:'power1.out'});
   npc.tween=gsap.to(npc.mesh.position,{x:target.x,z:target.z,duration:dur,ease:'power1.inOut',
-    onComplete:()=>{ npc.tween=null; if(npc.walking!==false) gsap.delayedCall(0.5+Math.random()*2.0,()=>scheduleWalk(npc)); }});
+    onComplete:()=>walkAlongPath(npc,path)});
 }
 
 function pauseNpcs() {
