@@ -364,6 +364,7 @@ function initTextures() {
 // ── Globals ───────────────────────────────────────────────────────────────────
 let renderer, scene, camera, groundMat;
 const pathMats = [], lampGlobes = [], buildings = [], npcList = [];
+const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
 let playerPath = [];
 let lastFrameTime = performance.now();
@@ -889,7 +890,7 @@ function checkAchievements() {
 function init() {
   setupRenderer(); setupCamera(); initTextures(); setupScene(); setupLighting();
   addGround(); addPaths(); addFountain();
-  addBuildings(); addDecorations(); addCharacters();
+  addBuildings(); cacheBuildingBoxes(); addDecorations(); addCharacters();
   addLabels(); applyRenames();
   setupEvents(); setupFilter();
   setupModal();
@@ -2218,12 +2219,51 @@ function flushDistance(amount) {
 }
 
 function buildRoadPath(from, rawTarget) {
-  const start=nearestRoadPoint(from);
-  const end=nearestRoadPoint(rawTarget);
+  const start=roadEntry(from);
+  const end=roadEntry(rawTarget);
   const mid1=new THREE.Vector3(start.x,0,end.z);
   const mid2=new THREE.Vector3(end.x,0,start.z);
   const useMid1=isRoadPoint(mid1)?mid1:mid2;
   return [start,useMid1,end].filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
+}
+
+function cacheBuildingBoxes() {
+  buildingBoxes.length=0;
+  const b=new THREE.Box3();
+  buildings.forEach(bd=>{
+    b.setFromObject(bd.group);
+    buildingBoxes.push({
+      minX:b.min.x-0.15, maxX:b.max.x+0.15,
+      minZ:b.min.z-0.15, maxZ:b.max.z+0.15
+    });
+  });
+}
+
+function segHitsBuilding(x1,z1,x2,z2) {
+  const dx=x2-x1, dz=z2-z1, len2=dx*dx+dz*dz;
+  if(len2<1e-6) return false;
+  for(const bx of buildingBoxes){
+    const t=clamp(((bx.minX-x1)*dx+(bx.minZ-z1)*dz)/len2,0,1);
+    const cx=x1+dx*t, cz=z1+dz*t;
+    if(cx>=bx.minX&&cx<=bx.maxX&&cz>=bx.minZ&&cz<=bx.maxZ) return true;
+  }
+  return false;
+}
+
+// 找一个「从 p 直达且不穿建筑」的路点；p 已在路上则原样返回
+function roadEntry(p) {
+  if(isRoadPoint(p)) return nearestRoadPoint(p);
+  const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
+  const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
+  const cands=[[rx,z],[x,rz],[rx,rz],[nearestRoadCoord2(x),rz],[rx,nearestRoadCoord2(z)]];
+  const seen=[];
+  for(const [cx,cz] of cands){
+    if(Math.abs(cx)>CITY_LIMIT||Math.abs(cz)>CITY_LIMIT)continue;
+    const key=cx.toFixed(2)+','+cz.toFixed(2);
+    if(seen.includes(key))continue; seen.push(key);
+    if(!segHitsBuilding(p.x,p.z,cx,cz)) return new THREE.Vector3(cx,0,cz);
+  }
+  return nearestRoadPoint(p);
 }
 
 function nearestRoadPoint(p) {
@@ -2234,6 +2274,10 @@ function nearestRoadPoint(p) {
 
 function nearestRoadCoord(v) {
   return ROAD_COORDS.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,ROAD_COORDS[0]);
+}
+
+function nearestRoadCoord2(v) {
+  return ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-v)-Math.abs(b-v))[1];
 }
 
 function isRoadPoint(p) {
