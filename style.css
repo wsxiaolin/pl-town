@@ -253,18 +253,6 @@ body.night .icon-moon { opacity: 1; transform: none; }
   letter-spacing: 0.03em;
 }
 
-/* ===== TRANSITION OVERLAY ===== */
-.transition-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--blue);
-  z-index: 999;
-  opacity: 0;
-  pointer-events: none;
-  transform-origin: center;
-  border-radius: 0;
-}
-
 /* ===== MOBILE ===== */
 @media (max-width: 680px) {
   html, body { overflow: auto; cursor: auto; }

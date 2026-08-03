@@ -390,6 +390,7 @@ const CONFIG = {
   cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
   playerSpeed: 4.2,     // 角色移动速度
   npcTalkRadius: 1.6,   // 玩家需走近该距离才能触发对话
+  buildingInteractRadius: 3.5, // 玩家到建筑中心 ≤ 该距离时点击才触发交互（远处点击只走过去）
 };
 const CAMERA_OFFSET = new THREE.Vector3(18,30,18);
 
@@ -1671,6 +1672,16 @@ function makeCharacter(headHex, bodyHex) {
   head.position.y=0.43; head.castShadow=true; g.add(head);
   return g;
 }
+function makePlayerMarker() {
+  const g=new THREE.Group();
+  const cone=new THREE.Mesh(
+    new THREE.ConeGeometry(0.13,0.26,3),
+    new THREE.MeshBasicMaterial({color:0xE8A838,transparent:true,opacity:0.95,depthTest:false})
+  );
+  cone.rotation.y=Math.PI/2; cone.position.y=0;
+  g.add(cone);
+  return g;
+}
 function addCharacters() {
   if (REDUCED) return;
   NPC_PROFILES.forEach(profile=>{
@@ -1684,6 +1695,8 @@ function addCharacters() {
   });
   cursorChar=makeCharacter(0xA8C8F8,0x3B6FE0);
   cursorChar.visible=false; scene.add(cursorChar);
+  const marker=makePlayerMarker();
+  marker.position.y=0.95; cursorChar.add(marker);
 }
 
 function waypointsNear(home, radius) {
@@ -1743,8 +1756,8 @@ function addLabels() {
     el.className='b-label-item'; el.href='#'; el.tabIndex=0;
     el.setAttribute('aria-label',`${b.label}${b.isStats?' — open stats panel':' — 查看详情'}`);
     el.innerHTML=`<span class="bl-num">${b.num}</span><span class="bl-icon">${b.icon}</span><span class="bl-name">${b.label}</span>`;
-    el.addEventListener('click',e=>{e.preventDefault();navigateTo(b);});
-    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();navigateTo(b);}});
+    el.addEventListener('click',e=>{e.preventDefault();interactOrWalk(b);});
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();interactOrWalk(b);}});
     if (!b.isStats) {
       el.querySelector('.bl-name').addEventListener('dblclick',e=>{
         e.preventDefault(); e.stopPropagation(); startRename(b, el.querySelector('.bl-name'));
@@ -1787,8 +1800,8 @@ function setupEvents() {
   const canvas=document.getElementById('c');
   canvas.addEventListener('mousemove',onMouseMove);
   canvas.addEventListener('click',onCanvasClick);
-  canvas.addEventListener('mouseenter',()=>{mouseOnScene=true; if(cursorChar)cursorChar.visible=true;});
-  canvas.addEventListener('mouseleave',()=>{mouseOnScene=false; if(cursorChar)cursorChar.visible=false;});
+  canvas.addEventListener('mouseenter',()=>{mouseOnScene=true;});
+  canvas.addEventListener('mouseleave',()=>{mouseOnScene=false;});
 
   document.getElementById('themeToggle').addEventListener('click',()=>{
     isNight=!isNight;
@@ -1841,7 +1854,10 @@ function onCanvasClick() {
   const npcHit=npcForRaycast();
   if(npcHit){ talkToOrWalk(npcHit); return; }
   const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
-  if(hits.length){const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);if(b)navigateTo(b);return;}
+  if(hits.length){
+    const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);
+    if(b){ interactOrWalk(b); return; }
+  }
   const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);
   if(near){ talkToOrWalk(near); return; }
   movePlayerTo(cursorWorld);
@@ -1852,6 +1868,14 @@ function talkToOrWalk(npc) {
     openNpcDialog(npc);
   } else {
     movePlayerTo(npc.mesh.position);
+  }
+}
+
+function interactOrWalk(b) {
+  if(cursorChar && cursorChar.position.distanceTo(b.group.position)<=CONFIG.buildingInteractRadius){
+    navigateTo(b);
+  } else {
+    movePlayerTo(b.group.position);
   }
 }
 
@@ -1870,17 +1894,7 @@ function unhover(b) {
 function navigateTo(b) {
   if (b.isStats) { openStatsPanel(); trackInteraction('stats'); return; }
   trackInteraction(b.id);
-  if (REDUCED) { openModal(b); return; }
-  const overlay=document.getElementById('transitionOverlay');
-  const v=b.group.position.clone(); v.y=1.5; v.project(camera);
-  const sx=(v.x*0.5+0.5)*window.innerWidth, sy=((-v.y)*0.5+0.5)*window.innerHeight;
-  gsap.set(overlay,{left:sx,top:sy,xPercent:-50,yPercent:-50,scale:0.04,opacity:1,borderRadius:'50%',pointerEvents:'all'});
-  gsap.to(overlay,{scale:55,borderRadius:'0%',duration:0.62,ease:'power3.in',onComplete:()=>{
-    openModal(b);
-    gsap.to(overlay,{opacity:0,duration:0.35,delay:0.05,onComplete:()=>{
-      gsap.set(overlay,{scale:0.04,pointerEvents:'none'});
-    }});
-  }});
+  openModal(b);
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -2165,6 +2179,7 @@ function applyUsername(name) {
 
 function proceedToCity() {
   entranceAnimation();
+  if(cursorChar){ cursorChar.visible=true; }
   startTimeTracking();
   checkAchievements();
 }
