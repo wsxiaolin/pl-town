@@ -657,8 +657,8 @@ const WAYPOINTS = buildWaypoints();
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
 const NPC_PROFILES = [
   {
-    id:'linxu', name:'林叙', role:'图书馆管理员',
-    head:0xD4A574, body:0x8B9DBF, home:[-6,6], patrolRadius:8,
+    id:'linxu', name:'林叙', role:'图书馆管理员', core:true, spawnChance:1,
+    head:0xD4A574, body:0x8B9DBF, home:[-6,6], work:[-4,3], patrolRadius:8,
     dialog:[
       { text:'「灯还给你留着。这座城的知识，都沉在这些书页里。」', options:[
         { text:'你在管理什么？', next:1 },
@@ -682,8 +682,8 @@ const NPC_PROFILES = [
     ],
   },
   {
-    id:'laoqin', name:'老秦', role:'修路工 · 向导',
-    head:0xC68642, body:0xC4C9D8, home:[0,-6], patrolRadius:9,
+    id:'laoqin', name:'老秦', role:'修路工 · 向导', core:true, spawnChance:1,
+    head:0xC68642, body:0xC4C9D8, home:[0,-6], work:[4,-9], patrolRadius:9,
     dialog:[
       { text:'「路都是我给铺平的。想认路？先认路名。」', options:[
         { text:'路名怎么认？', next:1 },
@@ -704,8 +704,8 @@ const NPC_PROFILES = [
     ],
   },
   {
-    id:'azi', name:'阿紫', role:'星尘报社记者',
-    head:0xFDBCB4, body:0x3B6FE0, home:[6,-6], patrolRadius:8,
+    id:'azi', name:'阿紫', role:'星尘报社记者', core:true, spawnChance:1,
+    head:0xFDBCB4, body:0x3B6FE0, home:[6,-6], work:[-4,9], patrolRadius:8,
     dialog:[
       { text:'「嘿，新面孔！报摊头条还没定呢——这座城今天又发生了什么？」', options:[
         { text:'你在写这座城的故事？', next:1 },
@@ -729,8 +729,8 @@ const NPC_PROFILES = [
     ],
   },
   {
-    id:'jiujin', name:'九斤', role:'猫咖馆店长',
-    head:0x8D5524, body:0xC8C4BE, home:[6,6], patrolRadius:8,
+    id:'jiujin', name:'九斤', role:'猫咖馆店长', core:true, spawnChance:1,
+    head:0x8D5524, body:0xC8C4BE, home:[6,6], work:[9,3], patrolRadius:8,
     dialog:[
       { text:'「咪……欢迎光临。猫在上层，规矩在底层。」', options:[
         { text:'听说你的楼有一万五千层？', next:1 },
@@ -747,6 +747,92 @@ const NPC_PROFILES = [
       ]},
       { text:'「喵。它是前任店长。我，是它雇的。」', options:[
         { text:'……懂了。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'tang', name:'唐师傅', role:'茶馆掌柜', core:false, spawnChance:1,
+    head:0xC08A4E, body:0x6B8FE8, home:[12,6], work:[15,15], patrolRadius:6,
+    dialog:[
+      { text:'「水开了，茶就快好了。这条街的闲话，都泡在壶里。」', options:[
+        { text:'最近有什么新闲话？', next:1 },
+        { text:'来壶茶。', next:null },
+      ]},
+      { text:'「听说研究院的灯整夜不灭。年轻人，别在半夜去敲那扇门。」', options:[
+        { text:'为什么？', next:2 },
+        { text:'我记住了。', next:null },
+      ]},
+      { text:'「因为敲门的人，第二天都说自己昨晚从没去过。」', options:[
+        { text:'……有意思。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'bai', name:'白露', role:'研究院研究员', core:false, spawnChance:1,
+    head:0xE8D8C8, body:0x8A9AB5, home:[12,-6], work:[15,-9], patrolRadius:6,
+    dialog:[
+      { text:'「嘘——数据刚跑到一半。你站的那块地砖，是上周的结论。」', options:[
+        { text:'你们在研究什么？', next:1 },
+        { text:'打扰了。', next:null },
+      ]},
+      { text:'「把这座城量一遍。每栋楼的高度、每条路的长度、每个居民的步数。」', options:[
+        { text:'那我的步数也在里面？', next:2 },
+        { text:'听起来很辛苦。', next:null },
+      ]},
+      { text:'「当然。你走得越多，我们的图就越完整。这是好事情。」', options:[
+        { text:'那我多走走。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'kang', name:'康叔', role:'文训社先生', core:false, spawnChance:1,
+    head:0xE0C8A8, body:0x7A6A5A, home:[-12,6], work:[-15,15], patrolRadius:6,
+    dialog:[
+      { text:'「写字如走路，一笔一划，都得踩在实处。」', options:[
+        { text:'教我一笔？', next:1 },
+        { text:'受教了。', next:null },
+      ]},
+      { text:'「你心先静下来，笔自然会跟着走。城也是一样。」', options:[
+        { text:'我会试着静下来。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'qiu', name:'秋嫂', role:'报摊婆婆', core:false, spawnChance:0.6,
+    head:0xD8B8A0, body:0xC06060, home:[-6,-6], work:[-9,-15], patrolRadius:6,
+    dialog:[
+      { text:'「今天的报纸还热着。要一份吗？比旧新闻便宜。」', options:[
+        { text:'今天有什么大事？', next:1 },
+        { text:'不用了，谢谢。', next:null },
+      ]},
+      { text:'「大事就是人人都想听的那个。小事，才藏得深。」', options:[
+        { text:'那小事是什么？', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'li', name:'李叔', role:'社区守望者', core:false, spawnChance:0.55,
+    head:0xA08060, body:0x4A6A8A, home:[12,12], work:[15,-15], patrolRadius:6,
+    dialog:[
+      { text:'「夜里我守着这片。你半夜出门，看见我的灯，就不用怕。」', options:[
+        { text:'你天天守夜？', next:1 },
+        { text:'辛苦了。', next:null },
+      ]},
+      { text:'「习惯了。城里的人睡得香，我才有得守。」', options:[
+        { text:'有你在真好。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'you', name:'游先生', role:'夜行者', core:false, spawnChance:0.35,
+    head:0xD0C8C0, body:0x3A3A4A, home:[18,0], work:null, patrolRadius:5,
+    dialog:[
+      { text:'「……你也看见了？那些灯，只在我走过的时候亮。」', options:[
+        { text:'你是谁？', next:1 },
+        { text:'我什么都没看见。', next:null },
+      ]},
+      { text:'「一个不太重要的名字。你只要知道——别在半夜数路灯。」', options:[
+        { text:'为什么？', next:null },
       ]},
     ],
   },
@@ -769,7 +855,10 @@ const ACHIEVEMENTS = [
   { id:'walker_100',    name:'长街行者',      desc:'累计步行 100 米',                       check:s=>(s.distance||0)>=100 },
   { id:'walker_500',    name:'环城暴走',      desc:'累计步行 500 米',                       check:s=>(s.distance||0)>=500 },
   { id:'chat_1',        name:'初次交谈',      desc:'和一位居民交谈',                        check:s=>(s.npcsTalked||0)>=1 },
-  { id:'chat_all',      name:'城中人脉',      desc:'和每一位居民都交谈过',                  check:s=>(s.npcsMet||[]).length>=NPC_PROFILES.length },
+  { id:'chat_all',      name:'城中人脉',      desc:'和每一位核心居民都交谈过',             check:s=>{
+    const core=NPC_PROFILES.filter(p=>p.core).map(p=>p.id);
+    return (s.npcsMet||[]).filter(id=>core.includes(id)).length>=core.length;
+  } },
   { id:'night_owl',     name:'守夜人',        desc:'第一次在夜里看这座城市',                check:s=>(s.nightToggles||0)>=1 },
   { id:'unlock_3',      name:'城市生长',      desc:'解锁 3 次城市变化',                     check:s=>(s.unlockLevel||0)>=3 },
 ];
@@ -795,6 +884,7 @@ function init() {
   setupModal();
   applyTheme(isNight, true);
   initAnimations();
+  setInterval(updateNpcSchedules, 1500);
   document.getElementById('labelsWrap').classList.add('hidden');
   requestAnimationFrame(loop);
 
@@ -1687,11 +1777,12 @@ function addCharacters() {
   NPC_PROFILES.forEach(profile=>{
     const g=makeCharacter(profile.head,profile.body);
     g.traverse(c=>{ if(c.isMesh) c.userData.npcId=profile.id; });
-    const start=WAYPOINTS[0];
-    g.position.set(start.x,0,start.z); scene.add(g);
-    const npc={profile, mesh:g, tween:null, patrol:waypointsNear(profile.home,profile.patrolRadius)};
+    const start=new THREE.Vector3(profile.home[0],0,profile.home[1]);
+    g.position.copy(start); scene.add(g);
+    const npc={profile, mesh:g, tween:null, spawnTimer:Math.random()*10};
     npcList.push(npc);
-    if (!MOBILE()) scheduleWalk(npc);
+    if(profile.spawnChance<1) g.visible=false;
+    if (!MOBILE()) npcRoutine(npc);
   });
   cursorChar=makeCharacter(0xA8C8F8,0x3B6FE0);
   cursorChar.visible=false; scene.add(cursorChar);
@@ -1699,26 +1790,43 @@ function addCharacters() {
   marker.position.y=0.95; cursorChar.add(marker);
 }
 
-function waypointsNear(home, radius) {
-  const pts=WAYPOINTS.filter(p=>Math.hypot(p.x-home[0],p.z-home[1])<=radius);
-  return pts.length?pts:WAYPOINTS.slice(0,8);
+function npcDesiredTarget(npc) {
+  const h=new Date().getHours();
+  const working = h>=9 && h<17;
+  const dest = working && npc.profile.work ? npc.profile.work : npc.profile.home;
+  return new THREE.Vector3(dest[0],0,dest[1]);
 }
 
-function scheduleWalk(npc) {
+function npcRoutine(npc) {
   if (npc.walking===false) return;
-  const pool=npc.patrol;
-  let ni;
-  do{ ni=Math.floor(Math.random()*pool.length); }
-  while(pool[ni].distanceTo(npc.mesh.position)<0.1);
-  const target=pool[ni];
-  walkAlongPath(npc, buildRoadPath(npc.mesh.position, target));
+  if (!npc.mesh.visible) return;
+  const target=npcDesiredTarget(npc);
+  if (!target) return;
+  const dist=npc.mesh.position.distanceTo(target);
+  if (dist>0.8 && !npc.tween) walkAlongPath(npc, buildRoadPath(npc.mesh.position, target));
+}
+
+function updateNpcSchedules() {
+  npcList.forEach(npc=>{
+    if (npc.profile.spawnChance<1) {
+      npc.spawnTimer-=1.5;
+      if(npc.spawnTimer<=0){
+        npc.spawnTimer=12+Math.random()*18;
+        const appear=Math.random()<npc.profile.spawnChance;
+        npc.mesh.visible=appear;
+        if(!appear && npc.tween){ npc.tween.kill(); npc.tween=null; }
+      }
+    }
+    if (npc.walking===false) return;
+    if (!npc.mesh.visible) return;
+    npcRoutine(npc);
+  });
 }
 
 function walkAlongPath(npc, path) {
   if (npc.walking===false) return;
   if (!path.length) {
     npc.tween=null;
-    if(npc.walking!==false) gsap.delayedCall(0.5+Math.random()*2.0,()=>scheduleWalk(npc));
     return;
   }
   const target=path.shift();
@@ -1726,7 +1834,7 @@ function walkAlongPath(npc, path) {
   const dur=Math.max(0.6,from.distanceTo(target)/1.4);
   gsap.to(npc.mesh.rotation,{y:Math.atan2(target.x-from.x,target.z-from.z),duration:0.3,ease:'power1.out'});
   npc.tween=gsap.to(npc.mesh.position,{x:target.x,z:target.z,duration:dur,ease:'power1.inOut',
-    onComplete:()=>walkAlongPath(npc,path)});
+    onComplete:()=>{ npc.tween=null; walkAlongPath(npc,path); }});
 }
 
 function pauseNpcs() {
@@ -1739,13 +1847,14 @@ function pauseNpcs() {
 function resumeNpcs() {
   npcList.forEach(npc=>{
     npc.walking=true;
-    if (!MOBILE()) scheduleWalk(npc);
+    if (!MOBILE()) npcRoutine(npc);
   });
 }
 
 function nearestNpcTo(p, radius) {
   let best=null, bestD=radius;
   npcList.forEach(npc=>{
+    if(!npc.mesh.visible)return;
     const d=npc.mesh.position.distanceTo(p);
     if(d<bestD){ bestD=d; best=npc; }
   });
@@ -1753,7 +1862,8 @@ function nearestNpcTo(p, radius) {
 }
 
 function npcForRaycast() {
-  const hits=raycaster.intersectObjects(npcList.map(n=>n.mesh),true);
+  const visible=npcList.filter(n=>n.mesh.visible);
+  const hits=raycaster.intersectObjects(visible.map(n=>n.mesh),true);
   if(!hits.length)return null;
   const id=hits[0].object.userData.npcId;
   return npcList.find(n=>n.profile.id===id)||null;
