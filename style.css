@@ -1143,3 +1143,136 @@ body.night .modal-paper {
   .modal-title { font-size: 22px; }
   .modal-line { font-size: 14px; line-height: 1.85; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════ */
+/* NPC DIALOG — resident profile & options                                       */
+/* ════════════════════════════════════════════════════════════════════════════ */
+
+.npc-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,12,22,0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 560;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.npc-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.npc-panel {
+  width: 100%;
+  max-width: 460px;
+  margin-bottom: 18px;
+  background: linear-gradient(160deg, #101826 0%, #0a0f1a 70%);
+  border: 1px solid rgba(168,200,248,0.18);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.5), 0 0 40px rgba(59,111,224,0.12);
+  padding: 20px 22px 18px;
+  transform: translateY(24px);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.npc-overlay.open .npc-panel { transform: translateY(0); }
+
+.npc-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.npc-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid rgba(168,200,248,0.35);
+  box-shadow: 0 0 16px rgba(168,200,248,0.2);
+}
+
+.npc-id {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.npc-name {
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 19px;
+  font-weight: 600;
+  color: #EAF0FB;
+  letter-spacing: 0.06em;
+}
+.npc-role {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #7fa3d8;
+  text-transform: uppercase;
+}
+
+.npc-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: color 0.2s, background 0.2s;
+}
+.npc-close:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+
+.npc-line {
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 16px;
+  line-height: 1.9;
+  color: #dfe7f4;
+  min-height: 76px;
+  margin-bottom: 16px;
+  animation: npcLineIn 0.4s ease;
+}
+
+@keyframes npcLineIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.npc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.npc-opt {
+  text-align: left;
+  font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  color: #cfe0f8;
+  background: rgba(59,111,224,0.10);
+  border: 1px solid rgba(168,200,248,0.22);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.1s;
+}
+.npc-opt:hover {
+  background: rgba(59,111,224,0.28);
+  border-color: rgba(168,200,248,0.6);
+  color: #fff;
+}
+.npc-opt:active { transform: scale(0.99); }
+
+/* Mobile NPC dialog */
+@media (max-width: 680px) {
+  .npc-panel { margin-bottom: 10px; max-width: calc(100vw - 20px); }
+  .npc-line { font-size: 14px; }
+}

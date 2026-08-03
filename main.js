@@ -29,6 +29,8 @@ let statsMode = 'clean';
 let mapMode = false;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
+let dialogOpen = false, activeNpc = null, activeNode = null;
+let pendingDistance = 0;
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -36,10 +38,14 @@ const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
 const ROAD_COORDS = [-18, -12, -6, 0, 6, 12, 18];
 const CITY_LIMIT = 22;
-const PLAYER_SPEED = 4.2;
-const CAMERA_NEAR_SIZE = 14;
-const CAMERA_MAP_SIZE = 25;
-const CAMERA_EDGE = 0.58;
+// 可调参数：镜头与角色
+const CONFIG = {
+  cameraNearSize: 11,   // 近景视野宽度（越小视角越窄）
+  cameraMapSize: 26,    // 底图视野宽度
+  cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
+  playerSpeed: 4.2,     // 角色移动速度
+  npcTalkRadius: 1.6,   // 点击时判断「碰到居民」的距离
+};
 const CAMERA_OFFSET = new THREE.Vector3(18,30,18);
 
 // ── Building config ───────────────────────────────────────────────────────────
@@ -294,13 +300,110 @@ const BUILDING_CONTENT = {
   },
 };
 
-const WAYPOINTS = [
-  new THREE.Vector3( 0,   0,-6), new THREE.Vector3( 0,   0,-4), new THREE.Vector3( 0,   0,-2),
-  new THREE.Vector3( 0,   0, 0), new THREE.Vector3( 0,   0, 2), new THREE.Vector3( 0,   0, 4),
-  new THREE.Vector3( 0,   0, 6), new THREE.Vector3(-6,   0, 0), new THREE.Vector3(-3.5, 0, 0),
-  new THREE.Vector3(-1.5, 0, 0), new THREE.Vector3( 1.5, 0, 0), new THREE.Vector3( 3.5, 0, 0),
-  new THREE.Vector3( 6,   0, 0), new THREE.Vector3(-1.2, 0,-1.2), new THREE.Vector3(1.2, 0,-1.2),
-  new THREE.Vector3(-1.2, 0, 1.2), new THREE.Vector3(1.2, 0, 1.2),
+// 道路网格路径点（覆盖整个城市，NPC 只在这些点上移动，不会穿过建筑）
+function buildWaypoints() {
+  const wps=[];
+  ROAD_COORDS.forEach(x=>ROAD_COORDS.forEach(z=>wps.push(new THREE.Vector3(x,0,z))));
+  return wps;
+}
+const WAYPOINTS = buildWaypoints();
+
+// ── NPC 档案 ─────────────────────────────────────────────────────────────────
+const NPC_PROFILES = [
+  {
+    id:'linxu', name:'林叙', role:'图书馆管理员',
+    head:0xD4A574, body:0x8B9DBF, home:[-6,6], patrolRadius:8,
+    dialog:[
+      { text:'「灯还给你留着。这座城的知识，都沉在这些书页里。」', options:[
+        { text:'你在管理什么？', next:1 },
+        { text:'最近有什么传闻？', next:2 },
+        { text:'谢谢，我先走了。', next:null },
+      ]},
+      { text:'「管理员把重要的东西收进书里：哪些街道不安全、哪些人值得信任。都写在纸上。」', options:[
+        { text:'那我该读哪本？', next:3 },
+        { text:'原来如此，谢谢。', next:null },
+      ]},
+      { text:'「传闻说东边老在半夜亮灯，但没几个人愿意承认自己去看过。」', options:[
+        { text:'你会去查吗？', next:4 },
+        { text:'听起来很可疑。', next:null },
+      ]},
+      { text:'「《实验记录》最适合新居民。别怕复杂，复杂只是还没被命名。」', options:[
+        { text:'记住了，谢谢你。', next:null },
+      ]},
+      { text:'「我只会记在纸上。好奇心这种事，得你自己去。」', options:[
+        { text:'明白了。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'laoqin', name:'老秦', role:'修路工 · 向导',
+    head:0xC68642, body:0xC4C9D8, home:[0,-6], patrolRadius:9,
+    dialog:[
+      { text:'「路都是我给铺平的。想认路？先认路名。」', options:[
+        { text:'路名怎么认？', next:1 },
+        { text:'这条路通到哪里？', next:2 },
+        { text:'我赶时间，先走了。', next:null },
+      ]},
+      { text:'「南北叫街，东西叫道。你沿着数字走，绝不会丢。」', options:[
+        { text:'难怪这么整齐。', next:null },
+        { text:'记住了，谢谢老秦。', next:null },
+      ]},
+      { text:'「每条路最后都通向一座楼。你走的每一步，都是去找一个答案。」', options:[
+        { text:'说得真够玄的。', next:null },
+        { text:'那我该往哪走？', next:3 },
+      ]},
+      { text:'「往亮的地方走，准没错。夜里要是迷路，就看那些路灯。」', options:[
+        { text:'好，心里有数了。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'azi', name:'阿紫', role:'星尘报社记者',
+    head:0xFDBCB4, body:0x3B6FE0, home:[6,-6], patrolRadius:8,
+    dialog:[
+      { text:'「嘿，新面孔！报摊头条还没定呢——这座城今天又发生了什么？」', options:[
+        { text:'你在写这座城的故事？', next:1 },
+        { text:'今天的头条是什么？', next:2 },
+        { text:'我没什么可说的。', next:null },
+      ]},
+      { text:'「每栋楼都有一半的秘密。我的工作，就是把另一半问出来。」', options:[
+        { text:'需要我帮忙打听吗？', next:3 },
+        { text:'祝你好运。', next:null },
+      ]},
+      { text:'「还没定。可能是路灯昨夜集体熄灭，也可能是咖啡馆来了只新猫。」', options:[
+        { text:'那很有新闻价值。', next:null },
+        { text:'别写猫，小心猫咖店长找你。', next:4 },
+      ]},
+      { text:'「太好了！你要是听到什么怪事，来报摊找我。署你的名。」', options:[
+        { text:'成交。', next:null },
+      ]},
+      { text:'「哈，店长那只猫比我还像主编。」', options:[
+        { text:'确实是。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'jiujin', name:'九斤', role:'猫咖馆店长',
+    head:0x8D5524, body:0xC8C4BE, home:[6,6], patrolRadius:8,
+    dialog:[
+      { text:'「咪……欢迎光临。猫在上层，规矩在底层。」', options:[
+        { text:'听说你的楼有一万五千层？', next:1 },
+        { text:'来杯茶，谢谢。', next:2 },
+        { text:'我只是路过。', next:null },
+      ]},
+      { text:'「嗯，一万五千层往上，还有一万五千层往下。猫都记不清。」', options:[
+        { text:'那只猫是店主还是你？', next:3 },
+        { text:'太夸张了。', next:null },
+      ]},
+      { text:'「茶温刚好。坐下喝一杯，脚步太快会吓到猫。」', options:[
+        { text:'好茶。', next:null },
+        { text:'那我慢点走。', next:null },
+      ]},
+      { text:'「喵。它是前任店长。我，是它雇的。」', options:[
+        { text:'……懂了。', next:null },
+      ]},
+    ],
+  },
 ];
 
 // Progression unlock tiers
@@ -310,6 +413,31 @@ const UNLOCK_TIERS = [
   { threshold:9,  label:'a stone arch revealed', fn: () => addArch(-5.5,0,5.8,-Math.PI/6) },
   { threshold:14, label:'a bench was placed',    fn: () => addBench(6.8,0,-1.5,Math.PI/3) },
 ];
+
+// ── 成就系统 ─────────────────────────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  { id:'citizen',       name:'居民落籍',      desc:'签下名字，成为这座城的居民',            check:s=>!!localStorage.getItem('minicityUser') },
+  { id:'first_building',name:'第一次叩门',    desc:'进入任意一座建筑',                      check:s=>(s.buildingsVisited||[]).length>=1 },
+  { id:'explorer_5',    name:'街区漫游者',    desc:'参观 5 座建筑',                         check:s=>(s.buildingsVisited||[]).length>=5 },
+  { id:'explorer_10',   name:'城市测绘员',    desc:'参观 10 座建筑',                        check:s=>(s.buildingsVisited||[]).length>=10 },
+  { id:'walker_100',    name:'长街行者',      desc:'累计步行 100 米',                       check:s=>(s.distance||0)>=100 },
+  { id:'walker_500',    name:'环城暴走',      desc:'累计步行 500 米',                       check:s=>(s.distance||0)>=500 },
+  { id:'chat_1',        name:'初次交谈',      desc:'和一位居民交谈',                        check:s=>(s.npcsTalked||0)>=1 },
+  { id:'chat_all',      name:'城中人脉',      desc:'和每一位居民都交谈过',                  check:s=>(s.npcsMet||[]).length>=NPC_PROFILES.length },
+  { id:'night_owl',     name:'守夜人',        desc:'第一次在夜里看这座城市',                check:s=>(s.nightToggles||0)>=1 },
+  { id:'unlock_3',      name:'城市生长',      desc:'解锁 3 次城市变化',                     check:s=>(s.unlockLevel||0)>=3 },
+];
+
+function checkAchievements() {
+  const s=getStats();
+  s.achievements=s.achievements||[];
+  let gained=false;
+  ACHIEVEMENTS.forEach(a=>{
+    if(s.achievements.includes(a.id))return;
+    if(a.check(s)){ s.achievements.push(a.id); gained=true; showUnlockToast('成就解锁 · '+a.name); }
+  });
+  if(gained) saveStats(s);
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function init() {
@@ -340,7 +468,7 @@ function setupRenderer() {
   if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 }
 function setupCamera() {
-  const vs = CAMERA_NEAR_SIZE;
+  const vs = CONFIG.cameraNearSize;
   camera = new THREE.OrthographicCamera(-vs,vs,vs,-vs,0.1,200);
   updateCameraProjection(vs);
   setCameraTarget(0,0,true);
@@ -954,24 +1082,66 @@ function makeCharacter(headHex, bodyHex) {
 }
 function addCharacters() {
   if (REDUCED) return;
-  [{head:0xD4A574,body:0x8B9DBF,s:0},{head:0xC68642,body:0xC4C9D8,s:7},
-   {head:0xFDBCB4,body:0x3B6FE0,s:12},{head:0x8D5524,body:0xC8C4BE,s:4}].forEach(d=>{
-    const g=makeCharacter(d.head,d.body);
-    const wp=WAYPOINTS[d.s]; g.position.set(wp.x,0,wp.z); scene.add(g);
-    const npc={mesh:g,wpIdx:d.s}; npcList.push(npc);
+  NPC_PROFILES.forEach(profile=>{
+    const g=makeCharacter(profile.head,profile.body);
+    g.traverse(c=>{ if(c.isMesh) c.userData.npcId=profile.id; });
+    const start=WAYPOINTS[0];
+    g.position.set(start.x,0,start.z); scene.add(g);
+    const npc={profile, mesh:g, tween:null, patrol:waypointsNear(profile.home,profile.patrolRadius)};
+    npcList.push(npc);
     if (!MOBILE()) scheduleWalk(npc);
   });
   cursorChar=makeCharacter(0xA8C8F8,0x3B6FE0);
   cursorChar.visible=false; scene.add(cursorChar);
 }
+
+function waypointsNear(home, radius) {
+  const pts=WAYPOINTS.filter(p=>Math.hypot(p.x-home[0],p.z-home[1])<=radius);
+  return pts.length?pts:WAYPOINTS.slice(0,8);
+}
+
 function scheduleWalk(npc) {
-  let ni; do{ni=Math.floor(Math.random()*WAYPOINTS.length);}while(ni===npc.wpIdx);
-  npc.wpIdx=ni;
-  const from=npc.mesh.position.clone(), target=WAYPOINTS[ni];
-  const dur=Math.max(1.2,from.distanceTo(target)/1.6)+Math.random()*0.8;
+  if (npc.walking===false) return;
+  const pool=npc.patrol;
+  let ni;
+  do{ ni=Math.floor(Math.random()*pool.length); }
+  while(pool[ni].distanceTo(npc.mesh.position)<0.1);
+  const target=pool[ni];
+  const from=npc.mesh.position.clone();
+  const dur=Math.max(1.0,from.distanceTo(target)/1.4)+Math.random()*0.8;
   gsap.to(npc.mesh.rotation,{y:Math.atan2(target.x-from.x,target.z-from.z),duration:0.35,ease:'power1.out'});
-  gsap.to(npc.mesh.position,{x:target.x,z:target.z,duration:dur,ease:'power1.inOut',
-    onComplete:()=>gsap.delayedCall(0.5+Math.random()*2.2,()=>scheduleWalk(npc))});
+  npc.tween=gsap.to(npc.mesh.position,{x:target.x,z:target.z,duration:dur,ease:'power1.inOut',
+    onComplete:()=>{ npc.tween=null; if(npc.walking!==false) gsap.delayedCall(0.5+Math.random()*2.0,()=>scheduleWalk(npc)); }});
+}
+
+function pauseNpcs() {
+  npcList.forEach(npc=>{
+    npc.walking=false;
+    if(npc.tween){ npc.tween.kill(); npc.tween=null; }
+  });
+}
+
+function resumeNpcs() {
+  npcList.forEach(npc=>{
+    npc.walking=true;
+    if (!MOBILE()) scheduleWalk(npc);
+  });
+}
+
+function nearestNpcTo(p, radius) {
+  let best=null, bestD=radius;
+  npcList.forEach(npc=>{
+    const d=npc.mesh.position.distanceTo(p);
+    if(d<bestD){ bestD=d; best=npc; }
+  });
+  return best;
+}
+
+function npcForRaycast() {
+  const hits=raycaster.intersectObjects(npcList.map(n=>n.mesh),true);
+  if(!hits.length)return null;
+  const id=hits[0].object.userData.npcId;
+  return npcList.find(n=>n.profile.id===id)||null;
 }
 
 // ── Labels ────────────────────────────────────────────────────────────────────
@@ -1035,6 +1205,10 @@ function setupEvents() {
     document.body.classList.toggle('day',!isNight);
     localStorage.setItem('minicityTheme',isNight?'night':'day');
     applyTheme(isNight,false);
+    const s=getStats();
+    if(isNight)s.nightToggles=(s.nightToggles||0)+1;
+    saveStats(s);
+    checkAchievements();
   });
   document.getElementById('mapToggle').addEventListener('click',toggleMapMode);
 
@@ -1042,7 +1216,7 @@ function setupEvents() {
   document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'));
   document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'));
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){closeStatsPanel();closeModal();}
+    if(e.key==='Escape'){closeStatsPanel();closeModal();closeNpcDialog();}
   });
 
   document.getElementById('loginBtn').addEventListener('click',doLogin);
@@ -1051,7 +1225,7 @@ function setupEvents() {
   document.getElementById('cgSkip').addEventListener('click',skipCG);
 
   window.addEventListener('resize',()=>{
-    const w=window.innerWidth,h=window.innerHeight,vs=mapMode?CAMERA_MAP_SIZE:CAMERA_NEAR_SIZE;
+    const w=window.innerWidth,h=window.innerHeight,vs=mapMode?CONFIG.cameraMapSize:CONFIG.cameraNearSize;
     renderer.setSize(w,h);
     updateCameraProjection(vs);
   });
@@ -1071,10 +1245,15 @@ function onMouseMove(e) {
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
 }
 function onCanvasClick() {
+  if (dialogOpen) return;
   raycaster.setFromCamera(mouse2D,camera);
+  const npcHit=npcForRaycast();
+  if(npcHit){ openNpcDialog(npcHit); return; }
   const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
-  if(hits.length){const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);if(b)navigateTo(b);}
-  else movePlayerTo(cursorWorld);
+  if(hits.length){const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);if(b)navigateTo(b);return;}
+  const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);
+  if(near){ openNpcDialog(near); return; }
+  movePlayerTo(cursorWorld);
 }
 
 // ── Hover / Navigate ──────────────────────────────────────────────────────────
@@ -1167,7 +1346,7 @@ function toggleMapMode() {
   mapMode=!mapMode;
   const btn=document.getElementById('mapToggle');
   btn&&btn.classList.toggle('active',mapMode);
-  const size=mapMode?CAMERA_MAP_SIZE:CAMERA_NEAR_SIZE;
+  const size=mapMode?CONFIG.cameraMapSize:CONFIG.cameraNearSize;
   animateCameraSize(size);
   if(mapMode) setCameraTarget(0,0,false);
   else if(cursorChar) setCameraTarget(cursorChar.position.x,cursorChar.position.z,false);
@@ -1177,7 +1356,7 @@ function updateCameraFollow(delta) {
   if(!cursorChar||mapMode)return;
   const v=cursorChar.position.clone();
   v.y=0.4; v.project(camera);
-  if(Math.abs(v.x)>CAMERA_EDGE||Math.abs(v.y)>CAMERA_EDGE){
+  if(Math.abs(v.x)>CONFIG.cameraEdge||Math.abs(v.y)>CONFIG.cameraEdge){
     const t=1-Math.pow(0.001,delta);
     setCameraTarget(
       cameraTarget.x+(cursorChar.position.x-cameraTarget.x)*t,
@@ -1213,17 +1392,18 @@ function animateCameraSize(size) {
 }
 
 function movePlayerTo(target) {
-  if(!cursorChar)return;
+  if(!cursorChar||dialogOpen)return;
   cursorChar.visible=true;
   playerPath = buildRoadPath(cursorChar.position, target);
 }
 
 function updatePlayerMovement(delta) {
   if(!cursorChar||!playerPath.length)return;
+  if(dialogOpen){ playerPath=[]; return; }
   const target=playerPath[0];
   const dx=target.x-cursorChar.position.x, dz=target.z-cursorChar.position.z;
   const dist=Math.hypot(dx,dz);
-  const step=PLAYER_SPEED*delta;
+  const step=CONFIG.playerSpeed*delta;
   if(dist<=step){
     cursorChar.position.set(target.x,0,target.z);
     playerPath.shift();
@@ -1233,6 +1413,16 @@ function updatePlayerMovement(delta) {
   cursorChar.position.z+=dz/dist*step;
   cursorChar.position.y=0;
   cursorChar.rotation.y=Math.atan2(dx,dz);
+  pendingDistance+=step;
+  if(pendingDistance>=10){ const d=Math.floor(pendingDistance); pendingDistance-=d; flushDistance(d); }
+}
+
+function flushDistance(amount) {
+  if(!cursorChar||amount<=0)return;
+  const s=getStats();
+  s.distance=(s.distance||0)+amount;
+  saveStats(s);
+  checkAchievements();
 }
 
 function buildRoadPath(from, rawTarget) {
@@ -1272,7 +1462,7 @@ function getUserId() {
 
 function getStats() {
   const raw=localStorage.getItem('minicityStats');
-  return raw?JSON.parse(raw):{interactions:0,buildingsVisited:[],joinDate:null,unlockLevel:0};
+  return raw?JSON.parse(raw):{interactions:0,buildingsVisited:[],joinDate:null,unlockLevel:0,achievements:[],npcsMet:[],npcsTalked:0,distance:0,nightToggles:0};
 }
 function saveStats(s){localStorage.setItem('minicityStats',JSON.stringify(s));}
 
@@ -1282,6 +1472,7 @@ function trackInteraction(buildingId) {
   if(buildingId&&!s.buildingsVisited.includes(buildingId)) s.buildingsVisited.push(buildingId);
   saveStats(s);
   checkUnlocks(s);
+  checkAchievements();
 }
 
 function checkUnlocks(s) {
@@ -1354,6 +1545,7 @@ function doLogin() {
   if(!s.joinDate){s.joinDate=Date.now();saveStats(s);}
   getUserId();
   applyUsername(name);
+  checkAchievements();
   const overlay=document.getElementById('loginOverlay');
   overlay.classList.add('hidden');
   setTimeout(()=>{
@@ -1370,6 +1562,7 @@ function applyUsername(name) {
 function proceedToCity() {
   entranceAnimation();
   startTimeTracking();
+  checkAchievements();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1400,7 +1593,6 @@ function renderClean() {
   const since=s.joinDate?formatDate(s.joinDate):'today';
   const time=parseInt(localStorage.getItem('minicityTime')||'0');
   const visited=(s.buildingsVisited||[]).length;
-  const earned=s.unlockLevel||0;
   const totalBuildings=BUILDING_DEFS.length;
 
   const nextTier=UNLOCK_TIERS.find(t=>s.interactions<t.threshold);
@@ -1417,6 +1609,16 @@ function renderClean() {
     </div>`;
   }).join('');
 
+  const achList=s.achievements||[];
+  const achRows=ACHIEVEMENTS.map(a=>{
+    const done=achList.includes(a.id);
+    return `<div class="sp-ul-item${done?' done':''}" title="${a.desc}">
+      <span class="sp-ul-dot">${done?'★':'☆'}</span>
+      <span class="sp-ul-name">${a.name}</span>
+      <span class="sp-ul-thresh">${done?a.desc:'未达成'}</span>
+    </div>`;
+  }).join('');
+
   document.getElementById('spBody').innerHTML=`
     <div class="sp-user-row">
       <div class="sp-username">${name}</div>
@@ -1427,7 +1629,7 @@ function renderClean() {
       <div class="sp-card"><div class="sc-val">${formatTime(time)}</div><div class="sc-lbl">TIME IN CITY</div></div>
       <div class="sp-card"><div class="sc-val">${s.interactions}</div><div class="sc-lbl">INTERACTIONS</div></div>
       <div class="sp-card"><div class="sc-val">${visited}&thinsp;/&thinsp;${totalBuildings}</div><div class="sc-lbl">BUILDINGS VISITED</div></div>
-      <div class="sp-card"><div class="sc-val">${earned}</div><div class="sc-lbl">UNLOCKS EARNED</div></div>
+      <div class="sp-card"><div class="sc-val">${Math.round(s.distance||0)}</div><div class="sc-lbl">DISTANCE WALKED</div></div>
     </div>
     <div class="sp-prog-section">
       ${nextTier
@@ -1438,6 +1640,10 @@ function renderClean() {
     <div class="sp-unlocks">
       <div class="sp-ul-title">UNLOCK HISTORY</div>
       ${unlockRows}
+    </div>
+    <div class="sp-unlocks">
+      <div class="sp-ul-title">ACHIEVEMENTS · ${achList.length}&thinsp;/&thinsp;${ACHIEVEMENTS.length}</div>
+      ${achRows}
     </div>`;
 }
 
@@ -1464,6 +1670,9 @@ function renderRaw() {
     row('buildings_visited',visited),
     row('city_level',level),
     row('unlocks_earned',s.unlockLevel||0),
+    row('distance_walked',Math.round(s.distance||0)),
+    row('achievements',(s.achievements||[]).length+'/'+ACHIEVEMENTS.length),
+    row('npcs_met',(s.npcsMet||[]).length+'/'+NPC_PROFILES.length),
   sep].join('\n');
 
   const content=`> SELECT * FROM city_stats\n  WHERE user_id = '${uid}';\n\n${table}\n\n1 row in set (0.001 sec)\n\n> _`;
@@ -1608,6 +1817,10 @@ function setupModal() {
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modalOverlay')) closeModal();
   });
+  document.getElementById('npcClose').addEventListener('click', closeNpcDialog);
+  document.getElementById('npcOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('npcOverlay')) closeNpcDialog();
+  });
 }
 
 function openModal(b) {
@@ -1634,6 +1847,53 @@ function openModal(b) {
 
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
+}
+
+// ── NPC 交互对话框 ───────────────────────────────────────────────────────────
+function openNpcDialog(npc) {
+  pauseNpcs();
+  dialogOpen=true; activeNpc=npc;
+  const s=getStats();
+  s.npcsTalked=(s.npcsTalked||0)+1;
+  if(!s.npcsMet)s.npcsMet=[];
+  if(!s.npcsMet.includes(npc.profile.id))s.npcsMet.push(npc.profile.id);
+  saveStats(s);
+  checkAchievements();
+  if(cursorChar) npc.mesh.rotation.y=Math.atan2(cursorChar.position.x-npc.mesh.position.x,cursorChar.position.z-npc.mesh.position.z);
+  const overlay=document.getElementById('npcOverlay');
+  document.getElementById('npcName').textContent=npc.profile.name;
+  document.getElementById('npcRole').textContent=npc.profile.role;
+  document.getElementById('npcAvatar').style.background=
+    `linear-gradient(135deg,#${npc.profile.head.toString(16).padStart(6,'0')},#${npc.profile.body.toString(16).padStart(6,'0')})`;
+  overlay.classList.add('open');
+  showNpcNode(npc.profile.dialog[0]);
+}
+
+function showNpcNode(node) {
+  activeNode=node;
+  const line=document.getElementById('npcLine');
+  line.textContent=node.text;
+  line.style.animation='none'; void line.offsetWidth; line.style.animation='';
+  const optWrap=document.getElementById('npcOptions');
+  optWrap.innerHTML='';
+  node.options.forEach(o=>{
+    const btn=document.createElement('button');
+    btn.className='npc-opt';
+    btn.textContent=o.text;
+    btn.addEventListener('click',()=>{
+      if(o.onPick)o.onPick();
+      if(o.next!=null) showNpcNode(activeNpc.profile.dialog[o.next]);
+      else closeNpcDialog();
+    });
+    optWrap.appendChild(btn);
+  });
+}
+
+function closeNpcDialog() {
+  if(!dialogOpen)return;
+  dialogOpen=false; activeNpc=null; activeNode=null;
+  document.getElementById('npcOverlay').classList.remove('open');
+  resumeNpcs();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
