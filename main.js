@@ -367,7 +367,7 @@ const pathMats = [], lampGlobes = [], buildings = [], npcList = [];
 let cursorChar = null;
 let playerPath = [];
 let lastFrameTime = performance.now();
-let isNight    = localStorage.getItem('minicityTheme') === 'night';
+let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
 let currentFilter = 'bots';
 let statsMode = 'clean';
@@ -895,7 +895,8 @@ function init() {
   setupModal();
   applyTheme(isNight, true);
   initAnimations();
-  setInterval(()=>{ gameClock=(gameClock+1/60)%24; updateNpcSchedules(); },1000);
+  setInterval(syncTimeAndTheme, 1000);
+  syncTimeAndTheme();
   document.getElementById('labelsWrap').classList.add('hidden');
   requestAnimationFrame(loop);
 
@@ -1964,17 +1965,6 @@ function setupEvents() {
   canvas.addEventListener('mouseenter',()=>{mouseOnScene=true;});
   canvas.addEventListener('mouseleave',()=>{mouseOnScene=false;});
 
-  document.getElementById('themeToggle').addEventListener('click',()=>{
-    isNight=!isNight;
-    document.body.classList.toggle('night',isNight);
-    document.body.classList.toggle('day',!isNight);
-    localStorage.setItem('minicityTheme',isNight?'night':'day');
-    applyTheme(isNight,false);
-    const s=getStats();
-    if(isNight)s.nightToggles=(s.nightToggles||0)+1;
-    saveStats(s);
-    checkAchievements();
-  });
   document.getElementById('mapToggle').addEventListener('click',toggleMapMode);
 
   document.getElementById('spClose').addEventListener('click',closeStatsPanel);
@@ -2078,6 +2068,29 @@ function tweenColor(c,hex,dur) {
   const t=new THREE.Color(hex);
   if(dur===0){c.copy(t);return;}
   gsap.to(c,{r:t.r,g:t.g,b:t.b,duration:dur,ease:'power2.inOut'});
+}
+
+function syncTimeAndTheme() {
+  gameClock=(gameClock+1/60)%24;
+  const night = gameClock>=19 || gameClock<6;
+  if (night!==isNight) {
+    isNight=night;
+    document.body.classList.toggle('night',isNight);
+    document.body.classList.toggle('day',!isNight);
+    applyTheme(isNight,false);
+    if(isNight){
+      const s=getStats();
+      s.nightToggles=(s.nightToggles||0)+1;
+      saveStats(s);
+      checkAchievements();
+    }
+  }
+  const el=document.getElementById('communityTime');
+  if(el){
+    const h=Math.floor(gameClock), m=Math.floor((gameClock-h)*60);
+    el.textContent=(h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
+  updateNpcSchedules();
 }
 
 // ── Entrance + loop animations ────────────────────────────────────────────────
