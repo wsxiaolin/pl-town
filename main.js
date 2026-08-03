@@ -2147,20 +2147,25 @@ function toggleMapMode() {
 
 function updateCameraFollow(delta) {
   if(!cursorChar||mapMode)return;
-  const v=cursorChar.position.clone();
-  v.y=0.4; v.project(camera);
-  if(Math.abs(v.x)>CONFIG.cameraEdge||Math.abs(v.y)>CONFIG.cameraEdge){
-    const t=1-Math.pow(0.001,delta);
-    setCameraTarget(
-      cameraTarget.x+(cursorChar.position.x-cameraTarget.x)*t,
-      cameraTarget.z+(cursorChar.position.z-cameraTarget.z)*t,
-      true
-    );
-  }
+  const p=cursorChar.position;
+  const v=p.clone(); v.y=0.4; v.project(camera);
+  const ox=Math.abs(v.x), oz=Math.abs(v.y);
+  if(ox<=CONFIG.cameraEdge&&oz<=CONFIG.cameraEdge)return;
+  // 玩家当前 NDC 超出边缘，休息点 = 让玩家刚好回到边缘的目标位置
+  const maxo=Math.max(ox,oz);
+  const scale=1-CONFIG.cameraEdge/maxo;
+  const dx=p.x-cameraTarget.x, dz=p.z-cameraTarget.z;
+  const rx=cameraTarget.x+dx*scale, rz=cameraTarget.z+dz*scale;
+  const t=1-Math.exp(-6*delta); // 帧率无关的连续缓动
+  setCameraTarget(
+    cameraTarget.x+(rx-cameraTarget.x)*t,
+    cameraTarget.z+(rz-cameraTarget.z)*t,
+    true
+  );
 }
 
 function setCameraTarget(x,z,instant) {
-  const nx=clamp(x,-10,10), nz=clamp(z,-10,10);
+  const nx=clamp(x,-13,13), nz=clamp(z,-13,13);
   if(instant){
     cameraTarget.set(nx,0,nz);
     camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
