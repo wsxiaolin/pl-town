@@ -389,7 +389,7 @@ const CONFIG = {
   cameraMapSize: 26,    // 底图视野宽度
   cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
   playerSpeed: 4.2,     // 角色移动速度
-  npcTalkRadius: 1.6,   // 点击时判断「碰到居民」的距离
+  npcTalkRadius: 1.6,   // 玩家需走近该距离才能触发对话
 };
 const CAMERA_OFFSET = new THREE.Vector3(18,30,18);
 
@@ -1839,12 +1839,20 @@ function onCanvasClick() {
   if (dialogOpen) return;
   raycaster.setFromCamera(mouse2D,camera);
   const npcHit=npcForRaycast();
-  if(npcHit){ openNpcDialog(npcHit); return; }
+  if(npcHit){ talkToOrWalk(npcHit); return; }
   const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
   if(hits.length){const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);if(b)navigateTo(b);return;}
   const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);
-  if(near){ openNpcDialog(near); return; }
+  if(near){ talkToOrWalk(near); return; }
   movePlayerTo(cursorWorld);
+}
+
+function talkToOrWalk(npc) {
+  if(cursorChar && cursorChar.position.distanceTo(npc.mesh.position)<=CONFIG.npcTalkRadius){
+    openNpcDialog(npc);
+  } else {
+    movePlayerTo(npc.mesh.position);
+  }
 }
 
 // ── Hover / Navigate ──────────────────────────────────────────────────────────
