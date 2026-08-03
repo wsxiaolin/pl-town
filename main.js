@@ -2019,7 +2019,11 @@ function talkToOrWalk(npc) {
   if(cursorChar && cursorChar.position.distanceTo(npc.mesh.position)<=CONFIG.npcTalkRadius){
     openNpcDialog(npc);
   } else {
-    movePlayerTo(npc.mesh.position);
+    const p=cursorChar?cursorChar.position:new THREE.Vector3(0,0,0);
+    const n=npc.mesh.position;
+    const dx=p.x-n.x, dz=p.z-n.z, d=Math.hypot(dx,dz)||1;
+    const stopDist=CONFIG.npcTalkRadius-0.35;
+    movePlayerTo(new THREE.Vector3(n.x+dx/d*stopDist,0,n.z+dz/d*stopDist));
   }
 }
 
