@@ -581,12 +581,18 @@ let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
 let currentFilter = 'all';
 let statsMode = 'clean';
-let mapMode = false;
+let mapMode = false; // 全景地图弹层是否打开
+let mapShotData = null;    // 启动时俯视截取的全城图（dataURL）
+let mapShotRenderer = null, mapShotCam = null;
+const MAP_SHOT = 1024;     // 截图像素边长
+const MAP_SHOT_SPAN = 34;  // 截图覆盖的世界坐标跨度（±），含外环与四门商场
+let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
 let dialogOpen = false, activeNpc = null, activeNode = null;
 let pendingDistance = 0;
 let gameClock = 9; // 游戏时间（小时）：现实 1 分钟 = 游戏 1 小时
+let gameTimeRef = Date.now(); // 实时时间的锚点：页面加载瞬间视为早上 9 点
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -597,7 +603,6 @@ const CITY_LIMIT = 28;
 // 可调参数：镜头与角色
 const CONFIG = {
   cameraNearSize: 11,   // 近景视野宽度（越小视角越窄）— 略放宽以容纳扩展后的城
-  cameraMapSize: 32,    // 地图视野宽度 — 覆盖整个新城含外环
   cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
   playerSpeed: 4.2,     // 角色移动速度
   npcTalkRadius: 1.6,   // 玩家需走近该距离才能触发对话
@@ -1135,6 +1140,8 @@ function init() {
   syncTimeAndTheme();
   document.getElementById('labelsWrap').classList.add('hidden');
   requestAnimationFrame(loop);
+
+  setTimeout(captureMapShot, 3200); // 等入场动画结束，俯视截取全景图
 
   checkLogin();
 }
@@ -2792,12 +2799,27 @@ function setupEvents() {
   canvas.addEventListener('mouseleave',()=>{mouseOnScene=false;});
 
   document.getElementById('mapToggle').addEventListener('click',toggleMapMode);
+  document.getElementById('mapClose').addEventListener('click',()=>mapMode&&toggleMapMode());
+  document.getElementById('mapOverlay').addEventListener('click',e=>{
+    if(e.target.id==='mapOverlay'&&mapMode)toggleMapMode();
+  });
+  document.getElementById('mapTipClose').addEventListener('click',closeMapTip);
+  document.getElementById('mapTipTele').addEventListener('click',()=>{
+    if(!mapTipB||!teleportUnlocked())return;
+    const b=mapTipB;
+    closeMapTip();
+    toggleMapMode();
+    mapTeleport(b);
+  });
 
   document.getElementById('spClose').addEventListener('click',closeStatsPanel);
   document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'));
   document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'));
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){closeStatsPanel();closeModal();closeNpcDialog();}
+    if(e.key==='Escape'){
+      if(mapMode){toggleMapMode();return;}
+      closeStatsPanel();closeModal();closeNpcDialog();
+    }
   });
 
   document.getElementById('loginBtn').addEventListener('click',doLogin);
@@ -2806,9 +2828,9 @@ function setupEvents() {
   document.getElementById('cgSkip').addEventListener('click',skipCG);
 
   window.addEventListener('resize',()=>{
-    const w=window.innerWidth,h=window.innerHeight,vs=mapMode?CONFIG.cameraMapSize:CONFIG.cameraNearSize;
-    renderer.setSize(w,h);
-    updateCameraProjection(vs);
+    renderer.setSize(window.innerWidth,window.innerHeight);
+    updateCameraProjection(CONFIG.cameraNearSize);
+    if(mapMode) updateMapImage();
   });
 }
 
@@ -2905,13 +2927,14 @@ function tweenColor(c,hex,dur) {
 }
 
 function syncTimeAndTheme() {
-  gameClock=(gameClock+1/60)%24;
+  gameClock=(9+(Date.now()-gameTimeRef)/60000)%24; // 实时计算：加载时刻=9点，此后每分钟快进1小时
   const night = gameClock>=19 || gameClock<6;
   if (night!==isNight) {
     isNight=night;
     document.body.classList.toggle('night',isNight);
     document.body.classList.toggle('day',!isNight);
     applyTheme(isNight,false);
+    setTimeout(()=>{ mapShotData=null; captureMapShot(); if(mapMode)updateMapImage(); },1000); // 昼夜切换后重拍全景
     if(isNight){
       const s=getStats();
       s.nightToggles=(s.nightToggles||0)+1;
@@ -2970,16 +2993,115 @@ function loop() {
   updateCameraFollow(delta);
   updateLabels();
   renderer.render(scene,camera);
+  if(mapMode) updateMapMarker(); // 玩家走动时同步地图上的位置标记
 }
 
 function toggleMapMode() {
   mapMode=!mapMode;
   const btn=document.getElementById('mapToggle');
   btn&&btn.classList.toggle('active',mapMode);
-  const size=mapMode?CONFIG.cameraMapSize:CONFIG.cameraNearSize;
-  animateCameraSize(size);
-  if(mapMode) setCameraTarget(0,0,false);
-  else if(cursorChar) setCameraTarget(cursorChar.position.x,cursorChar.position.z,false);
+  const overlay=document.getElementById('mapOverlay');
+  if(mapMode){
+    overlay.classList.add('show');
+    updateMapImage();
+  }else{
+    overlay.classList.remove('show');
+    closeMapTip();
+  }
+}
+
+// ── 全景地图：启动时俯视渲染一张真实截图，纸上只标注玩家位置 ──────────────────
+function captureMapShot() {
+  if(!scene)return;
+  if(!mapShotCam){
+    mapShotCam=new THREE.OrthographicCamera(
+      -MAP_SHOT_SPAN,MAP_SHOT_SPAN,MAP_SHOT_SPAN,-MAP_SHOT_SPAN,0.1,200);
+    mapShotCam.position.set(0,90,0);
+    mapShotCam.up.set(0,0,1); // 图像顶端=北
+    mapShotCam.lookAt(0,0,0);
+    mapShotCam.updateProjectionMatrix();
+  }
+  if(!mapShotRenderer){
+    const cv=document.createElement('canvas');
+    cv.width=MAP_SHOT; cv.height=MAP_SHOT;
+    mapShotRenderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,preserveDrawingBuffer:true});
+    mapShotRenderer.setSize(MAP_SHOT,MAP_SHOT,false);
+    mapShotRenderer.setPixelRatio(1);
+    mapShotRenderer.toneMapping=THREE.ACESFilmicToneMapping;
+    mapShotRenderer.toneMappingExposure=1.0;
+    if(THREE.SRGBColorSpace) mapShotRenderer.outputColorSpace=THREE.SRGBColorSpace;
+  }
+  mapShotRenderer.render(scene,mapShotCam);
+  mapShotData=mapShotRenderer.domElement.toDataURL('image/png');
+}
+
+function updateMapImage() {
+  const image=document.getElementById('mapImage');
+  if(!image)return;
+  renderMapIcons();
+  if(!mapShotData)captureMapShot();
+  if(mapShotData&&image.src!==mapShotData)image.src=mapShotData;
+  updateMapMarker();
+}
+
+function updateMapMarker() {
+  const marker=document.getElementById('mapMarker');
+  if(!marker||!cursorChar)return;
+  const left=((cursorChar.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
+  const top=((cursorChar.position.z+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
+  marker.style.left=left+'%';
+  marker.style.top=top+'%';
+}
+
+// ── 地图图标：建筑只标小图标，点击弹小介绍 ────────────────────────────────────
+function renderMapIcons() {
+  const wrap=document.getElementById('mapIcons');
+  if(!wrap||mapIconsBuilt)return;
+  mapIconsBuilt=true;
+  buildings.forEach(b=>{
+    const el=document.createElement('button');
+    el.type='button';
+    el.className='map-icon';
+    el.title=b.label;
+    el.innerHTML=b.icon;
+    el.style.left=((b.group.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';
+    el.style.top=((b.group.position.z+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';
+    el.addEventListener('click',()=>openMapTip(b));
+    wrap.appendChild(el);
+  });
+}
+
+function teleportUnlocked() {
+  const s=getStats();
+  return (s.achievements||[]).includes('walker_100');
+}
+
+function openMapTip(b) {
+  mapTipB=b;
+  const content=BUILDING_CONTENT[b.id];
+  document.getElementById('mapTipTitle').textContent=content?content.name:b.label;
+  document.getElementById('mapTipSlogan').textContent=content?content.slogan:'这座小城的一角。';
+  const unlocked=teleportUnlocked();
+  document.getElementById('mapTipTele').disabled=!unlocked;
+  document.getElementById('mapTipLock').classList.toggle('hidden',unlocked);
+  document.getElementById('mapTip').classList.add('open');
+}
+
+function closeMapTip() {
+  mapTipB=null;
+  document.getElementById('mapTip').classList.remove('open');
+}
+
+function mapTeleport(b) {
+  if(!cursorChar)return;
+  const q=buildingRoadEntry(b.group.position);
+  if(q){
+    playerPath=[];
+    cursorChar.position.set(q.x,0,q.z);
+    setCameraTarget(q.x,q.z,true);
+  }else{
+    movePlayerTo(b.group.position);
+  }
 }
 
 function updateCameraFollow(delta) {
@@ -3019,11 +3141,6 @@ function updateCameraProjection(vs) {
   const a=window.innerWidth/window.innerHeight;
   camera.left=-vs*a; camera.right=vs*a; camera.top=vs; camera.bottom=-vs;
   camera.updateProjectionMatrix();
-}
-
-function animateCameraSize(size) {
-  const state={v:camera.top};
-  gsap.to(state,{v:size,duration:0.55,ease:'power2.out',onUpdate:()=>updateCameraProjection(state.v)});
 }
 
 function movePlayerTo(target) {

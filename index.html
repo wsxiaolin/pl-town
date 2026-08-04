@@ -41,6 +41,28 @@
     </div>
   </div>
 
+  <!-- City map paper -->
+  <div class="map-overlay" id="mapOverlay" role="dialog" aria-label="全景地图">
+    <div class="map-paper">
+      <button class="map-close" id="mapClose" type="button" aria-label="关闭地图">✕</button>
+      <h2 class="map-title">物实小城 · 全景地图</h2>
+      <div class="map-image-wrap" id="mapImageWrap">
+        <img id="mapImage" alt="物实小城全景地图" />
+        <div class="map-icons" id="mapIcons"></div>
+        <span class="map-marker" id="mapMarker" aria-label="当前位置"></span>
+        <div class="map-tip" id="mapTip">
+          <button class="mt-close" id="mapTipClose" type="button" aria-label="关闭介绍">✕</button>
+          <h3 class="mt-title" id="mapTipTitle"></h3>
+          <p class="mt-slogan" id="mapTipSlogan"></p>
+          <div class="mt-actions">
+            <button class="mt-tele" id="mapTipTele" type="button">传送</button>
+            <span class="mt-lock" id="mapTipLock">步行 100 米解锁传送</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Population filter -->
   <div class="pop-filter" id="popFilter">
     <span class="pf-label">CITIZENS</span>
