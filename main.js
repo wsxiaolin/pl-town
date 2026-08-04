@@ -558,6 +558,42 @@ function initTextures() {
     _noise(ctx, s, 0.03);
   });
 
+  // --- KingIce: golden crown surface with "King Ice" text ---
+  _canvas('kingice', 512, (ctx, s) => {
+    const g = ctx.createLinearGradient(0, 0, s, s);
+    g.addColorStop(0, '#E8A838');
+    g.addColorStop(0.3, '#F0C050');
+    g.addColorStop(0.5, '#FFF1C0');
+    g.addColorStop(0.7, '#F0C050');
+    g.addColorStop(1, '#D49028');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+    // Subtle diamond pattern
+    for (let y = 0; y < s; y += 48) {
+      for (let x = 0; x < s; x += 48) {
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.beginPath(); ctx.moveTo(x+24, y); ctx.lineTo(x+48, y+24);
+        ctx.lineTo(x+24, y+48); ctx.lineTo(x, y+24); ctx.closePath(); ctx.fill();
+      }
+    }
+    // Horizontal band lines
+    ctx.fillStyle = 'rgba(180,120,20,0.18)';
+    ctx.fillRect(0, s*0.22, s, 4);
+    ctx.fillRect(0, s*0.78, s, 4);
+    // "King Ice" text — large, bold, white with gold outline
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 96px "Segoe UI", Arial, sans-serif';
+    // Gold outline/shadow
+    ctx.strokeStyle = 'rgba(140,80,0,0.5)'; ctx.lineWidth = 8;
+    ctx.strokeText('King Ice', s/2, s/2);
+    // White fill
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+    ctx.fillText('King Ice', s/2, s/2);
+    ctx.shadowColor = 'transparent';
+    _noise(ctx, s, 0.02);
+  });
+
   // --- Suburb: small house wall texture ---
   _canvas('suburb', 256, (ctx, s) => {
     ctx.fillStyle = '#EDE3D0'; ctx.fillRect(0, 0, s, s);
@@ -679,6 +715,8 @@ const BUILDING_DEFS = [
     icon:I(`<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`) },
   { id:'school_north',  num:'29', label:'北区学院', x: 0,  z: 27, shape:'school',
     icon:I(`<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`) },
+  { id:'kingice',       num:'30', label:'King Ice',  x: 20, z: 20, shape:'crown',
+    icon:I(`<path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/>`) },
 ];
 
 // ── Building dialog content (from copywriting) ────────────────────────────────
@@ -889,6 +927,10 @@ const BUILDING_CONTENT = {
   school_north: {
     name:'北区学院', slogan:'这里教的不只是答案，更是提问的方法。',
     dialog:['学院的走廊安静得能听见自己的脚步回声。','黑板上还留着没擦干净的式子和一句未完的提问。','「一座城若不再产生提问，便已开始衰老。」']
+  },
+  kingice: {
+    name:'King Ice', slogan:'皇冠落座之处，冰与光交界。',
+    dialog:['Ice is good. Gugu is bad!']
   },
 };
 
@@ -1943,6 +1985,52 @@ function ctx2d_windows(g, x, y, z) {
   part(g, new THREE.BoxGeometry(0.02,0.45,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y, z+0.005], false);
 }
 
+// 30 KINGICE — crown-shaped golden building with "King Ice" text
+function buildCrown(cfg) {
+  const g = new THREE.Group();
+  // Stone base
+  part(g, new THREE.CylinderGeometry(1.8, 2.0, 0.3, 32), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.15,0]);
+  // Crown band — main cylinder body with golden "King Ice" texture
+  const bodyMat = stdMat({color:0xE8A838,roughness:0.25,metalness:0.35,tex:'kingice',rx:2,ry:1});
+  bodyMat.emissive = new THREE.Color(P.GOLD); bodyMat.emissiveIntensity = 0;
+  const body = mk(new THREE.CylinderGeometry(1.5, 1.6, 1.6, 32), bodyMat);
+  body.position.y = 0.3 + 0.8; body.castShadow = body.receiveShadow = true; g.add(body);
+  const top = 0.3 + 1.6;
+  // Gold rim at top of band
+  part(g, new THREE.CylinderGeometry(1.58, 1.58, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, top + 0.04, 0]);
+  // Gold rim at bottom of band
+  part(g, new THREE.CylinderGeometry(1.62, 1.62, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, 0.34, 0]);
+  // 5 crown points (teeth) — evenly spaced around the top rim
+  const pointCount = 5;
+  const crownGemColors = [0x3B6FE0, 0xE85858, 0x5A8A3A, 0xA858E8, 0xE8A838];
+  for (let i = 0; i < pointCount; i++) {
+    const angle = (i / pointCount) * Math.PI * 2 - Math.PI / 2;
+    const px = Math.cos(angle) * 1.25;
+    const pz = Math.sin(angle) * 1.25;
+    // Tapered crown point — wider at base, narrow at tip
+    const pointH = 0.75 + (i % 2) * 0.15; // alternate heights for variety
+    part(g, new THREE.CylinderGeometry(0.06, 0.22, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
+    // Gem at each tip
+    part(g, new THREE.SphereGeometry(0.1, 12, 12), {color:crownGemColors[i],emissive:crownGemColors[i],emissiveIntensity:0.35,roughness:0.15,metalness:0.4}, [px, top + 0.08 + pointH + 0.1, pz], false);
+  }
+  // Short crown points between the tall ones (fill the gaps for full crown look)
+  for (let i = 0; i < pointCount; i++) {
+    const angle = ((i + 0.5) / pointCount) * Math.PI * 2 - Math.PI / 2;
+    const px = Math.cos(angle) * 1.35;
+    const pz = Math.sin(angle) * 1.35;
+    const pointH = 0.4;
+    part(g, new THREE.CylinderGeometry(0.04, 0.18, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
+    // Small gem at tip
+    part(g, new THREE.SphereGeometry(0.06, 8, 8), {color:0xFFF8E0,emissive:0xFFF8E0,emissiveIntensity:0.25,roughness:0.2,metalness:0.3}, [px, top + 0.08 + pointH + 0.06, pz], false);
+  }
+  // Blue entrance disc at base
+  part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.3+0.026,0], false);
+  // Label Y for floating tag
+  const labelY = top + 0.08 + 0.85 + 0.5;
+  g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY};
+}
+
 const SHAPE_FNS = {
   bank:buildBank, board:buildBoard, tower:buildTower, darktower:buildDarkTower,
   pavilion:buildPavilion, library:buildLibrary, ruins:buildRuins,
@@ -1950,7 +2038,7 @@ const SHAPE_FNS = {
   screen:buildScreen, shaft:buildShaft, altar:buildAltar, observatory:buildObservatory,
   pagoda:buildPagoda, market:buildMarket, greenhouse:buildGreenhouse,
   clocktower:buildClockTower, temple:buildTemple, factory:buildFactory,
-  mall:buildMall, school:buildSchool
+  mall:buildMall, school:buildSchool, crown:buildCrown
 };
 
 function addBuildings() {
