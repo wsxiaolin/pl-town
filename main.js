@@ -1291,6 +1291,16 @@ function addPaths() {
     const a = (i/8)*Math.PI*2 + Math.PI/8;
     addLamps([[Math.cos(a)*ringR, 0, Math.sin(a)*ringR]]);
   }
+
+  // Central pedestrian loop around the fountain. It keeps the landmark open
+  // while providing a real four-way bypass instead of a missing-road dead end.
+  const plazaMat = stdMat({ color: 0xB9B8B3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
+  pathMats.push(plazaMat);
+  const plazaRing = new THREE.Mesh(new THREE.RingGeometry(2.25, 3.0, 64), plazaMat);
+  plazaRing.rotation.x = -Math.PI/2;
+  plazaRing.position.set(0, ROAD_Y + 0.002, 0);
+  plazaRing.receiveShadow = true;
+  scene.add(plazaRing);
 }
 
 // ── Fountain (city-center landmark, made prominent) ──────────────────────────
@@ -2604,12 +2614,44 @@ function pickPatrolSpot(npc) {
     const p=new THREE.Vector3(x,0,z);
     if(p.distanceTo(center)<=radius && p.distanceTo(center)>0.5) pool.push(p);
   }));
+  // Also consider road-line points right beside the destination, so NPCs don't
+  // only stand at the intersection grid.
+  const rx=nearestRoadCoord(center.x), rz=nearestRoadCoord(center.z);
+  [[rx,center.z],[center.x,rz],[rx,rz]].forEach(([x,z])=>{
+    const p=new THREE.Vector3(x,0,z);
+    if(p.distanceTo(center)<=radius && p.distanceTo(center)>0.5) pool.push(p);
+  });
   if(!pool.length) return null;
   return pool[Math.floor(Math.random()*pool.length)];
 }
 
+// NPCs step aside when the player walks into them instead of blocking the road.
+function npcYieldToPlayer(npc) {
+  if (!cursorChar || !cursorChar.visible) return;
+  const dx=npc.mesh.position.x-cursorChar.position.x;
+  const dz=npc.mesh.position.z-cursorChar.position.z;
+  const d=Math.hypot(dx,dz);
+  if (d < 1.05) {
+    if (!npc.yielding) {
+      npc.yielding=true;
+      if (npc.tween){ npc.tween.kill(); npc.tween=null; }
+      const len=d||1;
+      const ox=dx/len, oz=dz/len;
+      // Step sideways, perpendicular to the line between player and NPC.
+      const dest={x:npc.mesh.position.x-oz*0.55, z:npc.mesh.position.z+ox*0.55};
+      npc.tween=gsap.to(npc.mesh.position,{x:dest.x,z:dest.z,duration:0.32,ease:'power1.out',
+        onComplete:()=>{ npc.tween=null; }});
+    }
+  } else if (npc.yielding) {
+    npc.yielding=false;
+    npc.idleTimer=0;
+    npcRoutine(npc);
+  }
+}
+
 function npcRoutine(npc) {
   if (npc.walking===false) return;
+  if (npc.yielding) return;
   if (!npc.mesh.visible) return;
   const target=npcDesiredTarget(npc);
   const dist=npc.mesh.position.distanceTo(target);
@@ -2921,6 +2963,10 @@ function loop() {
   const delta=Math.min((now-lastFrameTime)/1000,0.05);
   lastFrameTime=now;
   updatePlayerMovement(delta);
+  npcList.forEach(npc=>{
+    if(!npc.mesh.visible||npc.walking===false) return;
+    npcYieldToPlayer(npc);
+  });
   updateCameraFollow(delta);
   updateLabels();
   renderer.render(scene,camera);
@@ -3029,10 +3075,209 @@ function flushDistance(amount) {
 function buildRoadPath(from, rawTarget) {
   const start=roadEntry(from);
   const end=roadEntry(rawTarget);
-  const mid1=new THREE.Vector3(start.x,0,end.z);
-  const mid2=new THREE.Vector3(end.x,0,start.z);
-  const useMid1=isRoadPoint(mid1)?mid1:mid2;
-  return [start,useMid1,end].filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
+  const graph=getRoadGraph();
+  const sNode=connectToGrid(start,graph);
+  const eNode=connectToGrid(end,graph);
+  if(sNode&&eNode){
+    const gridPath=aStarRoad(sNode,eNode,graph);
+    if(gridPath&&gridPath.length){
+      const pts=[start];
+      for(let i=1;i<gridPath.length;i++) pts.push(new THREE.Vector3(gridPath[i].x,0,gridPath[i].z));
+      pts.push(end);
+      const out=pts.filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
+      if(out.length) return out;
+    }
+  }
+  // Never use an unchecked L-path here: it can cross a building or a missing
+  // road segment. Stop at the safe road entry when no connected route exists.
+  return start.distanceTo(end)>0.05 ? [start] : [start];
+}
+
+// ── Road network graph (grid A* over the 7×7 intersections) ─────────────────
+const FOUNTAIN_CLEAR = 1.95;  // keep walking paths clear of the center fountain
+let roadGraph=null;
+
+function getRoadGraph() {
+  if(roadGraph) return roadGraph;
+  const coords=ROAD_COORDS;
+  const nodeIdx=new Map();
+  const nodes=[];
+  const addNode=(x,z)=>{
+    const key=x+','+z;
+    if(nodeIdx.has(key)) return nodes[nodeIdx.get(key)];
+    const node=new THREE.Vector3(x,0,z);
+    node.i=nodes.length;
+    node.adj=[];
+    nodeIdx.set(key,nodes.length);
+    nodes.push(node);
+    return node;
+  };
+  coords.forEach(x=>coords.forEach(z=>addNode(x,z)));
+  nodes.forEach((n,i)=>{ n.i=i; n.adj=[]; });
+  const addEdge=(a,b)=>{
+    if(pathBlocked(a.x,a.z,b.x,b.z)) return;
+    a.adj.push(b); b.adj.push(a);
+  };
+  coords.forEach((x,i)=>coords.forEach((z,j)=>{
+    const a=nodes[nodeIdx.get(x+','+z)];
+    if(i+1<coords.length) addEdge(a,nodes[nodeIdx.get(coords[i+1]+','+z)]);
+    if(j+1<coords.length) addEdge(a,nodes[nodeIdx.get(x+','+coords[j+1])]);
+  }));
+
+  // The visible outer ring is a real escape route around the fountain and
+  // blocked building edges. Connect it to the four arterial endpoints.
+  const ringNodes=[];
+  const ringR=24;
+  const ringCount=16;
+  for(let i=0;i<ringCount;i++){
+    const a=i/ringCount*Math.PI*2;
+    ringNodes.push(addNode(Number((Math.cos(a)*ringR).toFixed(3)),Number((Math.sin(a)*ringR).toFixed(3))));
+  }
+  ringNodes.forEach((n,i)=>addEdge(n,ringNodes[(i+1)%ringCount]));
+  [[0,-18,0,-24],[18,0,24,0],[0,18,0,24],[-18,0,-24,0]].forEach(([x1,z1,x2,z2])=>{
+    const a=nodes[nodeIdx.get(x1+','+z1)];
+    const b=nodes[nodeIdx.get(x2+','+z2)];
+    if(a&&b) addEdge(a,b);
+  });
+
+  // Inner plaza loop: this is the walkable counterpart of the central ring
+  // mesh added in addPaths(). It connects to each arterial without entering
+  // the fountain basin.
+  const plazaNodes=[];
+  const plazaR=2.7;
+  for(let i=0;i<8;i++){
+    const a=i/8*Math.PI*2;
+    plazaNodes.push(addNode(Number((Math.cos(a)*plazaR).toFixed(3)),Number((Math.sin(a)*plazaR).toFixed(3))));
+  }
+  plazaNodes.forEach((n,i)=>addEdge(n,plazaNodes[(i+1)%plazaNodes.length]));
+  [[0,-6,0,-2.7],[6,0,2.7,0],[0,6,0,2.7],[-6,0,-2.7,0]].forEach(([x1,z1,x2,z2])=>{
+    const a=nodes[nodeIdx.get(x1+','+z1)];
+    const b=nodes[nodeIdx.get(x2+','+z2)];
+    if(a&&b) addEdge(a,b);
+  });
+  roadGraph={nodes,nodeIdx};
+  return roadGraph;
+}
+
+// A straight segment is unusable if it crosses a building footprint or the
+// fountain plaza (the arterial roads are cut there and no mesh exists).
+function pathBlocked(x1,z1,x2,z2) {
+  if(segHitsBuilding(x1,z1,x2,z2)) return true;
+  const dx=x2-x1, dz=z2-z1;
+  const len2=dx*dx+dz*dz;
+  const t=len2<1e-9?0:clamp(((0-x1)*dx+(0-z1)*dz)/len2,0,1);
+  const cx=x1+dx*t, cz=z1+dz*t;
+  return cx*cx+cz*cz < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR;
+}
+
+function aStarRoad(sNode,eNode,graph) {
+  if(sNode===eNode) return [sNode];
+  const gScore=new Map([[sNode.i,0]]);
+  const cameFrom=new Map();
+  const closed=new Set();
+  const open=[{n:sNode,f:0,g:0}];
+  const h=n=>Math.abs(n.x-eNode.x)+Math.abs(n.z-eNode.z);
+  while(open.length){
+    let bi=0;
+    for(let i=1;i<open.length;i++) if(open[i].f<open[bi].f) bi=i;
+    const cur=open.splice(bi,1)[0];
+    if(closed.has(cur.n.i)) continue;
+    if(cur.n.i===eNode.i){
+      const path=[]; let c=cur.n;
+      while(c!==undefined){ path.unshift(c); c=cameFrom.get(c.i); }
+      return path;
+    }
+    closed.add(cur.n.i);
+    for(const nb of cur.n.adj){
+      if(closed.has(nb.i)) continue;
+      const tg=cur.g+Math.hypot(nb.x-cur.n.x,nb.z-cur.n.z);
+      const old=gScore.get(nb.i);
+      if(old===undefined||tg<old){
+        gScore.set(nb.i,tg);
+        cameFrom.set(nb.i,cur.n);
+        open.push({n:nb,g:tg,f:tg+h(nb)});
+      }
+    }
+  }
+  return null;
+}
+
+// Snap a road-line point to the nearest reachable grid intersection.
+function connectToGrid(p,graph) {
+  const key=p.x+','+p.z;
+  if(graph.nodeIdx.has(key)) {
+    const node=graph.nodes[graph.nodeIdx.get(key)];
+    if(node.adj.length) return node;
+  }
+  if(ROAD_COORDS.includes(p.x)){
+    const zs=ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-p.z)-Math.abs(b-p.z));
+    for(const z of zs) {
+      const node=graph.nodes[graph.nodeIdx.get(p.x+','+z)];
+      if(node&&node.adj.length&&!pathBlocked(p.x,p.z,p.x,z)) return node;
+    }
+  }
+  if(ROAD_COORDS.includes(p.z)){
+    const xs=ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-p.x)-Math.abs(b-p.x));
+    for(const x of xs) {
+      const node=graph.nodes[graph.nodeIdx.get(x+','+p.z)];
+      if(node&&node.adj.length&&!pathBlocked(p.x,p.z,x,p.z)) return node;
+    }
+  }
+  return null;
+}
+
+// Malls/schools sit ON the outer arterial lines; a road-line target that lands
+// in their footprint is moved just outside the base, along the road, toward
+// the city center — so the player never walks through the building.
+function snapToRoadClear(p) {
+  const q=p.clone();
+  const lineX=ROAD_COORDS.includes(q.x);
+  const lineZ=ROAD_COORDS.includes(q.z);
+  if(!lineX&&!lineZ) return q;
+  for(const bx of buildingBoxes){
+    if(q.x<bx.minX||q.x>bx.maxX||q.z<bx.minZ||q.z>bx.maxZ) continue;
+    if(lineX){
+      const a=bx.minZ-0.6, b=bx.maxZ+0.6;
+      q.z=Math.abs(a)<Math.abs(b)?a:b;
+    } else {
+      const a=bx.minX-0.6, b=bx.maxX+0.6;
+      q.x=Math.abs(a)<Math.abs(b)?a:b;
+    }
+    break;
+  }
+  return q;
+}
+
+// Building clicks start inside the building footprint. Find the closest road
+// centerline outside that footprint instead of testing a segment whose first
+// point is already inside the obstacle.
+function buildingRoadEntry(p) {
+  let owner=null;
+  for(const bx of buildingBoxes){
+    if(p.x>=bx.minX&&p.x<=bx.maxX&&p.z>=bx.minZ&&p.z<=bx.maxZ){ owner=bx; break; }
+  }
+  if(!owner) return null;
+  const candidates=[];
+  ROAD_COORDS.forEach(x=>{
+    const z = x>=owner.minX&&x<=owner.maxX
+      ? (Math.abs(owner.minZ-0.6)<Math.abs(owner.maxZ+0.6) ? owner.minZ-0.6 : owner.maxZ+0.6)
+      : p.z;
+    candidates.push(new THREE.Vector3(x,0,z));
+  });
+  ROAD_COORDS.forEach(z=>{
+    const x = z>=owner.minZ&&z<=owner.maxZ
+      ? (Math.abs(owner.minX-0.6)<Math.abs(owner.maxX+0.6) ? owner.minX-0.6 : owner.maxX+0.6)
+      : p.x;
+    candidates.push(new THREE.Vector3(x,0,z));
+  });
+  candidates.sort((a,b)=>{
+    const da=a.distanceTo(p), db=b.distanceTo(p);
+    return da-db || Math.abs(a.x)+Math.abs(a.z)-Math.abs(b.x)-Math.abs(b.z);
+  });
+  return candidates.find(q=>{
+    if(q.x>=owner.minX&&q.x<=owner.maxX&&q.z>=owner.minZ&&q.z<=owner.maxZ) return false;
+    return !segHitsBuilding(q.x,q.z,q.x,q.z);
+  }) || candidates[0];
 }
 
 function cacheBuildingBoxes() {
@@ -3058,9 +3303,11 @@ function segHitsBuilding(x1,z1,x2,z2) {
   return false;
 }
 
-// 找一个「从 p 直达且不穿建筑」的路点；p 已在路上则原样返回
+// 找一个「从 p 直达且不穿建筑/喷泉」的路点；p 已在路上则原样返回
 function roadEntry(p) {
-  if(isRoadPoint(p)) return nearestRoadPoint(p);
+  const buildingEntry=buildingRoadEntry(p);
+  if(buildingEntry) return buildingEntry;
+  if(isRoadPoint(p)) return snapToRoadClear(p);
   const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
   const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
   const cands=[[rx,z],[x,rz],[rx,rz],[nearestRoadCoord2(x),rz],[rx,nearestRoadCoord2(z)]];
@@ -3069,7 +3316,7 @@ function roadEntry(p) {
     if(Math.abs(cx)>CITY_LIMIT||Math.abs(cz)>CITY_LIMIT)continue;
     const key=cx.toFixed(2)+','+cz.toFixed(2);
     if(seen.includes(key))continue; seen.push(key);
-    if(!segHitsBuilding(p.x,p.z,cx,cz)) return new THREE.Vector3(cx,0,cz);
+    if(!pathBlocked(x,z,cx,cz)) return new THREE.Vector3(cx,0,cz);
   }
   return nearestRoadPoint(p);
 }
