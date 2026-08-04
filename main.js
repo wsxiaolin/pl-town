@@ -576,6 +576,8 @@ const pathMats = [], lampGlobes = [], buildings = [], npcList = [];
 const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
 let playerPath = [];
+let playerMarker = null; // 玩家头顶的三角标记，用于高亮
+let cameraZoom; // 当前视野宽度，由滚轮/双指缩放调整
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
@@ -603,6 +605,8 @@ const CITY_LIMIT = 28;
 // 可调参数：镜头与角色
 const CONFIG = {
   cameraNearSize: 11,   // 近景视野宽度（越小视角越窄）— 略放宽以容纳扩展后的城
+  cameraZoomMin: 5,     // 滚轮/双指缩放的最小视野宽度
+  cameraZoomMax: 26,    // 滚轮/双指缩放的最大视野宽度
   cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
   playerSpeed: 4.2,     // 角色移动速度
   npcTalkRadius: 1.6,   // 玩家需走近该距离才能触发对话
@@ -1140,6 +1144,7 @@ function init() {
   syncTimeAndTheme();
   document.getElementById('labelsWrap').classList.add('hidden');
   requestAnimationFrame(loop);
+  updateWelcome();
 
   setTimeout(captureMapShot, 3200); // 等入场动画结束，俯视截取全景图
 
@@ -1159,7 +1164,8 @@ function setupRenderer() {
   if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 }
 function setupCamera() {
-  const vs = CONFIG.cameraNearSize;
+  cameraZoom=CONFIG.cameraNearSize;
+  const vs = cameraZoom;
   camera = new THREE.OrthographicCamera(-vs,vs,vs,-vs,0.1,200);
   updateCameraProjection(vs);
   setCameraTarget(0,0,true);
@@ -2579,6 +2585,30 @@ function makePlayerMarker() {
   g.add(cone);
   return g;
 }
+
+// 点击 “You are here”/小人：视角不够近就拉近，并高亮头顶三角
+function onYouClick() {
+  if(mapMode||dialogOpen||!cursorChar||!cursorChar.visible)return;
+  if(cameraZoom>6.5){ // 视角还不够大的时候才放大
+    const state={z:cameraZoom};
+    gsap.killTweensOf(state);
+    gsap.to(state,{z:6.5,duration:0.45,ease:'power2.out',onUpdate:()=>{
+      cameraZoom=state.z; updateCameraProjection(cameraZoom);
+    }});
+  }
+  highlightPlayerMarker();
+}
+
+function highlightPlayerMarker() {
+  const cone=playerMarker&&playerMarker.children[0];
+  if(!cone)return;
+  gsap.killTweensOf(cone.scale); gsap.killTweensOf(cone.material);
+  gsap.timeline()
+    .to(cone.material,{opacity:1,duration:0.1})
+    .to(cone.scale,{x:2.4,y:2.4,z:2.4,duration:0.22,ease:'power2.out'})
+    .to(cone.scale,{x:1,y:1,z:1,duration:0.5,ease:'elastic.out(1.1,0.4)'})
+    .to(cone.material,{opacity:0.95,duration:0.3});
+}
 function addCharacters() {
   if (REDUCED) return;
   NPC_PROFILES.forEach(profile=>{
@@ -2595,8 +2625,8 @@ function addCharacters() {
   // Spawn point offset slightly from center — per user request
   cursorChar.position.set(1.5, 0, -1.5);
   cursorChar.visible=false; scene.add(cursorChar);
-  const marker=makePlayerMarker();
-  marker.position.y=0.95; cursorChar.add(marker);
+  playerMarker=makePlayerMarker();
+  playerMarker.position.y=0.95; cursorChar.add(playerMarker);
 }
 
 function hoursInRange(h, wh) {
@@ -2798,8 +2828,49 @@ function setupEvents() {
   canvas.addEventListener('mouseenter',()=>{mouseOnScene=true;});
   canvas.addEventListener('mouseleave',()=>{mouseOnScene=false;});
 
+  // PC：滚轮缩放
+  canvas.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const factor=e.deltaY>0?1.12:1/1.12;
+    cameraZoom=clamp(cameraZoom*factor,CONFIG.cameraZoomMin,CONFIG.cameraZoomMax);
+    updateCameraProjection(cameraZoom);
+  },{passive:false});
+
+  // 移动端：双指缩放
+  let pinchDist=0;
+  canvas.addEventListener('touchstart',e=>{
+    if(e.touches.length===2){
+      pinchDist=Math.hypot(
+        e.touches[0].clientX-e.touches[1].clientX,
+        e.touches[0].clientY-e.touches[1].clientY
+      );
+    }
+  },{passive:true});
+  canvas.addEventListener('touchmove',e=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      const d=Math.hypot(
+        e.touches[0].clientX-e.touches[1].clientX,
+        e.touches[0].clientY-e.touches[1].clientY
+      );
+      if(pinchDist>0){
+        cameraZoom=clamp(cameraZoom*pinchDist/d,CONFIG.cameraZoomMin,CONFIG.cameraZoomMax);
+        updateCameraProjection(cameraZoom);
+      }
+      pinchDist=d;
+    }
+  },{passive:false});
+
   document.getElementById('mapToggle').addEventListener('click',toggleMapMode);
   document.getElementById('mapClose').addEventListener('click',()=>mapMode&&toggleMapMode());
+  document.querySelector('.you-block').addEventListener('click',onYouClick);
+  document.getElementById('fsToggle').addEventListener('click',()=>{
+    if(document.fullscreenElement){
+      document.exitFullscreen().catch(()=>{});
+    }else{
+      document.documentElement.requestFullscreen().catch(()=>{});
+    }
+  });
   document.getElementById('mapOverlay').addEventListener('click',e=>{
     if(e.target.id==='mapOverlay'&&mapMode)toggleMapMode();
   });
@@ -2829,7 +2900,7 @@ function setupEvents() {
 
   window.addEventListener('resize',()=>{
     renderer.setSize(window.innerWidth,window.innerHeight);
-    updateCameraProjection(CONFIG.cameraNearSize);
+    updateCameraProjection(cameraZoom);
     if(mapMode) updateMapImage();
   });
 }
@@ -2850,6 +2921,10 @@ function onMouseMove(e) {
 function onCanvasClick() {
   if (dialogOpen) return;
   raycaster.setFromCamera(mouse2D,camera);
+  if(cursorChar&&cursorChar.visible){
+    const phits=raycaster.intersectObject(cursorChar,true);
+    if(phits.length){ onYouClick(); return; }
+  }
   const npcHit=npcForRaycast();
   if(npcHit){ talkToOrWalk(npcHit); return; }
   const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
@@ -3479,8 +3554,16 @@ function trackInteraction(buildingId) {
   s.interactions++;
   if(buildingId&&!s.buildingsVisited.includes(buildingId)) s.buildingsVisited.push(buildingId);
   saveStats(s);
+  updateWelcome();
   checkUnlocks(s);
   checkAchievements();
+}
+
+function updateWelcome() {
+  const s=getStats();
+  const show=(s.interactions||0)<2; // 第二次与建筑交互后不再显示
+  const el=document.querySelector('.welcome-block');
+  if(el) el.classList.toggle('hidden',!show);
 }
 
 function checkUnlocks(s) {
