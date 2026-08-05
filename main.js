@@ -44,6 +44,26 @@ function _tex(key, rx, ry) {
   if (rx || ry) t.repeat.set(rx || 1, ry || 1);
   return t;
 }
+function _texClamp(key) {
+  const c = _texCanvases[key];
+  if (!c) return null;
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.ClampToEdgeWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  if (renderer && renderer.capabilities) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+function addFacade(g, texKey, w, h, y, zOffset, rotY) {
+  const t = _texClamp(texKey);
+  if (!t) return null;
+  const mat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05 });
+  const facade = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  facade.position.set(0, y, zOffset);
+  if (rotY) facade.rotation.y = rotY;
+  facade.castShadow = true; facade.receiveShadow = true;
+  g.add(facade);
+  return facade;
+}
 function _noise(ctx, size, amount) {
   const img = ctx.getImageData(0, 0, size, size);
   for (let i = 0; i < img.data.length; i += 4) {
@@ -604,11 +624,46 @@ function initTextures() {
     }
     _noise(ctx, s, 0.025);
   });
+
+  // ══ 建筑立面贴图（完整立面，非重复）══
+  function _win(ctx,x,y,w,h,frame,glass){ctx.fillStyle=frame;ctx.fillRect(x-2,y-2,w+4,h+4);const gr=ctx.createLinearGradient(x,y,x+w,y+h);gr.addColorStop(0,glass[0]);gr.addColorStop(0.5,glass[1]);gr.addColorStop(1,glass[2]);ctx.fillStyle=gr;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(255,255,255,0.25)';ctx.fillRect(x,y,w*0.35,h*0.35);ctx.fillStyle='rgba(60,70,90,0.15)';ctx.fillRect(x+w/2-0.5,y,1,h);ctx.fillRect(x,y+h/2-0.5,w,1);}
+  function _door(ctx,x,y,w,h,frame,panel){ctx.fillStyle=frame;ctx.fillRect(x-3,y-3,w+6,h+6);ctx.fillStyle=panel;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(0,0,0,0.1)';ctx.fillRect(x,y,w/2,h);ctx.fillStyle='rgba(255,255,255,0.08)';ctx.fillRect(x+w/2,y,w/2,h);ctx.fillStyle='rgba(218,165,32,0.6)';ctx.beginPath();ctx.arc(x+w*0.7,y+h*0.5,2,0,Math.PI*2);ctx.fill();}
+  function _cornice(ctx,y,color){ctx.fillStyle=color;ctx.fillRect(0,y,512,8);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(0,y+8,512,3);}
+  function _awning(ctx,y,a,b){const sw=512/8;for(let i=0;i<8;i++){ctx.fillStyle=i%2===0?a:b;ctx.fillRect(i*sw,y,sw,12);}ctx.fillStyle='rgba(0,0,0,0.1)';ctx.fillRect(0,y+12,512,3);}
+
+  _canvas('facade_bank',512,(ctx,s)=>{ctx.fillStyle='#F0EFEC';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#E8E7E2');ctx.fillStyle='#F5F4F1';ctx.beginPath();ctx.moveTo(0,8);ctx.lineTo(s/2,50);ctx.lineTo(s,8);ctx.fill();ctx.fillStyle='rgba(0,0,0,0.04)';ctx.fillRect(0,8,s,4);ctx.fillStyle='#EAE9E4';ctx.fillRect(0,50,s,20);ctx.fillStyle='#D8D7D2';ctx.fillRect(0,64,s,6);const colW=40,gap=(s-5*colW)/4;for(let i=0;i<5;i++){const cx=i*(colW+gap);ctx.fillStyle='#F8F7F5';ctx.fillRect(cx,70,colW,s-100);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(cx,70,4,s-100);ctx.fillRect(cx+colW-4,70,4,s-100);ctx.fillStyle='#E8E7E2';ctx.fillRect(cx-4,68,colW+8,6);ctx.fillRect(cx-4,s-36,colW+8,6);}_door(ctx,s/2-30,s-90,60,50,'#C8A86D','#4A3A2A');ctx.fillStyle='#E0DFDC';ctx.fillRect(s/2-50,s-30,100,6);ctx.fillStyle='#D4D3D0';ctx.fillRect(s/2-40,s-20,80,6);_noise(ctx,s,0.02);});
+  _canvas('facade_tower',512,(ctx,s)=>{ctx.fillStyle='#D5DDED';ctx.fillRect(0,0,s,s);const floors=12,fh=s/floors;for(let f=0;f<floors;f++){const y=f*fh;ctx.fillStyle='#C8C8C0';ctx.fillRect(0,y,s,3);const panels=5,pw=s/panels;for(let p=0;p<panels;p++){const x=p*pw,t=(f+p)%3;const gr=ctx.createLinearGradient(x,y,x+pw,y+fh);if(t===0){gr.addColorStop(0,'#B0C8E8');gr.addColorStop(0.5,'#90B0D0');gr.addColorStop(1,'#7898B8');}else if(t===1){gr.addColorStop(0,'#C0D8F0');gr.addColorStop(0.5,'#A0C0E0');gr.addColorStop(1,'#88A8C8');}else{gr.addColorStop(0,'#A8C0E0');gr.addColorStop(0.5,'#88A8C8');gr.addColorStop(1,'#7090B0');}ctx.fillStyle=gr;ctx.fillRect(x+1,y+4,pw-2,fh-7);ctx.fillStyle='rgba(255,255,255,0.18)';ctx.fillRect(x+1,y+4,pw-2,(fh-7)*0.3);}}ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.3,s-fh,s*0.4,fh-4);ctx.fillStyle='rgba(200,220,250,0.4)';ctx.fillRect(s*0.32,s-fh+2,s*0.36,fh-8);_noise(ctx,s,0.012);});
+  _canvas('facade_darktower',512,(ctx,s)=>{ctx.fillStyle='#3A3A3E';ctx.fillRect(0,0,s,s);const floors=10,fh=s/floors;for(let f=0;f<floors;f++){const y=f*fh;ctx.fillStyle='#2A2A2E';ctx.fillRect(0,y,s,3);for(let p=0;p<3;p++){const x=p*(s/3)+8,pw=s/3-16;const lit=Math.random()>0.3;if(lit){const gr=ctx.createLinearGradient(x,y,x+pw,y+fh);gr.addColorStop(0,'#5A4F8E');gr.addColorStop(0.5,'#4A3F7E');gr.addColorStop(1,'#3A2F6E');ctx.fillStyle=gr;}else{ctx.fillStyle='#2A2A2E';}ctx.fillRect(x,y+4,pw,fh-7);if(lit){ctx.fillStyle='rgba(107,79,232,0.2)';ctx.fillRect(x,y+4,pw,(fh-7)*0.4);}}}ctx.fillStyle='#1A1A2E';ctx.fillRect(s*0.35,s-fh,s*0.3,fh);ctx.fillStyle='rgba(107,79,232,0.3)';ctx.fillRect(s*0.37,s-fh+4,s*0.26,fh-8);_noise(ctx,s,0.035);});
+  _canvas('facade_library',512,(ctx,s)=>{ctx.fillStyle='#E8E0D5';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D8D0C5');const uY=40,uH=s*0.45,cols=5,cw=s/cols;for(let c=0;c<cols;c++){const x=c*cw+10;_win(ctx,x,uY+15,cw-20,uH-20,'#C8C0B5',['#D5E8F8','#A8C8E0','#90B0C8']);}_cornice(ctx,uY+uH,'#D8D0C5');const gY=uY+uH+8,gH=s-gY-10;_door(ctx,s/2-25,gY+5,50,gH-15,'#B8A06D','#5A4A3A');_awning(ctx,gY-2,'#8A5A3A','#D8C8B8');_noise(ctx,s,0.025);});
+  _canvas('facade_skyscraper',512,(ctx,s)=>{ctx.fillStyle='#D8D7D2';ctx.fillRect(0,0,s,s);const floors=15,fh=s/floors;for(let f=0;f<floors;f++){const y=f*fh;ctx.fillStyle='#C8C7C2';ctx.fillRect(0,y,s,2);const panels=4,pw=s/panels;for(let p=0;p<panels;p++){const x=p*pw,t=(f+p)%2;const gr=ctx.createLinearGradient(x,y,x+pw,y+fh);if(t===0){gr.addColorStop(0,'#C5DBF5');gr.addColorStop(0.5,'#A8C5E8');gr.addColorStop(1,'#90B0D8');}else{gr.addColorStop(0,'#B8D0F0');gr.addColorStop(0.5,'#A0BCDF');gr.addColorStop(1,'#88A5CF');}ctx.fillStyle=gr;ctx.fillRect(x+1,y+3,pw-2,fh-5);ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fillRect(x+1,y+3,pw-2,(fh-5)*0.25);}}ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.3,s-fh,s*0.4,fh);_noise(ctx,s,0.012);});
+  _canvas('facade_campus',512,(ctx,s)=>{ctx.fillStyle='#EFEDE8';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#E0DFDC');const uY=30,uH=s*0.55;for(let f=0;f<3;f++){const y=uY+f*(uH/3);ctx.fillStyle='#D5D4CF';ctx.fillRect(0,y,s,4);_win(ctx,20,y+8,s-40,uH/3-16,'#C8C7C2',['#D0E8F8','#A8C8E0','#90B0C8']);}_cornice(ctx,uY+uH,'#E0DFDC');const gY=uY+uH+8;ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.35,gY,s*0.3,s-gY-5);ctx.fillStyle='rgba(200,220,250,0.5)';ctx.fillRect(s*0.37,gY+3,s*0.26,s-gY-11);_noise(ctx,s,0.02);});
+  _canvas('facade_screen',512,(ctx,s)=>{ctx.fillStyle='#EAE9E6';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D8D7D2');_cornice(ctx,s-12,'#D8D7D2');ctx.fillStyle='#2A2A30';ctx.fillRect(30,30,s-60,s-60);const gr=ctx.createLinearGradient(0,30,0,s-30);gr.addColorStop(0,'#1A3A6E');gr.addColorStop(0.5,'#2A5FA8');gr.addColorStop(1,'#1A3A6E');ctx.fillStyle=gr;ctx.fillRect(35,35,s-70,s-70);ctx.fillStyle='rgba(200,220,250,0.6)';ctx.fillRect(60,60,s-120,4);ctx.fillRect(60,75,s-150,3);ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fillText('WELCOME',s/2,s/2-10);ctx.fillStyle='#D0CFCC';ctx.fillRect(s/2-2,0,4,30);_noise(ctx,s,0.02);});
+  _canvas('facade_temple',512,(ctx,s)=>{ctx.fillStyle='#F0EFEC';ctx.fillRect(0,0,s,s);ctx.fillStyle='#F5F4F1';ctx.beginPath();ctx.moveTo(0,10);ctx.lineTo(s/2,55);ctx.lineTo(s,10);ctx.fill();ctx.fillStyle='#EAE9E4';ctx.fillRect(0,55,s,18);ctx.fillStyle='#D8D7D2';ctx.fillRect(0,68,s,5);const nCol=6,colW=28,gap=(s-nCol*colW)/(nCol+1);for(let i=0;i<nCol;i++){const cx=gap+i*(colW+gap);ctx.fillStyle='#F8F7F5';ctx.fillRect(cx,73,colW,s-113);ctx.fillStyle='rgba(0,0,0,0.05)';ctx.fillRect(cx,73,3,s-113);ctx.fillRect(cx+colW-3,73,3,s-113);ctx.fillStyle='#E8E7E2';ctx.fillRect(cx-4,71,colW+8,6);ctx.fillRect(cx-4,s-40,colW+8,6);}ctx.fillStyle='#E0DFDC';ctx.fillRect(0,s-34,s,6);ctx.fillStyle='#D4D3D0';ctx.fillRect(0,s-22,s,6);ctx.fillStyle='#4A3A2A';ctx.fillRect(s/2-25,s-90,50,56);_noise(ctx,s,0.018);});
+  _canvas('facade_factory',512,(ctx,s)=>{ctx.fillStyle='#D0CCC6';ctx.fillRect(0,0,s,s);const bh=20,bw=50;for(let y=0;y<s;y+=bh){const off=((y/bh)%2)*(bw/2);for(let x=-bw;x<s+bw;x+=bw){const bx=x+off;ctx.fillStyle=`rgb(${170+Math.floor(Math.random()*30)},${150+Math.floor(Math.random()*25)},${135+Math.floor(Math.random()*20)})`;ctx.fillRect(bx+1,y+1,bw-3,bh-3);}}for(let r=0;r<3;r++)for(let c=0;c<4;c++){const x=30+c*(s/4),y=30+r*(s/4);_win(ctx,x,y,(s/4)-30,(s/4)-30,'#A09890',['#B8D0E8','#98B8D0','#8098B0']);}ctx.fillStyle='#5A5A5A';ctx.fillRect(s*0.2,s-80,s*0.25,70);ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.22,s-78,s*0.21,66);ctx.fillStyle='#E8A838';ctx.fillRect(s*0.5,s-100,s*0.3,15);_noise(ctx,s,0.03);});
+  _canvas('facade_pagoda',512,(ctx,s)=>{ctx.fillStyle='#C4A86D';ctx.fillRect(0,0,s,s);const tiers=4,tierH=s/tiers;for(let i=0;i<tiers;i++){const y=i*tierH,w=s*(1-i*0.12),x=(s-w)/2;ctx.fillStyle='#8A5A3A';ctx.fillRect(x+20,y+8,w-40,tierH-16);ctx.fillStyle='#D0C8B0';ctx.fillRect(x+30,y+12,20,tierH-24);ctx.fillRect(x+w-50,y+12,20,tierH-24);ctx.fillStyle='#C45A4A';ctx.beginPath();ctx.moveTo(x-10,y+tierH-2);ctx.quadraticCurveTo(x+w/2,y+tierH+18,x+w+10,y+tierH-2);ctx.lineTo(x+w+10,y+tierH-8);ctx.lineTo(x-10,y+tierH-8);ctx.fill();}ctx.fillStyle='#E8A838';ctx.fillRect(s/2-2,0,4,12);ctx.beginPath();ctx.arc(s/2,14,5,0,Math.PI*2);ctx.fill();_noise(ctx,s,0.025);});
+  _canvas('facade_clocktower',512,(ctx,s)=>{ctx.fillStyle='#C5C5C2';ctx.fillRect(0,0,s,s);const bh=24,bw=60;for(let y=0;y<s;y+=bh){const off=((y/bh)%2)*(bw/2);for(let x=-bw;x<s+bw;x+=bw){const bx=x+off;const r=160+Math.floor(Math.random()*40),g=70+Math.floor(Math.random()*30),b=55+Math.floor(Math.random()*25);ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.fillRect(bx+1,y+1,bw-3,bh-3);}}for(let f=0;f<4;f++){const y=30+f*(s/5);_win(ctx,s*0.15,y,50,40,'#A09890',['#C0D8E8','#A0B8D0','#8898B0']);_win(ctx,s*0.7,y,50,40,'#A09890',['#C0D8E8','#A0B8D0','#8898B0']);}const cy=s*0.15,cr=35;ctx.fillStyle='#F8F4E8';ctx.beginPath();ctx.arc(s/2,cy,cr,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#5A5A5A';ctx.lineWidth=3;ctx.beginPath();ctx.arc(s/2,cy,cr,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#2A2A2A';ctx.fillRect(s/2-2,cy-20,4,20);ctx.fillRect(s/2-1,cy,2,25);_door(ctx,s/2-20,s-60,40,50,'#8A5A3A','#5A3A2A');_noise(ctx,s,0.025);});
+  _canvas('facade_market',512,(ctx,s)=>{ctx.fillStyle='#F0EFEC';ctx.fillRect(0,0,s,s);_awning(ctx,0,'#E8A838','#F5F4F1');_awning(ctx,s-20,'#E8A838','#F5F4F1');ctx.fillStyle='#C4A86D';ctx.fillRect(0,s*0.5,s,12);ctx.fillStyle='#E85858';ctx.beginPath();ctx.arc(s*0.2,s*0.5-5,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#E8A838';ctx.beginPath();ctx.arc(s*0.4,s*0.5-5,7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#5A8A3A';ctx.beginPath();ctx.arc(s*0.6,s*0.5-5,9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#A88858';ctx.fillRect(5,20,8,s*0.5-20);ctx.fillRect(s-13,20,8,s*0.5-20);ctx.fillStyle='#3B6FE0';ctx.fillRect(s*0.3,14,s*0.4,18);ctx.fillStyle='#F8F7F5';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('MARKET',s/2,27);_noise(ctx,s,0.02);});
+  _canvas('facade_greenhouse',512,(ctx,s)=>{ctx.fillStyle='#E0F0D8';ctx.fillRect(0,0,s,s);const panels=4,pw=s/panels;for(let p=0;p<panels;p++){const x=p*pw;const gr=ctx.createLinearGradient(x,0,x+pw,s);gr.addColorStop(0,'rgba(200,235,210,0.8)');gr.addColorStop(0.5,'rgba(170,210,180,0.6)');gr.addColorStop(1,'rgba(140,190,160,0.4)');ctx.fillStyle=gr;ctx.fillRect(x+2,2,pw-4,s-4);}ctx.strokeStyle='#A8B8A0';ctx.lineWidth=4;for(let p=0;p<=panels;p++){ctx.beginPath();ctx.moveTo(p*pw,0);ctx.lineTo(p*pw,s);ctx.stroke();}ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.4,s*0.7,s*0.2,s*0.3);_noise(ctx,s,0.015);});
+  _canvas('facade_kiosk',512,(ctx,s)=>{ctx.fillStyle='#E8E0D5';ctx.fillRect(0,0,s,s);ctx.fillStyle='#D8C8A0';ctx.fillRect(0,0,s,s*0.35);for(let c=0;c<3;c++){_win(ctx,20+c*(s/3),15,(s/3)-30,s*0.3-20,'#C8B8A0',['#D5E8F8','#A8C8E0','#90B0C8']);}_awning(ctx,s*0.35,'#E8A838','#F5F4F1');ctx.fillStyle='#4A6FA8';ctx.fillRect(20,s*0.4,s-40,s*0.25);ctx.fillStyle='#C4A86D';ctx.fillRect(0,s*0.65,s,s*0.35);ctx.fillStyle='#3B6FE0';ctx.fillRect(s*0.2,s*0.35-2,s*0.6,8);_noise(ctx,s,0.02);});
+  _canvas('facade_observatory',512,(ctx,s)=>{ctx.fillStyle='#EAE9E6';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D8D7D2');_cornice(ctx,s-10,'#D8D7D2');for(let c=0;c<4;c++){_win(ctx,20+c*(s/4),20,(s/4)-30,s*0.4-20,'#C8C7C2',['#D0E8F8','#A8C8E0','#90B0C8']);}_cornice(ctx,s*0.45,'#D8D7D2');_door(ctx,s/2-25,s*0.55,50,s*0.35,'#B8A06D','#5A4A3A');const gr=ctx.createRadialGradient(s/2,s*0.2,0,s/2,s*0.2,40);gr.addColorStop(0,'rgba(59,111,224,0.15)');gr.addColorStop(1,'rgba(59,111,224,0)');ctx.fillStyle=gr;ctx.fillRect(s*0.2,0,s*0.6,s*0.4);_noise(ctx,s,0.02);});
+  _canvas('facade_altar',512,(ctx,s)=>{ctx.fillStyle='#E4E3E0';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D0CFCC');ctx.fillStyle='#F0EFEC';ctx.fillRect(0,10,s,15);const nP=5;for(let i=0;i<nP;i++){const px=20+i*(s-40)/(nP-1)-12;ctx.fillStyle='#D8D7D2';ctx.fillRect(px,25,24,s-55);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(px,25,4,s-55);ctx.fillRect(px+20,25,4,s-55);ctx.fillStyle='#C8C7C2';ctx.fillRect(px-3,23,30,5);ctx.fillRect(px-3,s-32,30,5);}ctx.fillStyle='#D0CFCC';ctx.fillRect(0,s-30,s,12);ctx.fillStyle='#F8F4E8';ctx.fillRect(s/2-50,s-35,100,12);ctx.fillStyle='#E8A838';ctx.beginPath();ctx.arc(s/2,s-29,5,0,Math.PI*2);ctx.fill();_noise(ctx,s,0.02);});
+  _canvas('facade_board',512,(ctx,s)=>{ctx.fillStyle='#C4A86D';ctx.fillRect(0,0,s,s);ctx.fillStyle='#A88858';ctx.fillRect(0,0,s,20);ctx.fillRect(0,s-20,s,20);ctx.fillRect(0,0,20,s);ctx.fillRect(s-20,0,20,s);ctx.fillStyle='#D8C8A0';ctx.fillRect(20,20,s-40,s-40);const papers=[[40,35,80,60,'#F8F4E8'],[150,30,70,50,'#F5F0E0'],[250,40,90,55,'#F0EBD8'],[370,35,75,60,'#F8F4E8'],[50,120,85,65,'#F5F0E0'],[160,110,70,55,'#F0EBD8'],[260,125,80,60,'#F8F4E8'],[370,120,70,50,'#F5F0E0'],[60,220,75,55,'#F0EBD8'],[170,210,85,65,'#F8F4E8'],[290,220,70,50,'#F5F0E0'],[380,215,65,55,'#F0EBD8'],[50,310,80,60,'#F5F0E0'],[160,300,70,55,'#F8F4E8'],[260,310,85,60,'#F5F0E0'],[375,305,65,50,'#F8F4E8']];papers.forEach(p=>{ctx.fillStyle=p.c;ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(p.x,p.y+p.h,p.w,3);ctx.fillStyle='rgba(60,50,40,0.3)';for(let i=0;i<4;i++)ctx.fillRect(p.x+5,p.y+5+i*8,p.w-10-Math.random()*20,1);ctx.fillStyle='#E85858';ctx.beginPath();ctx.arc(p.x+p.w/2,p.y+5,2,0,Math.PI*2);ctx.fill();});_noise(ctx,s,0.03);});
+  _canvas('facade_shaft',512,(ctx,s)=>{ctx.fillStyle='#D8D7D2';ctx.fillRect(0,0,s,s);const ps=s/4;for(let y=0;y<s;y+=ps)for(let x=0;x<s;x+=ps){const sh=0.9+Math.random()*0.15;ctx.fillStyle=_shade([216,215,210],sh);ctx.fillRect(x+2,y+2,ps-4,ps-4);ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(x+ps-4,y,4,ps);ctx.fillRect(x,y+ps-4,ps,4);}ctx.fillStyle='#2A2A30';ctx.fillRect(s*0.2,s*0.4,s*0.6,s*0.55);ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.22,s*0.42,s*0.56,s*0.51);ctx.fillStyle='#2A2A30';ctx.fillRect(s/2-1,s*0.42,2,s*0.51);ctx.fillStyle='#1A1A1E';ctx.fillRect(s*0.8,s*0.5,30,50);ctx.fillStyle='#A8C8F8';for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(s*0.8+15,s*0.52+i*10,3,0,Math.PI*2);ctx.fill();}ctx.fillStyle='#2A2A30';ctx.fillRect(s*0.4,s*0.15,s*0.2,25);ctx.fillStyle='#A8C8F8';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillText('1F',s/2,s*0.15+17);_noise(ctx,s,0.018);});
+  _canvas('facade_mall',512,(ctx,s)=>{ctx.fillStyle='#D8E0E8';ctx.fillRect(0,0,s,s);const floors=5,fh=s/floors;for(let f=0;f<floors;f++){const y=f*fh;ctx.fillStyle='#B8C0C8';ctx.fillRect(0,y,s,3);const panels=6,pw=s/panels;for(let p=0;p<panels;p++){const x=p*pw,t=(f+p)%3;const gr=ctx.createLinearGradient(x,y,x+pw,y+fh);if(t===0){gr.addColorStop(0,'#C0D8F0');gr.addColorStop(0.5,'#A0C0E0');gr.addColorStop(1,'#88A8C8');}else if(t===1){gr.addColorStop(0,'#B8D0E8');gr.addColorStop(0.5,'#98B8D0');gr.addColorStop(1,'#8098B0');}else{gr.addColorStop(0,'#D0E0F0');gr.addColorStop(0.5,'#B0C8E0');gr.addColorStop(1,'#98B0C8');}ctx.fillStyle=gr;ctx.fillRect(x+1,y+4,pw-2,fh-7);ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fillRect(x+1,y+4,pw-2,(fh-7)*0.25);}}ctx.fillStyle='#E8A838';ctx.fillRect(s*0.25,s*0.9,s*0.5,8);_noise(ctx,s,0.012);});
+  _canvas('facade_school',512,(ctx,s)=>{ctx.fillStyle='#F0EDE5';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#E0DFDC');_cornice(ctx,s-10,'#E0DFDC');const floors=4,fh=(s-20)/floors;for(let f=0;f<floors;f++){const y=10+f*fh;ctx.fillStyle='#D8D7D2';ctx.fillRect(0,y,s,3);for(let c=0;c<6;c++){const x=15+c*((s-30)/6),ww=(s-30)/6-8;_win(ctx,x,y+5,ww,fh-10,'#C8C7C2',['#C5DBF5','#A0BCDF','#88A5CF']);}}_door(ctx,s/2-25,s-55,50,45,'#B8A06D','#5A4A3A');_noise(ctx,s,0.02);});
+  _canvas('facade_banana',512,(ctx,s)=>{ctx.fillStyle='#F5E838';ctx.fillRect(0,0,s,s);ctx.fillStyle='#E8D528';ctx.beginPath();ctx.moveTo(s*0.2,s);ctx.quadraticCurveTo(s*0.2,s*0.4,s*0.5,s*0.35);ctx.quadraticCurveTo(s*0.8,s*0.4,s*0.8,s);ctx.fill();ctx.fillStyle='rgba(180,150,0,0.2)';ctx.beginPath();ctx.moveTo(s*0.25,s);ctx.quadraticCurveTo(s*0.25,s*0.45,s*0.5,s*0.42);ctx.quadraticCurveTo(s*0.75,s*0.45,s*0.75,s);ctx.fill();for(let i=0;i<4;i++){const x=s*0.1+i*s*0.22,y=s*0.15;ctx.fillStyle='#4A6FA8';ctx.beginPath();ctx.ellipse(x+s*0.08,y,s*0.06,s*0.1,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(200,220,250,0.5)';ctx.beginPath();ctx.ellipse(x+s*0.08,y,s*0.05,s*0.08,0,0,Math.PI*2);ctx.fill();}ctx.fillStyle='#D8C020';ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(s/2,s*0.15,s,0);ctx.lineTo(s,8);ctx.lineTo(0,8);ctx.fill();ctx.fillStyle='#8A5A00';ctx.fillRect(s*0.3,s*0.82,s*0.4,16);ctx.fillStyle='#F5E838';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('布拿拉宫',s/2,s*0.82+11);_noise(ctx,s,0.03);});
+  _canvas('facade_qipai',512,(ctx,s)=>{ctx.fillStyle='#E8E7E4';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D8D7D2');const ts=s/8;for(let r=0;r<4;r++)for(let c=0;c<8;c++){ctx.fillStyle=(r+c)%2===0?'#2A2A2E':'#F8F7F5';ctx.fillRect(c*ts,r*ts+8,ts,ts);}_cornice(ctx,4*ts+8,'#D8D7D2');ctx.fillStyle='#4A3A2A';ctx.fillRect(s*0.15,s*0.55,s*0.7,s*0.4);ctx.fillStyle='rgba(80,60,40,0.5)';ctx.fillRect(s*0.17,s*0.57,s*0.66,s*0.36);ctx.fillStyle='#E8E7E2';ctx.fillRect(s*0.05,s*0.55,8,s*0.4);ctx.fillRect(s*0.9,s*0.55,8,s*0.4);_noise(ctx,s,0.02);});
+
+  // ══ 地面区域贴图 ══
+  _canvas('ground2',256,(ctx,s)=>{ctx.fillStyle='#E0D8CC';ctx.fillRect(0,0,s,s);for(let i=0;i<350;i++){const x=Math.random()*s,y=Math.random()*s,r=0.5+Math.random()*2;const sh=Math.random();ctx.fillStyle=sh<0.3?'rgba(200,180,150,0.5)':sh<0.6?'rgba(180,160,130,0.4)':'rgba(210,200,180,0.4)';ctx.fillRect(x,y,r*2,r*2);}_noise(ctx,s,0.04);});
+  _canvas('ground4',256,(ctx,s)=>{ctx.fillStyle='#C0D0A0';ctx.fillRect(0,0,s,s);for(let i=0;i<600;i++){const x=Math.random()*s,y=Math.random()*s;const sh=0.65+Math.random()*0.5;ctx.fillStyle=`rgba(${Math.floor(100*sh)},${Math.floor(150*sh)},${Math.floor(70*sh)},0.5)`;ctx.fillRect(x,y,1,2+Math.random()*3);}_noise(ctx,s,0.03);});
+  _canvas('ground5',256,(ctx,s)=>{ctx.fillStyle='#E8E7E4';ctx.fillRect(0,0,s,s);const ts=32;for(let y=0;y<s;y+=ts){const off=((y/ts)%2)*(ts/2);for(let x=-ts;x<s+ts;x+=ts){const bx=x+off,sh=0.9+Math.random()*0.12;ctx.fillStyle=_shade([232,231,228],sh);ctx.fillRect(bx+1,y+1,ts-2,ts-2);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(bx+ts-2,y,2,ts);ctx.fillRect(bx,y+ts-2,ts,2);}}_noise(ctx,s,0.025);});
+  _canvas('ground6',256,(ctx,s)=>{ctx.fillStyle='#D0CCC8';ctx.fillRect(0,0,s,s);ctx.strokeStyle='rgba(100,90,80,0.2)';ctx.lineWidth=1;for(let i=0;i<20;i++){ctx.beginPath();const x=Math.random()*s,y=Math.random()*s;ctx.moveTo(x,y);for(let j=0;j<5;j++)ctx.lineTo(x+(Math.random()-0.5)*40,y+(Math.random()-0.5)*40);ctx.stroke();}for(let i=0;i<200;i++){const x=Math.random()*s,y=Math.random()*s;const sh=Math.random();ctx.fillStyle=`rgba(${180+Math.floor(sh*40)},${170+Math.floor(sh*30)},${160+Math.floor(sh*20)},0.3)`;ctx.fillRect(x,y,1.5,1.5);}_noise(ctx,s,0.035);});
 }
 
 // ── Globals ───────────────────────────────────────────────────────────────────
 let renderer, scene, camera, groundMat;
-const pathMats = [], lampGlobes = [], buildings = [], npcList = [];
+const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
 const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
 let playerPath = [];
@@ -623,7 +678,7 @@ let mapMode = false; // 全景地图弹层是否打开
 let mapShotData = null;    // 启动时俯视截取的全城图（dataURL）
 let mapShotRenderer = null, mapShotCam = null;
 const MAP_SHOT = 1024;     // 截图像素边长
-const MAP_SHOT_SPAN = 34;  // 截图覆盖的世界坐标跨度（±），含外环与四门商场
+const MAP_SHOT_SPAN = 50;
 let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
@@ -636,19 +691,19 @@ const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
-const ROAD_COORDS = [-18, -12, -6, 0, 6, 12, 18];
-const CITY_LIMIT = 28;
+const ROAD_COORDS = [-36,-27,-18,-12,-6,0,6,12,18,27,36];
+const CITY_LIMIT = 42;
 // 可调参数：镜头与角色
 const CONFIG = {
-  cameraNearSize: 11,   // 近景视野宽度（越小视角越窄）— 略放宽以容纳扩展后的城
+  cameraNearSize: 14,   // 近景视野宽度
   cameraZoomMin: 5,     // 滚轮/双指缩放的最小视野宽度
-  cameraZoomMax: 26,    // 滚轮/双指缩放的最大视野宽度
+  cameraZoomMax: 40,    // 滚轮/双指缩放的最大视野宽度
   cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
   playerSpeed: 4.2,     // 角色移动速度
   npcTalkRadius: 1.6,   // 玩家需走近该距离才能触发对话
   buildingInteractRadius: 3.5, // 玩家到建筑中心 ≤ 该距离时点击才触发交互（远处点击只走过去）
 };
-const CAMERA_OFFSET = new THREE.Vector3(18,30,18);
+const CAMERA_OFFSET = new THREE.Vector3(24,40,24);
 
 // ── Building config ───────────────────────────────────────────────────────────
 const PLH = 0.3;
@@ -717,6 +772,44 @@ const BUILDING_DEFS = [
     icon:I(`<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`) },
   { id:'kingice',       num:'30', label:'King Ice',  x: 20, z: 20, shape:'crown',
     icon:I(`<path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/>`) },
+  // ── 外环扩展建筑 ──
+  { id:'knowledgebase', num:'31', label:'知识库',   x:-33, z:-33, shape:'library',
+    icon:I(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/>`) },
+  { id:'community',     num:'32', label:'社区中心', x: 33, z:-33, shape:'clocktower',
+    icon:I(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>`) },
+  { id:'commons',       num:'33', label:'众议院',   x:-33, z: 0,  shape:'temple',
+    icon:I(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/>`) },
+  { id:'lab',           num:'34', label:'实验楼',   x: 33, z: 0,  shape:'greenhouse',
+    icon:I(`<path d="M9 3h6"/><path d="M10 3v5l-4 9a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-4-9V3"/>`) },
+  { id:'teahouse',      num:'35', label:'茶馆',     x: 33, z: 33, shape:'pagoda',
+    icon:I(`<path d="M5 10h12v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 11h1a2 2 0 0 1 0 4h-1"/>`) },
+  { id:'writingclub',   num:'36', label:'文训社',   x:-33, z: 33, shape:'factory', facade:'facade_library',
+    icon:I(`<path d="M4 20l4-1 10-10a3 3 0 0 0-4-4L4 15z"/><path d="M13 6l5 5"/>`) },
+  { id:'archive',       num:'37', label:'档案馆',   x:-21, z:-33, shape:'library', facade:'facade_board',
+    icon:I(`<path d="M3 4h18v16H3z"/><path d="M7 4v16"/>`) },
+  { id:'tradingpost',   num:'38', label:'交易所',   x: 21, z:-33, shape:'bank', facade:'facade_market',
+    icon:I(`<path d="M3 10h18v8H3z"/><path d="M3 10l9-5 9 5"/>`) },
+  { id:'records',       num:'39', label:'记录厅',   x:-33, z:-21, shape:'temple', facade:'facade_observatory',
+    icon:I(`<path d="M4 4h16v16H4z"/><path d="M8 8h8"/>`) },
+  { id:'guildhall',     num:'40', label:'公会堂',   x: 33, z:-21, shape:'clocktower', facade:'facade_tower',
+    icon:I(`<path d="M6 20V8h12v12"/><path d="M4 8h16l-2-4H6z"/>`) },
+  { id:'musichall',     num:'41', label:'音乐厅',   x:-21, z: 33, shape:'pavilion', facade:'facade_screen',
+    icon:I(`<path d="M9 18V5l12-2v13"/><circle cx="6" cy="6" r="3"/>`) },
+  { id:'conservatory',  num:'42', label:'温室',     x: 21, z: 33, shape:'greenhouse', facade:'facade_campus',
+    icon:I(`<path d="M12 2L2 12h3v8h14v-8h3z"/>`) },
+  { id:'arena',         num:'43', label:'竞技场',   x:-33, z: 21, shape:'factory', facade:'facade_clocktower',
+    icon:I(`<circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M3 12h18"/>`) },
+  { id:'guesthouse',    num:'44', label:'客栈',     x: 33, z: 21, shape:'pagoda', facade:'facade_kiosk',
+    icon:I(`<path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/>`) },
+  { id:'shrine',        num:'45', label:'神社',     x: 0, z:-33, shape:'altar', facade:'facade_temple',
+    icon:I(`<path d="M4 20h16"/><path d="M6 20V8h12v12"/>`) },
+  { id:'beacon',        num:'46', label:'灯塔',     x: 0, z: 33, shape:'tower', facade:'facade_darktower',
+    icon:I(`<path d="M8 21V5l4-3 4 3v16"/><path d="M8 21h8"/>`) },
+  // ── 特殊建筑 ──
+  { id:'banana_palace',  num:'47', label:'布拿拉宫', x:-30, z: 30, shape:'banana',
+    icon:I(`<path d="M6 14c0-4 2-8 6-8s6 4 6 8c0 3-2 6-6 6s-6-3-6-6z"/><path d="M12 6V3"/>`) },
+  { id:'qipai_hall',     num:'48', label:'棋气派',   x: 30, z: 30, shape:'qipai',
+    icon:I(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`) },
 ];
 
 // ── Building dialog content (from copywriting) ────────────────────────────────
@@ -932,6 +1025,24 @@ const BUILDING_CONTENT = {
     name:'King Ice', slogan:'皇冠落座之处，冰与光交界。',
     dialog:['Ice is good. Gugu is bad!']
   },
+  archive: { name:'档案馆', slogan:'过去不会消失，只是被收了起来。', dialog:['厚重的木门后面是成排的铁柜，标签已经泛黄。','每份档案都是城里发生过的事的记录。','「要理解一座城为什么变成现在这样，得先看它做过什么。」'] },
+  tradingpost: { name:'交易所', slogan:'价值在这里被反复称量。', dialog:['柜台上摆着各种代币和凭证。','这里不仅交易货币，还交换信息、服务和承诺。','「价格会波动，但信用不会。」'] },
+  records: { name:'记录厅', slogan:'每一个名字背后都有故事。', dialog:['墙上密密麻麻刻着名字。','管理人员定期来核对，确保每个名字都对应一个真实的存在。','「被记住，是这座城给予居民最基本的尊重。」'] },
+  guildhall: { name:'公会堂', slogan:'一个人走得快，一群人走得远。', dialog:['大堂里挂着各种旗帜，每面代表一个自发组织。','「加入一个公会，你会发现城市比想象的大。」'] },
+  musichall: { name:'音乐厅', slogan:'声音也能成为建筑。', dialog:['穹顶下回荡着排练的旋律。','「不需要听懂，只需要听。」'] },
+  conservatory: { name:'温室', slogan:'在最暖的地方种最嫩的芽。', dialog:['玻璃房里温度恒定，种着城外不易存活的植物。','「给条件足够的时间，一切都会发芽。」'] },
+  arena: { name:'竞技场', slogan:'规则之内，尽情较量。', dialog:['圆形场地中央画着白线，四周的看台还是空的。','「赢得漂亮，输得坦然。」'] },
+  guesthouse: { name:'客栈', slogan:'远道而来的人先在这里落脚。', dialog:['三层小楼，每层窗台上都放着一盏灯。','「明天的事明天再说。今晚先歇着。」'] },
+  shrine: { name:'神社', slogan:'安静地站着，也是一种参与。', dialog:['石阶尽头是一座小小的殿宇。','「不必祈祷，只是站在这里就够了。」'] },
+  beacon: { name:'灯塔', slogan:'为还没到的人亮着。', dialog:['塔顶的灯日夜不灭。','「总有人在路上。总有人需要一盏灯。」'] },
+  banana_palace: { name:'布拿拉宫', slogan:'黄得发亮，歪得有理。', dialog:['一座巨大的香蕉造型建筑矗立在眼前，黄得耀眼。','布拿拉工站在门口，手里捧着一根小香蕉。','「我叫布拿拉工，是这宫的主人。宫不是宫殿的宫，是香蕉的弯。」','「你问我为什么住在香蕉里？因为这城里，总得有人住在不一样的地方。」'] },
+  qipai_hall: { name:'棋气派', slogan:'落子无悔，入局即生。', dialog:['门口站着两尊巨型棋子雕像——一王一后。','地面铺着黑白棋盘格，每一步都踩在一格命运上。','「棋气派下的不是棋，是气。气断了，棋就散了。」'] },
+  knowledgebase: { name:'知识库', slogan:'所有被保存的东西，都在这里继续发光。', dialog:['墙面像索引一样延伸，抽屉里收着旧讨论、旧作品。','「先查，再问。能留下来的东西，总会帮助下一个人。」'] },
+  community: { name:'社区中心', slogan:'居民在这里互相确认彼此存在。', dialog:['大厅里挂着很多便签，有求助，有招募。','「一座城不是建出来的，是搭出来的。」'] },
+  commons: { name:'众议院', slogan:'议事的厅堂，也是争论的起点。', dialog:['圆形大厅里摆着弧形的座位。','「多数不代表正确，但沉默一定不代表同意。」'] },
+  lab: { name:'实验楼', slogan:'试错是这座城的燃料。', dialog:['玻璃门后是整齐的仪器和不太整齐的便签。','「不要把异常丢掉。异常有时候是入口。」'] },
+  teahouse: { name:'茶馆', slogan:'暂时坐下，也是一种前进。', dialog:['茶香从窗缝里慢慢散出来。','「有些答案不会在奔跑时出现。坐一会儿。」'] },
+  writingclub: { name:'文训社', slogan:'字是城的声音，写下来才不散。', dialog:['木桌木椅，墨迹未干。','「别怕写不好。先写下来，再改。」'] },
 };
 
 // 道路网格路径点（覆盖整个城市，NPC 只在这些点上移动，不会穿过建筑）
@@ -1134,6 +1245,33 @@ const NPC_PROFILES = [
       ]},
     ],
   },
+  {
+    id:'bunala', name:'布拿拉工', role:'布拿拉宫主人', core:true, spawnChance:1,
+    behavior:'field', workHours:[8,20],
+    head:0xF5E838, body:0x4A4A00, home:[-30,30], work:[-30,30], patrolRadius:6,
+    dialog:[
+      { text:'「你来了！我是布拿拉工，布拿拉宫的主人。进来坐坐？香蕉管够。」', options:[
+        { text:'你为什么叫布拿拉工？', next:1 },
+        { text:'这宫殿……真的是一根香蕉？', next:2 },
+        { text:'谢谢，我先走了。', next:null },
+      ]},
+      { text:'「布拿拉工，就是布拿拉宫的工。宫是我盖的，工也是我。」', options:[
+        { text:'那你为什么盖了个香蕉？', next:2 },
+        { text:'好吧，我懂了。', next:null },
+      ]},
+      { text:'「为什么是香蕉？因为城里没人盖香蕉啊。总得有人做不一样的事。再说了，香蕉弯弯的，住进去有种被包住的感觉——很踏实。」', options:[
+        { text:'里面几层？', next:3 },
+        { text:'我能进去看看吗？', next:null },
+      ]},
+      { text:'「三层。最顶上那个弯弯的香蕉柄是我的工作室。从弯处往外看，能看到半座城。」', options:[
+        { text:'听起来不错。', next:4 },
+        { text:'我要去买香蕉了。', next:null },
+      ]},
+      { text:'「对了，你要是想在城里卖香蕉，来找我进货。我不赚居民的钱，只收个本钱。」', options:[
+        { text:'成交。', next:null },
+      ]},
+    ],
+  },
 ];
 
 // Progression unlock tiers
@@ -1223,9 +1361,9 @@ function setupLighting() {
   const dir = new THREE.DirectionalLight(0xFFFFFF, isNight ? 0.30 : 0.55);
   dir.name = 'dir'; dir.position.set(18,28,12); dir.castShadow = true;
   dir.shadow.mapSize.set(2048,2048);
-  dir.shadow.camera.left=-32; dir.shadow.camera.right=32;
-  dir.shadow.camera.top=32;   dir.shadow.camera.bottom=-32;
-  dir.shadow.camera.near=0.5; dir.shadow.camera.far=90;
+  dir.shadow.camera.left=-45; dir.shadow.camera.right=45;
+  dir.shadow.camera.top=45;   dir.shadow.camera.bottom=-45;
+  dir.shadow.camera.near=0.5; dir.shadow.camera.far=120;
   dir.shadow.bias=-0.0006; dir.shadow.normalBias=0.02;
   scene.add(dir);
   const fill = new THREE.DirectionalLight(0xD8E8FF, 0.18);
@@ -1235,6 +1373,34 @@ function addGround() {
   groundMat = stdMat({ color: isNight?P.NIGHT_GROUND:P.DAY_GROUND, roughness:1, metalness:0, tex:'ground', rx:30, ry:30 });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(110,110), groundMat);
   m.rotation.x = -Math.PI/2; m.receiveShadow = true; scene.add(m);
+  // ── 扩展地面区域层（叠在原地面之上，不同区域不同质感）──
+  // 远端荒地（最底层，最大）
+  const farMat = stdMat({ color: isNight?0x9A988E:0xD8D4CC, roughness:1, metalness:0, tex:'ground6', rx:24, ry:24 });
+  farMat.polygonOffset = true; farMat.polygonOffsetFactor = 1; farMat.polygonOffsetUnits = 1;
+  const farG = new THREE.Mesh(new THREE.PlaneGeometry(220,220), farMat);
+  farG.rotation.x = -Math.PI/2; farG.position.y = -0.01; farG.receiveShadow = true; scene.add(farG);
+  // 郊区沙土环
+  const subMat = stdMat({ color: isNight?0xB4B0A4:0xE0D8CC, roughness:1, tex:'ground2', rx:18, ry:18 });
+  subMat.polygonOffset = true; subMat.polygonOffsetFactor = 0.5; subMat.polygonOffsetUnits = 1;
+  const subG = new THREE.Mesh(new THREE.PlaneGeometry(150,150), subMat);
+  subG.rotation.x = -Math.PI/2; subG.position.y = -0.005; subG.receiveShadow = true; scene.add(subG);
+  // 中心广场石板
+  const plazaMat = stdMat({ color: isNight?0xB0AFA8:0xE8E7E4, roughness:0.9, tex:'ground5', rx:10, ry:10 });
+  plazaMat.polygonOffset = true; plazaMat.polygonOffsetFactor = -0.5; plazaMat.polygonOffsetUnits = -1;
+  const plazaG = new THREE.Mesh(new THREE.PlaneGeometry(40,40), plazaMat);
+  plazaG.rotation.x = -Math.PI/2; plazaG.position.y = 0.008; plazaG.receiveShadow = true; scene.add(plazaG);
+  // 四角草地
+  const grassMat = stdMat({ color: isNight?0x6A7A50:0xC0D0A0, roughness:1, tex:'ground4', rx:12, ry:12 });
+  grassMat.polygonOffset = true; grassMat.polygonOffsetFactor = -0.5; grassMat.polygonOffsetUnits = -1;
+  [[24,24],[24,-24],[-24,24],[-24,-24]].forEach(([x,z]) => {
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(24,24), grassMat);
+    g.rotation.x = -Math.PI/2; g.position.set(x, 0.006, z); g.receiveShadow = true; scene.add(g);
+  });
+  // 注册主题切换
+  groundMats.push({mat:farMat, day:0xD8D4CC, night:0x9A988E});
+  groundMats.push({mat:subMat, day:0xE0D8CC, night:0xB4B0A4});
+  groundMats.push({mat:plazaMat, day:0xE8E7E4, night:0xB0AFA8});
+  groundMats.push({mat:grassMat, day:0xC0D0A0, night:0x6A7A50});
 }
 
 // ── Paths (grid layout for expanded city) ─────────────────────────────────────
@@ -1263,25 +1429,25 @@ function addPaths() {
   // The black arterial roads extend toward the outer buildings, but stop before
   // their bases. A clear plaza is reserved around the center fountain so no
   // road mesh sits underneath either landmark.
-  addRoadSegment(2.4, 23.8, 0, -14.1, true, 'asphalt');
-  addRoadSegment(2.4, 23.8, 0, 14.1, true, 'asphalt');
-  addRoadSegment(26.8, 2.4, -15.6, 0, true, 'asphalt');
-  addRoadSegment(26.8, 2.4, 15.6, 0, true, 'asphalt');
-  addRoadSegment(2.4, 2.0, 0, -24.0, true, 'asphalt');
-  addRoadSegment(2.4, 2.0, 0, 24.0, true, 'asphalt');
+  addRoadSegment(2.4, 35.8, 0, -21.1, true, 'asphalt');
+  addRoadSegment(2.4, 35.8, 0, 21.1, true, 'asphalt');
+  addRoadSegment(38.8, 2.4, -23.6, 0, true, 'asphalt');
+  addRoadSegment(38.8, 2.4, 23.6, 0, true, 'asphalt');
+  addRoadSegment(2.4, 2.0, 0, -39.0, true, 'asphalt');
+  addRoadSegment(2.4, 2.0, 0, 39.0, true, 'asphalt');
 
   const minorCoords = ROAD_COORDS.filter(pos => pos !== 0);
   minorCoords.forEach(pos => {
     const width = roadWidth(pos);
     const texKey = Math.abs(pos) === 6 || Math.abs(pos) === 12 ? 'road' : 'pavement';
     // Minor vertical roads stop at the arterial road instead of crossing it.
-    addRoadSegment(width, 20.8, pos, -11.6, false, texKey);
-    addRoadSegment(width, 20.8, pos, 11.6, false, texKey);
+    addRoadSegment(width, 32.8, pos, -18.6, false, texKey);
+    addRoadSegment(width, 32.8, pos, 18.6, false, texKey);
   });
 
   // Horizontal minor roads are cut between vertical roads. This makes every
   // minor intersection a single surface and eliminates depth flicker.
-  const boundaries = [-22, ...ROAD_COORDS, 22];
+  const boundaries = [-CITY_LIMIT, ...ROAD_COORDS, CITY_LIMIT];
   minorCoords.forEach(z => {
     const width = roadWidth(z);
     const texKey = Math.abs(z) === 6 || Math.abs(z) === 12 ? 'road' : 'pavement';
@@ -1298,7 +1464,7 @@ function addPaths() {
   // an incorrect lane divider and also ran through the center fountain.
   const lineMat = stdMat({ color: 0xE8B34B, roughness: 0.6, metalness: 0.1 });  // solid yellow
   pathMats.push(lineMat);
-  for (let p = -21; p <= 21; p += 2.4) {
+  for (let p = -36; p <= 36; p += 2.4) {
     if (Math.abs(p) < 2.8) continue;
     const lineX = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.008, 1.15), lineMat);
     lineX.position.set(0, LANE_Y, p); lineX.receiveShadow = false; scene.add(lineX);
@@ -1326,7 +1492,7 @@ function addPaths() {
   }));
 
   // Outer ring road — single RingGeometry mesh with plain dark color (no texture UVs to mess up)
-  const ringR = 24;
+  const ringR = 38;
   const ringMat = stdMat({ color: 0x3A3D44, roughness: 0.95 });  // plain asphalt color, no tex
   pathMats.push(ringMat);
   const ring = new THREE.Mesh(new THREE.RingGeometry(ringR - 1.0, ringR + 1.0, 96), ringMat);
@@ -2031,6 +2197,132 @@ function buildCrown(cfg) {
   return {...cfg, group:g, body, bodyMat, labelEl:null, labelY};
 }
 
+// 30 BANANA PALACE — 布拿拉宫
+function buildBanana(cfg) {
+  const g = new THREE.Group();
+  const bw = 4.0, bh = 3.5, bd = 4.0;
+  part(g, new THREE.BoxGeometry(bw+0.8, PLH, bd+0.8), {color:0xD4C020, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, PLH/2, 0]);
+  const bodyMat = stdMat({color:0xF5E838, roughness:0.3, metalness:0.1});
+  bodyMat.emissive = new THREE.Color(0xE8D528); bodyMat.emissiveIntensity = 0;
+  const body = mk(new THREE.SphereGeometry(1, 24, 16), bodyMat);
+  body.scale.set(bw/2, bh/2, bd/2); body.position.y = PLH + bh/2 + 0.012;
+  body.castShadow = true; body.receiveShadow = true; g.add(body);
+  const stem = mk(new THREE.ConeGeometry(0.5, 1.5, 12), stdMat({color:0x5A4A00, roughness:0.6}));
+  stem.position.set(0, PLH+bh+0.4, 0); stem.castShadow = true; g.add(stem);
+  for (let i = 0; i < 4; i++) {
+    const a = (i/4)*Math.PI*2;
+    const strip = mk(new THREE.SphereGeometry(0.3, 8, 6, 0, Math.PI*0.6, 0, Math.PI/2), stdMat({color:0xE8D528, roughness:0.4}));
+    strip.position.set(Math.cos(a)*1.2, PLH+0.1, Math.sin(a)*1.2); strip.rotation.y = a + Math.PI/2;
+    strip.scale.set(2, 0.5, 2); strip.castShadow = true; g.add(strip);
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = (i/6)*Math.PI*2;
+    const win = mk(new THREE.CircleGeometry(0.18, 16), stdMat({color:0x4A6FA8, roughness:0.2, metalness:0.3, emissive:0xA8C8F8, emissiveIntensity:0.1}));
+    win.position.set(Math.cos(a)*bw/2*0.9, PLH+bh*0.5, Math.sin(a)*bd/2*0.9);
+    win.lookAt(Math.cos(a)*bw, PLH+bh*0.5, Math.sin(a)*bd); g.add(win);
+  }
+  part(g, new THREE.BoxGeometry(0.6, 0.8, 0.06), {color:0x8A5A00, roughness:0.6, tex:'wood', rx:1, ry:1}, [0, PLH+0.4, bd/2+0.02], false);
+  part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.026, 0], false);
+  g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: PLH+bh+0.4+1.5+0.5};
+}
+
+// 31 QIPAI — 棋气派 grand chess-themed building
+function buildQipai(cfg) {
+  const g = new THREE.Group();
+  const bw = 6.0, bh = 4.5, bd = 6.0;
+  part(g, new THREE.BoxGeometry(bw+1.0, PLH, bd+1.0), {color:P.BUILDING_BASE, roughness:0.8, tex:'stone', rx:2, ry:2}, [0, PLH/2, 0]);
+  const bodyMat = mkBodyMat('stone', 2, 2);
+  const body = mk(new THREE.BoxGeometry(bw, bh, bd), bodyMat);
+  body.position.y = PLH + bh/2 + 0.012; body.castShadow = true; body.receiveShadow = true; g.add(body);
+  const top = PLH + bh;
+  part(g, new THREE.BoxGeometry(bw+0.3, 0.3, bd+0.3), {color:P.ROOF_RIM, roughness:0.4, tex:'rooftile', rx:3, ry:3}, [0, top+0.15, 0]);
+  for (let i = 0; i < 12; i++) {
+    const a = (i/12)*Math.PI*2;
+    part(g, new THREE.BoxGeometry(0.4, 0.25, 0.4), {color:P.ROOF_RIM, roughness:0.4, tex:'rooftile', rx:1, ry:1}, [Math.cos(a)*(bw/2+0.15), top+0.3, Math.sin(a)*(bd/2+0.15)], false);
+  }
+  // King statue
+  const kingG = new THREE.Group();
+  part(kingG, new THREE.CylinderGeometry(0.35, 0.4, 0.15, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.075, 0]);
+  part(kingG, new THREE.CylinderGeometry(0.22, 0.32, 1.2, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+0.6, 0]);
+  part(kingG, new THREE.CylinderGeometry(0.3, 0.25, 0.12, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.06, 0]);
+  part(kingG, new THREE.CylinderGeometry(0.18, 0.2, 0.35, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.12+0.175, 0]);
+  part(kingG, new THREE.SphereGeometry(0.15, 12, 8), {color:0xE8A838, roughness:0.2, metalness:0.5, emissive:0xE8A838, emissiveIntensity:0.1}, [0, 0.15+1.2+0.12+0.35+0.15, 0], false);
+  kingG.position.set(-bw/2-0.8, 0, bd/2+0.3);
+  kingG.traverse(c => { if (c.isMesh) c.castShadow = true; });
+  g.add(kingG);
+  // Queen statue
+  const queenG = new THREE.Group();
+  part(queenG, new THREE.CylinderGeometry(0.35, 0.4, 0.15, 16), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [0, 0.075, 0]);
+  part(queenG, new THREE.CylinderGeometry(0.22, 0.32, 1.2, 16), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [0, 0.15+0.6, 0]);
+  part(queenG, new THREE.CylinderGeometry(0.28, 0.25, 0.12, 16), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.06, 0]);
+  for (let i = 0; i < 5; i++) {
+    const a = (i/5)*Math.PI*2 - Math.PI/2;
+    part(queenG, new THREE.ConeGeometry(0.06, 0.2, 6), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [Math.cos(a)*0.18, 0.15+1.2+0.12+0.1, Math.sin(a)*0.18], false);
+  }
+  queenG.position.set(bw/2+0.8, 0, bd/2+0.3);
+  queenG.traverse(c => { if (c.isMesh) c.castShadow = true; });
+  g.add(queenG);
+  // Grand entrance
+  part(g, new THREE.BoxGeometry(1.8, 0.1, 0.1), {color:P.ROOF_RIM, roughness:0.4, tex:'stone', rx:1, ry:1}, [0, PLH+1.8, bd/2+0.02], false);
+  part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [-0.9, PLH+0.9, bd/2+0.02], false);
+  part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [0.9, PLH+0.9, bd/2+0.02], false);
+  // Checker floor
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    const cw = 0.4, cx = -1.5 + c*cw + cw/2, cz = bd/2 + 0.3 + r*cw + cw/2;
+    part(g, new THREE.BoxGeometry(cw-0.02, 0.02, cw-0.02), {color:(r+c)%2===0?0x2A2A2E:0xF8F7F5, roughness:0.3}, [cx, PLH+0.01, cz], false);
+  }
+  part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.026, 0], false);
+  g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: top+0.3+0.25+0.5};
+}
+
+// Pigeon sculpture
+function addPigeonSculpture(x, y, z, rotY) {
+  const g = new THREE.Group();
+  part(g, new THREE.BoxGeometry(0.6, 0.08, 0.6), {color:0xD4D3D0, roughness:0.8, tex:'stone', rx:1, ry:1}, [0, 0.04, 0]);
+  part(g, new THREE.BoxGeometry(0.5, 0.4, 0.5), {color:0xE0DFDC, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, 0.08+0.2, 0]);
+  part(g, new THREE.BoxGeometry(0.55, 0.05, 0.55), {color:0xD4D3D0, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, 0.08+0.4+0.025, 0]);
+  const topY = 0.08 + 0.4 + 0.05;
+  const bodyG = mk(new THREE.SphereGeometry(0.18, 14, 12), stdMat({color:0xC0BFB8, roughness:0.4, metalness:0.3}));
+  bodyG.position.set(0, topY+0.18, 0); bodyG.scale.set(1.3, 1.0, 1.8); bodyG.castShadow = true; g.add(bodyG);
+  const head = mk(new THREE.SphereGeometry(0.12, 12, 10), stdMat({color:0xC8C7C0, roughness:0.4, metalness:0.3}));
+  head.position.set(0, topY+0.3, 0.15); head.castShadow = true; g.add(head);
+  const beak = mk(new THREE.ConeGeometry(0.04, 0.1, 6), stdMat({color:0xE8A838, roughness:0.3}));
+  beak.position.set(0, topY+0.3, 0.25); beak.rotation.x = Math.PI/2; g.add(beak);
+  [-0.06, 0.06].forEach(dx => { const eye = mk(new THREE.SphereGeometry(0.015, 8, 8), stdMat({color:0x2A2A2E, roughness:0.1})); eye.position.set(dx, topY+0.32, 0.2); g.add(eye); });
+  [-0.2, 0.2].forEach(dx => { const wing = mk(new THREE.SphereGeometry(0.1, 10, 8), stdMat({color:0xB0AFA8, roughness:0.4, metalness:0.3})); wing.position.set(dx, topY+0.18, -0.02); wing.scale.set(0.5, 1.0, 1.5); wing.castShadow = true; g.add(wing); });
+  const tail = mk(new THREE.ConeGeometry(0.08, 0.2, 6), stdMat({color:0xB0AFA8, roughness:0.4}));
+  tail.position.set(0, topY+0.15, -0.18); tail.rotation.x = -Math.PI/2; tail.rotation.z = Math.PI; g.add(tail);
+  [-0.05, 0.05].forEach(dx => { part(g, new THREE.CylinderGeometry(0.015, 0.015, 0.08, 6), {color:0xE8A838, roughness:0.3}, [dx, topY+0.04, 0.05], false); });
+  part(g, new THREE.BoxGeometry(0.3, 0.08, 0.02), {color:0xC4A86D, roughness:0.5, metalness:0.3}, [0, 0.08+0.15, 0.26], false);
+  g.position.set(x, y, z); if (rotY) g.rotation.y = rotY; scene.add(g);
+}
+
+// ── Building ground plots ──
+const PLOT_MAP = {
+  bank:{tex:'ground5',size:4.5,color:0xE8E7E4}, board:{tex:'ground5',size:3.0,color:0xE4E3E0},
+  tower:{tex:'ground5',size:4.0,color:0xD8D7D2}, darktower:{tex:'ground6',size:4.0,color:0x9A988E},
+  pavilion:{tex:'ground4',size:4.5,color:0xC0D0A0}, library:{tex:'ground5',size:4.0,color:0xE8E7E4},
+  ruins:{tex:'ground2',size:3.5,color:0xE0D8CC}, skyscraper:{tex:'ground5',size:3.5,color:0xD8D7D2},
+  campus:{tex:'ground5',size:4.5,color:0xE8E7E4}, kiosk:{tex:'ground5',size:3.0,color:0xE4E3E0},
+  screen:{tex:'ground5',size:4.0,color:0xD8D7D2}, shaft:{tex:'ground5',size:3.0,color:0xD8D7D2},
+  altar:{tex:'ground5',size:3.5,color:0xE4E3E0}, observatory:{tex:'ground5',size:4.0,color:0xE8E7E4},
+  pagoda:{tex:'ground4',size:4.0,color:0xC0D0A0}, market:{tex:'ground5',size:4.5,color:0xE4E3E0},
+  greenhouse:{tex:'ground4',size:4.0,color:0xB8C888}, clocktower:{tex:'ground5',size:4.0,color:0xE4E3E0},
+  temple:{tex:'ground5',size:4.5,color:0xF0EFEC}, factory:{tex:'ground2',size:5.0,color:0xC8C4B8},
+  mall:{tex:'ground5',size:5.5,color:0xD8D7D2}, school:{tex:'ground4',size:5.0,color:0xB8C888},
+  crown:{tex:'ground5',size:4.5,color:0xF0EFEC}, banana:{tex:'ground2',size:6.0,color:0xE0D8A0},
+  qipai:{tex:'ground5',size:8.0,color:0xE4E3E0},
+};
+function addBuildingPlot(x, z, shape) {
+  const p = PLOT_MAP[shape] || {tex:'ground5', size:3.5, color:0xE4E3E0};
+  const mat = stdMat({color: isNight ? Math.floor(p.color*0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,p.size/2), ry:Math.max(1,p.size/2)});
+  mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -2;
+  const plot = new THREE.Mesh(new THREE.PlaneGeometry(p.size, p.size), mat);
+  plot.rotation.x = -Math.PI/2; plot.position.set(x, 0.03, z); plot.receiveShadow = true; scene.add(plot);
+}
+
 const SHAPE_FNS = {
   bank:buildBank, board:buildBoard, tower:buildTower, darktower:buildDarkTower,
   pavilion:buildPavilion, library:buildLibrary, ruins:buildRuins,
@@ -2038,14 +2330,48 @@ const SHAPE_FNS = {
   screen:buildScreen, shaft:buildShaft, altar:buildAltar, observatory:buildObservatory,
   pagoda:buildPagoda, market:buildMarket, greenhouse:buildGreenhouse,
   clocktower:buildClockTower, temple:buildTemple, factory:buildFactory,
-  mall:buildMall, school:buildSchool, crown:buildCrown
+  mall:buildMall, school:buildSchool, crown:buildCrown,
+  banana:buildBanana, qipai:buildQipai
 };
 
 function addBuildings() {
+  const FACADE_MAP = {
+    bank:'facade_bank',board:'facade_board',tower:'facade_tower',darktower:'facade_darktower',
+    pavilion:'facade_temple',library:'facade_library',ruins:'facade_library',
+    skyscraper:'facade_skyscraper',campus:'facade_campus',kiosk:'facade_kiosk',
+    screen:'facade_screen',shaft:'facade_shaft',altar:'facade_altar',
+    observatory:'facade_observatory',pagoda:'facade_pagoda',market:'facade_market',
+    greenhouse:'facade_greenhouse',clocktower:'facade_clocktower',temple:'facade_temple',
+    factory:'facade_factory',mall:'facade_mall',school:'facade_school',
+    crown:'facade_clocktower',banana:'facade_banana',qipai:'facade_qipai'
+  };
   BUILDING_DEFS.forEach(cfg => {
     const b = SHAPE_FNS[cfg.shape](cfg);
+    // Add facade planes on body faces
+    if (b.body && b.body.geometry && b.body.geometry.parameters) {
+      const p = b.body.geometry.parameters;
+      let bw, bh, bd;
+      if (p.width !== undefined) { bw = p.width; bh = p.height; bd = p.depth; }
+      else if (p.radiusTop !== undefined) { bw = p.radiusTop*2; bh = p.height; bd = p.radiusTop*2; }
+      else if (p.radius !== undefined) { bw = p.radius*2; bh = p.radius*2; bd = p.radius*2; }
+      else { bw = 2; bh = 2; bd = 2; }
+      const fk = cfg.facade || FACADE_MAP[cfg.shape];
+      if (fk && bw > 0.3 && bh > 0.3) {
+        addFacade(b.group, fk, bw, bh, b.body.position.y, bd/2 + 0.012);
+        const f2 = addFacade(b.group, fk, bw, bh, b.body.position.y, -(bd/2 + 0.012));
+        if (f2) f2.rotation.y = Math.PI;
+        if (bd > 0.3) {
+          const f3 = addFacade(b.group, fk, bd, bh, b.body.position.y, 0, 0);
+          if (f3) { f3.position.x = -(bw/2 + 0.012); f3.rotation.y = -Math.PI/2; }
+          const f4 = addFacade(b.group, fk, bd, bh, b.body.position.y, 0, 0);
+          if (f4) { f4.position.x = bw/2 + 0.012; f4.rotation.y = Math.PI/2; }
+        }
+      }
+    }
     b.group.position.y = -3; // Start hidden below ground for entrance animation
     scene.add(b.group); buildings.push(b);
+    // Add ground plot under the building
+    addBuildingPlot(cfg.x, cfg.z, cfg.shape);
   });
 }
 
@@ -2080,7 +2406,34 @@ function addDecorations() {
   // Inner-city greenery — boulevard trees and one city grass patch
   addInnerCityGreenery();
   // City gate lamp pillars at the cardinal entrances (where new malls/schools sit)
-  addLamps([[0,0,-22],[0,0,22],[-22,0,0],[22,0,0]]);
+  addLamps([[0,0,-22],[0,0,22],[-22,0,0],[22,0,0],[0,0,-38],[0,0,38],[-38,0,0],[38,0,0]]);
+  // ── 外环装饰 ──
+  addPigeonSculpture(0, 0, -12, 0);
+  addPigeonSculpture(-12, 0, 12, Math.PI/3);
+  addPigeonSculpture(-24, 0, 0, 0.5);
+  addPigeonSculpture(24, 0, 0, -0.3);
+  addTrees([[-15,0,-15],[-21,0,-21],[-27,0,-27],[-12,0,-27],[-27,0,-12],
+            [27,0,27],[21,0,21],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],
+            [-27,0,27],[-21,0,27],[-27,0,0],[27,0,0],[0,0,-27],[0,0,27],
+            [-30,0,0],[30,0,0],[0,0,-30],[0,0,30],
+            [-36,0,-36],[36,0,36],[36,0,-36],[-36,0,36]]);
+  addLamps([[-18,0,-18],[-18,0,18],[18,0,-18],[18,0,18],
+            [-24,0,-6],[-24,0,6],[24,0,-6],[24,0,6],
+            [-6,0,-24],[6,0,-24],[-6,0,24],[6,0,24],
+            [-30,0,-6],[-30,0,6],[30,0,-6],[30,0,6],
+            [-6,0,-30],[6,0,-30],[-6,0,30],[6,0,30]]);
+  addArch(-21,0,-21,Math.PI/6); addArch(21,0,21,-Math.PI/5);
+  addGazebo(-21,0,0); addGazebo(21,0,0);
+  addBench(-15,0,-15,0); addBench(15,0,15,Math.PI/2);
+  addBench(-15,0,15,Math.PI/3); addBench(15,0,-15,Math.PI);
+  addSphereStack(-15,0,15); addSphereStack(15,0,-15);
+  addStoneRing(-21,0,12); addStoneRing(21,0,-12);
+  addMonolith(21,0,21,-0.3); addMonolith(-21,0,-21,0.5);
+  addPond(-24, -24, 3.0); addPond(24, 24, 2.5);
+  addFlowerbed(-15, 0, 15); addFlowerbed(15, 0, -15);
+  for(let v of [-27,-21,-15,15,21,27]) {
+    addTrees([[v,0,-3],[v,0,3],[-3,0,v],[3,0,v]]);
+  }
 }
 
 // ── Edge grass + edge pond with short straight paths and small buildings ─────
@@ -2143,7 +2496,7 @@ function addEdgeGrassAndPond() {
 function addInnerCityGreenery() {
   // Boulevard trees along main road (x=0 and z=0), on both sides — skip intersections
   const treeSpots = [];
-  for (let p = -15; p <= 15; p += 3) {
+  for (let p = -33; p <= 33; p += 3) {
     if (p === 0) continue;            // skip central plaza
     if (ROAD_COORDS.includes(p)) continue;  // skip intersections (would clash with plaza)
     treeSpots.push([1.8, 0, p], [-1.8, 0, p]);   // both sides of x=0 road
@@ -2204,10 +2557,13 @@ function addCityPond(cx, cz, r) {
 }
 
 function addDistrictBuildings() {
-  const centers=[-27,-21,-15,-9,-3,3,9,15,21,27], lots=[];
+  const centers=[-33,-27,-21,-15,-9,-3,3,9,15,21,27,33], lots=[];
   centers.forEach(x=>centers.forEach(z=>{
     if(Math.hypot(x,z)<4.8)return;
+    const dist=Math.max(Math.abs(x),Math.abs(z));
+    const density = dist>24 ? 0.5 : dist>12 ? 0.8 : 1;
     [[0,0],[-1.35,1.15],[1.25,-1.2]].forEach(([dx,dz],k)=>{
+      if(Math.random()>density)return;
       const lx=x+dx, lz=z+dz;
       if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
       const blocked=buildings.some(b=>Math.hypot(b.x-lx,b.z-lz)<2.8);
@@ -2223,7 +2579,9 @@ function addSmallBlock(x,y,z,type,i) {
   // Varied colors for residential feel
   const wallColors = [
     [0xF2F1EE, 'wall'], [0xECEBE8, 'wall'], [0xE8D5A8, 'brick'],
-    [0xD8C8A0, 'brick'], [0xF0EFEC, 'stone'], [0xE8E0D5, 'brick']
+    [0xD8C8A0, 'brick'], [0xF0EFEC, 'stone'], [0xE8E0D5, 'brick'],
+    [0xD5D6D8, 'wall'], [0xC5C5C2, 'brick'], [0xD8D6D0, 'stone'],
+    [0xF0EDE5, 'wall'], [0xC8CED4, 'wall'], [0xE4E3E0, 'stone']
   ];
   const wc = wallColors[i % wallColors.length];
   const roofColors = [P.ROOF_RIM, 0xDAD9D5, 0xC45A4A, 0x8A5A3A, 0xB0AFAA];
@@ -2240,6 +2598,15 @@ function addSmallBlock(x,y,z,type,i) {
     part(g,new THREE.BoxGeometry(0.22,0.16,0.03),{color:0xB8CCEA,emissive:0xA8C8F8,emissiveIntensity:isNight?0.12:0.02,roughness:0.2},[wx,wy,d/2+0.02],false);
   }
   g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2; scene.add(g);
+  // ── 建筑下面的小地块贴图（成片共享纹理）──
+  const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
+  const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];
+  const plotColors = [0xE4E3E0, 0xC0D0A0, 0xE0D8CC, 0xF2F1EE, 0xE8E7E4, 0xD8D4CC, 0xB8C888, 0xE4E3E0];
+  const plotCol = plotColors[Math.abs(Math.round(x+z)) % plotColors.length];
+  const pmat = stdMat({color: isNight ? Math.floor(plotCol*0.7) : plotCol, roughness:0.9, tex:plotTex, rx:1, ry:1});
+  pmat.polygonOffset = true; pmat.polygonOffsetFactor = -1; pmat.polygonOffsetUnits = -1;
+  const plot = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), pmat);
+  plot.rotation.x = -Math.PI/2; plot.position.set(x, 0.025, z); plot.receiveShadow = true; scene.add(plot);
 }
 
 function addTrees(positions) {
@@ -3078,6 +3445,7 @@ function applyTheme(night,instant) {
   }
   tweenColor(groundMat.color,night?P.NIGHT_GROUND:P.DAY_GROUND,d);
   pathMats.forEach(m=>tweenColor(m.color,night?P.NIGHT_PATH:P.DAY_PATH,d));
+  groundMats.forEach(g=>tweenColor(g.mat.color,night?g.night:g.day,d));
   const amb=scene.getObjectByName('amb'),dir=scene.getObjectByName('dir');
   if(amb)gsap.to(amb,{intensity:night?0.60:1.05,duration:d});
   if(dir)gsap.to(dir,{intensity:night?0.30:0.55,duration:d});
@@ -3287,7 +3655,7 @@ function updateCameraFollow(delta) {
 }
 
 function setCameraTarget(x,z,instant) {
-  const nx=clamp(x,-13,13), nz=clamp(z,-13,13);
+  const nx=clamp(x,-20,20), nz=clamp(z,-20,20);
   if(instant){
     cameraTarget.set(nx,0,nz);
     camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
@@ -3407,14 +3775,14 @@ function getRoadGraph() {
   // The visible outer ring is a real escape route around the fountain and
   // blocked building edges. Connect it to the four arterial endpoints.
   const ringNodes=[];
-  const ringR=24;
-  const ringCount=16;
+  const ringR=38;
+  const ringCount=24;
   for(let i=0;i<ringCount;i++){
     const a=i/ringCount*Math.PI*2;
     ringNodes.push(addNode(Number((Math.cos(a)*ringR).toFixed(3)),Number((Math.sin(a)*ringR).toFixed(3))));
   }
   ringNodes.forEach((n,i)=>addEdge(n,ringNodes[(i+1)%ringCount]));
-  [[0,-18,0,-24],[18,0,24,0],[0,18,0,24],[-18,0,-24,0]].forEach(([x1,z1,x2,z2])=>{
+  [[0,-36,0,-38],[36,0,38,0],[0,36,0,38],[-36,0,-38,0]].forEach(([x1,z1,x2,z2])=>{
     const a=nodes[nodeIdx.get(x1+','+z1)];
     const b=nodes[nodeIdx.get(x2+','+z2)];
     if(a&&b) addEdge(a,b);
