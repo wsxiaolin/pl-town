@@ -5,15 +5,9 @@ export const SURFACE_Y = Object.freeze({
   landscape: 0.036,
   buildingPlot: 0.036,
   road: 0.065,
-  roadSurface: 0.086,
-  roadMarking: 0.095,
+  roadSurface: 0.10,
+  roadMarking: 0.11,
   water: 0.105,
-});
-
-export const POLYGON_OFFSET = Object.freeze({
-  plaza: { factor: -1, units: -1 },
-  landscape: { factor: -2, units: -2 },
-  buildingPlot: { factor: -3, units: -3 },
 });
 
 export const RENDER_ORDER = Object.freeze({

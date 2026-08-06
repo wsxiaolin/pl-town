@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { POLYGON_OFFSET, RENDER_ORDER, SURFACE_Y } from '../../rendering/layers';
+import { RENDER_ORDER, SURFACE_Y } from '../../rendering/layers';
 
 type MaterialOptions = THREE.MeshStandardMaterialParameters & {
   tex?: string;
@@ -42,6 +42,14 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     addLamps,
   } = options;
 
+  // Surface overlays are painter-ordered. They still test against buildings,
+  // but do not compete with one another in the depth buffer.
+  const createLayerMaterial = (parameters: MaterialOptions): THREE.MeshStandardMaterial => {
+    const material = createMaterial(parameters);
+    material.depthWrite = false;
+    return material;
+  };
+
   const groundMaterial = addGround();
   addPaths();
   return groundMaterial;
@@ -55,7 +63,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     farGround.renderOrder = RENDER_ORDER.base;
     scene.add(farGround);
 
-    const districtMat = createMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 18, ry: 18 });
+    const districtMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 18, ry: 18 });
     const district = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), districtMat);
     district.rotation.x = -Math.PI / 2;
     district.position.y = SURFACE_Y.district;
@@ -63,10 +71,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     district.renderOrder = RENDER_ORDER.district;
     scene.add(district);
 
-    const plazaMat = createMaterial({ color: isNight ? 0xb0afa8 : 0xe8e7e4, roughness: 0.9, tex: 'ground5', rx: 10, ry: 10 });
-    plazaMat.polygonOffset = true;
-    plazaMat.polygonOffsetFactor = POLYGON_OFFSET.plaza.factor;
-    plazaMat.polygonOffsetUnits = POLYGON_OFFSET.plaza.units;
+    const plazaMat = createLayerMaterial({ color: isNight ? 0xb0afa8 : 0xe8e7e4, roughness: 0.9, tex: 'ground5', rx: 10, ry: 10 });
     const plaza = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), plazaMat);
     plaza.rotation.x = -Math.PI / 2;
     plaza.position.y = SURFACE_Y.plaza;
@@ -74,10 +79,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     plaza.renderOrder = RENDER_ORDER.plaza;
     scene.add(plaza);
 
-    const grassMat = createMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 12, ry: 12 });
-    grassMat.polygonOffset = true;
-    grassMat.polygonOffsetFactor = POLYGON_OFFSET.landscape.factor;
-    grassMat.polygonOffsetUnits = POLYGON_OFFSET.landscape.units;
+    const grassMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 12, ry: 12 });
     const grassPositions: Array<[number, number]> = [[24, 24], [24, -24], [-24, 24], [-24, -24]];
     for (const [x, z] of grassPositions) {
       const grass = new THREE.Mesh(new THREE.PlaneGeometry(24, 24), grassMat);
@@ -101,7 +103,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     const pathColor = isNight ? colors.nightPath : colors.dayPath;
     const roadWidth = (position: number) => position === 0 ? 2.4 : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
     const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road') => {
-      const material = createMaterial({
+      const material = createLayerMaterial({
         color: main ? colors.asphalt : pathColor,
         roughness: 1,
         tex: texture,
@@ -144,7 +146,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
       }
     }
 
-    const lineMat = createMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
+    const lineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     pathMaterials.push(lineMat);
     for (let position = -36; position <= 36; position += 2.4) {
       if (Math.abs(position) < 2.8) continue;
@@ -154,16 +156,16 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
 
     for (const x of roadCoords) for (const z of roadCoords) {
       if ((x !== 0 && z !== 0) || (x === 0 && z === 0)) continue;
-      const material = createMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
+      const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
       pathMaterials.push(material);
       addMarking(new THREE.BoxGeometry(x === 0 ? 2 : 0.5, 0.005, x === 0 ? 0.5 : 2), material, x, z);
     }
 
-    const ringMat = createMaterial({ color: colors.asphalt, roughness: 0.95 });
+    const ringMat = createLayerMaterial({ color: colors.asphalt, roughness: 0.95 });
     pathMaterials.push(ringMat);
     addRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
 
-    const ringLineMat = createMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
+    const ringLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     pathMaterials.push(ringLineMat);
     addRing(37.96, 38.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking);
 
@@ -172,7 +174,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
       addLamps([[Math.cos(angle) * 38, 0, Math.sin(angle) * 38]]);
     }
 
-    const pedestrianMat = createMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
+    const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     pathMaterials.push(pedestrianMat);
     addRing(2.25, 3, pedestrianMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
   }

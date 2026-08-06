@@ -43,7 +43,7 @@ function _tex(key, rx, ry) {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 8) : 1;
+    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 16) : 1;
     t.repeat.set(repeatX, repeatY);
     return t;
   });
@@ -56,7 +56,7 @@ function _texClamp(key) {
     t.wrapS = THREE.ClampToEdgeWrapping;
     t.wrapT = THREE.ClampToEdgeWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 8) : 1;
+    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 16) : 1;
     return t;
   });
 }
@@ -64,7 +64,7 @@ function addFacade(g, texKey, w, h, y, zOffset, rotY) {
   const t = _texClamp(texKey);
   if (!t) return null;
   const mat = resources.material({ kind:'facade', texKey }, () =>
-    new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05 })
+    new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   );
   const facade = new THREE.Mesh(resources.geometry(new THREE.PlaneGeometry(w, h)), mat);
   facade.position.set(0, y, zOffset);
@@ -284,7 +284,7 @@ function initTextures() {
       ctx.fillStyle = ['rgba(200,180,200,0.4)','rgba(220,200,160,0.4)','rgba(180,200,220,0.3)'][i%3];
       ctx.fillRect(x, y, 1.5, 1.5);
     }
-    _noise(ctx, s, 0.04);
+    _noise(ctx, s, 0.025);
   });
 
   // --- Road: cobblestone ---
@@ -672,10 +672,10 @@ function initTextures() {
   _canvas('facade_qipai',512,(ctx,s)=>{ctx.fillStyle='#E8E7E4';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D8D7D2');const ts=s/8;for(let r=0;r<4;r++)for(let c=0;c<8;c++){ctx.fillStyle=(r+c)%2===0?'#2A2A2E':'#F8F7F5';ctx.fillRect(c*ts,r*ts+8,ts,ts);}_cornice(ctx,4*ts+8,'#D8D7D2');ctx.fillStyle='#4A3A2A';ctx.fillRect(s*0.15,s*0.55,s*0.7,s*0.4);ctx.fillStyle='rgba(80,60,40,0.5)';ctx.fillRect(s*0.17,s*0.57,s*0.66,s*0.36);ctx.fillStyle='#E8E7E2';ctx.fillRect(s*0.05,s*0.55,8,s*0.4);ctx.fillRect(s*0.9,s*0.55,8,s*0.4);_noise(ctx,s,0.02);});
 
   // ══ 地面区域贴图 ══
-  _canvas('ground2',256,(ctx,s)=>{ctx.fillStyle='#E0D8CC';ctx.fillRect(0,0,s,s);for(let i=0;i<350;i++){const x=Math.random()*s,y=Math.random()*s,r=0.5+Math.random()*2;const sh=Math.random();ctx.fillStyle=sh<0.3?'rgba(200,180,150,0.5)':sh<0.6?'rgba(180,160,130,0.4)':'rgba(210,200,180,0.4)';ctx.fillRect(x,y,r*2,r*2);}_noise(ctx,s,0.04);});
-  _canvas('ground4',256,(ctx,s)=>{ctx.fillStyle='#C0D0A0';ctx.fillRect(0,0,s,s);for(let i=0;i<600;i++){const x=Math.random()*s,y=Math.random()*s;const sh=0.65+Math.random()*0.5;ctx.fillStyle=`rgba(${Math.floor(100*sh)},${Math.floor(150*sh)},${Math.floor(70*sh)},0.5)`;ctx.fillRect(x,y,1,2+Math.random()*3);}_noise(ctx,s,0.03);});
-  _canvas('ground5',256,(ctx,s)=>{ctx.fillStyle='#E8E7E4';ctx.fillRect(0,0,s,s);const ts=32;for(let y=0;y<s;y+=ts){const off=((y/ts)%2)*(ts/2);for(let x=-ts;x<s+ts;x+=ts){const bx=x+off,sh=0.9+Math.random()*0.12;ctx.fillStyle=_shade([232,231,228],sh);ctx.fillRect(bx+1,y+1,ts-2,ts-2);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(bx+ts-2,y,2,ts);ctx.fillRect(bx,y+ts-2,ts,2);}}_noise(ctx,s,0.025);});
-  _canvas('ground6',256,(ctx,s)=>{ctx.fillStyle='#D0CCC8';ctx.fillRect(0,0,s,s);ctx.strokeStyle='rgba(100,90,80,0.2)';ctx.lineWidth=1;for(let i=0;i<20;i++){ctx.beginPath();const x=Math.random()*s,y=Math.random()*s;ctx.moveTo(x,y);for(let j=0;j<5;j++)ctx.lineTo(x+(Math.random()-0.5)*40,y+(Math.random()-0.5)*40);ctx.stroke();}for(let i=0;i<200;i++){const x=Math.random()*s,y=Math.random()*s;const sh=Math.random();ctx.fillStyle=`rgba(${180+Math.floor(sh*40)},${170+Math.floor(sh*30)},${160+Math.floor(sh*20)},0.3)`;ctx.fillRect(x,y,1.5,1.5);}_noise(ctx,s,0.035);});
+  _canvas('ground2',256,(ctx,s)=>{ctx.fillStyle='#E0D8CC';ctx.fillRect(0,0,s,s);for(let i=0;i<350;i++){const x=Math.random()*s,y=Math.random()*s,r=0.5+Math.random()*2;const sh=Math.random();ctx.fillStyle=sh<0.3?'rgba(200,180,150,0.5)':sh<0.6?'rgba(180,160,130,0.4)':'rgba(210,200,180,0.4)';ctx.fillRect(x,y,r*2,r*2);}_noise(ctx,s,0.025);});
+  _canvas('ground4',256,(ctx,s)=>{ctx.fillStyle='#C0D0A0';ctx.fillRect(0,0,s,s);for(let i=0;i<600;i++){const x=Math.random()*s,y=Math.random()*s;const sh=0.65+Math.random()*0.5;ctx.fillStyle=`rgba(${Math.floor(100*sh)},${Math.floor(150*sh)},${Math.floor(70*sh)},0.5)`;ctx.fillRect(x,y,1,2+Math.random()*3);}_noise(ctx,s,0.02);});
+  _canvas('ground5',256,(ctx,s)=>{ctx.fillStyle='#E8E7E4';ctx.fillRect(0,0,s,s);const ts=32;for(let y=0;y<s;y+=ts){const off=((y/ts)%2)*(ts/2);for(let x=-ts;x<s+ts;x+=ts){const bx=x+off,sh=0.9+Math.random()*0.12;ctx.fillStyle=_shade([232,231,228],sh);ctx.fillRect(bx+1,y+1,ts-2,ts-2);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(bx+ts-2,y,2,ts);ctx.fillRect(bx,y+ts-2,ts,2);}}_noise(ctx,s,0.015);});
+  _canvas('ground6',256,(ctx,s)=>{ctx.fillStyle='#D0CCC8';ctx.fillRect(0,0,s,s);ctx.strokeStyle='rgba(100,90,80,0.2)';ctx.lineWidth=1;for(let i=0;i<20;i++){ctx.beginPath();const x=Math.random()*s,y=Math.random()*s;ctx.moveTo(x,y);for(let j=0;j<5;j++)ctx.lineTo(x+(Math.random()-0.5)*40,y+(Math.random()-0.5)*40);ctx.stroke();}for(let i=0;i<200;i++){const x=Math.random()*s,y=Math.random()*s;const sh=Math.random();ctx.fillStyle=`rgba(${180+Math.floor(sh*40)},${170+Math.floor(sh*30)},${160+Math.floor(sh*20)},0.3)`;ctx.fillRect(x,y,1.5,1.5);}_noise(ctx,s,0.02);});
 }
 
 // ── Globals ───────────────────────────────────────────────────────────────────
@@ -1329,7 +1329,7 @@ function setupRenderer() {
 function setupCamera() {
   cameraZoom=CONFIG.cameraNearSize;
   const vs = cameraZoom;
-  camera = new THREE.OrthographicCamera(-vs,vs,vs,-vs,0.1,200);
+  camera = new THREE.OrthographicCamera(-vs,vs,vs,-vs,0.1,120);
   updateCameraProjection(vs);
   setCameraTarget(0,0,true);
 }
@@ -2147,11 +2147,10 @@ const PLOT_MAP = {
 function addBuildingPlot(x, z, shape) {
   const p = PLOT_MAP[shape] || {tex:'ground5', size:3.5, color:0xE4E3E0};
   const mat = stdMat({color: isNight ? Math.floor(p.color*0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,p.size/2), ry:Math.max(1,p.size/2)});
-  mat.polygonOffset = true;
-  mat.polygonOffsetFactor = -3;
-  mat.polygonOffsetUnits = -3;
+  mat.depthWrite = false;
   const plot = new THREE.Mesh(new THREE.PlaneGeometry(p.size, p.size), mat);
-  plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot, z); plot.receiveShadow = true;
+  const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
+  plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
   plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
 }
 
@@ -2437,11 +2436,10 @@ function addSmallBlock(x,y,z,type,i) {
   const plotColors = [0xE4E3E0, 0xC0D0A0, 0xE0D8CC, 0xF2F1EE, 0xE8E7E4, 0xD8D4CC, 0xB8C888, 0xE4E3E0];
   const plotCol = plotColors[Math.abs(Math.round(x+z)) % plotColors.length];
   const pmat = stdMat({color: isNight ? Math.floor(plotCol*0.7) : plotCol, roughness:0.9, tex:plotTex, rx:1, ry:1});
-  pmat.polygonOffset = true;
-  pmat.polygonOffsetFactor = -3;
-  pmat.polygonOffsetUnits = -3;
+  pmat.depthWrite = false;
   const plot = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), pmat);
-  plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot, z); plot.receiveShadow = true;
+  const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
+  plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
   plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
 }
 
@@ -3390,7 +3388,7 @@ function captureMapShot() {
   if(!scene)return;
   if(!mapShotCam){
     mapShotCam=new THREE.OrthographicCamera(
-      -MAP_SHOT_SPAN,MAP_SHOT_SPAN,MAP_SHOT_SPAN,-MAP_SHOT_SPAN,0.1,200);
+      -MAP_SHOT_SPAN,MAP_SHOT_SPAN,MAP_SHOT_SPAN,-MAP_SHOT_SPAN,0.1,130);
     mapShotCam.position.set(0,90,0);
     mapShotCam.up.set(0,0,1); // 图像顶端=北
     mapShotCam.lookAt(0,0,0);
