@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { ResourcePool } from '../core/ResourcePool';
 import { InstancedBatch } from '../core/InstancedBatch';
-import { createRenderer } from '../rendering/createRenderer';
+import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rendering/createRenderer';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS } from './cityConfig';
 import { createCitySurfaces } from './rendering/createCitySurfaces';
@@ -43,7 +43,7 @@ function _tex(key, rx, ry) {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 16) : 1;
+    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), readRenderSettings().anisotropy) : 1;
     t.repeat.set(repeatX, repeatY);
     return t;
   });
@@ -56,7 +56,7 @@ function _texClamp(key) {
     t.wrapS = THREE.ClampToEdgeWrapping;
     t.wrapT = THREE.ClampToEdgeWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 16) : 1;
+    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), readRenderSettings().anisotropy) : 1;
     return t;
   });
 }
@@ -3162,6 +3162,8 @@ function setupEvents() {
   },{passive:false,signal});
 
   document.getElementById('mapToggle').addEventListener('click',toggleMapMode,{signal});
+  setupRenderSettings(signal);
+  document.getElementById('renderSettingsClose').addEventListener('click',closeRenderSettings,{signal});
   document.getElementById('mapClose').addEventListener('click',()=>mapMode&&toggleMapMode(),{signal});
   document.querySelector('.you-block').addEventListener('click',onYouClick,{signal});
   document.getElementById('fsToggle').addEventListener('click',()=>{
@@ -3187,9 +3189,9 @@ function setupEvents() {
   document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'),{signal});
   document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'),{signal});
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){
-      if(mapMode){toggleMapMode();return;}
-      closeStatsPanel();closeModal();closeNpcDialog();
+      if(e.key==='Escape'){
+        if(mapMode){toggleMapMode();return;}
+       closeRenderSettings();closeStatsPanel();closeModal();closeNpcDialog();
     }
   },{signal});
 
@@ -3203,6 +3205,68 @@ function setupEvents() {
     updateCameraProjection(cameraZoom);
     if(mapMode) updateMapImage();
   },{signal});
+}
+
+function setupRenderSettings(signal: AbortSignal) {
+  const toggle = document.getElementById('renderSettingsToggle');
+  const panel = document.getElementById('renderSettings');
+  if (!toggle || !panel) return;
+  const settings = readRenderSettings();
+  const resolution = panel.querySelector('#renderResolution') as HTMLInputElement;
+  const resolutionValue = panel.querySelector('#renderResolutionValue');
+  const antialias = panel.querySelector('#renderAntialias') as HTMLInputElement;
+  const anisotropy = panel.querySelector('#renderAnisotropy') as HTMLSelectElement;
+  const anisotropyValue = panel.querySelector('#renderAnisotropyValue');
+  const shadows = panel.querySelector('#renderShadows') as HTMLInputElement;
+  const exposure = panel.querySelector('#renderExposure') as HTMLInputElement;
+  const exposureValue = panel.querySelector('#renderExposureValue');
+  resolution.value = String(settings.resolution);
+  antialias.checked = settings.antialias;
+  anisotropy.value = String(settings.anisotropy);
+  shadows.checked = settings.shadows;
+  exposure.value = String(settings.exposure);
+  const updateLabels = () => {
+    resolutionValue.textContent = `${resolution.value}x`;
+    anisotropyValue.textContent = `${anisotropy.value}x`;
+    exposureValue.textContent = Number(exposure.value).toFixed(2);
+  };
+  updateLabels();
+  const close = closeRenderSettings;
+  const saveAndReload = () => {
+    localStorage.setItem(RENDER_SETTINGS_KEY, JSON.stringify({
+      resolution: Number(resolution.value),
+      antialias: antialias.checked,
+      anisotropy: Number(anisotropy.value),
+      shadows: shadows.checked,
+      exposure: Number(exposure.value),
+    }));
+    window.location.reload();
+  };
+  toggle.addEventListener('click',e=>{
+    e.stopPropagation();
+    if (panel.classList.contains('open')) close();
+    else {
+      panel.classList.add('open');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+  },{signal});
+  resolution.addEventListener('input',updateLabels,{signal});
+  exposure.addEventListener('input',updateLabels,{signal});
+  panel.querySelector('#renderSettingsApply').addEventListener('click',saveAndReload,{signal});
+  panel.querySelector('#renderSettingsReset').addEventListener('click',()=>{
+    localStorage.removeItem(RENDER_SETTINGS_KEY);
+    window.location.reload();
+  },{signal});
+  document.addEventListener('click',e=>{
+    if (panel.classList.contains('open') && !panel.contains(e.target as Node) && e.target !== toggle) close();
+  },{signal});
+}
+
+function closeRenderSettings() {
+  const panel = document.getElementById('renderSettings');
+  const toggle = document.getElementById('renderSettingsToggle');
+  panel?.classList.remove('open');
+  toggle?.setAttribute('aria-expanded','false');
 }
 
 function onMouseMove(e) {

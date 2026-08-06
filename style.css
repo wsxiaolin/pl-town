@@ -152,6 +152,24 @@ body.night { --text-mid: #666662; }
   border-color: var(--blue);
   color: #fff;
 }
+.settings-toggle {
+  width: 29px;
+  height: 29px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(0,0,0,0.09);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.72);
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, transform 0.18s;
+}
+.settings-toggle:hover, .settings-toggle[aria-expanded="true"] {
+  background: var(--blue);
+  color: #fff;
+}
+.settings-toggle[aria-expanded="true"] { transform: rotate(24deg); }
+.settings-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .time-display {
   display: flex;
   align-items: center;
@@ -498,6 +516,8 @@ body.night .time-display::before { background: #8FB4E8; }
     white-space: nowrap;
     flex-shrink: 0;
   }
+  .settings-toggle { width: 28px; height: 28px; }
+  .render-settings { top: 43px; right: 10px; width: 190px; }
 .fs-toggle { display: none; }
 @media (max-width: 680px) {
   .fs-toggle { display: inline-block; }
@@ -696,6 +716,35 @@ body.night .time-display::before { background: #8FB4E8; }
 }
 .sp-body::-webkit-scrollbar { width: 4px; }
 .sp-body::-webkit-scrollbar-thumb { background: #E0DFDC; border-radius: 2px; }
+
+/* Render settings drawer */
+.render-settings-panel { z-index: 410; }
+.render-settings-subtitle { margin-top: 5px; color: var(--text-light); font-size: 9px; letter-spacing: 0.02em; }
+.render-settings-section { padding: 0 0 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.render-settings-section:last-of-type { margin-bottom: 0; }
+.render-settings-section-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.render-settings-section h2 { color: var(--text-dark); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.render-settings-section output { color: var(--blue); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.render-settings-section p { margin: 7px 0 12px; color: var(--text-mid); font-size: 9px; line-height: 1.55; }
+.render-range { width: 100%; height: 20px; accent-color: var(--blue); cursor: pointer; }
+.render-range-labels { display: flex; justify-content: space-between; color: var(--text-light); font-size: 8px; }
+.render-select { width: 100%; padding: 9px 10px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; background: rgba(255,255,255,0.7); color: var(--text-dark); font: inherit; font-size: 10px; }
+.render-switch { position: relative; display: inline-flex; flex-shrink: 0; cursor: pointer; }
+.render-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.render-switch span { width: 36px; height: 20px; border-radius: 999px; background: #D8D7D2; transition: background 0.2s; }
+.render-switch span::after { content: ''; display: block; width: 16px; height: 16px; margin: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.18); transition: transform 0.2s; }
+.render-switch input:checked + span { background: var(--blue); }
+.render-switch input:checked + span::after { transform: translateX(16px); }
+.render-settings-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.render-reset, .render-apply { width: 100%; padding: 10px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; background: transparent; color: var(--text-mid); cursor: pointer; font: inherit; font-size: 10px; }
+.render-reset:hover { border-color: var(--blue); color: var(--blue); }
+.render-apply { border-color: var(--blue); background: var(--blue); color: #fff; }
+.render-apply:hover { opacity: 0.86; }
+body.night .render-settings-panel { background: rgba(30,30,30,0.97); border-color: rgba(255,255,255,0.12); }
+body.night .render-settings-section { border-color: rgba(255,255,255,0.12); }
+body.night .render-settings-section h2 { color: #fff; }
+body.night .render-select { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); color: #fff; }
+body.night .render-reset { border-color: rgba(255,255,255,0.14); }
 
 /* Clean mode */
 .sp-user-row {
