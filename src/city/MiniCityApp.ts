@@ -1337,6 +1337,7 @@ function setupScene() {
   scene = new THREE.Scene();
   scene.background = isNight ? TEX.skyNight : TEX.skyDay;
   if (!scene.background) scene.background = new THREE.Color(isNight ? P.NIGHT_BG : P.DAY_BG);
+  (window as any).__mini = () => ({ scene, camera, renderer, cameraZoom, THREE });
 }
 function setupLighting() {
   const amb = new THREE.AmbientLight(0xFAF8F4, isNight ? 0.60 : 1.05);

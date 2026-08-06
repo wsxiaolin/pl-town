@@ -34,7 +34,12 @@ src/
     ├── createRenderer.ts         # WebGLRenderer 质量和稳定性配置
     └── layers.ts                 # 地表高度和渲染顺序
 tests/
-└── smoke.spec.ts                 # 桌面/移动 WebGL 冒烟测试
+├── smoke.spec.ts                 # 桌面/移动 WebGL 冒烟测试
+└── diagnostics/
+    ├── diag-check.ts             # 两帧近景/远景区域变化扫描
+    ├── diag-burst.ts             # 多帧全屏闪烁采样
+    ├── diag-burst2.ts            # 指定区域颜色交替采样
+    └── diag-obj.ts               # 将闪烁区域映射到 Three.js Mesh
 ```
 
 ## 性能策略
@@ -56,3 +61,20 @@ tests/
 验证地板时，分别在近景和最大缩放下沿地块边缘缓慢移动镜头，并重点检查建筑地块、
 中心广场、道路标线、池塘和河流交界。`npm run test:e2e` 会同时检查桌面和移动端 canvas
 非空、控制台无异常且页面无横向溢出。
+
+## 渲染诊断
+
+诊断脚本需要先启动预览服务器，并默认访问 `http://127.0.0.1:4173/`：
+
+```bash
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4173
+npx tsx tests/diagnostics/diag-check.ts
+npx tsx tests/diagnostics/diag-burst.ts
+npx tsx tests/diagnostics/diag-burst2.ts
+npx tsx tests/diagnostics/diag-obj.ts
+```
+
+`diag-check.ts` 会将参考截图写入未跟踪的 `diagnostics-output/`，该目录和截图不应提交。
+`diag-obj.ts` 使用 `window.__mini` 调试钩子读取场景、相机和 Three.js 对象，用于定位疑似
+z-fighting 的 Mesh；该钩子不参与正常渲染逻辑。
