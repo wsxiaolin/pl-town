@@ -77,7 +77,7 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
 // Collect atomic building units: nodes whose children are all leaf meshes.
 // Multi-mesh units (a building made of walls/roof/shops parts) stay as one model.
 // Merged clusters (a node containing nested groups) are skipped since they cannot be split.
-function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
+function collectUnits(root: THREE.Object3D, maxHorizontal = Infinity): THREE.Object3D[] {
   const units: THREE.Object3D[] = [];
   const visit = (node: THREE.Object3D) => {
     let meshCount = 0;
@@ -92,7 +92,18 @@ function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
     }
   };
   visit(root);
-  return units;
+  return units.filter(unit => {
+    unit.updateWorldMatrix(true, true);
+    const size = new THREE.Box3().setFromObject(unit).getSize(new THREE.Vector3());
+    const horizontal = Math.max(size.x, size.z);
+    const ratio = size.y / Math.max(horizontal, 0.001);
+    return size.y > 0.05
+      && horizontal > 0.05
+      && horizontal < maxHorizontal
+      && size.y < 500
+      && ratio >= 0.25
+      && ratio <= 12;
+  });
 }
 
 export async function replaceWithRealBuildingModels(
@@ -115,7 +126,7 @@ export async function replaceWithRealBuildingModels(
   const candidates = [
     ...collectUnits(buildingPack.scene),
     ...collectUnits(newYorkPack.scene),
-    ...collectUnits(europeanPack.scene),
+    ...collectUnits(europeanPack.scene, 250),
   ];
   if (candidates.length === 0) return;
   residentialBuildings.forEach((building, index) => {
