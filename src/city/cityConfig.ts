@@ -1,0 +1,48 @@
+import * as THREE from 'three';
+
+export const PALETTE = Object.freeze({
+  DAY_BG: 0xf9f8f6,
+  NIGHT_BG: 0xd4d3ce,
+  DAY_GROUND: 0xf2f1ee,
+  NIGHT_GROUND: 0xc4c3be,
+  DAY_PATH: 0xe8e7e4,
+  NIGHT_PATH: 0xbcbbb6,
+  BUILDING_WHITE: 0xffffff,
+  BUILDING_BASE: 0xeae9e6,
+  ROOF_RIM: 0xf8f7f5,
+  BLUE: 0x3b6fe0,
+  FOUNTAIN_RIM: 0xecebe8,
+  FOUNTAIN_WATER: 0xc8dafc,
+  GOLD: 0xe8a838,
+  PARCHMENT: 0xe8d5a8,
+  DARK_TOWER: 0x4a4a52,
+  RUIN_GREY: 0xb5b2ac,
+  ASPHALT: 0x3a3d44,
+  PAVEMENT: 0xc8c7c2,
+  RIVER: 0x5a8fb8,
+  RIVER_DEEP: 0x3a6f98,
+  MALL_FRAME: 0x2a3038,
+  MALL_SIGN: 0xe8a838,
+  SCHOOL_BRICK: 0xa04030,
+  SCHOOL_ROOF: 0x6a4a3a,
+  FIELD: 0xb8c898,
+  SUBURB_WALL: 0xede3d0,
+  SUBURB_ROOF: 0x8a5a4a,
+  PARK_GRASS: 0xc8d8a8,
+});
+
+export const ROAD_COORDS = Object.freeze([-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36]);
+export const CITY_LIMIT = 42;
+export const BUILDING_PLATFORM_HEIGHT = 0.3;
+
+export const CITY_CONFIG = Object.freeze({
+  cameraNearSize: 14,
+  cameraZoomMin: 5,
+  cameraZoomMax: 40,
+  cameraEdge: 0.55,
+  playerSpeed: 4.2,
+  npcTalkRadius: 1.6,
+  buildingInteractRadius: 3.5,
+});
+
+export const CAMERA_OFFSET = new THREE.Vector3(24, 40, 24);

@@ -1,27 +1,27 @@
-/* MiniCity — main.js · 物实小城改造版 */
-'use strict';
+// @ts-nocheck
+import * as THREE from 'three';
+import { gsap } from 'gsap';
+import { ResourcePool } from '../core/ResourcePool';
+import { InstancedBatch } from '../core/InstancedBatch';
+import { createRenderer } from '../rendering/createRenderer';
+import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
+import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS } from './cityConfig';
+import { createCitySurfaces } from './rendering/createCitySurfaces';
+
+const resources = new ResourcePool();
+let animationFrame = 0;
+let clockInterval = 0;
+let trackingInterval = 0;
+let started = false;
+let eventController = new AbortController();
+let treeTrunks, treeCrowns, lampPosts, lampLights;
+let raycastBuildingGroups = [];
+const labelWorldPosition = new THREE.Vector3();
 
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
 
-// ── Palette ───────────────────────────────────────────────────────────────────
-const P = {
-  DAY_BG:         0xF9F8F6,  NIGHT_BG:       0xD4D3CE,
-  DAY_GROUND:     0xF2F1EE,  NIGHT_GROUND:   0xC4C3BE,
-  DAY_PATH:       0xE8E7E4,  NIGHT_PATH:     0xBCBBB6,
-  BUILDING_WHITE: 0xFFFFFF,  BUILDING_BASE:  0xEAE9E6,
-  ROOF_RIM:       0xF8F7F5,  BLUE:           0x3B6FE0,
-  FOUNTAIN_RIM:   0xECEBE8,  FOUNTAIN_WATER: 0xC8DAFC,
-  GOLD:           0xE8A838,  PARCHMENT:      0xE8D5A8,
-  DARK_TOWER:     0x4A4A52,  RUIN_GREY:      0xB5B2AC,
-  // New: city-life palette
-  ASPHALT:        0x3A3D44,  PAVEMENT:       0xC8C7C2,
-  RIVER:          0x5A8FB8,  RIVER_DEEP:     0x3A6F98,
-  MALL_FRAME:     0x2A3038,  MALL_SIGN:      0xE8A838,
-  SCHOOL_BRICK:   0xA04030,  SCHOOL_ROOF:    0x6A4A3A,
-  FIELD:          0xB8C898,  SUBURB_WALL:    0xEDE3D0,
-  SUBURB_ROOF:    0x8A5A4A,  PARK_GRASS:     0xC8D8A8,
-};
+const P = PALETTE;
 
 // ── Procedural Textures ──────────────────────────────────────────────────────
 const _texCanvases = {};
@@ -37,27 +37,36 @@ function _canvas(key, size, drawFn) {
 function _tex(key, rx, ry) {
   const c = _texCanvases[key];
   if (!c) return null;
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.RepeatWrapping;
-  t.wrapT = THREE.RepeatWrapping;
-  if (renderer && renderer.capabilities) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  if (rx || ry) t.repeat.set(rx || 1, ry || 1);
-  return t;
+  const repeatX = rx || 1, repeatY = ry || 1;
+  return resources.texture(`repeat:${key}:${repeatX}:${repeatY}`, () => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 8) : 1;
+    t.repeat.set(repeatX, repeatY);
+    return t;
+  });
 }
 function _texClamp(key) {
   const c = _texCanvases[key];
   if (!c) return null;
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.ClampToEdgeWrapping;
-  t.wrapT = THREE.ClampToEdgeWrapping;
-  if (renderer && renderer.capabilities) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  return t;
+  return resources.texture(`clamp:${key}`, () => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.ClampToEdgeWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), 8) : 1;
+    return t;
+  });
 }
 function addFacade(g, texKey, w, h, y, zOffset, rotY) {
   const t = _texClamp(texKey);
   if (!t) return null;
-  const mat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05 });
-  const facade = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  const mat = resources.material({ kind:'facade', texKey }, () =>
+    new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05 })
+  );
+  const facade = new THREE.Mesh(resources.geometry(new THREE.PlaneGeometry(w, h)), mat);
   facade.position.set(0, y, zOffset);
   if (rotY) facade.rotation.y = rotY;
   facade.castShadow = true; facade.receiveShadow = true;
@@ -326,8 +335,16 @@ function initTextures() {
     _noise(ctx, s, 0.02);
   });
 
-  TEX.skyDay = new THREE.CanvasTexture(_texCanvases.skyDay);
-  TEX.skyNight = new THREE.CanvasTexture(_texCanvases.skyNight);
+  TEX.skyDay = resources.texture('sky:day', () => {
+    const texture = new THREE.CanvasTexture(_texCanvases.skyDay);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  });
+  TEX.skyNight = resources.texture('sky:night', () => {
+    const texture = new THREE.CanvasTexture(_texCanvases.skyNight);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  });
 
   // --- Grass: lush green ---
   _canvas('grass', 256, (ctx, s) => {
@@ -691,22 +708,10 @@ const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
-const ROAD_COORDS = [-36,-27,-18,-12,-6,0,6,12,18,27,36];
-const CITY_LIMIT = 42;
-// 可调参数：镜头与角色
-const CONFIG = {
-  cameraNearSize: 14,   // 近景视野宽度
-  cameraZoomMin: 5,     // 滚轮/双指缩放的最小视野宽度
-  cameraZoomMax: 40,    // 滚轮/双指缩放的最大视野宽度
-  cameraEdge: 0.55,     // 人物贴近画面边缘的比例，触发镜头移动
-  playerSpeed: 4.2,     // 角色移动速度
-  npcTalkRadius: 1.6,   // 玩家需走近该距离才能触发对话
-  buildingInteractRadius: 3.5, // 玩家到建筑中心 ≤ 该距离时点击才触发交互（远处点击只走过去）
-};
-const CAMERA_OFFSET = new THREE.Vector3(24,40,24);
+const CONFIG = CITY_CONFIG;
 
 // ── Building config ───────────────────────────────────────────────────────────
-const PLH = 0.3;
+const PLH = BUILDING_PLATFORM_HEIGHT;
 
 const I = (svg) => `<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
 
@@ -964,45 +969,21 @@ const BUILDING_CONTENT = {
       '「签名之后，你就是这座城的人了。」'
     ]
   },
-  knowledgebase: {
-    name:'知识库', slogan:'所有被保存的东西，都在这里继续发光。',
-    dialog:['墙面像索引一样延伸，抽屉里收着旧讨论、旧作品和被反复引用的词。','管理员给每一类知识都留了入口，免得后来的人在城里迷路。','「先查，再问。能留下来的东西，总会帮助下一个人。」']
-  },
   newsstand: {
     name:'报摊', slogan:'消息比路灯亮得更早。',
     dialog:['报纸叠在木箱上，墨迹还没完全干。','摊主说今天的头条换了三次，因为这座城总有人突然出现，也总有人突然消失。','「拿一份吧。知道发生了什么，至少能少走一点弯路。」']
-  },
-  community: {
-    name:'社区中心', slogan:'居民在这里互相确认彼此存在。',
-    dialog:['大厅里挂着很多便签，有求助，有招募，也有一句简单的“我在”。','这里没有宏大的仪式，只有人们把零散的需要放到同一张桌子上。','「一座城不是建筑堆出来的，是回应堆出来的。」']
   },
   research: {
     name:'研究院', slogan:'把未知拆开，再小心地装回去。',
     dialog:['白色塔楼里传来低频的嗡鸣，像某种机器正在思考。','研究员们不急着给答案，他们先把问题写得更清楚。','「别害怕复杂。复杂只是还没有被命名。」']
   },
-  commons: {
-    name:'众议院', slogan:'每一种声音都能短暂停在这里。',
-    dialog:['半圆形的座位围着中央讲台，纸页、脚步和争论声混在一起。','有人在讨论道路，有人在讨论规则，还有人在讨论一只猫是否拥有通行权。','「发言吧。城市会记住被认真说出口的话。」']
-  },
   senate: {
     name:'参议院', slogan:'慢一点，才能决定更重的事。',
     dialog:['圆顶下的声音被压低，像每句话都要先经过墙壁审查。','这里不处理喧哗，只处理喧哗之后还剩下的问题。','「决定不是结束，是责任开始的地方。」']
   },
-  writingclub: {
-    name:'文训社', slogan:'把想法磨成能被别人读懂的形状。',
-    dialog:['旧屋还亮着灯，桌上摊满修改过的稿纸。','有人划掉形容词，有人补上结尾，也有人只是安静读完。','「写得更清楚，不代表写得更安全。」']
-  },
-  lab: {
-    name:'实验楼', slogan:'失败会被记录，成功也一样。',
-    dialog:['玻璃门后是整齐的仪器和不太整齐的便签。','每一次实验都会留下编号，哪怕结果只是证明这条路不通。','「不要把异常丢掉。异常有时候是入口。」']
-  },
   culturehall: {
     name:'文化馆', slogan:'城的记忆在这里被展出。',
     dialog:['展厅里有模型、照片、手稿，还有一些无法归类的小东西。','它们不一定重要，但它们共同证明：这座城曾经被很多人认真使用过。','「文化不是纪念品，是居民留下的痕迹。」']
-  },
-  teahouse: {
-    name:'茶馆', slogan:'暂时坐下，也是一种前进。',
-    dialog:['茶香从窗缝里慢慢散出来，把街上的急促脚步按慢了一拍。','人们在这里交换传闻，也交换沉默。','「有些答案不会在奔跑时出现。坐一会儿。」']
   },
   // ── New city-life dialogs ──
   mall_south: {
@@ -1313,20 +1294,29 @@ function checkAchievements() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 function init() {
   setupRenderer(); setupCamera(); initTextures(); setupScene(); setupLighting();
-  addGround(); addPaths(); addFountain();
+  groundMat = createCitySurfaces({
+    scene,
+    isNight,
+    roadCoords: ROAD_COORDS,
+    cityLimit: CITY_LIMIT,
+    colors: { asphalt: P.ASPHALT, dayPath: P.DAY_PATH, nightPath: P.NIGHT_PATH },
+    createMaterial: stdMat,
+    pathMaterials: pathMats,
+    groundMaterials: groundMats,
+    addLamps,
+  });
+  addFountain();
   addBuildings(); cacheBuildingBoxes(); addDecorations(); addCharacters();
   addLabels(); applyRenames();
   setupEvents(); setupFilter();
   setupModal();
   applyTheme(isNight, true);
   initAnimations();
-  setInterval(syncTimeAndTheme, 1000);
+  clockInterval = window.setInterval(syncTimeAndTheme, 1000);
   syncTimeAndTheme();
   document.getElementById('labelsWrap').classList.add('hidden');
-  requestAnimationFrame(loop);
+  animationFrame = requestAnimationFrame(loop);
   updateWelcome();
-
-  setTimeout(captureMapShot, 3200); // 等入场动画结束，俯视截取全景图
 
   checkLogin();
 }
@@ -1334,14 +1324,7 @@ function init() {
 // ── Renderer / Camera / Scene / Lighting ──────────────────────────────────────
 function setupRenderer() {
   const canvas = document.getElementById('c');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
-  if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer = createRenderer(canvas);
 }
 function setupCamera() {
   cameraZoom=CONFIG.cameraNearSize;
@@ -1360,7 +1343,8 @@ function setupLighting() {
   amb.name = 'amb'; scene.add(amb);
   const dir = new THREE.DirectionalLight(0xFFFFFF, isNight ? 0.30 : 0.55);
   dir.name = 'dir'; dir.position.set(18,28,12); dir.castShadow = true;
-  dir.shadow.mapSize.set(2048,2048);
+  const shadowSize = MOBILE() ? 512 : 1024;
+  dir.shadow.mapSize.set(shadowSize,shadowSize);
   dir.shadow.camera.left=-45; dir.shadow.camera.right=45;
   dir.shadow.camera.top=45;   dir.shadow.camera.bottom=-45;
   dir.shadow.camera.near=0.5; dir.shadow.camera.far=120;
@@ -1369,161 +1353,6 @@ function setupLighting() {
   const fill = new THREE.DirectionalLight(0xD8E8FF, 0.18);
   fill.position.set(-6,8,-6); scene.add(fill);
 }
-function addGround() {
-  groundMat = stdMat({ color: isNight?P.NIGHT_GROUND:P.DAY_GROUND, roughness:1, metalness:0, tex:'ground', rx:30, ry:30 });
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(110,110), groundMat);
-  m.rotation.x = -Math.PI/2; m.receiveShadow = true; scene.add(m);
-  // ── 扩展地面区域层（叠在原地面之上，不同区域不同质感）──
-  // 远端荒地（最底层，最大）
-  const farMat = stdMat({ color: isNight?0x9A988E:0xD8D4CC, roughness:1, metalness:0, tex:'ground6', rx:24, ry:24 });
-  farMat.polygonOffset = true; farMat.polygonOffsetFactor = 1; farMat.polygonOffsetUnits = 1;
-  const farG = new THREE.Mesh(new THREE.PlaneGeometry(220,220), farMat);
-  farG.rotation.x = -Math.PI/2; farG.position.y = -0.01; farG.receiveShadow = true; scene.add(farG);
-  // 郊区沙土环
-  const subMat = stdMat({ color: isNight?0xB4B0A4:0xE0D8CC, roughness:1, tex:'ground2', rx:18, ry:18 });
-  subMat.polygonOffset = true; subMat.polygonOffsetFactor = 0.5; subMat.polygonOffsetUnits = 1;
-  const subG = new THREE.Mesh(new THREE.PlaneGeometry(150,150), subMat);
-  subG.rotation.x = -Math.PI/2; subG.position.y = -0.005; subG.receiveShadow = true; scene.add(subG);
-  // 中心广场石板
-  const plazaMat = stdMat({ color: isNight?0xB0AFA8:0xE8E7E4, roughness:0.9, tex:'ground5', rx:10, ry:10 });
-  plazaMat.polygonOffset = true; plazaMat.polygonOffsetFactor = -0.5; plazaMat.polygonOffsetUnits = -1;
-  const plazaG = new THREE.Mesh(new THREE.PlaneGeometry(40,40), plazaMat);
-  plazaG.rotation.x = -Math.PI/2; plazaG.position.y = 0.008; plazaG.receiveShadow = true; scene.add(plazaG);
-  // 四角草地
-  const grassMat = stdMat({ color: isNight?0x6A7A50:0xC0D0A0, roughness:1, tex:'ground4', rx:12, ry:12 });
-  grassMat.polygonOffset = true; grassMat.polygonOffsetFactor = -0.5; grassMat.polygonOffsetUnits = -1;
-  [[24,24],[24,-24],[-24,24],[-24,-24]].forEach(([x,z]) => {
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(24,24), grassMat);
-    g.rotation.x = -Math.PI/2; g.position.set(x, 0.006, z); g.receiveShadow = true; scene.add(g);
-  });
-  // 注册主题切换
-  groundMats.push({mat:farMat, day:0xD8D4CC, night:0x9A988E});
-  groundMats.push({mat:subMat, day:0xE0D8CC, night:0xB4B0A4});
-  groundMats.push({mat:plazaMat, day:0xE8E7E4, night:0xB0AFA8});
-  groundMats.push({mat:grassMat, day:0xC0D0A0, night:0x6A7A50});
-}
-
-// ── Paths (grid layout for expanded city) ─────────────────────────────────────
-function addPaths() {
-  const col = isNight ? P.NIGHT_PATH : P.DAY_PATH;
-  const ROAD_Y = 0.04;          // road surface height
-  const LANE_Y = 0.075;         // lane markings clearly above the asphalt
-  const CROSSWALK_Y = 0.08;     // crosswalks clearly above the asphalt
-
-  const roadWidth = pos => pos === 0 ? 2.4 : (Math.abs(pos) === 6 || Math.abs(pos) === 12 ? 1.5 : 1.0);
-  const addRoadSegment = (w, d, x, z, main=false, texKey='road') => {
-    const mat = stdMat({
-      color: main ? P.ASPHALT : col,
-      roughness: 1,
-      tex: texKey,
-      rx: Math.max(1, w/3),
-      ry: Math.max(1, d/3)
-    });
-    pathMats.push(mat);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), mat);
-    mesh.position.set(x, ROAD_Y, z);
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-  };
-
-  // The black arterial roads extend toward the outer buildings, but stop before
-  // their bases. A clear plaza is reserved around the center fountain so no
-  // road mesh sits underneath either landmark.
-  addRoadSegment(2.4, 35.8, 0, -21.1, true, 'asphalt');
-  addRoadSegment(2.4, 35.8, 0, 21.1, true, 'asphalt');
-  addRoadSegment(38.8, 2.4, -23.6, 0, true, 'asphalt');
-  addRoadSegment(38.8, 2.4, 23.6, 0, true, 'asphalt');
-  addRoadSegment(2.4, 2.0, 0, -39.0, true, 'asphalt');
-  addRoadSegment(2.4, 2.0, 0, 39.0, true, 'asphalt');
-
-  const minorCoords = ROAD_COORDS.filter(pos => pos !== 0);
-  minorCoords.forEach(pos => {
-    const width = roadWidth(pos);
-    const texKey = Math.abs(pos) === 6 || Math.abs(pos) === 12 ? 'road' : 'pavement';
-    // Minor vertical roads stop at the arterial road instead of crossing it.
-    addRoadSegment(width, 32.8, pos, -18.6, false, texKey);
-    addRoadSegment(width, 32.8, pos, 18.6, false, texKey);
-  });
-
-  // Horizontal minor roads are cut between vertical roads. This makes every
-  // minor intersection a single surface and eliminates depth flicker.
-  const boundaries = [-CITY_LIMIT, ...ROAD_COORDS, CITY_LIMIT];
-  minorCoords.forEach(z => {
-    const width = roadWidth(z);
-    const texKey = Math.abs(z) === 6 || Math.abs(z) === 12 ? 'road' : 'pavement';
-    for(let i=0;i<boundaries.length-1;i++){
-      const left=boundaries[i], right=boundaries[i+1];
-      const leftHalf=ROAD_COORDS.includes(left) ? roadWidth(left)/2 : 0;
-      const rightHalf=ROAD_COORDS.includes(right) ? roadWidth(right)/2 : 0;
-      const start=left+leftHalf, end=right-rightHalf;
-      if(end>start) addRoadSegment(end-start, width, (start+end)/2, z, false, texKey);
-    }
-  });
-
-  // Dashed center lines on the two main roads. A single solid mesh looked like
-  // an incorrect lane divider and also ran through the center fountain.
-  const lineMat = stdMat({ color: 0xE8B34B, roughness: 0.6, metalness: 0.1 });  // solid yellow
-  pathMats.push(lineMat);
-  for (let p = -36; p <= 36; p += 2.4) {
-    if (Math.abs(p) < 2.8) continue;
-    const lineX = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.008, 1.15), lineMat);
-    lineX.position.set(0, LANE_Y, p); lineX.receiveShadow = false; scene.add(lineX);
-    const lineZ = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.008, 0.07), lineMat);
-    lineZ.position.set(p, LANE_Y, 0); lineZ.receiveShadow = false; scene.add(lineZ);
-  }
-
-  // Crosswalks at main-road intersections (where x=0 or z=0 crosses another road)
-  // Place a small crosswalk strip on each side of the intersection, perpendicular to the main road.
-  ROAD_COORDS.forEach(x => ROAD_COORDS.forEach(z => {
-    const onMainAxis = (x === 0 || z === 0);
-    if (!onMainAxis) return;
-    // Skip the very center (0,0) — fountain will be there
-    if (x === 0 && z === 0) return;
-    const cwMat = stdMat({ color: 0xF0F0EC, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
-    pathMats.push(cwMat);
-    // Zebra stripes span the arterial road, perpendicular to traffic.
-    if (x === 0) {
-      const cw = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.005, 0.5), cwMat);
-      cw.position.set(0, CROSSWALK_Y, z); cw.receiveShadow = false; scene.add(cw);
-    } else {
-      const cw = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.005, 2.0), cwMat);
-      cw.position.set(x, CROSSWALK_Y, 0); cw.receiveShadow = false; scene.add(cw);
-    }
-  }));
-
-  // Outer ring road — single RingGeometry mesh with plain dark color (no texture UVs to mess up)
-  const ringR = 38;
-  const ringMat = stdMat({ color: 0x3A3D44, roughness: 0.95 });  // plain asphalt color, no tex
-  pathMats.push(ringMat);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(ringR - 1.0, ringR + 1.0, 96), ringMat);
-  ring.rotation.x = -Math.PI/2;
-  ring.position.set(0, ROAD_Y - 0.005, 0);
-  ring.receiveShadow = true; scene.add(ring);
-  // Thin yellow center line on the ring (a slightly smaller ring on top)
-  const ringLineMat = stdMat({ color: 0xE8B34B, roughness: 0.6, metalness: 0.1 });
-  pathMats.push(ringLineMat);
-  const ringLine = new THREE.Mesh(new THREE.RingGeometry(ringR - 0.04, ringR + 0.04, 96), ringLineMat);
-  ringLine.rotation.x = -Math.PI/2;
-  ringLine.position.set(0, ROAD_Y + 0.002, 0);
-  scene.add(ringLine);
-
-  // Lamp posts at 8 points around the ring
-  for (let i = 0; i < 8; i++) {
-    const a = (i/8)*Math.PI*2 + Math.PI/8;
-    addLamps([[Math.cos(a)*ringR, 0, Math.sin(a)*ringR]]);
-  }
-
-  // Central pedestrian loop around the fountain. It keeps the landmark open
-  // while providing a real four-way bypass instead of a missing-road dead end.
-  const plazaMat = stdMat({ color: 0xB9B8B3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
-  pathMats.push(plazaMat);
-  const plazaRing = new THREE.Mesh(new THREE.RingGeometry(2.25, 3.0, 64), plazaMat);
-  plazaRing.rotation.x = -Math.PI/2;
-  plazaRing.position.set(0, ROAD_Y + 0.002, 0);
-  plazaRing.receiveShadow = true;
-  scene.add(plazaRing);
-}
-
 // ── Fountain (city-center landmark, made prominent) ──────────────────────────
 function addFountain() {
   const g = new THREE.Group();
@@ -2318,9 +2147,12 @@ const PLOT_MAP = {
 function addBuildingPlot(x, z, shape) {
   const p = PLOT_MAP[shape] || {tex:'ground5', size:3.5, color:0xE4E3E0};
   const mat = stdMat({color: isNight ? Math.floor(p.color*0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,p.size/2), ry:Math.max(1,p.size/2)});
-  mat.polygonOffset = true; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -2;
+  mat.polygonOffset = true;
+  mat.polygonOffsetFactor = -3;
+  mat.polygonOffsetUnits = -3;
   const plot = new THREE.Mesh(new THREE.PlaneGeometry(p.size, p.size), mat);
-  plot.rotation.x = -Math.PI/2; plot.position.set(x, 0.03, z); plot.receiveShadow = true; scene.add(plot);
+  plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot, z); plot.receiveShadow = true;
+  plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
 }
 
 const SHAPE_FNS = {
@@ -2373,6 +2205,7 @@ function addBuildings() {
     // Add ground plot under the building
     addBuildingPlot(cfg.x, cfg.z, cfg.shape);
   });
+  raycastBuildingGroups = buildings.map(b => b.group);
 }
 
 // ── Decorations ───────────────────────────────────────────────────────────────
@@ -2604,27 +2437,39 @@ function addSmallBlock(x,y,z,type,i) {
   const plotColors = [0xE4E3E0, 0xC0D0A0, 0xE0D8CC, 0xF2F1EE, 0xE8E7E4, 0xD8D4CC, 0xB8C888, 0xE4E3E0];
   const plotCol = plotColors[Math.abs(Math.round(x+z)) % plotColors.length];
   const pmat = stdMat({color: isNight ? Math.floor(plotCol*0.7) : plotCol, roughness:0.9, tex:plotTex, rx:1, ry:1});
-  pmat.polygonOffset = true; pmat.polygonOffsetFactor = -1; pmat.polygonOffsetUnits = -1;
+  pmat.polygonOffset = true;
+  pmat.polygonOffsetFactor = -3;
+  pmat.polygonOffsetUnits = -3;
   const plot = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), pmat);
-  plot.rotation.x = -Math.PI/2; plot.position.set(x, 0.025, z); plot.receiveShadow = true; scene.add(plot);
+  plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot, z); plot.receiveShadow = true;
+  plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
 }
 
 function addTrees(positions) {
+  if (!treeTrunks) {
+    treeTrunks = new InstancedBatch(scene,
+      resources.geometry(new THREE.CylinderGeometry(0.06,0.09,0.38,8)),
+      resources.material({kind:'tree-trunk'},()=>stdMat({color:0xE0DFDC,roughness:0.9,tex:'wood',rx:1,ry:1})), 512);
+    treeCrowns = new InstancedBatch(scene,
+      resources.geometry(new THREE.SphereGeometry(0.30,12,12)),
+      resources.material({kind:'tree-crown'},()=>stdMat({color:0xF5F4F2,roughness:0.85})), 512);
+  }
   positions.forEach(([x,,z]) => {
-    const g = new THREE.Group();
-    part(g, new THREE.CylinderGeometry(0.06,0.09,0.38,8), {color:0xE0DFDC,roughness:0.9,tex:'wood',rx:1,ry:1}, [0,0.19,0]);
-    part(g, new THREE.SphereGeometry(0.30,12,12), {color:0xF5F4F2,roughness:0.85}, [0,0.66,0]);
-    g.position.set(x,0,z); scene.add(g);
+    treeTrunks.add(x,0.19,z);
+    treeCrowns.add(x,0.66,z);
   });
 }
 function addLamps(positions) {
+  if (!lampPosts) {
+    const postMaterial=resources.material({kind:'lamp-post'},()=>stdMat({color:0xCDCCCA,roughness:0.7,tex:'metal',rx:1,ry:1}));
+    const globeMaterial=resources.material({kind:'lamp-light'},()=>stdMat({color:0xF8F7F5,roughness:0.15,emissive:0xEEF0FF,emissiveIntensity:isNight?0.6:0.05}));
+    lampPosts = new InstancedBatch(scene,resources.geometry(new THREE.CylinderGeometry(0.04,0.04,1.15,8)),postMaterial,384);
+    lampLights = new InstancedBatch(scene,resources.geometry(new THREE.SphereGeometry(0.13,14,14)),globeMaterial,384,false);
+    lampGlobes.push(globeMaterial);
+  }
   positions.forEach(([x,,z]) => {
-    const g = new THREE.Group();
-    part(g, new THREE.CylinderGeometry(0.04,0.04,1.15,8), {color:0xCDCCCA,roughness:0.7,tex:'metal',rx:1,ry:1}, [0,0.575,0]);
-    const gm = stdMat({color:0xF8F7F5,roughness:0.15,emissive:0xEEF0FF,emissiveIntensity:isNight?0.6:0.05});
-    const globe = mk(new THREE.SphereGeometry(0.13,14,14),gm);
-    globe.position.y=1.28; g.add(globe); lampGlobes.push(gm);
-    g.position.set(x,0,z); scene.add(g);
+    lampPosts.add(x,0.575,z);
+    lampLights.add(x,1.28,z);
   });
 }
 function addBench(x,y,z,rotY) {
@@ -3022,7 +2867,7 @@ function addMarketStalls(x, z, count, dir) {
 // ── Characters ────────────────────────────────────────────────────────────────
 function makeCharacter(headHex, bodyHex) {
   const g=new THREE.Group();
-  const shadow=mk(new THREE.CircleGeometry(0.17,16),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.11}));
+  const shadow=mk(new THREE.CircleGeometry(0.17,16),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.11,depthWrite:false}));
   shadow.rotation.x=-Math.PI/2; shadow.position.y=0.012; g.add(shadow);
   const body=mk(new THREE.CylinderGeometry(0.10,0.13,0.30,12),stdMat({color:bodyHex,roughness:0.6}));
   body.position.y=0.15; body.castShadow=true; g.add(body);
@@ -3278,10 +3123,11 @@ function startRename(b, nameEl) {
 // ── Events ────────────────────────────────────────────────────────────────────
 function setupEvents() {
   const canvas=document.getElementById('c');
-  canvas.addEventListener('mousemove',onMouseMove);
-  canvas.addEventListener('click',onCanvasClick);
-  canvas.addEventListener('mouseenter',()=>{mouseOnScene=true;});
-  canvas.addEventListener('mouseleave',()=>{mouseOnScene=false;});
+  const signal=eventController.signal;
+  canvas.addEventListener('mousemove',onMouseMove,{signal});
+  canvas.addEventListener('click',onCanvasClick,{signal});
+  canvas.addEventListener('mouseenter',()=>{mouseOnScene=true;},{signal});
+  canvas.addEventListener('mouseleave',()=>{mouseOnScene=false;},{signal});
 
   // PC：滚轮缩放
   canvas.addEventListener('wheel',e=>{
@@ -3289,7 +3135,7 @@ function setupEvents() {
     const factor=e.deltaY>0?1.12:1/1.12;
     cameraZoom=clamp(cameraZoom*factor,CONFIG.cameraZoomMin,CONFIG.cameraZoomMax);
     updateCameraProjection(cameraZoom);
-  },{passive:false});
+  },{passive:false,signal});
 
   // 移动端：双指缩放
   let pinchDist=0;
@@ -3300,7 +3146,7 @@ function setupEvents() {
         e.touches[0].clientY-e.touches[1].clientY
       );
     }
-  },{passive:true});
+  },{passive:true,signal});
   canvas.addEventListener('touchmove',e=>{
     if(e.touches.length===2){
       e.preventDefault();
@@ -3314,50 +3160,50 @@ function setupEvents() {
       }
       pinchDist=d;
     }
-  },{passive:false});
+  },{passive:false,signal});
 
-  document.getElementById('mapToggle').addEventListener('click',toggleMapMode);
-  document.getElementById('mapClose').addEventListener('click',()=>mapMode&&toggleMapMode());
-  document.querySelector('.you-block').addEventListener('click',onYouClick);
+  document.getElementById('mapToggle').addEventListener('click',toggleMapMode,{signal});
+  document.getElementById('mapClose').addEventListener('click',()=>mapMode&&toggleMapMode(),{signal});
+  document.querySelector('.you-block').addEventListener('click',onYouClick,{signal});
   document.getElementById('fsToggle').addEventListener('click',()=>{
     if(document.fullscreenElement){
       document.exitFullscreen().catch(()=>{});
     }else{
       document.documentElement.requestFullscreen().catch(()=>{});
     }
-  });
+  },{signal});
   document.getElementById('mapOverlay').addEventListener('click',e=>{
     if(e.target.id==='mapOverlay'&&mapMode)toggleMapMode();
-  });
-  document.getElementById('mapTipClose').addEventListener('click',closeMapTip);
+  },{signal});
+  document.getElementById('mapTipClose').addEventListener('click',closeMapTip,{signal});
   document.getElementById('mapTipTele').addEventListener('click',()=>{
     if(!mapTipB||!teleportUnlocked())return;
     const b=mapTipB;
     closeMapTip();
     toggleMapMode();
     mapTeleport(b);
-  });
+  },{signal});
 
-  document.getElementById('spClose').addEventListener('click',closeStatsPanel);
-  document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'));
-  document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'));
+  document.getElementById('spClose').addEventListener('click',closeStatsPanel,{signal});
+  document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'),{signal});
+  document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'),{signal});
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
       if(mapMode){toggleMapMode();return;}
       closeStatsPanel();closeModal();closeNpcDialog();
     }
-  });
+  },{signal});
 
-  document.getElementById('loginBtn').addEventListener('click',doLogin);
-  document.getElementById('loginInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  document.getElementById('loginBtn').addEventListener('click',doLogin,{signal});
+  document.getElementById('loginInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();},{signal});
 
-  document.getElementById('cgSkip').addEventListener('click',skipCG);
+  document.getElementById('cgSkip').addEventListener('click',skipCG,{signal});
 
   window.addEventListener('resize',()=>{
     renderer.setSize(window.innerWidth,window.innerHeight);
     updateCameraProjection(cameraZoom);
     if(mapMode) updateMapImage();
-  });
+  },{signal});
 }
 
 function onMouseMove(e) {
@@ -3366,7 +3212,7 @@ function onMouseMove(e) {
   raycaster.setFromCamera(mouse2D,camera);
   raycaster.ray.intersectPlane(groundPlane,cursorWorld);
   raycaster.setFromCamera(mouse2D,camera);
-  const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
+  const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
     const id=hits[0].object.userData.buildingId;
     const b=buildings.find(x=>x.id===id);
@@ -3382,7 +3228,7 @@ function onCanvasClick() {
   }
   const npcHit=npcForRaycast();
   if(npcHit){ talkToOrWalk(npcHit); return; }
-  const hits=raycaster.intersectObjects(buildings.map(b=>b.group),true);
+  const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
     const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);
     if(b){ interactOrWalk(b); return; }
@@ -3443,7 +3289,6 @@ function applyTheme(night,instant) {
   } else {
     tweenColor(scene.background,night?P.NIGHT_BG:P.DAY_BG,d);
   }
-  tweenColor(groundMat.color,night?P.NIGHT_GROUND:P.DAY_GROUND,d);
   pathMats.forEach(m=>tweenColor(m.color,night?P.NIGHT_PATH:P.DAY_PATH,d));
   groundMats.forEach(g=>tweenColor(g.mat.color,night?g.night:g.day,d));
   const amb=scene.getObjectByName('amb'),dir=scene.getObjectByName('dir');
@@ -3502,17 +3347,16 @@ function initAnimations() {
 function updateLabels() {
   buildings.forEach(b=>{
     if(!b.labelEl)return;
-    const v=b.group.position.clone();
-    v.y=b.group.position.y+b.labelY;
-    v.project(camera);
-    b.labelEl.style.left=((v.x*0.5+0.5)*window.innerWidth)+'px';
-    b.labelEl.style.top=(((-v.y)*0.5+0.5)*window.innerHeight)+'px';
+    labelWorldPosition.copy(b.group.position);
+    labelWorldPosition.y=b.group.position.y+b.labelY;
+    labelWorldPosition.project(camera);
+    b.labelEl.style.transform=`translate3d(${(labelWorldPosition.x*0.5+0.5)*window.innerWidth}px,${((-labelWorldPosition.y)*0.5+0.5)*window.innerHeight}px,0) translate(-50%,-50%)`;
   });
 }
 
 // ── Loop ──────────────────────────────────────────────────────────────────────
 function loop() {
-  requestAnimationFrame(loop);
+  animationFrame = requestAnimationFrame(loop);
   const now=performance.now();
   const delta=Math.min((now-lastFrameTime)/1000,0.05);
   lastFrameTime=now;
@@ -3564,6 +3408,9 @@ function captureMapShot() {
   }
   mapShotRenderer.render(scene,mapShotCam);
   mapShotData=mapShotRenderer.domElement.toDataURL('image/png');
+  mapShotRenderer.dispose();
+  mapShotRenderer.forceContextLoss();
+  mapShotRenderer=null;
 }
 
 function updateMapImage() {
@@ -3638,8 +3485,8 @@ function mapTeleport(b) {
 function updateCameraFollow(delta) {
   if(!cursorChar||mapMode)return;
   const p=cursorChar.position;
-  const v=p.clone(); v.y=0.4; v.project(camera);
-  const ox=Math.abs(v.x), oz=Math.abs(v.y);
+  labelWorldPosition.copy(p); labelWorldPosition.y=0.4; labelWorldPosition.project(camera);
+  const ox=Math.abs(labelWorldPosition.x), oz=Math.abs(labelWorldPosition.y);
   if(ox<=CONFIG.cameraEdge&&oz<=CONFIG.cameraEdge)return;
   // 玩家当前 NDC 超出边缘，休息点 = 让玩家刚好回到边缘的目标位置
   const maxo=Math.max(ox,oz);
@@ -4056,7 +3903,7 @@ function formatDate(ts) {
 }
 
 function startTimeTracking() {
-  setInterval(()=>{
+  trackingInterval = window.setInterval(()=>{
     const t=parseInt(localStorage.getItem('minicityTime')||'0')+1;
     localStorage.setItem('minicityTime',t);
   },1000);
@@ -4457,19 +4304,49 @@ function stdMat(p){
     const t = _tex(texKey, rx, ry);
     if(t) o.map = t;
   }
+  if(o.transparent) o.depthWrite=false;
   return new THREE.MeshStandardMaterial(o);
 }
-function mk(geo,mat){return new THREE.Mesh(geo,mat);}
+function mk(geo,mat){return new THREE.Mesh(resources.geometry(geo),mat);}
 function part(group,geo,matOrParams,pos,shadow=true){
-  const mat=matOrParams instanceof THREE.Material?matOrParams:stdMat(matOrParams);
-  const m=new THREE.Mesh(geo,mat);
+  const mat=matOrParams instanceof THREE.Material
+    ? matOrParams
+    : resources.material({kind:'part',...matOrParams},()=>stdMat(matOrParams));
+  const m=new THREE.Mesh(resources.geometry(geo),mat);
   if(pos)m.position.set(pos[0],pos[1],pos[2]);
   m.castShadow=shadow; m.receiveShadow=true;
+  if(mat.transparent){m.renderOrder=RENDER_ORDER.transparentSurface;}
   if(group)group.add(m);
   return m;
 }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-document.body.classList.remove('day','night');
-document.body.classList.add(isNight?'night':'day');
-init();
+export function startMiniCity() {
+  if(started)return;
+  started=true;
+  eventController=new AbortController();
+  document.body.classList.remove('day','night');
+  document.body.classList.add(isNight?'night':'day');
+  init();
+}
+
+export function destroyMiniCity() {
+  if(!started)return;
+  started=false;
+  cancelAnimationFrame(animationFrame);
+  clearInterval(clockInterval);
+  clearInterval(trackingInterval);
+  clearTimeout(cgAutoEnterTimer);
+  eventController.abort();
+  cgTimeline?.kill();
+  npcList.forEach(npc=>npc.tween?.kill());
+  gsap.globalTimeline.clear();
+  mapShotRenderer?.dispose();
+  mapShotRenderer?.forceContextLoss();
+  mapShotRenderer=null;
+  renderer?.dispose();
+  renderer?.forceContextLoss();
+  scene?.clear();
+  resources.dispose();
+  document.getElementById('labelsWrap')?.replaceChildren();
+  document.getElementById('mapIcons')?.replaceChildren();
+}

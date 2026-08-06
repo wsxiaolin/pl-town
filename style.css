@@ -39,7 +39,9 @@ body.night { --text-mid: #666662; }
 
 .b-label-item {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  will-change: transform;
   display: flex;
   flex-direction: column;
   align-items: center;
