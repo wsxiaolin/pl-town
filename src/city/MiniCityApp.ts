@@ -7,6 +7,7 @@ import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rend
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS } from './cityConfig';
 import { createCitySurfaces } from './rendering/createCitySurfaces';
+import { replaceWithRealBuildingModels } from './rendering/realBuildingModels';
 
 const resources = new ResourcePool();
 let animationFrame = 0;
@@ -681,6 +682,7 @@ function initTextures() {
 // ── Globals ───────────────────────────────────────────────────────────────────
 let renderer, scene, camera, groundMat;
 const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
+const residentialBuildings = []; // 无名居民房（材质包替换的目标）
 const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
 let playerPath = [];
@@ -1307,6 +1309,7 @@ function init() {
   });
   addFountain();
   addBuildings(); cacheBuildingBoxes(); addDecorations(); addCharacters();
+  replaceWithRealBuildingModels(buildings, residentialBuildings, readRenderSettings().realModels).catch(error => console.error('3D model loading failed', error));
   addLabels(); applyRenames();
   setupEvents(); setupFilter();
   setupModal();
@@ -2431,6 +2434,7 @@ function addSmallBlock(x,y,z,type,i) {
     part(g,new THREE.BoxGeometry(0.22,0.16,0.03),{color:0xB8CCEA,emissive:0xA8C8F8,emissiveIntensity:isNight?0.12:0.02,roughness:0.2},[wx,wy,d/2+0.02],false);
   }
   g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2; scene.add(g);
+  residentialBuildings.push({ id:`house_${i}`, group:g });
   // ── 建筑下面的小地块贴图（成片共享纹理）──
   const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
   const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];
@@ -3218,12 +3222,14 @@ function setupRenderSettings(signal: AbortSignal) {
   const anisotropy = panel.querySelector('#renderAnisotropy') as HTMLSelectElement;
   const anisotropyValue = panel.querySelector('#renderAnisotropyValue');
   const shadows = panel.querySelector('#renderShadows') as HTMLInputElement;
+  const realModels = panel.querySelector('#renderRealModels') as HTMLInputElement;
   const exposure = panel.querySelector('#renderExposure') as HTMLInputElement;
   const exposureValue = panel.querySelector('#renderExposureValue');
   resolution.value = String(settings.resolution);
   antialias.checked = settings.antialias;
   anisotropy.value = String(settings.anisotropy);
   shadows.checked = settings.shadows;
+  realModels.checked = settings.realModels;
   exposure.value = String(settings.exposure);
   const updateLabels = () => {
     resolutionValue.textContent = `${resolution.value}x`;
@@ -3239,6 +3245,7 @@ function setupRenderSettings(signal: AbortSignal) {
       anisotropy: Number(anisotropy.value),
       shadows: shadows.checked,
       exposure: Number(exposure.value),
+      realModels: realModels.checked,
     }));
     window.location.reload();
   };
