@@ -34,6 +34,26 @@ export const PALETTE = Object.freeze({
 export const ROAD_COORDS = Object.freeze([-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36]);
 export const CITY_LIMIT = 42;
 export const BUILDING_PLATFORM_HEIGHT = 0.3;
+export const SATELLITE_CITY = Object.freeze({
+  roadNodes: Object.freeze([
+    [0, 38], [0, 55], [-8, 68], [-28, 68], [28, 68], [20, 82],
+    [-24, 82], [-16, 97], [25, 97],
+  ]),
+  roadSegments: Object.freeze([
+    [0, 38, 0, 55], [0, 55, -8, 68], [-8, 68, 28, 68],
+    [28, 68, 20, 82], [20, 82, -24, 82], [-24, 82, -16, 97],
+    [-16, 97, 25, 97],
+  ]),
+  buildingPositions: Object.freeze([
+    [-21, 60], [-14, 60], [-7, 60], [0, 60], [7, 60], [14, 60],
+    [-21, 76], [-14, 76], [-7, 76], [0, 76], [7, 76], [14, 76],
+    [-21, 92], [-14, 92], [-7, 92], [0, 92], [7, 92], [14, 92],
+  ]),
+  connectorStartZ: 38,
+  centerZ: 78,
+  width: 66,
+  depth: 50,
+});
 
 export const CITY_CONFIG = Object.freeze({
   cameraNearSize: 14,

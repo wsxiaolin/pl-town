@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { SATELLITE_CITY } from '../cityConfig';
+import { RENDER_ORDER, SURFACE_Y } from '../../rendering/layers';
 
 const MODEL_URLS = {
   banana: new URL('../../../banana.glb', import.meta.url).href,
   buildings: new URL('../../../buildings.glb', import.meta.url).href,
-  european: new URL('../../../european_buildings_asset_pack_1.glb', import.meta.url).href,
-  newYork: new URL('../../../new_york_buildings.glb', import.meta.url).href,
 };
 
 export type ReplaceableBuilding = {
@@ -15,12 +15,15 @@ export type ReplaceableBuilding = {
 };
 
 const loader = new GLTFLoader();
+const PACK_POSITIONS = SATELLITE_CITY.buildingPositions.slice(0, 13).map(([x, z]) => ({ x, z }));
+const DESIGNED_POSITIONS = SATELLITE_CITY.buildingPositions.slice(13).map(([x, z]) => ({ x, z }));
 
 function detachedClone(source: THREE.Object3D): THREE.Object3D {
   source.updateWorldMatrix(true, true);
   const clone = source.clone(true);
-  clone.matrix.copy(source.matrixWorld);
-  clone.matrix.decompose(clone.position, clone.quaternion, clone.scale);
+  source.matrixWorld.decompose(new THREE.Vector3(), clone.quaternion, clone.scale);
+  clone.position.set(0, 0, 0);
+  clone.matrixAutoUpdate = true;
   clone.traverse(child => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -33,34 +36,37 @@ function detachedClone(source: THREE.Object3D): THREE.Object3D {
   return clone;
 }
 
-function normalizeModel(model: THREE.Object3D, footprint: number, height: number): THREE.Group {
+function normalizeModel(model: THREE.Object3D, targetSize: THREE.Vector3): THREE.Group {
   const holder = new THREE.Group();
-  holder.add(model);
+  const content = new THREE.Group();
+  holder.add(content);
+  content.add(model);
   holder.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(holder);
   const size = box.getSize(new THREE.Vector3());
-  const horizontal = Math.max(size.x, size.z, 0.001);
-  const scale = Math.min(footprint / horizontal, height / Math.max(size.y, 0.001));
-  model.scale.multiplyScalar(scale);
+  const scale = Math.min(
+    targetSize.x / Math.max(size.x, 0.001),
+    targetSize.y / Math.max(size.y, 0.001),
+    targetSize.z / Math.max(size.z, 0.001),
+  );
+  content.scale.setScalar(scale);
   holder.updateMatrixWorld(true);
   const scaledBox = new THREE.Box3().setFromObject(holder);
   const center = scaledBox.getCenter(new THREE.Vector3());
-  model.position.x -= center.x;
-  model.position.z -= center.z;
-  model.position.y -= scaledBox.min.y;
+  content.position.set(-center.x, -scaledBox.min.y, -center.z);
   return holder;
 }
 
 function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D): void {
-  const tmp = new THREE.Group();
-  tmp.add(building.group);
-  tmp.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(tmp);
-  tmp.remove(building.group);
+  const target = building.group.clone(true);
+  target.position.set(0, 0, 0);
+  target.quaternion.identity();
+  target.scale.set(1, 1, 1);
+  target.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(target);
   const size = box.getSize(new THREE.Vector3());
-  const footprint = Math.max(size.x, size.z, 0.5);
-  const height = Math.max(size.y, 0.8);
-  const model = normalizeModel(detachedClone(source), footprint, height);
+  size.set(Math.max(size.x, 0.5), Math.max(size.y, 0.8), Math.max(size.z, 0.5));
+  const model = normalizeModel(detachedClone(source), size);
   building.group.clear();
   building.group.add(model);
   let firstMaterial: THREE.MeshStandardMaterial | undefined;
@@ -74,10 +80,57 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
   if (firstMaterial) building.bodyMat = firstMaterial;
 }
 
+function addBuildingPack(scene: THREE.Scene, sources: THREE.Object3D[]): void {
+  const plotMaterial = new THREE.MeshStandardMaterial({ color: 0xd6d3cc, roughness: 0.92 });
+  PACK_POSITIONS.forEach((position, index) => {
+    const x = position.x!;
+    const z = position.z!;
+    const source = sources[index % sources.length];
+    if (!source) return;
+    const model = normalizeModel(detachedClone(source), new THREE.Vector3(7, 8, 7));
+    model.name = `imported-building-${index + 1}`;
+    model.userData.assetPack = 'buildings';
+    model.position.set(x, 0, z);
+    model.rotation.y = ((index * 3) % 8) * Math.PI / 8;
+    scene.add(model);
+    const plot = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 8.4), plotMaterial);
+    plot.rotation.x = -Math.PI / 2;
+    plot.position.set(x, SURFACE_Y.buildingPlot, z);
+    plot.receiveShadow = true;
+    plot.renderOrder = RENDER_ORDER.buildingPlot;
+    scene.add(plot);
+  });
+}
+
+function addDesignedBuildings(scene: THREE.Scene, buildings: ReplaceableBuilding[]): void {
+  const plotMaterial = new THREE.MeshStandardMaterial({ color: 0xd6d3cc, roughness: 0.92 });
+  const sources = ['library', 'academy', 'catcafe', 'teahouse', 'qipai_hall']
+    .map(id => buildings.find(building => building.id === id)?.group)
+    .filter((group): group is THREE.Group => Boolean(group));
+  DESIGNED_POSITIONS.forEach((position, index) => {
+    const x = position.x!;
+    const z = position.z!;
+    const source = sources[index % sources.length];
+    if (!source) return;
+    const model = normalizeModel(detachedClone(source), new THREE.Vector3(7, 7, 7));
+    model.name = `satellite-designed-${index + 1}`;
+    model.userData.assetPack = 'main-city-design';
+    model.position.set(x, 0, z);
+    model.rotation.y = index % 2 ? Math.PI / 6 : -Math.PI / 8;
+    scene.add(model);
+    const plot = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 7.4), plotMaterial);
+    plot.rotation.x = -Math.PI / 2;
+    plot.position.set(x, SURFACE_Y.buildingPlot, z);
+    plot.receiveShadow = true;
+    plot.renderOrder = RENDER_ORDER.buildingPlot;
+    scene.add(plot);
+  });
+}
+
 // Collect atomic building units: nodes whose children are all leaf meshes.
 // Multi-mesh units (a building made of walls/roof/shops parts) stay as one model.
 // Merged clusters (a node containing nested groups) are skipped since they cannot be split.
-function collectUnits(root: THREE.Object3D, maxHorizontal = Infinity): THREE.Object3D[] {
+function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
   const units: THREE.Object3D[] = [];
   const visit = (node: THREE.Object3D) => {
     let meshCount = 0;
@@ -92,45 +145,17 @@ function collectUnits(root: THREE.Object3D, maxHorizontal = Infinity): THREE.Obj
     }
   };
   visit(root);
-  return units.filter(unit => {
-    unit.updateWorldMatrix(true, true);
-    const size = new THREE.Box3().setFromObject(unit).getSize(new THREE.Vector3());
-    const horizontal = Math.max(size.x, size.z);
-    const ratio = size.y / Math.max(horizontal, 0.001);
-    return size.y > 0.05
-      && horizontal > 0.05
-      && horizontal < maxHorizontal
-      && size.y < 500
-      && ratio >= 0.25
-      && ratio <= 12;
-  });
+  return units;
 }
 
-export async function replaceWithRealBuildingModels(
-  buildings: ReplaceableBuilding[],
-  residentialBuildings: ReplaceableBuilding[],
-  realModels: boolean,
-): Promise<void> {
+export async function addRealBuildingModels(scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
   const bananaBuilding = buildings.find(building => building.id === 'banana_palace');
-  const banana = await loader.loadAsync(MODEL_URLS.banana);
-  if (bananaBuilding) replaceBuilding(bananaBuilding, banana.scene);
-  if (!realModels) return;
-
-  const [buildingPack, europeanPack, newYorkPack] = await Promise.all([
+  const [banana, buildingPack] = await Promise.all([
+    loader.loadAsync(MODEL_URLS.banana),
     loader.loadAsync(MODEL_URLS.buildings),
-    loader.loadAsync(MODEL_URLS.european),
-    loader.loadAsync(MODEL_URLS.newYork),
   ]);
-  // low_poly_night_city_building_skyline.glb is one merged skyline mesh and cannot be split;
-  // it is intentionally left out so we only reuse packs with separable buildings.
-  const candidates = [
-    ...collectUnits(buildingPack.scene),
-    ...collectUnits(newYorkPack.scene),
-    ...collectUnits(europeanPack.scene, 250),
-  ];
-  if (candidates.length === 0) return;
-  residentialBuildings.forEach((building, index) => {
-    const source = candidates[index % candidates.length];
-    if (source) replaceBuilding(building, source);
-  });
+  if (bananaBuilding) replaceBuilding(bananaBuilding, banana.scene);
+  const candidates = collectUnits(buildingPack.scene);
+  addBuildingPack(scene, candidates);
+  addDesignedBuildings(scene, buildings);
 }

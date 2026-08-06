@@ -5,9 +5,9 @@ import { ResourcePool } from '../core/ResourcePool';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rendering/createRenderer';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
-import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS } from './cityConfig';
+import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './cityConfig';
 import { createCitySurfaces } from './rendering/createCitySurfaces';
-import { replaceWithRealBuildingModels } from './rendering/realBuildingModels';
+import { addRealBuildingModels } from './rendering/realBuildingModels';
 
 const resources = new ResourcePool();
 let animationFrame = 0;
@@ -682,7 +682,6 @@ function initTextures() {
 // ── Globals ───────────────────────────────────────────────────────────────────
 let renderer, scene, camera, groundMat;
 const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
-const residentialBuildings = []; // 无名居民房（材质包替换的目标）
 const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
 let playerPath = [];
@@ -697,7 +696,7 @@ let mapMode = false; // 全景地图弹层是否打开
 let mapShotData = null;    // 启动时俯视截取的全城图（dataURL）
 let mapShotRenderer = null, mapShotCam = null;
 const MAP_SHOT = 1024;     // 截图像素边长
-const MAP_SHOT_SPAN = 50;
+const MAP_SHOT_SPAN = 120;
 let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
@@ -1309,7 +1308,9 @@ function init() {
   });
   addFountain();
   addBuildings(); cacheBuildingBoxes(); addDecorations(); addCharacters();
-  replaceWithRealBuildingModels(buildings, residentialBuildings, readRenderSettings().realModels).catch(error => console.error('3D model loading failed', error));
+  addRealBuildingModels(scene, buildings)
+    .then(() => { mapShotData = null; })
+    .catch(error => console.error('3D model loading failed', error));
   addLabels(); applyRenames();
   setupEvents(); setupFilter();
   setupModal();
@@ -2434,7 +2435,6 @@ function addSmallBlock(x,y,z,type,i) {
     part(g,new THREE.BoxGeometry(0.22,0.16,0.03),{color:0xB8CCEA,emissive:0xA8C8F8,emissiveIntensity:isNight?0.12:0.02,roughness:0.2},[wx,wy,d/2+0.02],false);
   }
   g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2; scene.add(g);
-  residentialBuildings.push({ id:`house_${i}`, group:g });
   // ── 建筑下面的小地块贴图（成片共享纹理）──
   const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
   const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];
@@ -3222,14 +3222,12 @@ function setupRenderSettings(signal: AbortSignal) {
   const anisotropy = panel.querySelector('#renderAnisotropy') as HTMLSelectElement;
   const anisotropyValue = panel.querySelector('#renderAnisotropyValue');
   const shadows = panel.querySelector('#renderShadows') as HTMLInputElement;
-  const realModels = panel.querySelector('#renderRealModels') as HTMLInputElement;
   const exposure = panel.querySelector('#renderExposure') as HTMLInputElement;
   const exposureValue = panel.querySelector('#renderExposureValue');
   resolution.value = String(settings.resolution);
   antialias.checked = settings.antialias;
   anisotropy.value = String(settings.anisotropy);
   shadows.checked = settings.shadows;
-  realModels.checked = settings.realModels;
   exposure.value = String(settings.exposure);
   const updateLabels = () => {
     resolutionValue.textContent = `${resolution.value}x`;
@@ -3245,7 +3243,6 @@ function setupRenderSettings(signal: AbortSignal) {
       anisotropy: Number(anisotropy.value),
       shadows: shadows.checked,
       exposure: Number(exposure.value),
-      realModels: realModels.checked,
     }));
     window.location.reload();
   };
@@ -3496,7 +3493,7 @@ function updateMapMarker() {
   const marker=document.getElementById('mapMarker');
   if(!marker||!cursorChar)return;
   const left=((cursorChar.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
-  const top=((cursorChar.position.z+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
+   const top=((MAP_SHOT_SPAN-cursorChar.position.z)/(2*MAP_SHOT_SPAN))*100;
   marker.style.left=left+'%';
   marker.style.top=top+'%';
 }
@@ -3513,7 +3510,7 @@ function renderMapIcons() {
     el.title=b.label;
     el.innerHTML=b.icon;
     el.style.left=((b.group.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';
-    el.style.top=((b.group.position.z+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';
+     el.style.top=((MAP_SHOT_SPAN-b.group.position.z)/(2*MAP_SHOT_SPAN)*100)+'%';
     el.addEventListener('click',()=>openMapTip(b));
     wrap.appendChild(el);
   });
@@ -3572,7 +3569,7 @@ function updateCameraFollow(delta) {
 }
 
 function setCameraTarget(x,z,instant) {
-  const nx=clamp(x,-20,20), nz=clamp(z,-20,20);
+  const nx=clamp(x,-38,38), nz=clamp(z,-38,112);
   if(instant){
     cameraTarget.set(nx,0,nz);
     camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
@@ -3705,6 +3702,14 @@ function getRoadGraph() {
     if(a&&b) addEdge(a,b);
   });
 
+  SATELLITE_CITY.roadNodes.forEach(([x,z])=>addNode(x,z));
+  SATELLITE_CITY.roadSegments.forEach(([x1,z1,x2,z2])=>{
+    addEdge(nodes[nodeIdx.get(x1+','+z1)],nodes[nodeIdx.get(x2+','+z2)]);
+  });
+  const mainSouth=nodes[nodeIdx.get('0,38')];
+  const satelliteNorth=nodes[nodeIdx.get('0,55')];
+  if(mainSouth&&satelliteNorth) addEdge(mainSouth,satelliteNorth);
+
   // Inner plaza loop: this is the walkable counterpart of the central ring
   // mesh added in addPaths(). It connects to each arterial without entering
   // the fountain basin.
@@ -3788,6 +3793,11 @@ function connectToGrid(p,graph) {
       if(node&&node.adj.length&&!pathBlocked(p.x,p.z,x,p.z)) return node;
     }
   }
+  const satelliteNode = SATELLITE_CITY.roadNodes
+    .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z)])
+    .filter(node=>node && node.adj.length)
+    .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+  if(satelliteNode && p.z > 52 && !pathBlocked(p.x,p.z,satelliteNode.x,satelliteNode.z)) return satelliteNode;
   return null;
 }
 
@@ -3873,6 +3883,10 @@ function roadEntry(p) {
   const buildingEntry=buildingRoadEntry(p);
   if(buildingEntry) return buildingEntry;
   if(isRoadPoint(p)) return snapToRoadClear(p);
+  if(p.z>=52){
+    const nearest=SATELLITE_CITY.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
+    return new THREE.Vector3(nearest[0],0,nearest[1]);
+  }
   const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
   const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
   const cands=[[rx,z],[x,rz],[rx,rz],[nearestRoadCoord2(x),rz],[rx,nearestRoadCoord2(z)]];
@@ -3893,7 +3907,11 @@ function nearestRoadPoint(p) {
 }
 
 function nearestRoadCoord(v) {
-  return ROAD_COORDS.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,ROAD_COORDS[0]);
+  return nearestCoord(v,ROAD_COORDS);
+}
+
+function nearestCoord(v,coords) {
+  return coords.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,coords[0]);
 }
 
 function nearestRoadCoord2(v) {

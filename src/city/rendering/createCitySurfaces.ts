@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from '../../rendering/layers';
+import { SATELLITE_CITY } from '../cityConfig';
 
 type MaterialOptions = THREE.MeshStandardMaterialParameters & {
   tex?: string;
@@ -90,11 +91,20 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
       scene.add(grass);
     }
 
+    const satelliteMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 10, ry: 9 });
+    const satellite = new THREE.Mesh(new THREE.PlaneGeometry(SATELLITE_CITY.width, SATELLITE_CITY.depth), satelliteMat);
+    satellite.rotation.x = -Math.PI / 2;
+    satellite.position.set(0, SURFACE_Y.district, SATELLITE_CITY.centerZ);
+    satellite.receiveShadow = true;
+    satellite.renderOrder = RENDER_ORDER.district;
+    scene.add(satellite);
+
     groundMaterials.push(
       { mat: farMat, day: 0xd8d4cc, night: 0x9a988e },
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
+      { mat: satelliteMat, day: 0xe0d8cc, night: 0xb4b0a4 },
     );
     return farMat;
   }
@@ -102,7 +112,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
   function addPaths(): void {
     const pathColor = isNight ? colors.nightPath : colors.dayPath;
     const roadWidth = (position: number) => position === 0 ? 2.4 : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
-    const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road') => {
+    const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road', district = '') => {
       const material = createLayerMaterial({
         color: main ? colors.asphalt : pathColor,
         roughness: 1,
@@ -115,6 +125,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
       road.position.set(x, SURFACE_Y.road, z);
       road.renderOrder = RENDER_ORDER.road;
       road.receiveShadow = true;
+      if(district) road.userData.district = district;
       scene.add(road);
     };
 
@@ -124,6 +135,27 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     addRoadSegment(38.8, 2.4, 23.6, 0, true, 'asphalt');
     addRoadSegment(2.4, 2.0, 0, -39.0, true, 'asphalt');
     addRoadSegment(2.4, 2.0, 0, 39.0, true, 'asphalt');
+
+    SATELLITE_CITY.roadSegments.forEach((segment, index) => {
+      const [x1, z1, x2, z2] = segment as [number, number, number, number];
+      const width = index === 0 ? 2.4 : 1.45;
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const length = Math.hypot(dx, dz);
+      const road = new THREE.Mesh(new THREE.BoxGeometry(width, 0.04, length), createLayerMaterial({
+        color: index === 0 ? colors.asphalt : pathColor,
+        roughness: 1,
+        tex: index === 0 ? 'asphalt' : 'pavement',
+        rx: Math.max(1, width / 3),
+        ry: Math.max(1, length / 3),
+      }));
+      road.position.set((x1 + x2) / 2, SURFACE_Y.road, (z1 + z2) / 2);
+      road.rotation.y = -Math.atan2(dx, dz);
+      road.renderOrder = RENDER_ORDER.road;
+      road.receiveShadow = true;
+      road.userData.district = index === 0 ? 'satellite-connector' : 'satellite-road';
+      scene.add(road);
+    });
 
     const minorCoords = roadCoords.filter((position) => position !== 0);
     for (const position of minorCoords) {
