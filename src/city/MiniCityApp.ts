@@ -11,6 +11,7 @@ import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, skipCG, startCG } from './cg';
+import { MultiplayerClient } from '../network/MultiplayerClient';
 
 const resources = new ResourcePool();
 let animationFrame = 0;
@@ -688,6 +689,7 @@ const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList =
 const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
 let playerPath = [];
+let pendingBuilding = null;
 let playerMarker = null; // 玩家头顶的三角标记，用于高亮
 let cameraZoom; // 当前视野宽度，由滚轮/双指缩放调整
 let lastFrameTime = performance.now();
@@ -706,6 +708,13 @@ let dialogOpen = false, activeNpc = null, activeNode = null;
 let pendingDistance = 0;
 let gameClock = 9; // 游戏时间（小时）：现实 1 分钟 = 游戏 1 小时
 let gameTimeRef = Date.now(); // 实时时间的锚点：页面加载瞬间视为早上 9 点
+let multiplayer = null;
+const remotePlayers = new Map();
+let lastNetworkPosition = 0;
+let onlinePlayers = [];
+const residences = [];
+let currentHouses = [];
+let selectedResidenceId = null;
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -783,6 +792,7 @@ function init() {
   updateWelcome();
 
   checkLogin();
+  setupMultiplayerUI();
 }
 
 // ── Renderer / Camera / Scene / Lighting ──────────────────────────────────────
@@ -1841,7 +1851,8 @@ function addDistrictBuildings() {
     const dist=Math.max(Math.abs(x),Math.abs(z));
     const density = dist>24 ? 0.5 : dist>12 ? 0.8 : 1;
     [[0,0],[-1.35,1.15],[1.25,-1.2]].forEach(([dx,dz],k)=>{
-      if(Math.random()>density)return;
+      const seeded=Math.abs(Math.round((x+41)*97+(z+43)*193+k*389))%1000/1000;
+      if(seeded>density)return;
       const lx=x+dx, lz=z+dz;
       if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
       const blocked=buildings.some(b=>Math.hypot(b.x-lx,b.z-lz)<2.8);
@@ -1875,7 +1886,11 @@ function addSmallBlock(x,y,z,type,i) {
     const wx=-w/2+0.35+(n%2)*0.7, wy=0.42+Math.floor(n/2)*0.42;
     part(g,new THREE.BoxGeometry(0.22,0.16,0.03),{color:0xB8CCEA,emissive:0xA8C8F8,emissiveIntensity:isNight?0.12:0.02,roughness:0.2},[wx,wy,d/2+0.02],false);
   }
-  g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2; scene.add(g);
+  const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
+  g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
+  g.traverse((object)=>{ if(object.isMesh) object.userData.residenceId=residenceId; });
+  scene.add(g); raycastBuildingGroups.push(g);
+  residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅`,group:g});
   // ── 建筑下面的小地块贴图（成片共享纹理）──
   const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
   const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];
@@ -2167,7 +2182,7 @@ function addCharacters() {
   });
   cursorChar=makeCharacter(0xA8C8F8,0x3B6FE0);
   // Spawn point offset slightly from center — per user request
-  cursorChar.position.set(1.5, 0, -1.5);
+  cursorChar.position.set(0, 0, -6);
   cursorChar.visible=false; scene.add(cursorChar);
   playerMarker=makePlayerMarker();
   playerMarker.position.y=0.95; cursorChar.add(playerMarker);
@@ -2535,6 +2550,179 @@ function onMouseMove(e) {
     if(b&&b!==hoveredB){if(hoveredB)unhover(hoveredB);hover(b);}
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
 }
+
+// ── Multiplayer ────────────────────────────────────────────────────────────────
+function setupMultiplayerUI() {
+  const toggle = document.getElementById('onlinePanelToggle');
+  const panel = document.getElementById('onlinePanel');
+  const form = document.getElementById('chatForm');
+  const input = document.getElementById('chatInput');
+  if (!toggle || !panel || !form || !input) return;
+  toggle.addEventListener('click', () => panel.classList.toggle('open'), { signal: eventController.signal });
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    multiplayer?.chat(text);
+    input.value = '';
+  }, { signal: eventController.signal });
+  document.querySelectorAll('[data-online-tab]').forEach((tab) => tab.addEventListener('click', () => {
+    const target = tab.dataset.onlineTab;
+    document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item === tab));
+    document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === `online${target === 'chat' ? 'Chat' : 'Houses'}View`));
+  }, { signal: eventController.signal }));
+}
+
+function setupMultiplayer(nickname) {
+  if (multiplayer) return;
+  multiplayer = new MultiplayerClient({
+    connection: (state) => {
+      const dot = document.getElementById('onlineStateDot');
+      const count = document.getElementById('onlineCount');
+      dot?.classList.toggle('connected', state === 'connected');
+      if (state !== 'connected' && count) count.textContent = '连接中';
+    },
+    connected: (user, players, houses) => {
+      onlinePlayers = players.filter((player) => player.id !== user.id);
+      if (cursorChar) {
+        const unsafe = Math.hypot(user.position.x, user.position.z) < FOUNTAIN_CLEAR || pointInAnyBuilding(user.position.x, user.position.z);
+        if (unsafe) {
+          cursorChar.position.set(0, 0, -6);
+          multiplayer?.position({ x: 0, y: 0, z: -6, rotation: 0 });
+        } else {
+          cursorChar.position.set(user.position.x, 0, user.position.z);
+          cursorChar.rotation.y = user.position.rotation ?? 0;
+        }
+      }
+      players.forEach(addRemotePlayer);
+      renderHouseList(houses);
+      updateOnlineCount(players.length);
+    },
+    playerJoined: (player) => { onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
+    playerMoved: (id, position) => {
+      const remote = remotePlayers.get(id);
+      if (remote) { remote.target.set(position.x, position.y, position.z); remote.rotation = position.rotation ?? remote.rotation; }
+    },
+    playerLeft: (id) => { onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
+    chat: (message) => appendChat(message.nickname, message.text, message.userId === multiplayer?.user?.id),
+    houses: renderHouseList,
+    error: (message) => showUnlockToast(message),
+  });
+  multiplayer.connect(nickname);
+}
+
+function updateOnlineCount(count) {
+  const el = document.getElementById('onlineCount');
+  if (el) el.textContent = `${Math.max(0, count)} 人在线`;
+}
+
+function addRemotePlayer(player) {
+  if (!player?.id || player.id === multiplayer?.user?.id || remotePlayers.has(player.id)) return;
+  const mesh = makeCharacter(0xF0C18A, 0xC45A4A);
+  mesh.position.set(player.position.x, player.position.y, player.position.z);
+  mesh.rotation.y = player.position.rotation ?? 0;
+  mesh.userData.remotePlayerId = player.id;
+  scene.add(mesh);
+  remotePlayers.set(player.id, { mesh, target: new THREE.Vector3(player.position.x, player.position.y, player.position.z), rotation: player.position.rotation ?? 0, nickname: player.nickname });
+}
+
+function removeRemotePlayer(id) {
+  const remote = remotePlayers.get(id);
+  if (!remote) return;
+  scene.remove(remote.mesh);
+  remote.mesh.traverse((object) => { if (object.geometry) object.geometry.dispose(); if (object.material?.dispose) object.material.dispose(); });
+  remotePlayers.delete(id);
+}
+
+function updateRemotePlayers(delta) {
+  remotePlayers.forEach((remote) => {
+    remote.mesh.position.lerp(remote.target, Math.min(1, delta * 12));
+    remote.mesh.rotation.y += Math.atan2(Math.sin(remote.rotation - remote.mesh.rotation.y), Math.cos(remote.rotation - remote.mesh.rotation.y)) * Math.min(1, delta * 12);
+  });
+}
+
+function appendChat(nickname, text, own) {
+  const log = document.getElementById('chatLog');
+  if (!log) return;
+  const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
+  const author = document.createElement('b'); author.textContent = nickname;
+  const body = document.createElement('span'); body.textContent = text;
+  row.append(author, body); log.appendChild(row);
+  while (log.children.length > 80) log.firstElementChild?.remove();
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderHouseList(houses) {
+  const list = document.getElementById('houseList');
+  if (!list) return;
+  currentHouses=houses;
+  list.replaceChildren();
+  const mine = multiplayer?.user?.id;
+  if(selectedResidenceId){
+    const residence=residences.find((item)=>item.id===selectedResidenceId);
+    const selectedHouse=houses.find((house)=>house.buildingId===selectedResidenceId);
+    const focus=document.createElement('article'); focus.className='house-focus';
+    const title=document.createElement('strong'); title.textContent=selectedHouse?.name||residence?.label||selectedResidenceId;
+    const state=document.createElement('span'); state.textContent=selectedHouse?`已入住 ${selectedHouse.members.length}/10`:'闲置住宅';
+    focus.append(title,state);
+    if(!selectedHouse){
+      const claim=document.createElement('button'); claim.textContent='认领这间住宅';
+      claim.onclick=()=>multiplayer?.housing('claim',{buildingId:selectedResidenceId});
+      focus.appendChild(claim);
+    }
+    list.appendChild(focus);
+  }
+  if (!houses.length) {
+    const empty = document.createElement('p'); empty.className = 'house-empty'; empty.textContent = '还没有被认领的住宅。'; list.appendChild(empty);
+  }
+  houses.forEach((house) => {
+    const row = document.createElement('article'); row.className = 'house-row';
+    const title = document.createElement('strong'); title.textContent = house.name || house.buildingId;
+    const detail = document.createElement('span'); detail.textContent = `${house.members.length}/10 · 所有者 ${house.ownerNickname}`;
+    const members = document.createElement('small'); members.textContent = house.members.map((member) => member.nickname).join('、');
+    row.append(title, detail, members);
+    if (house.ownerId === mine) {
+      const actions = document.createElement('div'); actions.className = 'house-actions';
+      const rename = document.createElement('button'); rename.textContent = '改名'; rename.onclick = () => { const name = window.prompt('住宅名称', house.name || ''); if (name?.trim()) multiplayer?.housing('rename', { buildingId: house.buildingId, name }); };
+      const invite = document.createElement('button'); invite.textContent = '邀请'; invite.onclick = () => {
+        const candidates = onlinePlayers.filter((player) => !houses.some((item) => item.members.some((member) => member.userId === player.id)));
+        const selected = chooseUser('邀请哪位在线居民？', candidates);
+        if (selected) multiplayer?.housing('invite', { buildingId: house.buildingId, userId: selected });
+      };
+      const manage = document.createElement('button'); manage.textContent = '成员'; manage.onclick = () => {
+        const members = house.members.filter((member) => member.userId !== mine);
+        const selected = chooseUser('管理哪位成员？', members.map((member) => ({ id: member.userId, nickname: member.nickname })));
+        if (!selected) return;
+        const action = window.prompt('输入 kick 踢出，或 transfer 转让住宅', 'kick');
+        if (action === 'kick') multiplayer?.housing('kick', { buildingId: house.buildingId, userId: selected });
+        if (action === 'transfer') multiplayer?.housing('transfer', { buildingId: house.buildingId, userId: selected });
+      };
+      const release = document.createElement('button'); release.textContent = '放弃'; release.onclick = () => { if (window.confirm('确认放弃这间住宅？')) multiplayer?.housing('release', { buildingId: house.buildingId }); };
+      actions.append(rename, invite, manage, release); row.appendChild(actions);
+    } else if (house.members.some((member) => member.userId === mine)) {
+      const leave = document.createElement('button'); leave.className = 'house-leave'; leave.textContent = '退出'; leave.onclick = () => multiplayer?.housing('leave', { buildingId: house.buildingId }); row.appendChild(leave);
+    }
+    list.appendChild(row);
+  });
+  if(!selectedResidenceId){
+    const hint=document.createElement('p'); hint.className='house-select-hint'; hint.textContent='点击地图中的小型居民楼，可查看或认领该住宅。'; list.appendChild(hint);
+  }
+}
+
+function openResidence(residenceId) {
+  selectedResidenceId=residenceId;
+  document.getElementById('onlinePanel')?.classList.add('open');
+  document.querySelectorAll('[data-online-tab]').forEach((tab)=>tab.classList.toggle('active',tab.dataset.onlineTab==='houses'));
+  document.querySelectorAll('.online-view').forEach((view)=>view.classList.toggle('active',view.id==='onlineHousesView'));
+  renderHouseList(currentHouses);
+}
+
+function chooseUser(question, users) {
+  if (!users.length) { showUnlockToast('当前没有可选择的在线居民'); return null; }
+  const choices = users.map((user, index) => `${index + 1}. ${user.nickname}`).join('\n');
+  const value = Number(window.prompt(`${question}\n${choices}`, '1'));
+  return Number.isInteger(value) && users[value - 1] ? users[value - 1].id : null;
+}
 function onCanvasClick() {
   if (dialogOpen) return;
   raycaster.setFromCamera(mouse2D,camera);
@@ -2546,6 +2734,8 @@ function onCanvasClick() {
   if(npcHit){ talkToOrWalk(npcHit); return; }
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
+    const residenceId=hits[0].object.userData.residenceId;
+    if(residenceId){ openResidence(residenceId); return; }
     const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);
     if(b){ interactOrWalk(b); return; }
   }
@@ -2572,8 +2762,10 @@ function interactOrWalk(b) {
     cursorChar.position.z - b.group.position.z
   ) : Infinity;
   if(cursorChar && buildingDistance<=CONFIG.buildingInteractRadius){
+    pendingBuilding=null;
     navigateTo(b);
   } else {
+    pendingBuilding=b;
     movePlayerTo(b.group.position);
   }
 }
@@ -2677,6 +2869,7 @@ function loop() {
   const delta=Math.min((now-lastFrameTime)/1000,0.05);
   lastFrameTime=now;
   updatePlayerMovement(delta);
+  updateRemotePlayers(delta);
   npcList.forEach(npc=>{
     if(!npc.mesh.visible||npc.walking===false) return;
     npcYieldToPlayer(npc);
@@ -2856,7 +3049,14 @@ function movePlayerTo(target) {
 }
 
 function updatePlayerMovement(delta) {
-  if(!cursorChar||!playerPath.length)return;
+  if(!cursorChar||!playerPath.length){
+    if(pendingBuilding && cursorChar){
+      const b=pendingBuilding;
+      const distance=Math.hypot(cursorChar.position.x-b.group.position.x,cursorChar.position.z-b.group.position.z);
+      if(distance<=CONFIG.buildingInteractRadius){ pendingBuilding=null; navigateTo(b); }
+    }
+    return;
+  }
   if(dialogOpen){ playerPath=[]; return; }
   const target=playerPath[0];
   const dx=target.x-cursorChar.position.x, dz=target.z-cursorChar.position.z;
@@ -2883,6 +3083,10 @@ function updatePlayerMovement(delta) {
     }
   });
   cursorChar.rotation.y=Math.atan2(dx,dz);
+  if(multiplayer && performance.now()-lastNetworkPosition>=80){
+    multiplayer.position({x:cursorChar.position.x,y:cursorChar.position.y,z:cursorChar.position.z,rotation:cursorChar.rotation.y});
+    lastNetworkPosition=performance.now();
+  }
   pendingDistance+=step;
   if(pendingDistance>=10){ const d=Math.floor(pendingDistance); pendingDistance-=d; flushDistance(d); }
 }
@@ -3356,6 +3560,7 @@ function proceedToCity() {
   entranceAnimation();
   if(cursorChar){ cursorChar.visible=true; }
   startTimeTracking();
+  setupMultiplayer(localStorage.getItem('minicityUser')||'居民');
   checkAchievements();
 }
 
@@ -3630,6 +3835,9 @@ export function destroyMiniCity() {
   cancelAnimationFrame(animationFrame);
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
+  multiplayer?.close();
+  multiplayer=null;
+  remotePlayers.clear();
   destroyCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());

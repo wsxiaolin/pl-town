@@ -11,6 +11,21 @@ npm run dev
 
 开发地址默认是 `http://localhost:5173`。
 
+## 联机前端
+
+前端已经接入根目录下的 `server/` WebSocket 服务。默认开发时连接
+`ws://当前网页主机:8787`。如果服务器地址不同，在启动 Vite 前设置
+`VITE_SERVER_URL`，例如：
+
+```powershell
+$env:VITE_SERVER_URL='wss://example.org'
+npm run dev
+```
+
+右下角“联机”面板提供全服文字公聊和住宅状态。点击地图中的小型居民楼可以查看、
+认领和管理住宅。临时身份恢复令牌保存在浏览器 `localStorage` 中，聊天正文不会写入
+数据库。服务器启动方式和消息协议见 [`server/README.md`](server/README.md)。
+
 ```bash
 npm run typecheck
 npm run build
