@@ -18,6 +18,7 @@ export const RENDER_ORDER = Object.freeze({
   buildingPlot: 4,
   road: 5,
   roadMarking: 6,
+  water: 6.5,
   transparentSurface: 7,
   overlay: 10,
 });

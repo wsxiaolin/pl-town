@@ -699,7 +699,7 @@ let mapMode = false; // 全景地图弹层是否打开
 let mapShotData = null;    // 启动时俯视截取的全城图（dataURL）
 let mapShotRenderer = null, mapShotCam = null;
 const MAP_SHOT = 1024;     // 截图像素边长
-const MAP_SHOT_SPAN = 120;
+const MAP_SHOT_SPAN = 48;  // 半边长：只框住主城（外围环线 r≈38），卫星城在下方便不进入画面
 let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let dialogOpen = false, activeNpc = null, activeNode = null;
@@ -915,9 +915,11 @@ function buildTower(cfg) {
   const top = PLH+bh;
   part(g, new THREE.BoxGeometry(bw+0.2,0.12,bw+0.2), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:2,ry:2}, [0,top+0.06,0]);
   part(g, new THREE.BoxGeometry(1.1,0.72,1.1), {color:0xF9F8F6,roughness:0.06,tex:'glass',rx:1,ry:1}, [0,top+0.12+0.36,0]);
-  part(g, new THREE.BoxGeometry(1.22,0.08,1.22), {color:P.ROOF_RIM,roughness:0.4,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.04,0]);
-  part(g, new THREE.CylinderGeometry(0.022,0.022,0.7,8), {color:0xD0CFCC,roughness:0.5,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.08+0.35,0]);
-  const tipY = top+0.12+0.72+0.08+0.7+0.07;
+  // Roof slab raised so its bottom clears the glass box top (top+0.12+0.72) —
+  // coplanar faces there caused the lighthouse-edge flicker.
+  part(g, new THREE.BoxGeometry(1.22,0.08,1.22), {color:P.ROOF_RIM,roughness:0.4,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.12,0]);
+  part(g, new THREE.CylinderGeometry(0.022,0.022,0.7,8), {color:0xD0CFCC,roughness:0.5,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.16+0.35,0]);
+  const tipY = top+0.12+0.72+0.16+0.35+0.35+0.07;
   part(g, new THREE.SphereGeometry(0.07,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.4}, [0,tipY,0], false);
   part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
   g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
@@ -1104,14 +1106,15 @@ function buildScreen(cfg) {
   const top = 0.25+bh;
   // Roof slab
   part(g, new THREE.BoxGeometry(bw+0.3,0.12,1.0), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:3,ry:1}, [0,top+0.06,0]);
-  // Glowing screen on front face
+  // Glowing screen on front face — layers stepped outward with clear gaps so no
+  // coplanar faces z-fight (screen→frame→glow lines all distinct depths).
   const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1});
-  part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.04), screenMat, [0,0.25+bh*0.5,0.32], false);
+  part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.05), screenMat, [0,0.25+bh*0.5,0.41], false);
   // Screen frame
-  part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.06), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.30], false);
+  part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.05), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.34], false);
   // Screen glow lines
   for (let i = 0; i < 4; i++) {
-    part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.02), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2}, [0,0.25+bh*0.3+i*0.4,0.34], false);
+    part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.03), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2}, [0,0.25+bh*0.3+i*0.4,0.475], false);
   }
   // Antenna on top
   part(g, new THREE.CylinderGeometry(0.03,0.03,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0,top+0.12+0.25,0]);
@@ -2032,19 +2035,22 @@ function addFlowerbed(x, y, z) {
 function addPond(cx, cz, r) {
   const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
   const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
-  pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.03, cz); scene.add(pond);
+  // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.036) so
+  // the surrounding ground never z-fights through the pond.
+  pond.renderOrder = RENDER_ORDER.water;
+  pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);
   // Stone border
   for (let i = 0; i < 12; i++) {
     const a = (i/12)*Math.PI*2;
     const stone = part(null, new THREE.SphereGeometry(0.15, 8, 8), {color:0xC4A86D, roughness:0.7, tex:'stone', rx:1, ry:1});
-    stone.position.set(cx+Math.cos(a)*r, 0.05, cz+Math.sin(a)*r);
+    stone.position.set(cx+Math.cos(a)*r, 0.09, cz+Math.sin(a)*r);
     scene.add(stone);
   }
   // Lily pads
   for (let i = 0; i < 3; i++) {
     const a = Math.random()*Math.PI*2, d = Math.random()*r*0.6;
     const lily = part(null, new THREE.CircleGeometry(0.12+Math.random()*0.05, 8), {color:0x5A8A3A, roughness:0.9, tex:'grass', rx:1, ry:1});
-    lily.rotation.x = -Math.PI/2; lily.position.set(cx+Math.cos(a)*d, 0.04, cz+Math.sin(a)*d);
+    lily.rotation.x = -Math.PI/2; lily.position.set(cx+Math.cos(a)*d, 0.08, cz+Math.sin(a)*d);
     scene.add(lily);
   }
 }
@@ -2460,6 +2466,14 @@ function setupRenderSettings(signal: AbortSignal) {
   const exposure = panel.querySelector('#renderExposure') as HTMLInputElement;
   const exposureValue = panel.querySelector('#renderExposureValue');
   resolution.value = String(settings.resolution);
+  // Let the user push resolution all the way to (and beyond) the device pixel
+  // ratio; on high-DPI screens that is real supersampling, not a no-op.
+  if(resolution) {
+    const dpr=window.devicePixelRatio||1;
+    resolution.min='0.5';
+    resolution.max=String(Math.max(4, dpr));
+    resolution.step='0.25';
+  }
   antialias.checked = settings.antialias;
   anisotropy.value = String(settings.anisotropy);
   shadows.checked = settings.shadows;
@@ -2708,7 +2722,19 @@ function captureMapShot() {
     mapShotRenderer.toneMappingExposure=1.0;
     if(THREE.SRGBColorSpace) mapShotRenderer.outputColorSpace=THREE.SRGBColorSpace;
   }
+  // The satellite town lives south of the main city (z>=44). Keep it off the
+  // overview map so the paper only shows the main city.
+  const hiddenSatellite=[];
+  scene.traverse(obj=>{
+    const p=new THREE.Vector3();
+    obj.getWorldPosition(p);
+    if(p.z>=44&&obj.isMesh&&obj.visible){
+      hiddenSatellite.push(obj);
+      obj.visible=false;
+    }
+  });
   mapShotRenderer.render(scene,mapShotCam);
+  hiddenSatellite.forEach(obj=>{ obj.visible=true; });
   mapShotData=mapShotRenderer.domElement.toDataURL('image/png');
   mapShotRenderer.dispose();
   mapShotRenderer.forceContextLoss();
@@ -2729,8 +2755,8 @@ function updateMapMarker() {
   if(!marker||!cursorChar)return;
   const left=((cursorChar.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
    const top=((MAP_SHOT_SPAN-cursorChar.position.z)/(2*MAP_SHOT_SPAN))*100;
-  marker.style.left=left+'%';
-  marker.style.top=top+'%';
+  marker.style.left=clamp(left,0,100)+'%';
+  marker.style.top=clamp(top,0,100)+'%';
 }
 
 // ── 地图图标：建筑只标小图标，点击弹小介绍 ────────────────────────────────────
@@ -2880,18 +2906,44 @@ function buildRoadPath(from, rawTarget) {
     if(gridPath&&gridPath.length){
       const pts=[start];
       for(let i=1;i<gridPath.length;i++) pts.push(new THREE.Vector3(gridPath[i].x,0,gridPath[i].z));
-      pts.push(end);
-      const out=pts.filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
-      if(out.length) return out;
+      // Never end a leg inside a building footprint, and never strike the final
+      // approach across a building: stop on the road instead.
+      const approachClear=!pointInAnyBuilding(end.x,end.z)
+        && !segHitsBuilding(pts[pts.length-1].x,pts[pts.length-1].z,end.x,end.z)
+        && !pathBlocked(pts[pts.length-1].x,pts[pts.length-1].z,end.x,end.z);
+      if(approachClear) pts.push(end);
+      // Straighten collinear runs along the SAME road line only — never cut
+      // diagonally across building blocks or open ground.
+      const out=[];
+      for(const p of pts){
+        if(out.length>=2){
+          const a=out[out.length-2], b=out[out.length-1];
+          const sameLine=(a.x===b.x&&b.x===p.x)||(a.z===b.z&&b.z===p.z);
+          if(sameLine&&!segHitsBuilding(a.x,a.z,p.x,p.z)&&!pathBlocked(a.x,a.z,p.x,p.z)){
+            out.pop();
+          }
+        }
+        out.push(p);
+      }
+      const filtered=out.filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
+      if(filtered.length>1) return filtered;
     }
   }
-  // Never use an unchecked L-path here: it can cross a building or a missing
-  // road segment. Stop at the safe road entry when no connected route exists.
-  return start.distanceTo(end)>0.05 ? [start] : [start];
+  // No connected route — never cut across open ground into a building. Walking
+  // to the nearest road entry is still safe when the hop itself is clear.
+  if(!pointInAnyBuilding(start.x,start.z)&&!pathBlocked(from.x,from.z,start.x,start.z)&&start.distanceTo(end)>0.05) return [start];
+  return [];
 }
 
 // ── Road network graph (grid A* over the 7×7 intersections) ─────────────────
 const FOUNTAIN_CLEAR = 1.95;  // keep walking paths clear of the center fountain
+// Walkable ring around the fountain plaza (radius 2.7) — also used by roadEntry
+// so a player standing in the plaza snaps onto the closest plaza point instead
+// of being pushed toward a far grid corner.
+const PLAZA_POINTS = Array.from({length:8},(_,i)=>{
+  const a=i/8*Math.PI*2;
+  return [Number((Math.cos(a)*2.7).toFixed(3)), Number((Math.sin(a)*2.7).toFixed(3))];
+});
 let roadGraph=null;
 
 function getRoadGraph() {
@@ -2945,15 +2997,9 @@ function getRoadGraph() {
   const satelliteNorth=nodes[nodeIdx.get('0,55')];
   if(mainSouth&&satelliteNorth) addEdge(mainSouth,satelliteNorth);
 
-  // Inner plaza loop: this is the walkable counterpart of the central ring
-  // mesh added in addPaths(). It connects to each arterial without entering
-  // the fountain basin.
-  const plazaNodes=[];
-  const plazaR=2.7;
-  for(let i=0;i<8;i++){
-    const a=i/8*Math.PI*2;
-    plazaNodes.push(addNode(Number((Math.cos(a)*plazaR).toFixed(3)),Number((Math.sin(a)*plazaR).toFixed(3))));
-  }
+  // Inner plaza loop: the walkable counterpart of the central ring mesh added
+  // in addPaths(). It connects to each arterial without entering the fountain.
+  const plazaNodes=PLAZA_POINTS.map(([x,z])=>addNode(x,z));
   plazaNodes.forEach((n,i)=>addEdge(n,plazaNodes[(i+1)%plazaNodes.length]));
   [[0,-6,0,-2.7],[6,0,2.7,0],[0,6,0,2.7],[-6,0,-2.7,0]].forEach(([x1,z1,x2,z2])=>{
     const a=nodes[nodeIdx.get(x1+','+z1)];
@@ -3007,7 +3053,8 @@ function aStarRoad(sNode,eNode,graph) {
   return null;
 }
 
-// Snap a road-line point to the nearest reachable grid intersection.
+// Snap a road-line point to the nearest reachable intersection on the network
+// (grid, central plaza ring, outer ring or satellite roads).
 function connectToGrid(p,graph) {
   const key=p.x+','+p.z;
   if(graph.nodeIdx.has(key)) {
@@ -3028,12 +3075,22 @@ function connectToGrid(p,graph) {
       if(node&&node.adj.length&&!pathBlocked(p.x,p.z,x,p.z)) return node;
     }
   }
+  // Nearest reachable node anywhere on the network. This handles spawn in the
+  // fountain plaza, corner off-grid spots and satellite drives: the player is
+  // snapped to the CLOSEST clear node so it never gets pushed the wrong way.
   const satelliteNode = SATELLITE_CITY.roadNodes
     .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z)])
     .filter(node=>node && node.adj.length)
     .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
-  if(satelliteNode && p.z > 52 && !pathBlocked(p.x,p.z,satelliteNode.x,satelliteNode.z)) return satelliteNode;
-  return null;
+  if(satelliteNode && p.z>=44 && !pathBlocked(p.x,p.z,satelliteNode.x,satelliteNode.z)) return satelliteNode;
+  let best=null, bestD=Infinity;
+  for(const node of graph.nodes){
+    if(!node.adj.length) continue;
+    const d=Math.hypot(node.x-p.x,node.z-p.z);
+    if(d>=bestD) continue;
+    if(!pathBlocked(p.x,p.z,node.x,node.z)){ best=node; bestD=d; }
+  }
+  return best;
 }
 
 // Malls/schools sit ON the outer arterial lines; a road-line target that lands
@@ -3080,14 +3137,30 @@ function buildingRoadEntry(p) {
       : p.x;
     candidates.push(new THREE.Vector3(x,0,z));
   });
+  // Satellite-town buildings live off the main grid; snap to their road nodes.
+  if(p.z>=44){
+    SATELLITE_CITY.roadNodes.forEach(([x,z])=>candidates.push(new THREE.Vector3(x,0,z)));
+  }
   candidates.sort((a,b)=>{
     const da=a.distanceTo(p), db=b.distanceTo(p);
     return da-db || Math.abs(a.x)+Math.abs(a.z)-Math.abs(b.x)-Math.abs(b.z);
   });
-  return candidates.find(q=>{
+  const clear=q=>{
     if(q.x>=owner.minX&&q.x<=owner.maxX&&q.z>=owner.minZ&&q.z<=owner.maxZ) return false;
-    return !segHitsBuilding(q.x,q.z,q.x,q.z);
+    return !pointInAnyBuilding(q.x,q.z);
+  };
+  return candidates.find(clear) || candidates.find(q=>{
+    return q.x<owner.minX||q.x>owner.maxX||q.z<owner.minZ||q.z>owner.maxZ;
   }) || candidates[0];
+}
+
+// True when (x,z) falls inside any cached building footprint (used to stop the
+// player from being told to walk through or stand inside a building).
+function pointInAnyBuilding(x,z) {
+  for(const bx of buildingBoxes){
+    if(x>=bx.minX&&x<=bx.maxX&&z>=bx.minZ&&z<=bx.maxZ) return true;
+  }
+  return false;
 }
 
 function cacheBuildingBoxes() {
@@ -3118,20 +3191,27 @@ function roadEntry(p) {
   const buildingEntry=buildingRoadEntry(p);
   if(buildingEntry) return buildingEntry;
   if(isRoadPoint(p)) return snapToRoadClear(p);
-  if(p.z>=52){
+  if(p.z>=44){
     const nearest=SATELLITE_CITY.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
-    return new THREE.Vector3(nearest[0],0,nearest[1]);
+    const q=new THREE.Vector3(nearest[0],0,nearest[1]);
+    return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
   }
-  const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
-  const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
-  const cands=[[rx,z],[x,rz],[rx,rz],[nearestRoadCoord2(x),rz],[rx,nearestRoadCoord2(z)]];
-  const seen=[];
-  for(const [cx,cz] of cands){
-    if(Math.abs(cx)>CITY_LIMIT||Math.abs(cz)>CITY_LIMIT)continue;
-    const key=cx.toFixed(2)+','+cz.toFixed(2);
-    if(seen.includes(key))continue; seen.push(key);
-    if(!pathBlocked(x,z,cx,cz)) return new THREE.Vector3(cx,0,cz);
-  }
+  // Otherwise snap to the NEAREST road-line point that can be reached with a
+  // straight clear hop — for the fountain plaza this is the closest plaza
+  // node, so the player never gets pushed toward a far corner first.
+  let best=new THREE.Vector3(0,0,0), bestD=Infinity;
+  const tryPoint=(cx,cz)=>{
+    const q=new THREE.Vector3(cx,0,cz);
+    const d=q.distanceTo(p);
+    if(d<bestD&&!pathBlocked(p.x,p.z,cx,cz)&&!pointInAnyBuilding(cx,cz)){
+      best=q; bestD=d;
+    }
+  };
+  ROAD_COORDS.forEach(x=>{ tryPoint(x,p.z); tryPoint(x,nearestRoadCoord(p.z)); });
+  ROAD_COORDS.forEach(z=>{ tryPoint(p.x,z); tryPoint(nearestRoadCoord(p.x),z); });
+  PLAZA_POINTS.forEach(([x,z])=>tryPoint(x,z));
+  SATELLITE_CITY.roadNodes.forEach(([x,z])=>tryPoint(x,z));
+  if(bestD<Infinity) return best;
   return nearestRoadPoint(p);
 }
 
@@ -3147,10 +3227,6 @@ function nearestRoadCoord(v) {
 
 function nearestCoord(v,coords) {
   return coords.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,coords[0]);
-}
-
-function nearestRoadCoord2(v) {
-  return ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-v)-Math.abs(b-v))[1];
 }
 
 function isRoadPoint(p) {
