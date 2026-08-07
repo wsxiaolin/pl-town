@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { RENDER_ORDER, SURFACE_Y } from '../../rendering/layers';
-import { SATELLITE_CITY } from '../cityConfig';
+import { RENDER_ORDER, SURFACE_Y } from './layers';
+import { SATELLITE_CITY } from '../city/data/cityConfig';
 
 type MaterialOptions = THREE.MeshStandardMaterialParameters & {
   tex?: string;
@@ -30,7 +30,7 @@ type CitySurfaceOptions = {
   addLamps: (positions: number[][]) => void;
 };
 
-export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStandardMaterial {
+export function createCitySurfaces(options: CitySurfaceOptions): void {
   const {
     scene,
     isNight,
@@ -51,11 +51,10 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
     return material;
   };
 
-  const groundMaterial = addGround();
+  addGround();
   addPaths();
-  return groundMaterial;
 
-  function addGround(): THREE.MeshStandardMaterial {
+  function addGround(): void {
     const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
     const farGround = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), farMat);
     farGround.rotation.x = -Math.PI / 2;
@@ -106,7 +105,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): THREE.MeshStand
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
       { mat: satelliteMat, day: 0xe0d8cc, night: 0xb4b0a4 },
     );
-    return farMat;
   }
 
   function addPaths(): void {

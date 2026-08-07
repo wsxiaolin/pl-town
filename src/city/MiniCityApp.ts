@@ -5,9 +5,12 @@ import { ResourcePool } from '../core/ResourcePool';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rendering/createRenderer';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
-import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './cityConfig';
-import { createCitySurfaces } from './rendering/createCitySurfaces';
-import { addRealBuildingModels } from './rendering/realBuildingModels';
+import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './data/cityConfig';
+import { BUILDING_CONTENT, BUILDING_DEFS } from './data/buildings';
+import { NPC_PROFILES } from './data/npcs';
+import { createCitySurfaces } from '../rendering/createCitySurfaces';
+import { addRealBuildingModels } from '../rendering/realBuildingModels';
+import { destroyCG, initCG, shouldShowCG, skipCG, startCG } from './cg';
 
 const resources = new ResourcePool();
 let animationFrame = 0;
@@ -680,7 +683,7 @@ function initTextures() {
 }
 
 // ── Globals ───────────────────────────────────────────────────────────────────
-let renderer, scene, camera, groundMat;
+let renderer, scene, camera;
 const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
 const buildingBoxes = []; // 主建筑的占地 AABB，用于寻路避障
 let cursorChar = null;
@@ -699,7 +702,6 @@ const MAP_SHOT = 1024;     // 截图像素边长
 const MAP_SHOT_SPAN = 120;
 let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
-let cgTimeline = null, cgAutoEnterTimer = null, cgScene5Shown = false;
 let dialogOpen = false, activeNpc = null, activeNode = null;
 let pendingDistance = 0;
 let gameClock = 9; // 游戏时间（小时）：现实 1 分钟 = 游戏 1 小时
@@ -713,548 +715,6 @@ const CONFIG = CITY_CONFIG;
 
 // ── Building config ───────────────────────────────────────────────────────────
 const PLH = BUILDING_PLATFORM_HEIGHT;
-
-const I = (svg) => `<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
-
-const BUILDING_DEFS = [
-  { id:'activity',   num:'01', label:'活动区',     x: 4,  z:-9, shape:'bank',
-    icon:I(`<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>`) },
-  { id:'bulletin',   num:'02', label:'公告板',     x:-4,  z:-9, shape:'board',
-    icon:I(`<rect x="4" y="5" width="16" height="14" rx="1"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>`) },
-  { id:'techhalf',   num:'03', label:'技术半城',   x: 9,  z:-3, shape:'tower',
-    icon:I(`<polyline points="8 6 4 12 8 18"/><polyline points="16 6 20 12 16 18"/>`) },
-  { id:'blackhole',  num:'04', label:'黑洞半城',   x:-9,  z:-3, shape:'darktower',
-    icon:I(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2" fill="#3B6FE0"/>`) },
-  { id:'laws',       num:'05', label:'城的法则',   x: 4,  z: 3, shape:'pavilion',
-    icon:I(`<path d="M12 3v18"/><path d="M6 8h12"/><path d="M6 8l-2 6h4z"/><path d="M18 8l-2 6h4z"/>`) },
-  { id:'library',    num:'06', label:'图书馆',     x:-4,  z: 3, shape:'library',
-    icon:I(`<path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M4 19a2 2 0 0 1 2-2h12"/>`) },
-  { id:'litreview',  num:'07', label:'文学审核部', x:-9,  z: 3, shape:'ruins',
-    icon:I(`<path d="M4 20V8l5-4 5 4v8"/><path d="M14 20V12l6-3v11"/><line x1="4" y1="20" x2="20" y2="20"/>`) },
-  { id:'catcafe',    num:'08', label:'猫咖馆',     x: 9,  z: 3, shape:'skyscraper',
-    icon:I(`<path d="M6 8V5l3 2"/><path d="M18 8V5l-3 2"/><path d="M5 10c0-2 2-3 7-3s7 1 7 3v5c0 3-3 5-7 5s-7-2-7-5z"/>`) },
-  { id:'academy',    num:'09', label:'物实学院',   x: 4,  z: 9, shape:'campus',
-    icon:I(`<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1 2.5 3 6 3s6-2 6-3v-5"/>`) },
-  { id:'news',       num:'10', label:'星尘报社',   x:-4,  z: 9, shape:'kiosk',
-    icon:I(`<rect x="3" y="5" width="18" height="14" rx="1"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/><line x1="7" y1="17" x2="13" y2="17"/>`) },
-  { id:'mutualaid',  num:'11', label:'互助团',     x:-9,  z: 9, shape:'kiosk',
-    icon:I(`<path d="M12 21s-7-5-7-11a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 6-7 11-7 11z"/>`) },
-  { id:'screen',     num:'12', label:'大屏幕',     x: 9,  z: 9, shape:'screen',
-    icon:I(`<rect x="3" y="4" width="18" height="13" rx="1"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/>`) },
-  { id:'elevator',   num:'13', label:'电梯',       x: 9,  z:-9, shape:'shaft',
-    icon:I(`<rect x="6" y="3" width="12" height="18" rx="1"/><line x1="10" y1="8" x2="12" y2="6"/><line x1="12" y1="6" x2="14" y2="8"/><line x1="10" y1="16" x2="12" y2="18"/><line x1="12" y1="18" x2="14" y2="16"/>`) },
-  { id:'residentid', num:'14', label:'居民证',     x:-9,  z:-9, shape:'altar',
-    icon:I(`<rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="8" cy="12" r="2"/><line x1="13" y1="11" x2="18" y2="11"/><line x1="13" y1="14" x2="16" y2="14"/>`) },
-  { id:'stats',      num:'15', label:'STATS',      x:-5.5,z:-5.5,shape:'observatory', isStats:true,
-    icon:I(`<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>`) },
-  { id:'knowledgebase', num:'16', label:'知识库',   x:-15, z:-15, shape:'library',
-    icon:I(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/><path d="M11 8h5"/><path d="M11 12h4"/>`) },
-  { id:'newsstand',     num:'17', label:'报摊',     x:-9,  z:-15, shape:'market',
-    icon:I(`<path d="M4 7h16v11H4z"/><path d="M4 7l2-3h12l2 3"/><path d="M8 11h4"/><path d="M8 14h8"/>`) },
-  { id:'community',     num:'18', label:'社区中心', x: 15, z:-15, shape:'clocktower',
-    icon:I(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M7 11h2"/><path d="M15 11h2"/>`) },
-  { id:'research',      num:'19', label:'研究院',   x: 15, z:-9,  shape:'factory',
-    icon:I(`<path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M8 3h8"/><path d="M8 15h8"/>`) },
-  { id:'commons',       num:'20', label:'众议院',   x:-15, z: 3,  shape:'temple',
-    icon:I(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/><path d="M12 10v8"/><path d="M17 10v8"/><path d="M4 18h16"/>`) },
-  { id:'senate',        num:'21', label:'参议院',   x:-15, z: 9,  shape:'temple',
-    icon:I(`<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/><path d="M4 12h16"/>`) },
-  { id:'writingclub',   num:'22', label:'文训社',   x:-15, z: 15, shape:'factory',
-    icon:I(`<path d="M4 20l4-1 10-10a3 3 0 0 0-4-4L4 15z"/><path d="M13 6l5 5"/>`) },
-  { id:'lab',           num:'23', label:'实验楼',   x: 15, z: 3,  shape:'greenhouse',
-    icon:I(`<path d="M9 3h6"/><path d="M10 3v5l-4 9a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-4-9V3"/><path d="M8 16h8"/>`) },
-  { id:'culturehall',   num:'24', label:'文化馆',   x: 15, z: 9,  shape:'screen',
-    icon:I(`<path d="M4 5h16v14H4z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="M6 19l3-4"/><path d="M18 19l-3-4"/>`) },
-  { id:'teahouse',      num:'25', label:'茶馆',     x: 15, z: 15, shape:'pagoda',
-    icon:I(`<path d="M5 10h12v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 11h1a2 2 0 0 1 0 4h-1"/><path d="M8 6c0-1 1-1 1-2"/><path d="M12 6c0-1 1-1 1-2"/>`) },
-  // ── New city-life buildings (malls & schools) ──
-  { id:'mall_south',    num:'26', label:'南门商场', x: 0,  z:-27, shape:'mall',
-    icon:I(`<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`) },
-  { id:'school_east',   num:'27', label:'东区小学', x: 27, z: 0,  shape:'school',
-    icon:I(`<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`) },
-  { id:'mall_west',     num:'28', label:'西门商场', x:-27, z: 0,  shape:'mall',
-    icon:I(`<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`) },
-  { id:'school_north',  num:'29', label:'北区学院', x: 0,  z: 27, shape:'school',
-    icon:I(`<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`) },
-  { id:'kingice',       num:'30', label:'King Ice',  x: 20, z: 20, shape:'crown',
-    icon:I(`<path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/>`) },
-  // ── 外环扩展建筑 ──
-  { id:'knowledgebase', num:'31', label:'知识库',   x:-33, z:-33, shape:'library',
-    icon:I(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/>`) },
-  { id:'community',     num:'32', label:'社区中心', x: 33, z:-33, shape:'clocktower',
-    icon:I(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>`) },
-  { id:'commons',       num:'33', label:'众议院',   x:-33, z: 0,  shape:'temple',
-    icon:I(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/>`) },
-  { id:'lab',           num:'34', label:'实验楼',   x: 33, z: 0,  shape:'greenhouse',
-    icon:I(`<path d="M9 3h6"/><path d="M10 3v5l-4 9a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-4-9V3"/>`) },
-  { id:'teahouse',      num:'35', label:'茶馆',     x: 33, z: 33, shape:'pagoda',
-    icon:I(`<path d="M5 10h12v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 11h1a2 2 0 0 1 0 4h-1"/>`) },
-  { id:'writingclub',   num:'36', label:'文训社',   x:-33, z: 33, shape:'factory', facade:'facade_library',
-    icon:I(`<path d="M4 20l4-1 10-10a3 3 0 0 0-4-4L4 15z"/><path d="M13 6l5 5"/>`) },
-  { id:'archive',       num:'37', label:'档案馆',   x:-21, z:-33, shape:'library', facade:'facade_board',
-    icon:I(`<path d="M3 4h18v16H3z"/><path d="M7 4v16"/>`) },
-  { id:'tradingpost',   num:'38', label:'交易所',   x: 21, z:-33, shape:'bank', facade:'facade_market',
-    icon:I(`<path d="M3 10h18v8H3z"/><path d="M3 10l9-5 9 5"/>`) },
-  { id:'records',       num:'39', label:'记录厅',   x:-33, z:-21, shape:'temple', facade:'facade_observatory',
-    icon:I(`<path d="M4 4h16v16H4z"/><path d="M8 8h8"/>`) },
-  { id:'guildhall',     num:'40', label:'公会堂',   x: 33, z:-21, shape:'clocktower', facade:'facade_tower',
-    icon:I(`<path d="M6 20V8h12v12"/><path d="M4 8h16l-2-4H6z"/>`) },
-  { id:'musichall',     num:'41', label:'音乐厅',   x:-21, z: 33, shape:'pavilion', facade:'facade_screen',
-    icon:I(`<path d="M9 18V5l12-2v13"/><circle cx="6" cy="6" r="3"/>`) },
-  { id:'conservatory',  num:'42', label:'温室',     x: 21, z: 33, shape:'greenhouse', facade:'facade_campus',
-    icon:I(`<path d="M12 2L2 12h3v8h14v-8h3z"/>`) },
-  { id:'arena',         num:'43', label:'竞技场',   x:-33, z: 21, shape:'factory', facade:'facade_clocktower',
-    icon:I(`<circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M3 12h18"/>`) },
-  { id:'guesthouse',    num:'44', label:'客栈',     x: 33, z: 21, shape:'pagoda', facade:'facade_kiosk',
-    icon:I(`<path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/>`) },
-  { id:'shrine',        num:'45', label:'神社',     x: 0, z:-33, shape:'altar', facade:'facade_temple',
-    icon:I(`<path d="M4 20h16"/><path d="M6 20V8h12v12"/>`) },
-  { id:'beacon',        num:'46', label:'灯塔',     x: 0, z: 33, shape:'tower', facade:'facade_darktower',
-    icon:I(`<path d="M8 21V5l4-3 4 3v16"/><path d="M8 21h8"/>`) },
-  // ── 特殊建筑 ──
-  { id:'banana_palace',  num:'47', label:'布拿拉宫', x:-30, z: 30, shape:'banana',
-    icon:I(`<path d="M6 14c0-4 2-8 6-8s6 4 6 8c0 3-2 6-6 6s-6-3-6-6z"/><path d="M12 6V3"/>`) },
-  { id:'qipai_hall',     num:'48', label:'棋气派',   x: 30, z: 30, shape:'qipai',
-    icon:I(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`) },
-];
-
-// ── Building dialog content (from copywriting) ────────────────────────────────
-const BUILDING_CONTENT = {
-  activity: {
-    name:'活动区', slogan:'在这里领取你的货币吧。',
-    dialog:[
-      '钱袋落在柜台上，发出一声闷响。',
-      '"在这里想要生存，没钱可不行。"柜台后面的人头也没抬，"必要的时候买些东西，以及……贿赂。"',
-      '你会有越来越多的追随者，没钱给他们可不行。',
-      '「马内的力量，还是大的。」'
-    ]
-  },
-  bulletin: {
-    name:'公告板', slogan:'一块镶了铁框、加了雨棚的木板。',
-    dialog:[
-      '一块普通的大木板，用铁镶了框，还安了雨棚。很明显，这里最近有人来修过。',
-      '纸页都有些发黄了，不过还牢牢粘在上面，不掉下来。凑近一点好好看看——并非传单或小报，而是一堆公告。写这些公告的人做事一定特别有条理，句句分明，就是潦草了些。',
-      '你正看着，一个空旷的声音忽然响起：',
-      '「一座城市，怎么会没有管理人员呢？」',
-      '——哦？难道这里还有"管理人员"？'
-    ]
-  },
-  techhalf: {
-    name:'技术半城', slogan:'你完全可以相信这里。',
-    dialog:[
-      '这里的所有居民都是知识居民，都是很友善的。',
-      '但它对你没有那么友好——在你真正成为居民之前，也就是当你不再需要这本手册时，你才会体会到这里的乐趣。',
-      '也就是说，在别的地方，可能会有危险。',
-      '也有一些新居民偏偏喜欢这里，我们称他们为"新知者"。总有一些另一个半城的居民混进来，管理人员的部分工作，就是把他们请回去。他们居住的房子，我们叫"水实验"。',
-      '「建议：熟悉这里之前，少接触这个区。」'
-    ]
-  },
-  blackhole: {
-    name:'黑洞半城', slogan:'这里包容一切。',
-    dialog:[
-      '正如名字所说的，这里包容一切。你会找到朋友，也会发现……黑暗。',
-      '这里的人鱼龙混杂，尽量避免和坏人接触。什么是坏人？那些被"封禁"的人，他们的"居民权限"失效了——有些只是暂时的，有些是永远的。',
-      '不过，我们允许你展示自己的存在，你可以在半城发布你的作品。在这个半城，你可以做作家、数学家、历史学家……某些方面，它比技术半城更多元。',
-      '「无论在哪一个半城，那些发布\'水作品\'极多的人，都被称为\'伪用户\'。」'
-    ]
-  },
-  laws: {
-    name:'城的法则', slogan:'你违反的每一条法则，都会化作你不甘的泪水。',
-    dialog:[
-      '一卷羊皮纸摊在石台上，字迹工整得近乎冰冷。',
-      '谨记，认真思考管理人员的每一次警告，他们对你的生活有很大影响。',
-      '你要做一个好公民。',
-      '「法则不是束缚，是这座城还在运转的理由。」'
-    ]
-  },
-  library: {
-    name:'图书馆', slogan:'这里是珍藏知识的地方。',
-    dialog:[
-      '推门进去，空气里是旧纸和木头的味道。',
-      '技术半城的人们绞尽脑汁，为大家做出了一些优质作品，他们为了让更多人居住在技术半城而努力贡献。如果你选择住在技术半城，一些基本的知识你要明白——《实验记录》会给予你很大帮助。',
-      '黑洞半城的人们也不落后，有些大佬就出现在这个半城。《这都是知识》里收录了他们的智慧。',
-      '想当管理人员？翻开《志愿者要求一览》——志愿者是管理人员的基础。怀念外部世界吗？了解一下法律吧，这对你回去有很大帮助。',
-      '角落里，一本厚厚的《物实百科全书》静静躺着，记载着这座城的历史与文化。旁边的小说合集，则承诺"文学可以带给你乐趣"。',
-      '「招募图书管理员、收集员，欢迎大家。」',
-      '待收集：杂文　未完整：小说'
-    ]
-  },
-  litreview: {
-    name:'文学审核部', slogan:'「已废弃」',
-    dialog:[
-      '你看到一行脚印，顺着它走了过去。脚印越来越杂乱。',
-      '一栋古里古气的大房子，门前脚印十分杂乱，管理者似乎匆匆忙忙地离开的。门前挂着褪色的牌匾：文学审核部。',
-      '原来所有书进图书馆之前都要经过他们的审核。权力还是蛮大的，或许他们有一部分人员就是管理人员。',
-      '真令人痛心，这么气宇轩昂的组织……',
-      '「已废弃。」',
-      '告示板上的字迹还没干透。'
-    ]
-  },
-  catcafe: {
-    name:'物实猫咖馆', slogan:'闲暇时光来撸猫也不错。',
-    dialog:[
-      '一栋高得看不到顶的楼，门牌上画着一只打哈欠的猫。',
-      '趁着三月的暖阳，和着微风听听风铃吧。',
-      '不过，这可是高达 15000 多层的楼哦。',
-      '还有——小心军火！',
-      '「猫在窗台上眯着眼，像是已经在这里等了你很久。」'
-    ]
-  },
-  academy: {
-    name:'物实学院', slogan:'文化一条街。',
-    dialog:[
-      '现代化的大楼立在老街尽头，玻璃幕墙反着光。',
-      '这貌似是一个学校，不知道里面是什么样子。咦，这里面的课程好像对我们的生存很有帮助。',
-      '面前出现了一个五角星。这里可以收藏吗？拿着这些课，以后或许有用。',
-      '「知识不是必需品，是奢侈品——但在物实，它两者都是。」'
-    ]
-  },
-  news: {
-    name:'星尘报社', slogan:'隶属于 SNO.星尘报社总部。',
-    dialog:[
-      '"拿着这份报纸吧！"',
-      '你抬起头，想问他是哪个报社的。可那个人已经消失了。',
-      '你看了看手中的报纸。报纸上写着：',
-      '「隶属于 SNO.星尘报社总部」',
-      '真有意思，连这都有。看起来，要在这里待一段时间了。',
-      '「新闻是这座城里唯一比法则跑得更快的东西。」'
-    ]
-  },
-  mutualaid: {
-    name:'互助团', slogan:'你有什么需要吗？',
-    dialog:[
-      '一张广告贴在墙上，边角被风掀起。',
-      '互助团成立了！你有什么需要吗？快来这里投稿吧，我们会尽所可能的帮助你！',
-      '你对着空气说："我怎么能离开这里？"',
-      '「抱歉，我们属于这里，无法帮你离开。」',
-      '不要灰心。这个组织还是很有用的。',
-      '「能帮的，他们都会帮。不能帮的，只有你自己。」'
-    ]
-  },
-  screen: {
-    name:'大屏幕', slogan:'闪着荧荧的光。',
-    dialog:[
-      '这条街竟然有尽头。尽头的墙上夹着一块大屏幕，闪着荧荧的光。',
-      '屏幕亮起：',
-      '你好，欢迎来到物实！',
-      '有几点你需要注意：',
-      '1. 一定要尊敬管理员们，尤其是紫兰斋。',
-      '2. 不要理会那些骂人、刷屏的居民。',
-      '3. 如果你是管理人员，记住，你的责任就是"移水"和"处理事件"，不要借着管理人员的名义去……（模糊）',
-      '4. 尽量发布一些有意义的作品，否则你会失去一些货币。',
-      '5. 请一定把这个大屏幕拆下来揣在兜里。不要担心它会消失——下一个来这里的人，同样也会看到它。',
-      '「屏幕可以带走，规则要留下。」'
-    ]
-  },
-  elevator: {
-    name:'电梯', slogan:'我们会尽快修复其他按钮。',
-    dialog:[
-      '你拆下了大屏幕，却发现它后面藏着一架电梯。',
-      '门缓缓打开，内部的按钮泛着幽光：',
-      '⑤　④　③　②　①　-①',
-      '「我们会尽快修复其他按钮。」',
-      '一张便签贴在按钮旁，字迹潦草：每一层都是一座城的一部分，但不是每一层都还在。',
-      '「选择你的楼层。」'
-    ]
-  },
-  residentid: {
-    name:'居民证', slogan:'请撕下这张纸，作为你的居民证。',
-    dialog:[
-      '一张纸静静躺在石台上，边角整齐。',
-      '——————————————————',
-      '{Visitor}',
-      '我会遵守《这个城的法则》，我已阅读《居民生存指南》。',
-      '——————————————————',
-      '如你遇到 Bug 类困难，请联系 turtlesim。',
-      '你要参与这个故事的话，就请签上你的名字。',
-      '「签名之后，你就是这座城的人了。」'
-    ]
-  },
-  newsstand: {
-    name:'报摊', slogan:'消息比路灯亮得更早。',
-    dialog:['报纸叠在木箱上，墨迹还没完全干。','摊主说今天的头条换了三次，因为这座城总有人突然出现，也总有人突然消失。','「拿一份吧。知道发生了什么，至少能少走一点弯路。」']
-  },
-  research: {
-    name:'研究院', slogan:'把未知拆开，再小心地装回去。',
-    dialog:['白色塔楼里传来低频的嗡鸣，像某种机器正在思考。','研究员们不急着给答案，他们先把问题写得更清楚。','「别害怕复杂。复杂只是还没有被命名。」']
-  },
-  senate: {
-    name:'参议院', slogan:'慢一点，才能决定更重的事。',
-    dialog:['圆顶下的声音被压低，像每句话都要先经过墙壁审查。','这里不处理喧哗，只处理喧哗之后还剩下的问题。','「决定不是结束，是责任开始的地方。」']
-  },
-  culturehall: {
-    name:'文化馆', slogan:'城的记忆在这里被展出。',
-    dialog:['展厅里有模型、照片、手稿，还有一些无法归类的小东西。','它们不一定重要，但它们共同证明：这座城曾经被很多人认真使用过。','「文化不是纪念品，是居民留下的痕迹。」']
-  },
-  // ── New city-life dialogs ──
-  mall_south: {
-    name:'南门商场', slogan:'霓虹之下，欲望被精心陈列。',
-    dialog:['自动门"嗖"地滑开，空调冷风裹住刚进来的你。','橱窗里陈列着进口商品、电子玩具、还有那些说不上有用但就是想买的小东西。','「城市之所以像城市，是因为这里永远有你想买却买不起的东西。」']
-  },
-  mall_west: {
-    name:'西门商场', slogan:'旧街坊与霓虹的交界处。',
-    dialog:['这间商场比南门那家旧些，但人却不显得少。','楼下菜场、楼上服饰，再往上是个改造过的电影院，只放老片。','「商业的层次，就是城市的层次。这里能买到全部日常。」']
-  },
-  school_east: {
-    name:'东区小学', slogan:'操场上有种永远不变的笑声。',
-    dialog:['铃声刚响过，孩子们从教室里涌出来，像被打翻的彩色弹珠。','旗杆上的旗被风吹得笔直，沙坑里留着上午的脚印。','「教育不是把城填满，是给下一座城留出空地。」']
-  },
-  school_north: {
-    name:'北区学院', slogan:'这里教的不只是答案，更是提问的方法。',
-    dialog:['学院的走廊安静得能听见自己的脚步回声。','黑板上还留着没擦干净的式子和一句未完的提问。','「一座城若不再产生提问，便已开始衰老。」']
-  },
-  kingice: {
-    name:'King Ice', slogan:'皇冠落座之处，冰与光交界。',
-    dialog:['Ice is good. Gugu is bad!']
-  },
-  archive: { name:'档案馆', slogan:'过去不会消失，只是被收了起来。', dialog:['厚重的木门后面是成排的铁柜，标签已经泛黄。','每份档案都是城里发生过的事的记录。','「要理解一座城为什么变成现在这样，得先看它做过什么。」'] },
-  tradingpost: { name:'交易所', slogan:'价值在这里被反复称量。', dialog:['柜台上摆着各种代币和凭证。','这里不仅交易货币，还交换信息、服务和承诺。','「价格会波动，但信用不会。」'] },
-  records: { name:'记录厅', slogan:'每一个名字背后都有故事。', dialog:['墙上密密麻麻刻着名字。','管理人员定期来核对，确保每个名字都对应一个真实的存在。','「被记住，是这座城给予居民最基本的尊重。」'] },
-  guildhall: { name:'公会堂', slogan:'一个人走得快，一群人走得远。', dialog:['大堂里挂着各种旗帜，每面代表一个自发组织。','「加入一个公会，你会发现城市比想象的大。」'] },
-  musichall: { name:'音乐厅', slogan:'声音也能成为建筑。', dialog:['穹顶下回荡着排练的旋律。','「不需要听懂，只需要听。」'] },
-  conservatory: { name:'温室', slogan:'在最暖的地方种最嫩的芽。', dialog:['玻璃房里温度恒定，种着城外不易存活的植物。','「给条件足够的时间，一切都会发芽。」'] },
-  arena: { name:'竞技场', slogan:'规则之内，尽情较量。', dialog:['圆形场地中央画着白线，四周的看台还是空的。','「赢得漂亮，输得坦然。」'] },
-  guesthouse: { name:'客栈', slogan:'远道而来的人先在这里落脚。', dialog:['三层小楼，每层窗台上都放着一盏灯。','「明天的事明天再说。今晚先歇着。」'] },
-  shrine: { name:'神社', slogan:'安静地站着，也是一种参与。', dialog:['石阶尽头是一座小小的殿宇。','「不必祈祷，只是站在这里就够了。」'] },
-  beacon: { name:'灯塔', slogan:'为还没到的人亮着。', dialog:['塔顶的灯日夜不灭。','「总有人在路上。总有人需要一盏灯。」'] },
-  banana_palace: { name:'布拿拉宫', slogan:'黄得发亮，歪得有理。', dialog:['一座巨大的香蕉造型建筑矗立在眼前，黄得耀眼。','布拿拉工站在门口，手里捧着一根小香蕉。','「我叫布拿拉工，是这宫的主人。宫不是宫殿的宫，是香蕉的弯。」','「你问我为什么住在香蕉里？因为这城里，总得有人住在不一样的地方。」'] },
-  qipai_hall: { name:'棋气派', slogan:'落子无悔，入局即生。', dialog:['门口站着两尊巨型棋子雕像——一王一后。','地面铺着黑白棋盘格，每一步都踩在一格命运上。','「棋气派下的不是棋，是气。气断了，棋就散了。」'] },
-  knowledgebase: { name:'知识库', slogan:'所有被保存的东西，都在这里继续发光。', dialog:['墙面像索引一样延伸，抽屉里收着旧讨论、旧作品。','「先查，再问。能留下来的东西，总会帮助下一个人。」'] },
-  community: { name:'社区中心', slogan:'居民在这里互相确认彼此存在。', dialog:['大厅里挂着很多便签，有求助，有招募。','「一座城不是建出来的，是搭出来的。」'] },
-  commons: { name:'众议院', slogan:'议事的厅堂，也是争论的起点。', dialog:['圆形大厅里摆着弧形的座位。','「多数不代表正确，但沉默一定不代表同意。」'] },
-  lab: { name:'实验楼', slogan:'试错是这座城的燃料。', dialog:['玻璃门后是整齐的仪器和不太整齐的便签。','「不要把异常丢掉。异常有时候是入口。」'] },
-  teahouse: { name:'茶馆', slogan:'暂时坐下，也是一种前进。', dialog:['茶香从窗缝里慢慢散出来。','「有些答案不会在奔跑时出现。坐一会儿。」'] },
-  writingclub: { name:'文训社', slogan:'字是城的声音，写下来才不散。', dialog:['木桌木椅，墨迹未干。','「别怕写不好。先写下来，再改。」'] },
-};
-
-// 道路网格路径点（覆盖整个城市，NPC 只在这些点上移动，不会穿过建筑）
-function buildWaypoints() {
-  const wps=[];
-  ROAD_COORDS.forEach(x=>ROAD_COORDS.forEach(z=>wps.push(new THREE.Vector3(x,0,z))));
-  return wps;
-}
-const WAYPOINTS = buildWaypoints();
-
-// ── NPC 档案 ─────────────────────────────────────────────────────────────────
-const NPC_PROFILES = [
-  {
-    id:'linxu', name:'林叙', role:'图书馆管理员', core:true, spawnChance:1,
-    behavior:'field', workHours:[9,17],
-    head:0xD4A574, body:0x8B9DBF, home:[-6,6], work:[-4,3], patrolRadius:8,
-    dialog:[
-      { text:'「灯还给你留着。这座城的知识，都沉在这些书页里。」', options:[
-        { text:'你在管理什么？', next:1 },
-        { text:'最近有什么传闻？', next:2 },
-        { text:'谢谢，我先走了。', next:null },
-      ]},
-      { text:'「管理员把重要的东西收进书里：哪些街道不安全、哪些人值得信任。都写在纸上。」', options:[
-        { text:'那我该读哪本？', next:3 },
-        { text:'原来如此，谢谢。', next:null },
-      ]},
-      { text:'「传闻说东边老在半夜亮灯，但没几个人愿意承认自己去看过。」', options:[
-        { text:'你会去查吗？', next:4 },
-        { text:'听起来很可疑。', next:null },
-      ]},
-      { text:'「《实验记录》最适合新居民。别怕复杂，复杂只是还没被命名。」', options:[
-        { text:'记住了，谢谢你。', next:null },
-      ]},
-      { text:'「我只会记在纸上。好奇心这种事，得你自己去。」', options:[
-        { text:'明白了。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'laoqin', name:'老秦', role:'修路工 · 向导', core:true, spawnChance:1,
-    behavior:'field', workHours:[8,16],
-    head:0xC68642, body:0xC4C9D8, home:[0,-6], work:[4,-9], patrolRadius:9,
-    dialog:[
-      { text:'「路都是我给铺平的。想认路？先认路名。」', options:[
-        { text:'路名怎么认？', next:1 },
-        { text:'这条路通到哪里？', next:2 },
-        { text:'我赶时间，先走了。', next:null },
-      ]},
-      { text:'「南北叫街，东西叫道。你沿着数字走，绝不会丢。」', options:[
-        { text:'难怪这么整齐。', next:null },
-        { text:'记住了，谢谢老秦。', next:null },
-      ]},
-      { text:'「每条路最后都通向一座楼。你走的每一步，都是去找一个答案。」', options:[
-        { text:'说得真够玄的。', next:null },
-        { text:'那我该往哪走？', next:3 },
-      ]},
-      { text:'「往亮的地方走，准没错。夜里要是迷路，就看那些路灯。」', options:[
-        { text:'好，心里有数了。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'azi', name:'阿紫', role:'星尘报社记者', core:true, spawnChance:1,
-    behavior:'field', workHours:[10,18],
-    head:0xFDBCB4, body:0x3B6FE0, home:[6,-6], work:[-4,9], patrolRadius:8,
-    dialog:[
-      { text:'「嘿，新面孔！报摊头条还没定呢——这座城今天又发生了什么？」', options:[
-        { text:'你在写这座城的故事？', next:1 },
-        { text:'今天的头条是什么？', next:2 },
-        { text:'我没什么可说的。', next:null },
-      ]},
-      { text:'「每栋楼都有一半的秘密。我的工作，就是把另一半问出来。」', options:[
-        { text:'需要我帮忙打听吗？', next:3 },
-        { text:'祝你好运。', next:null },
-      ]},
-      { text:'「还没定。可能是路灯昨夜集体熄灭，也可能是咖啡馆来了只新猫。」', options:[
-        { text:'那很有新闻价值。', next:null },
-        { text:'别写猫，小心猫咖店长找你。', next:4 },
-      ]},
-      { text:'「太好了！你要是听到什么怪事，来报摊找我。署你的名。」', options:[
-        { text:'成交。', next:null },
-      ]},
-      { text:'「哈，店长那只猫比我还像主编。」', options:[
-        { text:'确实是。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'jiujin', name:'九斤', role:'猫咖馆店长', core:true, spawnChance:1,
-    behavior:'shop', workHours:[10,20],
-    head:0x8D5524, body:0xC8C4BE, home:[6,6], work:[9,3], patrolRadius:8,
-    dialog:[
-      { text:'「咪……欢迎光临。猫在上层，规矩在底层。」', options:[
-        { text:'听说你的楼有一万五千层？', next:1 },
-        { text:'来杯茶，谢谢。', next:2 },
-        { text:'我只是路过。', next:null },
-      ]},
-      { text:'「嗯，一万五千层往上，还有一万五千层往下。猫都记不清。」', options:[
-        { text:'那只猫是店主还是你？', next:3 },
-        { text:'太夸张了。', next:null },
-      ]},
-      { text:'「茶温刚好。坐下喝一杯，脚步太快会吓到猫。」', options:[
-        { text:'好茶。', next:null },
-        { text:'那我慢点走。', next:null },
-      ]},
-      { text:'「喵。它是前任店长。我，是它雇的。」', options:[
-        { text:'……懂了。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'tang', name:'唐师傅', role:'茶馆掌柜', core:false, spawnChance:1,
-    behavior:'shop', workHours:[9,19],
-    head:0xC08A4E, body:0x6B8FE8, home:[12,6], work:[15,15], patrolRadius:6,
-    dialog:[
-      { text:'「水开了，茶就快好了。这条街的闲话，都泡在壶里。」', options:[
-        { text:'最近有什么新闲话？', next:1 },
-        { text:'来壶茶。', next:null },
-      ]},
-      { text:'「听说研究院的灯整夜不灭。年轻人，别在半夜去敲那扇门。」', options:[
-        { text:'为什么？', next:2 },
-        { text:'我记住了。', next:null },
-      ]},
-      { text:'「因为敲门的人，第二天都说自己昨晚从没去过。」', options:[
-        { text:'……有意思。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'bai', name:'白露', role:'研究院研究员', core:false, spawnChance:1,
-    behavior:'field', workHours:[9,17],
-    head:0xE8D8C8, body:0x8A9AB5, home:[12,-6], work:[15,-9], patrolRadius:6,
-    dialog:[
-      { text:'「嘘——数据刚跑到一半。你站的那块地砖，是上周的结论。」', options:[
-        { text:'你们在研究什么？', next:1 },
-        { text:'打扰了。', next:null },
-      ]},
-      { text:'「把这座城量一遍。每栋楼的高度、每条路的长度、每个居民的步数。」', options:[
-        { text:'那我的步数也在里面？', next:2 },
-        { text:'听起来很辛苦。', next:null },
-      ]},
-      { text:'「当然。你走得越多，我们的图就越完整。这是好事情。」', options:[
-        { text:'那我多走走。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'kang', name:'康叔', role:'文训社先生', core:false, spawnChance:0.55,
-    behavior:'rare', workHours:[9,16],
-    head:0xE0C8A8, body:0x7A6A5A, home:[-12,6], work:[-15,15], patrolRadius:6,
-    dialog:[
-      { text:'「写字如走路，一笔一划，都得踩在实处。」', options:[
-        { text:'教我一笔？', next:1 },
-        { text:'受教了。', next:null },
-      ]},
-      { text:'「你心先静下来，笔自然会跟着走。城也是一样。」', options:[
-        { text:'我会试着静下来。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'qiu', name:'秋嫂', role:'报摊婆婆', core:false, spawnChance:1,
-    behavior:'shop', workHours:[7,12],
-    head:0xD8B8A0, body:0xC06060, home:[-6,-6], work:[-9,-15], patrolRadius:6,
-    dialog:[
-      { text:'「今天的报纸还热着。要一份吗？比旧新闻便宜。」', options:[
-        { text:'今天有什么大事？', next:1 },
-        { text:'不用了，谢谢。', next:null },
-      ]},
-      { text:'「大事就是人人都想听的那个。小事，才藏得深。」', options:[
-        { text:'那小事是什么？', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'li', name:'李叔', role:'社区守望者', core:false, spawnChance:0.5,
-    behavior:'rare', workHours:[20,7],
-    head:0xA08060, body:0x4A6A8A, home:[12,12], work:[15,-15], patrolRadius:6,
-    dialog:[
-      { text:'「夜里我守着这片。你半夜出门，看见我的灯，就不用怕。」', options:[
-        { text:'你天天守夜？', next:1 },
-        { text:'辛苦了。', next:null },
-      ]},
-      { text:'「习惯了。城里的人睡得香，我才有得守。」', options:[
-        { text:'有你在真好。', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'you', name:'游先生', role:'夜行者', core:false, spawnChance:0.35,
-    behavior:'rare', workHours:[22,4],
-    head:0xD0C8C0, body:0x3A3A4A, home:[18,0], work:null, patrolRadius:5,
-    dialog:[
-      { text:'「……你也看见了？那些灯，只在我走过的时候亮。」', options:[
-        { text:'你是谁？', next:1 },
-        { text:'我什么都没看见。', next:null },
-      ]},
-      { text:'「一个不太重要的名字。你只要知道——别在半夜数路灯。」', options:[
-        { text:'为什么？', next:null },
-      ]},
-    ],
-  },
-  {
-    id:'bunala', name:'布拿拉工', role:'布拿拉宫主人', core:true, spawnChance:1,
-    behavior:'field', workHours:[8,20],
-    head:0xF5E838, body:0x4A4A00, home:[-30,30], work:[-30,30], patrolRadius:6,
-    dialog:[
-      { text:'「你来了！我是布拿拉工，布拿拉宫的主人。进来坐坐？香蕉管够。」', options:[
-        { text:'你为什么叫布拿拉工？', next:1 },
-        { text:'这宫殿……真的是一根香蕉？', next:2 },
-        { text:'谢谢，我先走了。', next:null },
-      ]},
-      { text:'「布拿拉工，就是布拿拉宫的工。宫是我盖的，工也是我。」', options:[
-        { text:'那你为什么盖了个香蕉？', next:2 },
-        { text:'好吧，我懂了。', next:null },
-      ]},
-      { text:'「为什么是香蕉？因为城里没人盖香蕉啊。总得有人做不一样的事。再说了，香蕉弯弯的，住进去有种被包住的感觉——很踏实。」', options:[
-        { text:'里面几层？', next:3 },
-        { text:'我能进去看看吗？', next:null },
-      ]},
-      { text:'「三层。最顶上那个弯弯的香蕉柄是我的工作室。从弯处往外看，能看到半座城。」', options:[
-        { text:'听起来不错。', next:4 },
-        { text:'我要去买香蕉了。', next:null },
-      ]},
-      { text:'「对了，你要是想在城里卖香蕉，来找我进货。我不赚居民的钱，只收个本钱。」', options:[
-        { text:'成交。', next:null },
-      ]},
-    ],
-  },
-];
 
 // Progression unlock tiers
 const UNLOCK_TIERS = [
@@ -1295,7 +755,7 @@ function checkAchievements() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 function init() {
   setupRenderer(); setupCamera(); initTextures(); setupScene(); setupLighting();
-  groundMat = createCitySurfaces({
+  createCitySurfaces({
     scene,
     isNight,
     roadCoords: ROAD_COORDS,
@@ -2371,28 +1831,6 @@ function addCityGrassPatch(cx, cz, r) {
   }
 }
 
-function addCityPond(cx, cz, r) {
-  // Water surface
-  const waterMat = stdMat({color:P.RIVER, roughness:0.05, metalness:0.25, tex:'river', rx:1, ry:1});
-  const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 32), waterMat);
-  pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.05, cz); pond.receiveShadow = true;
-  scene.add(pond);
-  // Stone border
-  for (let i = 0; i < 14; i++) {
-    const a = (i/14)*Math.PI*2;
-    const stone = part(null, new THREE.SphereGeometry(0.18, 8, 8), {color:0xC4A86D, roughness:0.7, tex:'stone', rx:1, ry:1});
-    stone.position.set(cx+Math.cos(a)*r, 0.06, cz+Math.sin(a)*r);
-    scene.add(stone);
-  }
-  // A few lily pads
-  for (let i = 0; i < 3; i++) {
-    const a = Math.random()*Math.PI*2, d = Math.random()*r*0.6;
-    const lily = part(null, new THREE.CircleGeometry(0.12+Math.random()*0.05, 8), {color:0x5A8A3A, roughness:0.9, tex:'grass', rx:1, ry:1});
-    lily.rotation.x = -Math.PI/2; lily.position.set(cx+Math.cos(a)*d, 0.06, cz+Math.sin(a)*d);
-    scene.add(lily);
-  }
-}
-
 function addDistrictBuildings() {
   const centers=[-33,-27,-21,-15,-9,-3,3,9,15,21,27,33], lots=[];
   centers.forEach(x=>centers.forEach(z=>{
@@ -2579,27 +2017,6 @@ function addPavers() {
   });
 }
 
-// ── Park & City Areas ────────────────────────────────────────────────────────
-function addCentralPark() {
-  // Large grassy area around the center
-  const r = 3.5;
-  const grassMat = stdMat({color:0xC8D8A8, roughness:1, tex:'grass', rx:4, ry:4});
-  const grass = new THREE.Mesh(new THREE.CircleGeometry(r, 32), grassMat);
-  grass.rotation.x = -Math.PI/2; grass.position.set(0, 0.015, 0); grass.receiveShadow = true;
-  scene.add(grass);
-  // Park trees
-  addTrees([[-2.5,0,-2.5],[2.5,0,-2.5],[-2.5,0,2.5],[2.5,0,2.5]]);
-  // Park benches
-  addBench(-1.8, 0, 0, Math.PI/2); addBench(1.8, 0, 0, -Math.PI/2);
-  // Flowerbeds around fountain
-  addFlowerbed(-2.0, 0, -2.0); addFlowerbed(2.0, 0, 2.0);
-  addFlowerbed(-2.0, 0, 2.0); addFlowerbed(2.0, 0, -2.0);
-  // Park lamps
-  addLamps([[-2.0,0,-1.0],[2.0,0,1.0]]);
-  // Hedges along edges
-  addHedgeRow(-3.0, 0, 0); addHedgeRow(3.0, 0, 0);
-}
-
 function addFlowerbed(x, y, z) {
   const g = new THREE.Group();
   part(g, new THREE.CylinderGeometry(0.28, 0.24, 0.14, 12), {color:0xC4A86D, roughness:0.7, tex:'wood', rx:1, ry:1}, [0, 0.07, 0]);
@@ -2632,156 +2049,6 @@ function addPond(cx, cz, r) {
   }
 }
 
-// ── River: winding water through south-east outskirts ─────────────────────────
-function addRiver() {
-  // Sampled points along the river centerline (x, z, half-width)
-  const path = [
-    [ 6,   28, 2.4],
-    [10,   24, 2.6],
-    [14,   20, 2.8],
-    [18,   18, 3.0],
-    [21,   14, 2.8],
-    [23,   10, 2.6],
-    [25,    6, 2.4],
-    [27,    2, 2.2],
-    [28,   -2, 2.0],
-  ];
-  const waterMat = stdMat({color:P.RIVER, roughness:0.05, metalness:0.25, tex:'river', rx:4, ry:1});
-  // Build a flat ribbon by interpolating between left/right banks
-  for (let i = 0; i < path.length-1; i++) {
-    const [x1,z1,w1] = path[i], [x2,z2,w2] = path[i+1];
-    const dx = x2-x1, dz = z2-z1, len = Math.hypot(dx,dz);
-    const nx = -dz/len, nz = dx/len; // normal
-    const w = (w1+w2)/2;
-    const cx = (x1+x2)/2, cz = (z1+z2)/2;
-    const seg = part(null, new THREE.PlaneGeometry(w*2, len), waterMat);
-    seg.rotation.x = -Math.PI/2;
-    seg.position.set(cx, 0.03, cz);
-    seg.rotation.z = -Math.atan2(dx, dz); // orient along path
-    seg.receiveShadow = true; scene.add(seg);
-  }
-  // Stone banks at sample points
-  path.forEach(([x,z,w]) => {
-    for (let s = -1; s <= 1; s += 2) {
-      const bx = x + s*w*0.95*Math.cos(0), bz = z + s*w*0.95*Math.sin(0);
-      // approximate perpendicular offset
-      const stone = part(null, new THREE.SphereGeometry(0.22+Math.random()*0.1, 8, 8), {color:0xC4A86D, roughness:0.7, tex:'stone', rx:1, ry:1});
-      stone.position.set(x + s*w*0.9, 0.06, z + s*0.4);
-      scene.add(stone);
-    }
-  });
-  // Two wooden bridges across the river (at points where the river meets cardinal road extensions)
-  addBridge(14, 20, Math.atan2(1,-1));
-  addBridge(23, 10, Math.atan2(1,-1));
-  // Reeds along banks
-  for (let i = 0; i < 20; i++) {
-    const t = i/20;
-    const idx = Math.min(path.length-1, Math.floor(t*(path.length-1)));
-    const [px, pz, pw] = path[idx];
-    const side = (i%2===0)?1:-1;
-    const reed = part(null, new THREE.ConeGeometry(0.08, 0.5+Math.random()*0.3, 6), {color:0x6A8A4A, roughness:0.9, tex:'grass', rx:1, ry:1});
-    reed.position.set(px + side*pw*0.85 + (Math.random()-0.5)*0.4, 0.25, pz + (Math.random()-0.5)*0.4);
-    scene.add(reed);
-  }
-}
-
-function addBridge(cx, cz, rot) {
-  const g = new THREE.Group();
-  // Deck
-  part(g, new THREE.BoxGeometry(7.2, 0.18, 2.4), {color:0x9A7A4A, roughness:0.7, tex:'bridge', rx:4, ry:1}, [0, 0.12, 0]);
-  // Railings (both sides)
-  for (let s = -1; s <= 1; s += 2) {
-    part(g, new THREE.BoxGeometry(7.2, 0.4, 0.08), {color:0x6A4A3A, roughness:0.6, tex:'wood', rx:4, ry:1}, [0, 0.35, s*1.15]);
-    // Railing posts
-    for (let i = -3; i <= 3; i++) {
-      part(g, new THREE.BoxGeometry(0.08, 0.4, 0.08), {color:0x6A4A3A, roughness:0.6, tex:'wood', rx:1, ry:1}, [i*1.0, 0.35, s*1.15], false);
-    }
-  }
-  // Support piers
-  for (let i = -2; i <= 2; i++) {
-    part(g, new THREE.CylinderGeometry(0.15, 0.18, 0.5, 8), {color:0x9A8A7A, roughness:0.8, tex:'stone', rx:1, ry:1}, [i*1.4, -0.13, 0], false);
-  }
-  g.position.set(cx, 0, cz); g.rotation.y = rot;
-  scene.add(g);
-}
-
-// ── Community Parks distributed around the city ──────────────────────────────
-function addCommunityPark(cx, cz, r, opts={}) {
-  // Grass base — brighter, lush green to stand out from city ground
-  const grassMat = stdMat({color:0xA8C888, roughness:1, tex:'grass', rx:r/1.5, ry:r/1.5});
-  const grass = new THREE.Mesh(new THREE.CircleGeometry(r, 28), grassMat);
-  grass.rotation.x = -Math.PI/2; grass.position.set(cx, 0.05, cz); grass.receiveShadow = true;
-  scene.add(grass);
-  // Inner flowerbeds ring
-  for (let i = 0; i < 6; i++) {
-    const a = (i/6)*Math.PI*2 + (opts.seed||0)*0.5;
-    addFlowerbed(cx + Math.cos(a)*r*0.45, 0, cz + Math.sin(a)*r*0.45);
-  }
-  // Tree ring around edge
-  const treeCount = opts.trees || 6;
-  for (let i = 0; i < treeCount; i++) {
-    const a = (i/treeCount)*Math.PI*2 + (opts.seed||0)*0.3;
-    const d = r*0.78;
-    addTrees([[cx+Math.cos(a)*d, 0, cz+Math.sin(a)*d]]);
-  }
-  // A few inner scattered trees
-  for (let i = 0; i < 3; i++) {
-    const a = Math.random()*Math.PI*2, d = Math.random()*r*0.4;
-    addTrees([[cx+Math.cos(a)*d, 0, cz+Math.sin(a)*d]]);
-  }
-  // Center feature: gazebo, pond, or fountain
-  if (opts.feature === 'gazebo') addGazebo(cx, 0, cz);
-  else if (opts.feature === 'pond') addPond(cx, cz, r*0.32);
-  else if (opts.feature === 'fountain') addFountainPark(cx, cz);
-  // Benches facing the center feature
-  addBench(cx-r*0.55, 0, cz, Math.PI/2);
-  addBench(cx+r*0.55, 0, cz, -Math.PI/2);
-  addBench(cx, 0, cz-r*0.55, 0);
-  addBench(cx, 0, cz+r*0.55, Math.PI);
-  // Lamps at corners
-  addLamps([[cx+r*0.5, 0, cz-r*0.5], [cx-r*0.5, 0, cz+r*0.5], [cx-r*0.5, 0, cz-r*0.5], [cx+r*0.5, 0, cz+r*0.5]]);
-  // Hedge along one or two edges
-  if (opts.hedge) { addHedgeRow(cx, 0, cz+r*0.92); addHedgeRow(cx, 0, cz-r*0.92); }
-  // Stone border curb to define the park edge
-  const curbMat = stdMat({color:0xC4A86D, roughness:0.8, tex:'stone', rx:1, ry:1});
-  for (let i = 0; i < 24; i++) {
-    const a = (i/24)*Math.PI*2;
-    const stone = part(null, new THREE.SphereGeometry(0.1, 6, 6), curbMat);
-    stone.position.set(cx+Math.cos(a)*r, 0.05, cz+Math.sin(a)*r);
-    scene.add(stone);
-  }
-}
-
-function addFountainPark(cx, cz) {
-  // Stone-rimmed fountain with water
-  const g = new THREE.Group();
-  part(g, new THREE.CylinderGeometry(0.55, 0.6, 0.2, 18), {color:P.FOUNTAIN_RIM, roughness:0.4, tex:'stone', rx:1, ry:1}, [0, 0.1, 0]);
-  part(g, new THREE.CylinderGeometry(0.5, 0.5, 0.06, 18), {color:P.FOUNTAIN_WATER, roughness:0.1, metalness:0.3, tex:'water', rx:1, ry:1}, [0, 0.18, 0], false);
-  part(g, new THREE.CylinderGeometry(0.08, 0.1, 0.4, 8), {color:0xC4A86D, roughness:0.5, tex:'stone', rx:1, ry:1}, [0, 0.4, 0], false);
-  part(g, new THREE.SphereGeometry(0.1, 10, 10), {color:0xD0CFCC, roughness:0.4, metalness:0.3, tex:'metal', rx:1, ry:1}, [0, 0.65, 0], false);
-  g.position.set(cx, 0, cz); scene.add(g);
-}
-
-// ── Suburbs: small houses ringing the city outskirts ─────────────────────────
-function addSuburbs() {
-  // Suburban ring on four sides — small houses with gardens
-  const houses = [
-    // south-east ring (between city and river)
-    [20, 24], [23, 22], [21, 26], [24, 25],
-    // north-west ring
-    [-20,-24], [-23,-22], [-21,-26], [-24,-25],
-    // south-west ring
-    [-20, 24], [-23, 22], [-21, 26], [-24, 25],
-    // north-east ring
-    [20,-24], [23,-22], [21,-26], [24,-25],
-    // far south (between mall and city)
-    [-4, -24], [4, -24], [8, -22], [-8, -22],
-    // far north
-    [-4, 24], [4, 24], [8, 22], [-8, 22],
-  ];
-  houses.forEach(([x, z], i) => addSuburbHouse(x, z, (i*37) % 360));
-}
-
 function addSuburbHouse(x, z, rotDeg) {
   const g = new THREE.Group();
   const bw = 1.2, bh = 0.9;
@@ -2812,38 +2079,6 @@ function addSuburbHouse(x, z, rotDeg) {
   }
   g.position.set(x, 0, z); g.rotation.y = (rotDeg * Math.PI / 180);
   scene.add(g);
-}
-
-// ── Fields & forest filling outer corners ─────────────────────────────────────
-function addFieldsAndForest() {
-  // Field patches in 4 outer quadrants — raised above ground to avoid z-fighting
-  const fields = [
-    [-32, -32, 8], [32, -32, 8], [-32, 32, 8], [32, 32, 8],
-    [-38, 0, 6], [38, 0, 6], [0, -38, 6], [0, 38, 6],
-  ];
-  fields.forEach(([x, z, r]) => {
-    const fmat = stdMat({color:P.FIELD, roughness:1, tex:'field', rx:r/2, ry:r/2});
-    const f = new THREE.Mesh(new THREE.PlaneGeometry(r*2, r*2), fmat);
-    f.rotation.x = -Math.PI/2; f.position.set(x, 0.05, z); f.receiveShadow = true;
-    scene.add(f);
-  });
-  // Forest clusters (lots of trees)
-  const forestClusters = [
-    [-35,-35, 8], [-30,-40, 6], [-40,-25, 7], [-42,-15, 5],
-    [35, 35, 8], [30, 40, 6], [40, 25, 7], [42, 15, 5],
-    [-35, 35, 8], [-40, 25, 6], [-30, 42, 7],
-    [35,-35, 8], [40,-25, 6], [30,-42, 7],
-    // sparse scattered
-    [-25, 0, 4], [25, 0, 4], [0, -25, 4], [0, 25, 4],
-  ];
-  forestClusters.forEach(([cx, cz, n]) => {
-    const pts = [];
-    for (let i = 0; i < n; i++) {
-      const a = Math.random()*Math.PI*2, d = 1 + Math.random()*3;
-      pts.push([cx+Math.cos(a)*d, 0, cz+Math.sin(a)*d]);
-    }
-    addTrees(pts);
-  });
 }
 
 function addMarketStalls(x, z, count, dir) {
@@ -4184,117 +3419,6 @@ function setFilter(filter) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CG ANIMATION SYSTEM — 5-scene opening cinematic
-// ══════════════════════════════════════════════════════════════════════════════
-
-function shouldShowCG() {
-  return !localStorage.getItem('minicityCGSeenV2');
-}
-
-function startCG() {
-  const overlay = document.getElementById('cgOverlay');
-  const wrap = document.getElementById('cgSceneWrap');
-  overlay.style.display = 'flex';
-  requestAnimationFrame(() => overlay.classList.add('active'));
-  cgScene5Shown = false;
-
-  if (REDUCED) { endCG(); return; }
-
-  cgTimeline = gsap.timeline();
-
-  cgTimeline.call(() => scene1(wrap), [], 0)
-           .to({}, {duration: 4}, 0);
-  cgTimeline.call(() => scene2(wrap), [], 4)
-           .to({}, {duration: 4}, 4);
-  cgTimeline.call(() => scene3(wrap), [], 8)
-           .to({}, {duration: 4}, 8);
-  cgTimeline.call(() => scene4(wrap), [], 12)
-           .to({}, {duration: 4}, 12);
-  cgTimeline.call(() => scene5(wrap), [], 16);
-}
-
-function scene1(wrap) {
-  wrap.innerHTML = `
-    <div class="cg-bg cg-bg-void"><div class="cg-fall-lines"></div></div>
-    <div class="cg-frame"></div>
-    <div class="cg-text-block">
-      <span class="cg-kicker">UNKNOWN ALTITUDE</span>
-      <p class="cg-line cg-line-large">坠落。</p>
-      <p class="cg-line" style="animation-delay:1.7s">可地面始终没有到来。</p>
-    </div>`;
-}
-
-function scene2(wrap) {
-  wrap.innerHTML = `
-    <div class="cg-bg cg-bg-wake"><div class="cg-horizon"></div></div>
-    <div class="cg-frame"></div>
-    <div class="cg-text-block">
-      <span class="cg-kicker">SIGNAL ACQUIRED</span>
-      <p class="cg-line">你睁开眼睛。</p>
-      <p class="cg-line cg-highlight" style="animation-delay:1.8s">陌生的天际线正在苏醒。</p>
-    </div>`;
-}
-
-function scene3(wrap) {
-  wrap.innerHTML = `
-    <div class="cg-bg cg-bg-city"><div class="cg-city-silhouette"></div><div class="cg-searchlight"></div></div>
-    <div class="cg-frame"></div>
-    <div class="cg-text-block">
-      <span class="cg-kicker">SECTOR 00 / MINICITY</span>
-      <p class="cg-line">道路把城市切成两半。</p>
-      <p class="cg-line" style="animation-delay:1.6s">一半明亮，一半吞没所有回声。</p>
-    </div>`;
-}
-
-function scene4(wrap) {
-  wrap.innerHTML = `
-    <div class="cg-bg cg-bg-approach"><div class="cg-gate"></div></div>
-    <div class="cg-frame"></div>
-    <div class="cg-text-block">
-      <span class="cg-kicker">CITY LIMIT</span>
-      <p class="cg-line cg-quote">「一座城市，怎么会没有管理人员呢？」</p>
-      <p class="cg-line" style="animation-delay:1.8s">空旷的声音，像是在回答你。</p>
-    </div>`;
-}
-
-function scene5(wrap) {
-  if (cgScene5Shown) return;
-  cgScene5Shown = true;
-  wrap.innerHTML = `
-    <div class="cg-bg cg-bg-title"></div>
-    <div class="cg-frame"></div>
-    <div class="cg-title-block">
-      <span class="cg-kicker">A CITY AWAITS</span>
-      <h1 class="cg-title">物实小城</h1>
-      <p class="cg-title-en">MINICITY</p>
-      <button class="cg-enter-btn" id="cgEnterBtn">进入边界</button>
-    </div>`;
-  const btn = document.getElementById('cgEnterBtn');
-  if (btn) btn.addEventListener('click', endCG);
-  cgAutoEnterTimer = setTimeout(endCG, 8000);
-}
-
-function skipCG() {
-  if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
-  if (cgAutoEnterTimer) { clearTimeout(cgAutoEnterTimer); cgAutoEnterTimer = null; }
-  const wrap = document.getElementById('cgSceneWrap');
-  scene5(wrap);
-}
-
-function endCG() {
-  if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
-  if (cgAutoEnterTimer) { clearTimeout(cgAutoEnterTimer); cgAutoEnterTimer = null; }
-  localStorage.setItem('minicityCGSeenV2', 'true');
-  const overlay = document.getElementById('cgOverlay');
-  overlay.classList.remove('active');
-  setTimeout(() => {
-    overlay.style.display = 'none';
-    if(localStorage.getItem('minicityUser')) proceedToCity();
-    else showLogin();
-  }, 600);
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 // MODAL SYSTEM — ancient paper dialog
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -4412,6 +3536,13 @@ export function startMiniCity() {
   if(started)return;
   started=true;
   eventController=new AbortController();
+  initCG({
+    onFinish: () => {
+      if(localStorage.getItem('minicityUser')) proceedToCity();
+      else showLogin();
+    },
+    reduced: REDUCED,
+  });
   document.body.classList.remove('day','night');
   document.body.classList.add(isNight?'night':'day');
   init();
@@ -4423,9 +3554,8 @@ export function destroyMiniCity() {
   cancelAnimationFrame(animationFrame);
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
-  clearTimeout(cgAutoEnterTimer);
+  destroyCG();
   eventController.abort();
-  cgTimeline?.kill();
   npcList.forEach(npc=>npc.tween?.kill());
   gsap.globalTimeline.clear();
   mapShotRenderer?.dispose();

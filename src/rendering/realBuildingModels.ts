@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { SATELLITE_CITY } from '../cityConfig';
-import { RENDER_ORDER, SURFACE_Y } from '../../rendering/layers';
+import { SATELLITE_CITY } from '../city/data/cityConfig';
+import { RENDER_ORDER, SURFACE_Y } from './layers';
 
 const MODEL_URLS = {
-  banana: new URL('../../../banana.glb', import.meta.url).href,
-  buildings: new URL('../../../buildings.glb', import.meta.url).href,
+  banana: new URL('./models/banana.glb', import.meta.url).href,
+  buildings: new URL('./models/buildings.glb', import.meta.url).href,
 };
 
 export type ReplaceableBuilding = {

@@ -26,7 +26,14 @@ Playwright 浏览器缓存通过用户环境变量 `PLAYWRIGHT_BROWSERS_PATH` �
 src/
 ├── main.ts                       # 启动与页面/HMR 生命周期
 ├── city/
-│   └── MiniCityApp.ts            # 城市内容、交互、寻路与业务状态
+│   ├── MiniCityApp.ts            # 城市交互、寻路与业务状态
+│   ├── data/
+│   │   ├── buildings.ts          # 建筑定义与对话内容
+│   │   ├── cityConfig.ts         # 城市布局与视觉配置
+│   │   └── npcs.ts               # NPC 档案与对话内容
+│   └── rendering/
+│       ├── createCitySurfaces.ts # 城市地表与道路
+│       └── realBuildingModels.ts # 建筑模型
 ├── core/
 │   ├── InstancedBatch.ts         # 高频静态对象实例批次
 │   └── ResourcePool.ts           # 纹理、几何体、材质缓存与统一释放
