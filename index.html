@@ -213,9 +213,12 @@
     <div class="login-box">
       <span class="login-dot"></span>
       <p class="login-title">边界已经开启。</p>
-      <p class="login-sub">留下你的名字，成为这座城的居民。</p>
-      <input class="login-input" id="loginInput" type="text" placeholder="你的名字"
-             maxlength="20" autocomplete="off" spellcheck="false" />
+      <p class="login-sub">留下昵称和密码，成为这座城唯一身份的居民。</p>
+      <input class="login-input" id="loginInput" type="text" placeholder="昵称（至少两个字，中文/英文/数字）"
+             maxlength="40" autocomplete="off" spellcheck="false" />
+      <input class="login-input" id="loginPassword" type="password" placeholder="密码"
+             maxlength="128" autocomplete="off" spellcheck="false" />
+      <p class="login-error" id="loginError" role="alert" hidden></p>
       <button class="login-btn" id="loginBtn">签下名字，进入小城</button>
     </div>
   </div>

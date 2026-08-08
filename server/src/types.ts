@@ -8,7 +8,7 @@ export type User = {
 };
 
 export type ClientMessage =
-  | { type: 'hello'; token?: string; nickname?: string }
+  | { type: 'hello'; token?: string; nickname?: string; password?: string }
   | { type: 'position'; position: Position }
   | { type: 'chat'; text: string }
   | { type: 'housing.list' }

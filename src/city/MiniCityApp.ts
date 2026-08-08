@@ -2472,6 +2472,7 @@ function setupEvents() {
 
   document.getElementById('loginBtn').addEventListener('click',doLogin,{signal});
   document.getElementById('loginInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();},{signal});
+  document.getElementById('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();},{signal});
 
   document.getElementById('cgSkip').addEventListener('click',skipCG,{signal});
 
@@ -2658,7 +2659,7 @@ function clearUnreadChats() {
   updatePhoneBadge();
 }
 
-function setupMultiplayer(nickname) {
+function setupMultiplayer(nickname, password) {
   if (multiplayer) return;
   multiplayer = new MultiplayerClient({
     connection: (state) => {
@@ -2707,7 +2708,7 @@ function setupMultiplayer(nickname) {
       showUnlockToast(message);
     },
   });
-  multiplayer.connect(nickname);
+  multiplayer.connect(nickname, password);
 }
 
 function updateOnlineCount(count) {
@@ -3899,9 +3900,17 @@ function showLogin() {
 
 function doLogin() {
   const input=document.getElementById('loginInput');
+  const passwordInput=document.getElementById('loginPassword');
+  const errorEl=document.getElementById('loginError');
   const name=(input.value||'').trim();
-  if(!name)return;
+  const password=passwordInput?.value||'';
+  const showError=(msg:string)=>{ if(!errorEl)return; errorEl.textContent=msg; errorEl.hidden=!msg; };
+  if(!name||name.length<2){ showError('昵称至少需要两个字'); return; }
+  if(!/^[\p{L}\p{N}]{2,40}$/u.test(name)){ showError('昵称只能使用中文、英文和数字，不能包含空格或特殊字符'); return; }
+  if(!password){ showError('请输入密码'); return; }
+  showError('');
   localStorage.setItem('minicityUser',name);
+  localStorage.setItem('minicityPassword',password);
   const s=getStats();
   if(!s.joinDate){s.joinDate=Date.now();saveStats(s);}
   getUserId();
@@ -3924,7 +3933,7 @@ function proceedToCity() {
   entranceAnimation();
   if(cursorChar){ cursorChar.visible=true; }
   startTimeTracking();
-  setupMultiplayer(localStorage.getItem('minicityUser')||'居民');
+  setupMultiplayer(localStorage.getItem('minicityUser')||'居民', localStorage.getItem('minicityPassword')||undefined);
   checkAchievements();
 }
 

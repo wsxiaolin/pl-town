@@ -32,6 +32,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     nickname TEXT NOT NULL,
     email TEXT,
+    password_hash TEXT,
     token_hash TEXT NOT NULL UNIQUE,
     position_x REAL NOT NULL DEFAULT 0,
     position_y REAL NOT NULL DEFAULT 0,
@@ -67,18 +68,40 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS housing_requests_target_idx ON housing_requests(target_id, created_at);
   CREATE INDEX IF NOT EXISTS housing_requests_requester_idx ON housing_requests(requester_id, created_at);
 `);
+{
+  const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'password_hash')) db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+}
+{
+  const existing = db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'users_nickname_unique'`).get() as { count: number };
+  if (!existing.count) {
+    const duplicates = db.prepare(`SELECT nickname FROM users GROUP BY nickname COLLATE NOCASE HAVING COUNT(*) > 1`).all() as Array<{ nickname: string }>;
+    for (const duplicate of duplicates) {
+      const rows = db.prepare(`SELECT rowid FROM users WHERE nickname = ? COLLATE NOCASE ORDER BY rowid`).all(duplicate.nickname) as Array<{ rowid: number }>;
+      rows.slice(1).forEach((row) => db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE rowid = ?').run(`${duplicate.nickname}${row.rowid}`, new Date().toISOString(), row.rowid));
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_unique ON users (nickname COLLATE NOCASE)');
+  }
+}
 
 const now = () => new Date().toISOString();
 const rowUser = (row: any): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
-export function createUser(id: string, tokenHash: string, nickname: string): User {
+export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string): User {
   const timestamp = now();
-  db.prepare('INSERT INTO users (id, nickname, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, nickname, tokenHash, timestamp, timestamp);
+  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, timestamp, timestamp);
   return getUser(id)!;
 }
 export function getUserByToken(tokenHash: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE token_hash = ?').get(tokenHash);
   return row ? rowUser(row) : null;
+}
+export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null } | null {
+  const row = db.prepare('SELECT id, nickname, password_hash FROM users WHERE nickname = ? COLLATE NOCASE').get(nickname) as { id: string; nickname: string; password_hash: string | null } | undefined;
+  return row ? { id: row.id, nickname: row.nickname, passwordHash: row.password_hash } : null;
+}
+export function updateUserToken(id: string, tokenHash: string): void {
+  db.prepare('UPDATE users SET token_hash = ?, updated_at = ? WHERE id = ?').run(tokenHash, now(), id);
 }
 export function getUser(id: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);

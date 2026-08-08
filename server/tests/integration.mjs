@@ -12,7 +12,7 @@ const server = spawn(process.execPath, ['dist/index.js'], {
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 
-const connect = (nickname) => new Promise((resolve, reject) => {
+const connect = (nickname, password = 'secret') => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages = [];
   socket.on('message', (raw) => {
@@ -21,7 +21,21 @@ const connect = (nickname) => new Promise((resolve, reject) => {
     if (message.type === 'hello') resolve({ socket, hello: message, messages });
   });
   socket.on('error', reject);
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname })));
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password })));
+});
+
+const connectExpectingError = (nickname, password = 'secret') => new Promise((resolve, reject) => {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  socket.on('message', (raw) => {
+    const message = JSON.parse(raw);
+    if (message.type === 'error') { socket.close(); resolve(message.message); }
+  });
+  socket.on('error', reject);
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for auth error for ${nickname}`)), 3_000);
+  socket.on('open', () => {
+    socket.send(JSON.stringify({ type: 'hello', nickname, password }));
+    setTimeout(() => { clearTimeout(timeout); if (socket.readyState === socket.OPEN) socket.close(); }, 1_000);
+  });
 });
 
 const waitFor = (client, type, predicate = () => true) => new Promise((resolve, reject) => {
@@ -65,6 +79,16 @@ try {
   send(alice, { type: 'chat', text: 'integration-chat' });
   await waitFor(bob, 'chat', (message) => message.text === 'integration-chat');
 
+    // ── 身份与昵称校验 ─────────────────────────────────────────────
+  const oneChar = await connectExpectingError('A');
+  if (!oneChar) throw new Error('One-character nickname should be rejected');
+  const specialChars = await connectExpectingError('小明!');
+  if (!specialChars) throw new Error('Special characters should be rejected');
+  const noPassword = await connectExpectingError('小王', '');
+  if (!noPassword) throw new Error('Missing password should be rejected');
+  const wrongPassword = await connectExpectingError('Alice', 'wrong-pass');
+  if (!wrongPassword) throw new Error('Wrong password should be rejected');
+
   const buildingId = 'residence:3.00:4.00';
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
@@ -86,6 +110,12 @@ try {
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.ownerId === bob.hello.user.id));
   send(bob, { type: 'housing.release', buildingId });
   await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => house.buildingId === buildingId));
+
+  // 相同昵称+正确密码登录返回同一个全局唯一 ID
+  const aliceAgain = await connect('Alice');
+  if (aliceAgain.hello.user.id !== alice.hello.user.id) throw new Error('Logging in again with the same nickname must restore the same user ID');
+  if (aliceAgain.hello.user.id === bob.hello.user.id) throw new Error('Different residents must not share an ID');
+  aliceAgain.socket.close();
 
   console.log('Integration passed: identity, position, chat, housing applications, invite decline/accept, and lifecycle');
 } finally {

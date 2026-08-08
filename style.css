@@ -1172,6 +1172,15 @@ body.night .time-display::before { background: #8FB4E8; }
 }
 .login-input:focus { border-bottom-color: var(--blue); }
 .login-input::placeholder { color: var(--text-light); }
+.login-input + .login-input { margin-top: -16px; }
+
+.login-error {
+  width: 100%;
+  margin: -16px 0 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #c0392b;
+}
 
 .login-btn {
   background: var(--blue);

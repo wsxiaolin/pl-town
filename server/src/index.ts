@@ -40,7 +40,13 @@ function handle(client: Client, raw: string) {
   try { message = JSON.parse(raw) as ClientMessage; } catch { fail(client.socket, 'Invalid JSON'); return; }
   if (!message || typeof message !== 'object' || typeof message.type !== 'string') { fail(client.socket, 'Invalid message'); return; }
   if (message.type === 'hello') {
-    const result = authenticate(message.token, message.nickname);
+    let result: ReturnType<typeof authenticate>;
+    try {
+      result = authenticate({ token: message.token, nickname: message.nickname, password: message.password });
+    } catch (error) {
+      fail(client.socket, error instanceof Error ? error.message : '登录失败');
+      return;
+    }
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id) });
     broadcast({ type: 'player.joined', player: client.user }, client.user.id); return;
