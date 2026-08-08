@@ -1,5 +1,6 @@
+import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
-export const NPC_PROFILES = [
+export const NPC_PROFILES = [...COMMUNITY_NPCS,
   {
     id:'linxu', name:'林叙', role:'图书馆管理员', core:true, spawnChance:1,
     behavior:'field', workHours:[9,17],

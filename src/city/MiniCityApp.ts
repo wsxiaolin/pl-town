@@ -2269,7 +2269,10 @@ function npcRoutine(npc) {
   }
 }
 
+const MAX_RARE_VISIBLE_NPCS = 8;
+
 function updateNpcSchedules() {
+  let visibleRare=npcList.filter(n=>n.mesh.visible && (n.profile.behavior==='rare')).length;
   npcList.forEach(npc=>{
     if (currentFilter==='friends') {
       if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } }
@@ -2282,7 +2285,12 @@ function updateNpcSchedules() {
         npc.spawnTimer=14+Math.random()*18;
         const appear=Math.random()<npc.profile.spawnChance;
         npc.mesh.visible=appear;
-        if(!appear && npc.tween){ npc.tween.kill(); npc.tween=null; }
+        if(appear && visibleRare>=MAX_RARE_VISIBLE_NPCS){
+          npc.mesh.visible=false;
+          npc.spawnTimer=6+Math.random()*8;
+        } else if(appear){
+          visibleRare+=1;
+        } else if(!appear && npc.tween){ npc.tween.kill(); npc.tween=null; }
       }
     } else {
       npc.mesh.visible=true;
