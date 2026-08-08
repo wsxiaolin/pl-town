@@ -1222,11 +1222,15 @@ function buildPagoda(cfg) {
   const g = new THREE.Group();
   const tiers = 3, bw = 1.6, tierH = 0.6;
   let y = PLH;
-  const bodyMat = mkBodyMat('wood', 1, 1);
+  // Keep the facade on the actual closed wall meshes. A detached facade plane
+  // leaves visible gaps around the stepped tiers and can be mistaken for a wall.
+  const bodyMat = mkBodyMat('facade_pagoda', 1, 1);
+  let body = null;
   for (let i = 0; i < tiers; i++) {
     const w = bw * (1 - i * 0.18);
-    const body = mk(new THREE.BoxGeometry(w, tierH, w), bodyMat);
-    body.position.y = y + tierH/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const tierBody = mk(new THREE.BoxGeometry(w, tierH, w), bodyMat);
+    tierBody.position.y = y + tierH/2; tierBody.castShadow = tierBody.receiveShadow = true; g.add(tierBody);
+    if (!body) body = tierBody;
     const roofW = w + 0.6;
     const roof = part(g, new THREE.ConeGeometry(roofW * 0.72, 0.22, 4), {color:0xC45A4A,roughness:0.4,tex:'pagoda_tile',rx:2,ry:1}, [0, y + tierH + 0.11, 0]);
     roof.rotation.y = Math.PI/4;
@@ -1235,7 +1239,7 @@ function buildPagoda(cfg) {
   part(g, new THREE.ConeGeometry(0.08, 0.35, 6), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.2}, [0, y, 0], false);
   part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
   g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
-  return {...cfg, group:g, body:g.children[1], bodyMat, labelEl:null, labelY:y+0.5};
+  return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:y+0.5};
 }
 
 // 17 MARKET — open-air stalls with striped awning
@@ -1471,7 +1475,7 @@ function buildCrown(cfg) {
   // Stone base
   part(g, new THREE.CylinderGeometry(1.8, 2.0, 0.3, 32), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.15,0]);
   // Crown band — main cylinder body with golden "King Ice" texture
-  const bodyMat = stdMat({color:0xE8A838,roughness:0.25,metalness:0.35,tex:'kingice',rx:2,ry:1});
+  const bodyMat = stdMat({color:0xE8A838,roughness:0.25,metalness:0.35,tex:'kingice',rx:1,ry:1});
   bodyMat.emissive = new THREE.Color(P.GOLD); bodyMat.emissiveIntensity = 0;
   const body = mk(new THREE.CylinderGeometry(1.5, 1.6, 1.6, 32), bodyMat);
   body.position.y = 0.3 + 0.8; body.castShadow = body.receiveShadow = true; g.add(body);
@@ -1656,23 +1660,22 @@ function addBuildings() {
     pavilion:'facade_temple',library:'facade_library',ruins:'facade_library',
     skyscraper:'facade_skyscraper',campus:'facade_campus',kiosk:'facade_kiosk',
     screen:'facade_screen',shaft:'facade_shaft',altar:'facade_altar',
-    observatory:'facade_observatory',pagoda:'facade_pagoda',market:'facade_market',
+    observatory:'facade_observatory',market:'facade_market',
     greenhouse:'facade_greenhouse',clocktower:'facade_clocktower',temple:'facade_temple',
     factory:'facade_factory',mall:'facade_mall',school:'facade_school',
-    crown:'facade_clocktower',banana:'facade_banana',qipai:'facade_qipai'
+    banana:'facade_banana',qipai:'facade_qipai'
   };
   BUILDING_DEFS.forEach(cfg => {
     const b = SHAPE_FNS[cfg.shape](cfg);
-    // Add facade planes on body faces
+    // Facade planes are only valid for rectangular bodies. Curved buildings
+    // carry their facade texture directly on the mesh so their outline stays
+    // circular and the texture closes around the circumference.
     if (b.body && b.body.geometry && b.body.geometry.parameters) {
       const p = b.body.geometry.parameters;
-      let bw, bh, bd;
-      if (p.width !== undefined) { bw = p.width; bh = p.height; bd = p.depth; }
-      else if (p.radiusTop !== undefined) { bw = p.radiusTop*2; bh = p.height; bd = p.radiusTop*2; }
-      else if (p.radius !== undefined) { bw = p.radius*2; bh = p.radius*2; bd = p.radius*2; }
-      else { bw = 2; bh = 2; bd = 2; }
+      const isBoxBody = p.width !== undefined && p.height !== undefined && p.depth !== undefined;
+      const bw = p.width, bh = p.height, bd = p.depth;
       const fk = cfg.facade || FACADE_MAP[cfg.shape];
-      if (fk && bw > 0.3 && bh > 0.3) {
+      if (isBoxBody && fk && bw > 0.3 && bh > 0.3) {
         addFacade(b.group, fk, bw, bh, b.body.position.y, bd/2 + 0.012);
         const f2 = addFacade(b.group, fk, bw, bh, b.body.position.y, -(bd/2 + 0.012));
         if (f2) f2.rotation.y = Math.PI;
