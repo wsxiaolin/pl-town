@@ -10,7 +10,7 @@ export default defineConfig({
     browserName: 'chromium',
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+    command: 'npm run dev -w @minicity/web -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: true,
   },

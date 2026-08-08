@@ -1,25 +1,18 @@
 {
-  "name": "minicity",
+  "name": "minicity-workspace",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
+  "workspaces": ["apps/web", "apps/server"],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "gsap": "^3.15.0",
-    "three": "^0.160.1"
+    "dev": "concurrently -k -n WEB,SERVER -c cyan,green \"npm run dev -w @minicity/web\" \"npm run dev -w @minicity/server\"",
+    "start": "npm run dev",
+    "build": "tsc -p apps/web/tsconfig.json --noEmit && vite build --config apps/web/vite.config.ts && npm run build -w @minicity/server",
+    "typecheck": "tsc -p apps/web/tsconfig.json --noEmit && npm run typecheck -w @minicity/server",
+    "test": "playwright test apps/web/playwright.config.ts && npm run test:integration -w @minicity/server",
+    "test:web": "playwright test apps/web/playwright.config.ts",
+    "test:server": "npm run test:integration -w @minicity/server"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@types/pngjs": "^6.0.5",
-    "@types/three": "^0.160.0",
-    "pngjs": "^7.0.0",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.21"
+    "concurrently": "^9.2.1"
   }
 }

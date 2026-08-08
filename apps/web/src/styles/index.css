@@ -1,0 +1,2 @@
+/* Application-wide styles live behind a stable source-owned entry point. */
+@import './style.css';

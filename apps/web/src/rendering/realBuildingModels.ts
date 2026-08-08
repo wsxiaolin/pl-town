@@ -4,8 +4,8 @@ import { SATELLITE_CITY } from '../city/data/cityConfig';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 
 const MODEL_URLS = {
-  banana: new URL('./models/banana.glb', import.meta.url).href,
-  buildings: new URL('./models/buildings.glb', import.meta.url).href,
+  banana: new URL('../assets/models/banana.glb', import.meta.url).href,
+  buildings: new URL('../assets/models/buildings.glb', import.meta.url).href,
 };
 
 export type ReplaceableBuilding = {
