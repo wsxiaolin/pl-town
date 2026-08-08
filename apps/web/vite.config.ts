@@ -5,6 +5,7 @@ const webRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root: webRoot,
+  base: process.env.BASE_PATH || '/', // GitHub Pages 部署在子路径时注入（如 /pl-town/）
   server: {
     host: true,
     port: 5173,
