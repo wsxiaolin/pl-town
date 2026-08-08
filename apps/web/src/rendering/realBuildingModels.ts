@@ -91,7 +91,9 @@ function addBuildingPack(scene: THREE.Scene, sources: THREE.Object3D[]): void {
     model.name = `imported-building-${index + 1}`;
     model.userData.assetPack = 'buildings';
     model.position.set(x, 0, z);
-    model.rotation.y = ((index * 3) % 8) * Math.PI / 8;
+    // Keep each house facing the same direction so the satellite rows read as
+    // a continuous, orderly residential block.
+    model.rotation.y = 0;
     scene.add(model);
     const plot = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 8.4), plotMaterial);
     plot.rotation.x = -Math.PI / 2;
@@ -116,7 +118,7 @@ function addDesignedBuildings(scene: THREE.Scene, buildings: ReplaceableBuilding
     model.name = `satellite-designed-${index + 1}`;
     model.userData.assetPack = 'main-city-design';
     model.position.set(x, 0, z);
-    model.rotation.y = index % 2 ? Math.PI / 6 : -Math.PI / 8;
+    model.rotation.y = 0;
     scene.add(model);
     const plot = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 7.4), plotMaterial);
     plot.rotation.x = -Math.PI / 2;
