@@ -706,8 +706,15 @@ let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let dialogOpen = false, activeNpc = null, activeNode = null;
 let pendingDistance = 0;
-let gameClock = 9; // 游戏时间（小时）：现实 1 分钟 = 游戏 1 小时
-let gameTimeRef = Date.now(); // 实时时间的锚点：页面加载瞬间视为早上 9 点
+// 游戏时间算法（写死）：由现实北京时间推算，全程统一，全中国同一现实时刻 = 同一游戏时间。
+// 基准：现实北京时间 00:00 视为游戏 00:00；加速不变，现实 1 分钟 = 游戏 1 小时。
+function computeGameTime(ms = Date.now()) {
+  const beijing = ms + 8 * 3600 * 1000;      // 统一 UTC+8，不受本机时区影响
+  const dayStart = beijing - (beijing % 86400000); // 现实当日 00:00（北京时间）
+  const gameH = ((beijing - dayStart) / 60000);     // 现实分钟数即游戏小时数
+  return gameH % 24;                                // 溢出 24 小时回绕
+}
+let gameClock = computeGameTime();
 let multiplayer = null;
 const remotePlayers = new Map();
 let lastNetworkPosition = 0;
@@ -3171,7 +3178,7 @@ function tweenColor(c,hex,dur) {
 }
 
 function syncTimeAndTheme() {
-  gameClock=(9+(Date.now()-gameTimeRef)/60000)%24; // 实时计算：加载时刻=9点，此后每分钟快进1小时
+  gameClock = computeGameTime(); // 写死算法：由现实北京时间推算，全中国同一时刻游戏时间一致
   const night = gameClock>=19 || gameClock<6;
   if (night!==isNight) {
     isNight=night;
