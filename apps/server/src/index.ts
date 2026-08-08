@@ -8,6 +8,9 @@ import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 type Client = { socket: WebSocket; user: User; ready: boolean };
 const clients = new Map<string, Client>();
 const pendingPositions = new Map<string, Position>();
+const authAttempts = new Map<string, { count: number; startedAt: number }>();
+const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
+const MAX_MESSAGES_PER_SECOND = 60;
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
@@ -36,13 +39,25 @@ setInterval(() => pendingPositions.forEach((_position, userId) => flushPosition(
 
 function requireReady(client: Client, action: () => void) { if (!client.ready) fail(client.socket, 'Send hello before other messages'); else action(); }
 function handle(client: Client, raw: string) {
+  if (raw.length > 16_384) return fail(client.socket, 'Message too large');
+  const now = Date.now();
+  const window = messageWindows.get(client.socket) ?? { startedAt: now, count: 0 };
+  if (now - window.startedAt >= 1_000) { window.startedAt = now; window.count = 0; }
+  if (++window.count > MAX_MESSAGES_PER_SECOND) return fail(client.socket, 'Too many messages');
+  messageWindows.set(client.socket, window);
   let message: ClientMessage;
   try { message = JSON.parse(raw) as ClientMessage; } catch { fail(client.socket, 'Invalid JSON'); return; }
   if (!message || typeof message !== 'object' || typeof message.type !== 'string') { fail(client.socket, 'Invalid message'); return; }
   if (message.type === 'hello') {
+    const address = (client.socket as WebSocket & { _socket?: { remoteAddress?: string } })._socket?.remoteAddress ?? 'unknown';
+    const attempt = authAttempts.get(address) ?? { count: 0, startedAt: now };
+    if (now - attempt.startedAt >= 60_000) { attempt.startedAt = now; attempt.count = 0; }
+    if (++attempt.count > 20) return fail(client.socket, 'Too many authentication attempts');
+    authAttempts.set(address, attempt);
     let result: ReturnType<typeof authenticate>;
     try {
       result = authenticate({ token: message.token, nickname: message.nickname, password: message.password });
+      authAttempts.delete(address);
     } catch (error) {
       fail(client.socket, error instanceof Error ? error.message : '登录失败');
       return;
@@ -104,7 +119,7 @@ function handle(client: Client, raw: string) {
   });
 }
 
-const http = createServer((request, response) => { if (request.url === '/healthz') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ ok: true, online: clients.size })); return; } response.writeHead(404); response.end(); });
-const wss = new WebSocketServer({ server: http });
+const http = createServer((request, response) => { if (request.url === '/healthz') { response.writeHead(200, { 'content-type': 'application/json', 'x-content-type-options': 'nosniff', 'cache-control': 'no-store' }); response.end(JSON.stringify({ ok: true, online: clients.size })); return; } response.writeHead(404, { 'x-content-type-options': 'nosniff' }); response.end(); });
+const wss = new WebSocketServer({ server: http, maxPayload: 16 * 1024 });
 wss.on('connection', (socket) => { const client = { socket, user: null as unknown as User, ready: false }; socket.on('message', (data) => handle(client, data.toString())); socket.on('close', () => { if (client.ready && clients.get(client.user.id)?.socket === socket) { flushPosition(client.user.id); clients.delete(client.user.id); broadcast({ type: 'player.left', playerId: client.user.id }); } }); });
 http.listen(PORT, HOST, () => console.log(`MiniCity server listening on http://${HOST}:${PORT}`));

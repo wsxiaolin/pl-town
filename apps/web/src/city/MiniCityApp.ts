@@ -3913,7 +3913,7 @@ function doLogin() {
   if(!password){ showError('请输入密码'); return; }
   showError('');
   localStorage.setItem('minicityUser',name);
-  localStorage.setItem('minicityPassword',password);
+  // Keep the password in memory only; persistent credentials are a security risk.
   const s=getStats();
   if(!s.joinDate){s.joinDate=Date.now();saveStats(s);}
   getUserId();
@@ -3923,7 +3923,7 @@ function doLogin() {
   overlay.classList.add('hidden');
   setTimeout(()=>{
     overlay.style.display='none';
-    proceedToCity();
+    proceedToCity(name, password);
   },550);
 }
 
@@ -3932,11 +3932,12 @@ function applyUsername(name) {
   if(el) el.textContent='— '+name;
 }
 
-function proceedToCity() {
+function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string) {
   entranceAnimation();
   if(cursorChar){ cursorChar.visible=true; }
   startTimeTracking();
-  setupMultiplayer(localStorage.getItem('minicityUser')||'居民', localStorage.getItem('minicityPassword')||undefined);
+  localStorage.removeItem('minicityPassword');
+  setupMultiplayer(nickname, password);
   checkAchievements();
 }
 
@@ -3994,9 +3995,11 @@ function renderClean() {
     </div>`;
   }).join('');
 
-  document.getElementById('spBody').innerHTML=`
+  const body = document.getElementById('spBody');
+  if (!body) return;
+  body.innerHTML=`
     <div class="sp-user-row">
-      <div class="sp-username">${name}</div>
+      <div class="sp-username"></div>
       <div class="sp-level">LVL ${level}</div>
     </div>
     <div class="sp-since">citizen since ${since}</div>
@@ -4020,6 +4023,7 @@ function renderClean() {
       <div class="sp-ul-title">ACHIEVEMENTS · ${achList.length}&thinsp;/&thinsp;${ACHIEVEMENTS.length}</div>
       ${achRows}
     </div>`;
+  body.querySelector('.sp-username')?.replaceChildren(document.createTextNode(name));
 }
 
 function renderRaw() {
@@ -4051,7 +4055,12 @@ function renderRaw() {
   sep].join('\n');
 
   const content=`> SELECT * FROM city_stats\n  WHERE user_id = '${uid}';\n\n${table}\n\n1 row in set (0.001 sec)\n\n> _`;
-  document.getElementById('spBody').innerHTML=`<pre class="sp-raw">${content}</pre>`;
+  const body = document.getElementById('spBody');
+  if (!body) return;
+  const pre = document.createElement('pre');
+  pre.className = 'sp-raw';
+  pre.textContent = content;
+  body.replaceChildren(pre);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
