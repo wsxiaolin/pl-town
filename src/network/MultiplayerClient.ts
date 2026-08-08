@@ -1,6 +1,19 @@
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
 export type NetUser = { id: string; nickname: string; email: string | null; position: NetPosition };
 export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string }> };
+export type HousingRequest = {
+  id: number;
+  buildingId: string;
+  houseName: string | null;
+  ownerId: string;
+  ownerNickname: string;
+  requesterId: string;
+  requesterNickname: string;
+  targetId: string;
+  targetNickname: string;
+  kind: 'invite' | 'application';
+  createdAt: string;
+};
 
 type Callbacks = {
   connected?: (user: NetUser, players: NetUser[], houses: House[]) => void;
@@ -10,6 +23,7 @@ type Callbacks = {
   playerLeft?: (id: string) => void;
   chat?: (message: { userId: string; nickname: string; text: string }) => void;
   houses?: (houses: House[]) => void;
+  requests?: (requests: HousingRequest[]) => void;
   error?: (message: string) => void;
 };
 
@@ -42,12 +56,13 @@ export class MultiplayerClient {
   private scheduleReconnect(nickname: string) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(nickname), 2500); }
   private handle(raw: string) {
     let message: any; try { message = JSON.parse(raw); } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.user = message.user; this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user, message.players ?? [], message.houses ?? []); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.user = message.user; this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
     else if (message.type === 'chat') this.callbacks.chat?.(message);
     else if (message.type === 'housing.updated' || message.type === 'housing.list') this.callbacks.houses?.(message.houses ?? []);
+    else if (message.type === 'housing.requests') this.callbacks.requests?.(message.requests ?? []);
     else if (message.type === 'error') this.callbacks.error?.(message.message ?? '服务器请求失败');
   }
   private send(message: object) { if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message)); }

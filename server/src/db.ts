@@ -10,6 +10,20 @@ export type House = {
   members: Array<{ userId: string; nickname: string }>;
 };
 
+export type HousingRequest = {
+  id: number;
+  buildingId: string;
+  houseName: string | null;
+  ownerId: string;
+  ownerNickname: string;
+  requesterId: string;
+  requesterNickname: string;
+  targetId: string;
+  targetNickname: string;
+  kind: 'invite' | 'application';
+  createdAt: string;
+};
+
 const db = new Database(DATABASE_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -41,6 +55,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS house_members_user_idx ON house_members(user_id);
   CREATE UNIQUE INDEX IF NOT EXISTS house_members_one_home_idx ON house_members(user_id);
+  CREATE TABLE IF NOT EXISTS housing_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    building_id TEXT NOT NULL REFERENCES houses(building_id) ON DELETE CASCADE,
+    requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('invite', 'application')),
+    created_at TEXT NOT NULL,
+    UNIQUE (building_id, requester_id, target_id, kind)
+  );
+  CREATE INDEX IF NOT EXISTS housing_requests_target_idx ON housing_requests(target_id, created_at);
+  CREATE INDEX IF NOT EXISTS housing_requests_requester_idx ON housing_requests(requester_id, created_at);
 `);
 
 const now = () => new Date().toISOString();
@@ -85,3 +110,43 @@ export function addMember(buildingId: string, userId: string): void { db.prepare
 export function removeMember(buildingId: string, userId: string): void { db.prepare('DELETE FROM house_members WHERE building_id = ? AND user_id = ?').run(buildingId, userId); }
 export function transferHouse(buildingId: string, userId: string): void { db.prepare('UPDATE houses SET owner_id = ?, updated_at = ? WHERE building_id = ?').run(userId, now(), buildingId); }
 export function deleteHouse(buildingId: string): void { db.prepare('DELETE FROM houses WHERE building_id = ?').run(buildingId); }
+
+const requestQuery = `
+  SELECT r.id, r.building_id, r.requester_id, r.target_id, r.kind, r.created_at,
+         h.name AS house_name, h.owner_id, owner.nickname AS owner_nickname,
+         requester.nickname AS requester_nickname, target.nickname AS target_nickname
+  FROM housing_requests r
+  JOIN houses h ON h.building_id = r.building_id
+  JOIN users owner ON owner.id = h.owner_id
+  JOIN users requester ON requester.id = r.requester_id
+  JOIN users target ON target.id = r.target_id
+  WHERE r.requester_id = ? OR r.target_id = ?
+  ORDER BY r.created_at DESC
+`;
+const rowRequest = (row: any): HousingRequest => ({
+  id: row.id,
+  buildingId: row.building_id,
+  houseName: row.house_name,
+  ownerId: row.owner_id,
+  ownerNickname: row.owner_nickname,
+  requesterId: row.requester_id,
+  requesterNickname: row.requester_nickname,
+  targetId: row.target_id,
+  targetNickname: row.target_nickname,
+  kind: row.kind,
+  createdAt: row.created_at,
+});
+export function listHousingRequestsForUser(userId: string): HousingRequest[] {
+  return (db.prepare(requestQuery).all(userId, userId) as any[]).map(rowRequest);
+}
+export function getHousingRequest(id: number): HousingRequest | null {
+  const row = db.prepare(`${requestQuery.replace('WHERE r.requester_id = ? OR r.target_id = ?', 'WHERE r.id = ?')}`).get(id);
+  return row ? rowRequest(row) : null;
+}
+export function createHousingRequest(buildingId: string, requesterId: string, targetId: string, kind: HousingRequest['kind']): void {
+  db.prepare('INSERT INTO housing_requests (building_id, requester_id, target_id, kind, created_at) VALUES (?, ?, ?, ?, ?)').run(buildingId, requesterId, targetId, kind, now());
+}
+export function deleteHousingRequest(id: number): void { db.prepare('DELETE FROM housing_requests WHERE id = ?').run(id); }
+export function deleteHousingRequestsForUser(userId: string): void {
+  db.prepare('DELETE FROM housing_requests WHERE requester_id = ? OR target_id = ?').run(userId, userId);
+}

@@ -114,13 +114,16 @@ npm start
 {"type":"housing.claim","buildingId":"residence-01","name":"可选名称"}
 {"type":"housing.rename","buildingId":"residence-01","name":"新名称"}
 {"type":"housing.invite","buildingId":"residence-01","userId":"受邀用户 ID"}
+{"type":"housing.apply","buildingId":"residence-01"}
+{"type":"housing.accept","requestId":123}
+{"type":"housing.decline","requestId":123}
 {"type":"housing.kick","buildingId":"residence-01","userId":"成员 ID"}
 {"type":"housing.leave","buildingId":"residence-01"}
 {"type":"housing.transfer","buildingId":"residence-01","userId":"新所有者 ID"}
 {"type":"housing.release","buildingId":"residence-01"}
 ```
 
-规则：住宅只能有一个所有者；所有者自动是成员；最多 10 名成员；每名用户最多入住一间住宅；邀请目前代表所有者直接批准入住；转让对象必须已经是成员；所有者必须先转让或放弃住宅，不能直接退出。任何变更都会向全服广播最新的 `housing.updated` 快照。
+规则：住宅只能有一个所有者；所有者自动是成员；最多 10 名成员；每名用户最多入住一间住宅。邀请和主动申请都会先创建待处理请求，邀请对象或房主必须通过 `housing.accept` 同意，拒绝使用 `housing.decline`；请求状态通过 `housing.requests` 返回。转让对象必须已经是成员；所有者必须先转让或放弃住宅，不能直接退出。任何变更都会向全服广播最新的 `housing.updated` 快照。
 
 所有失败响应都是：
 

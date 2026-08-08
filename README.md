@@ -22,9 +22,11 @@ $env:VITE_SERVER_URL='wss://example.org'
 npm run dev
 ```
 
-右下角“联机”面板提供全服文字公聊和住宅状态。点击地图中的小型居民楼可以查看、
-认领和管理住宅。临时身份恢复令牌保存在浏览器 `localStorage` 中，聊天正文不会写入
-数据库。服务器启动方式和消息协议见 [`server/README.md`](server/README.md)。
+右下角悬浮的“居民手机”图标集中了在线状态、全服文字公聊和住宅管理，移动端以
+底部抽屉形式展开，不再遮挡左下角的人物状态。点击地图中的小型居民楼可以查看、
+认领和管理住宅；被命名的住宅会在 3D 场景和全景地图上直接显示名字。临时身份
+恢复令牌保存在浏览器 `localStorage` 中，聊天正文不会写入数据库。服务器启动方式
+和消息协议见 [`server/README.md`](server/README.md)。
 
 ```bash
 npm run typecheck

@@ -714,7 +714,14 @@ let lastNetworkPosition = 0;
 let onlinePlayers = [];
 const residences = [];
 let currentHouses = [];
+let currentHousingRequests = [];
 let selectedResidenceId = null;
+let unreadChats = 0;
+let pendingHousingRequests = 0;
+let residenceClaimId = null;
+// 住宅卡片内联面板（改名/邀请/成员/放弃/退出）的展开状态，跨刷新保留
+let housePanelState = { houseId: null, mode: null };
+const HOUSE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/><path d="M10.2 20v-5h3.6v5"/></svg>';
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -1890,7 +1897,7 @@ function addSmallBlock(x,y,z,type,i) {
   g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
   g.traverse((object)=>{ if(object.isMesh) object.userData.residenceId=residenceId; });
   scene.add(g); raycastBuildingGroups.push(g);
-  residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅`,group:g});
+  residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅`,group:g,labelEl:null});
   // ── 建筑下面的小地块贴图（成片共享纹理）──
   const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
   const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];
@@ -2555,10 +2562,24 @@ function onMouseMove(e) {
 function setupMultiplayerUI() {
   const toggle = document.getElementById('onlinePanelToggle');
   const panel = document.getElementById('onlinePanel');
+  const closeBtn = document.getElementById('phoneClose');
   const form = document.getElementById('chatForm');
   const input = document.getElementById('chatInput');
   if (!toggle || !panel || !form || !input) return;
-  toggle.addEventListener('click', () => panel.classList.toggle('open'), { signal: eventController.signal });
+  const claimClose = document.getElementById('residenceClaimClose');
+  const claimCancel = document.getElementById('residenceClaimCancel');
+  const claimSubmit = document.getElementById('residenceClaimSubmit');
+  const applyButton = document.getElementById('residenceApply');
+  const navigateButton = document.getElementById('residenceNavigate');
+  const claimInput = document.getElementById('residenceNameInput');
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setPhoneOpen(!panel.classList.contains('open'));
+  }, { signal: eventController.signal });
+  closeBtn?.addEventListener('click', () => setPhoneOpen(false), { signal: eventController.signal });
+  document.addEventListener('click', (event) => {
+    if (panel.classList.contains('open') && !panel.contains(event.target) && !toggle.contains(event.target)) setPhoneOpen(false);
+  }, { signal: eventController.signal });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     const text = input.value.trim();
@@ -2570,7 +2591,63 @@ function setupMultiplayerUI() {
     const target = tab.dataset.onlineTab;
     document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item === tab));
     document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === `online${target === 'chat' ? 'Chat' : 'Houses'}View`));
+    if (target === 'chat') clearUnreadChats();
   }, { signal: eventController.signal }));
+  claimClose?.addEventListener('click', closeResidencePanel, { signal: eventController.signal });
+  claimCancel?.addEventListener('click', closeResidencePanel, { signal: eventController.signal });
+  claimSubmit?.addEventListener('click', () => {
+    if (!residenceClaimId) return;
+    const name = claimInput?.value.trim() || '';
+    if (!name) { claimInput?.focus(); return; }
+    if (multiplayer?.user) {
+      claimSubmit.setAttribute('disabled', 'true');
+      multiplayer.housing('claim', { buildingId: residenceClaimId, name });
+    } else {
+      showUnlockToast('联机后才能认领住宅');
+    }
+  }, { signal: eventController.signal });
+  navigateButton?.addEventListener('click', () => {
+    if (residenceClaimId) navigateToResidence(residenceClaimId);
+  }, { signal: eventController.signal });
+  applyButton?.addEventListener('click', () => {
+    if (!residenceClaimId || applyButton.hasAttribute('disabled')) return;
+    multiplayer?.housing('apply', { buildingId: residenceClaimId });
+    applyButton.setAttribute('disabled', 'true');
+    applyButton.textContent = '申请中';
+    showUnlockToast('入住申请已发送');
+  }, { signal: eventController.signal });
+  document.getElementById('residenceClaim')?.addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeResidencePanel();
+  }, { signal: eventController.signal });
+}
+
+// 打开/收起“居民手机”，并同步悬浮按钮状态与未读角标
+function setPhoneOpen(open) {
+  const panel = document.getElementById('onlinePanel');
+  const toggle = document.getElementById('onlinePanelToggle');
+  if (!panel || !toggle) return;
+  panel.classList.toggle('open', open);
+  toggle.classList.toggle('active', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  if (open && document.querySelector('[data-online-tab="chat"]')?.classList.contains('active')) clearUnreadChats();
+}
+
+function bumpUnreadChats() {
+  unreadChats += 1;
+  updatePhoneBadge();
+}
+
+function updatePhoneBadge() {
+  const badge = document.getElementById('phoneBadge');
+  if (!badge) return;
+  const total = unreadChats + pendingHousingRequests;
+  badge.hidden = total === 0;
+  badge.textContent = total > 99 ? '99+' : String(total);
+}
+
+function clearUnreadChats() {
+  unreadChats = 0;
+  updatePhoneBadge();
 }
 
 function setupMultiplayer(nickname) {
@@ -2579,11 +2656,15 @@ function setupMultiplayer(nickname) {
     connection: (state) => {
       const dot = document.getElementById('onlineStateDot');
       const count = document.getElementById('onlineCount');
+      const fab = document.getElementById('onlinePanelToggle');
       dot?.classList.toggle('connected', state === 'connected');
+      fab?.classList.toggle('connected', state === 'connected');
       if (state !== 'connected' && count) count.textContent = '连接中';
     },
     connected: (user, players, houses) => {
       onlinePlayers = players.filter((player) => player.id !== user.id);
+      const owner = document.getElementById('phoneOwner');
+      if (owner) owner.textContent = `${user.nickname} 的手机`;
       if (cursorChar) {
         const unsafe = Math.hypot(user.position.x, user.position.z) < FOUNTAIN_CLEAR || pointInAnyBuilding(user.position.x, user.position.z);
         if (unsafe) {
@@ -2606,7 +2687,17 @@ function setupMultiplayer(nickname) {
     playerLeft: (id) => { onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
     chat: (message) => appendChat(message.nickname, message.text, message.userId === multiplayer?.user?.id),
     houses: renderHouseList,
-    error: (message) => showUnlockToast(message),
+    requests: (requests) => {
+      currentHousingRequests = requests;
+      pendingHousingRequests = requests.filter((request) => request.targetId === multiplayer?.user?.id).length;
+      updatePhoneBadge();
+      renderHouseList(currentHouses);
+    },
+    error: (message) => {
+      document.getElementById('residenceClaimSubmit')?.removeAttribute('disabled');
+      document.getElementById('residenceApply')?.removeAttribute('disabled');
+      showUnlockToast(message);
+    },
   });
   multiplayer.connect(nickname);
 }
@@ -2650,78 +2741,335 @@ function appendChat(nickname, text, own) {
   row.append(author, body); log.appendChild(row);
   while (log.children.length > 80) log.firstElementChild?.remove();
   log.scrollTop = log.scrollHeight;
+  // 手机收起或不在公聊页时，用悬浮按钮角标提示未读
+  const panel = document.getElementById('onlinePanel');
+  const chatActive = document.querySelector('[data-online-tab="chat"]')?.classList.contains('active');
+  if (!own && (!panel?.classList.contains('open') || !chatActive)) bumpUnreadChats();
 }
 
 function renderHouseList(houses) {
   const list = document.getElementById('houseList');
   if (!list) return;
-  currentHouses=houses;
+  currentHouses = houses;
   list.replaceChildren();
   const mine = multiplayer?.user?.id;
-  if(selectedResidenceId){
-    const residence=residences.find((item)=>item.id===selectedResidenceId);
-    const selectedHouse=houses.find((house)=>house.buildingId===selectedResidenceId);
-    const focus=document.createElement('article'); focus.className='house-focus';
-    const title=document.createElement('strong'); title.textContent=selectedHouse?.name||residence?.label||selectedResidenceId;
-    const state=document.createElement('span'); state.textContent=selectedHouse?`已入住 ${selectedHouse.members.length}/10`:'闲置住宅';
-    focus.append(title,state);
-    if(!selectedHouse){
-      const claim=document.createElement('button'); claim.textContent='认领这间住宅';
-      claim.onclick=()=>multiplayer?.housing('claim',{buildingId:selectedResidenceId});
-      focus.appendChild(claim);
-    }
-    list.appendChild(focus);
-  }
+  renderHousingRequests(list, mine);
+  if (selectedResidenceId && houses.some((house) => house.buildingId === selectedResidenceId)) list.appendChild(buildHouseFocus(houses));
   if (!houses.length) {
     const empty = document.createElement('p'); empty.className = 'house-empty'; empty.textContent = '还没有被认领的住宅。'; list.appendChild(empty);
   }
-  houses.forEach((house) => {
-    const row = document.createElement('article'); row.className = 'house-row';
-    const title = document.createElement('strong'); title.textContent = house.name || house.buildingId;
-    const detail = document.createElement('span'); detail.textContent = `${house.members.length}/10 · 所有者 ${house.ownerNickname}`;
-    const members = document.createElement('small'); members.textContent = house.members.map((member) => member.nickname).join('、');
-    row.append(title, detail, members);
-    if (house.ownerId === mine) {
-      const actions = document.createElement('div'); actions.className = 'house-actions';
-      const rename = document.createElement('button'); rename.textContent = '改名'; rename.onclick = () => { const name = window.prompt('住宅名称', house.name || ''); if (name?.trim()) multiplayer?.housing('rename', { buildingId: house.buildingId, name }); };
-      const invite = document.createElement('button'); invite.textContent = '邀请'; invite.onclick = () => {
-        const candidates = onlinePlayers.filter((player) => !houses.some((item) => item.members.some((member) => member.userId === player.id)));
-        const selected = chooseUser('邀请哪位在线居民？', candidates);
-        if (selected) multiplayer?.housing('invite', { buildingId: house.buildingId, userId: selected });
-      };
-      const manage = document.createElement('button'); manage.textContent = '成员'; manage.onclick = () => {
-        const members = house.members.filter((member) => member.userId !== mine);
-        const selected = chooseUser('管理哪位成员？', members.map((member) => ({ id: member.userId, nickname: member.nickname })));
-        if (!selected) return;
-        const action = window.prompt('输入 kick 踢出，或 transfer 转让住宅', 'kick');
-        if (action === 'kick') multiplayer?.housing('kick', { buildingId: house.buildingId, userId: selected });
-        if (action === 'transfer') multiplayer?.housing('transfer', { buildingId: house.buildingId, userId: selected });
-      };
-      const release = document.createElement('button'); release.textContent = '放弃'; release.onclick = () => { if (window.confirm('确认放弃这间住宅？')) multiplayer?.housing('release', { buildingId: house.buildingId }); };
-      actions.append(rename, invite, manage, release); row.appendChild(actions);
-    } else if (house.members.some((member) => member.userId === mine)) {
-      const leave = document.createElement('button'); leave.className = 'house-leave'; leave.textContent = '退出'; leave.onclick = () => multiplayer?.housing('leave', { buildingId: house.buildingId }); row.appendChild(leave);
-    }
-    list.appendChild(row);
-  });
-  if(!selectedResidenceId){
-    const hint=document.createElement('p'); hint.className='house-select-hint'; hint.textContent='点击地图中的小型居民楼，可查看或认领该住宅。'; list.appendChild(hint);
+  houses.forEach((house) => list.appendChild(buildHouseCard(house, houses, mine)));
+  if (!selectedResidenceId) {
+    const hint = document.createElement('p'); hint.className = 'house-select-hint'; hint.textContent = '点击地图中的小型居民楼，可查看或认领该住宅。'; list.appendChild(hint);
+  }
+  syncResidenceLabels();
+  renderMapHouseTags();
+  if (residenceClaimId && houses.some((house) => house.buildingId === residenceClaimId)) openResidence(residenceClaimId);
+  if (residenceClaimId && !houses.some((house) => house.buildingId === residenceClaimId)) {
+    const submit = document.getElementById('residenceClaimSubmit');
+    submit?.removeAttribute('disabled');
   }
 }
 
-function openResidence(residenceId) {
-  selectedResidenceId=residenceId;
-  document.getElementById('onlinePanel')?.classList.add('open');
-  document.querySelectorAll('[data-online-tab]').forEach((tab)=>tab.classList.toggle('active',tab.dataset.onlineTab==='houses'));
-  document.querySelectorAll('.online-view').forEach((view)=>view.classList.toggle('active',view.id==='onlineHousesView'));
+function renderHousingRequests(list, mine) {
+  if (!mine || !currentHousingRequests.length) return;
+  const section = document.createElement('section'); section.className = 'house-requests';
+  const heading = document.createElement('strong'); heading.className = 'house-requests-title'; heading.textContent = '待处理请求'; section.appendChild(heading);
+  currentHousingRequests.forEach((request) => {
+    const incoming = request.targetId === mine;
+    const row = document.createElement('div'); row.className = 'house-request';
+    const text = document.createElement('span'); text.className = 'house-request-text';
+    const houseName = request.houseName || '未命名住宅';
+    text.textContent = incoming
+      ? (request.kind === 'invite' ? `${request.requesterNickname} 邀请你入住「${houseName}」` : `${request.requesterNickname} 申请入住「${houseName}」`)
+      : (request.kind === 'invite' ? `已邀请 ${request.targetNickname} 入住「${houseName}」` : `已申请入住「${houseName}」`);
+    row.appendChild(text);
+    if (incoming) {
+      row.append(
+        houseActionButton('同意', false, () => { multiplayer?.housing('accept', { requestId: request.id }); }, 'primary'),
+        houseActionButton('拒绝', false, () => { multiplayer?.housing('decline', { requestId: request.id }); }, 'danger'),
+      );
+    } else {
+      const pending = document.createElement('small'); pending.className = 'house-request-pending'; pending.textContent = '等待同意'; row.appendChild(pending);
+    }
+    section.appendChild(row);
+  });
+  list.appendChild(section);
+}
+
+// 当前在地图上选中的住宅：未认领时给入口，已认领时显示入住进度
+function buildHouseFocus(houses) {
+  const residence = residences.find((item) => item.id === selectedResidenceId);
+  const house = houses.find((item) => item.buildingId === selectedResidenceId);
+  const focus = document.createElement('article'); focus.className = 'house-focus';
+  const head = document.createElement('div'); head.className = 'hf-head';
+  const icon = document.createElement('span'); icon.className = 'hf-icon'; icon.innerHTML = HOUSE_ICON_SVG;
+  const titles = document.createElement('div'); titles.className = 'hf-titles';
+  const title = document.createElement('strong'); title.textContent = house?.name || '闲置住宅';
+  const addr = document.createElement('span'); addr.className = 'hf-addr'; addr.textContent = residence?.label || selectedResidenceId;
+  titles.append(title, addr);
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'hf-close'; close.textContent = '✕'; close.title = '取消选择';
+  close.onclick = () => { selectedResidenceId = null; renderHouseList(currentHouses); };
+  head.append(icon, titles, close);
+  focus.appendChild(head);
+  const state = document.createElement('div'); state.className = 'hf-state';
+  if (house) {
+    const bar = document.createElement('div'); bar.className = 'hc-bar';
+    const fill = document.createElement('i'); fill.style.width = `${Math.min(100, house.members.length * 10)}%`;
+    bar.appendChild(fill);
+    const text = document.createElement('span'); text.textContent = `已入住 ${house.members.length}/10`;
+    state.append(bar, text);
+    focus.appendChild(state);
+  } else {
+    const text = document.createElement('span'); text.textContent = '这间住宅还没有主人。'; state.appendChild(text);
+    focus.appendChild(state);
+  }
+  return focus;
+}
+
+function houseActionButton(label, active, onClick, variant) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `hc-btn${variant ? ` ${variant}` : ''}${active ? ' active' : ''}`;
+  button.textContent = label;
+  button.onclick = onClick;
+  return button;
+}
+
+function setHousePanel(houseId, mode) {
+  if (housePanelState.houseId === houseId && housePanelState.mode === mode) housePanelState = { houseId: null, mode: null };
+  else housePanelState = { houseId, mode };
   renderHouseList(currentHouses);
 }
 
-function chooseUser(question, users) {
-  if (!users.length) { showUnlockToast('当前没有可选择的在线居民'); return null; }
-  const choices = users.map((user, index) => `${index + 1}. ${user.nickname}`).join('\n');
-  const value = Number(window.prompt(`${question}\n${choices}`, '1'));
-  return Number.isInteger(value) && users[value - 1] ? users[value - 1].id : null;
+function buildHouseCard(house, houses, mine) {
+  const isOwner = house.ownerId === mine;
+  const isMember = house.members.some((member) => member.userId === mine);
+  const card = document.createElement('article');
+  card.className = `house-card${isOwner ? ' mine' : ''}${house.buildingId === selectedResidenceId ? ' selected' : ''}`;
+
+  const head = document.createElement('div'); head.className = 'hc-head';
+  const titleBox = document.createElement('div'); titleBox.className = 'hc-title';
+  const name = document.createElement('strong'); name.className = 'hc-name'; name.textContent = house.name || '未命名住宅';
+  const owner = document.createElement('span'); owner.className = 'hc-owner'; owner.textContent = `所有者 ${house.ownerNickname}`;
+  titleBox.append(name, owner);
+  const occ = document.createElement('span'); occ.className = 'hc-occ'; occ.textContent = `${house.members.length}/10`;
+  head.append(titleBox, occ);
+
+  const bar = document.createElement('div'); bar.className = 'hc-bar';
+  const fill = document.createElement('i'); fill.style.width = `${Math.min(100, house.members.length * 10)}%`;
+  bar.appendChild(fill);
+
+  const members = document.createElement('div'); members.className = 'hc-members';
+  house.members.forEach((member) => {
+    const chip = document.createElement('span');
+    chip.className = `hc-chip${member.userId === house.ownerId ? ' owner' : ''}${member.userId === mine ? ' me' : ''}`;
+    chip.textContent = member.userId === house.ownerId ? `${member.nickname} · 房主` : member.nickname;
+    members.appendChild(chip);
+  });
+  card.append(head, bar, members);
+
+  const panelMode = housePanelState.houseId === house.buildingId ? housePanelState.mode : null;
+  const actions = document.createElement('div'); actions.className = 'hc-actions';
+  if (isOwner) {
+    actions.append(
+      houseActionButton('改名', panelMode === 'rename', () => setHousePanel(house.buildingId, 'rename')),
+      houseActionButton('邀请', panelMode === 'invite', () => setHousePanel(house.buildingId, 'invite')),
+      houseActionButton('成员', panelMode === 'members', () => setHousePanel(house.buildingId, 'members')),
+      houseActionButton('放弃', panelMode === 'release', () => setHousePanel(house.buildingId, 'release'), 'danger'),
+    );
+    card.appendChild(actions);
+  } else if (isMember) {
+    actions.appendChild(houseActionButton('退出住宅', panelMode === 'leave', () => setHousePanel(house.buildingId, 'leave'), 'danger'));
+    card.appendChild(actions);
+  } else if (!houses.some((item) => item.members.some((member) => member.userId === mine))) {
+    const pending = currentHousingRequests.some((request) => request.kind === 'application' && request.buildingId === house.buildingId && request.requesterId === mine);
+    const applyAction = houseActionButton(pending ? '申请中' : '申请入住', false, () => {
+      if (!pending) {
+        multiplayer?.housing('apply', { buildingId: house.buildingId });
+        showUnlockToast(`已申请入住「${house.name || '未命名住宅'}」`);
+      }
+    }, pending ? undefined : 'primary');
+    applyAction.disabled = pending;
+    actions.appendChild(applyAction);
+    card.appendChild(actions);
+  }
+  if (panelMode) card.appendChild(buildHousePanel(house, houses, mine, panelMode));
+  return card;
+}
+
+// 卡片内的内联操作区：改名表单 / 邀请选择器 / 成员管理 / 两步骤确认
+function buildHousePanel(house, houses, mine, mode) {
+  const panel = document.createElement('div'); panel.className = 'hc-panel';
+  const panelTitle = (text) => { const el = document.createElement('span'); el.className = 'hc-panel-title'; el.textContent = text; return el; };
+  if (mode === 'rename') {
+    const form = document.createElement('div'); form.className = 'hc-form';
+    const input = document.createElement('input');
+    input.value = house.name || ''; input.maxLength = 24; input.placeholder = '输入新的住宅名称';
+    input.setAttribute('aria-label', '住宅名称');
+    const save = houseActionButton('保存', false, () => {
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      housePanelState = { houseId: null, mode: null };
+      multiplayer?.housing('rename', { buildingId: house.buildingId, name });
+    }, 'primary');
+    input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); save.click(); } });
+    form.append(input, save, houseActionButton('取消', false, () => setHousePanel(house.buildingId, 'rename')));
+    panel.append(panelTitle('重新命名'), form);
+    requestAnimationFrame(() => input.focus());
+  } else if (mode === 'invite') {
+    panel.appendChild(panelTitle('邀请在线居民入住'));
+    const candidates = onlinePlayers.filter((player) => !houses.some((item) => item.members.some((member) => member.userId === player.id)));
+    const box = document.createElement('div'); box.className = 'hc-candidates';
+    if (!candidates.length) {
+      const empty = document.createElement('p'); empty.className = 'hc-person-empty'; empty.textContent = '当前没有可邀请的在线居民。'; box.appendChild(empty);
+    }
+    candidates.forEach((player) => {
+      const row = document.createElement('div'); row.className = 'hc-person';
+      const name = document.createElement('span'); name.className = 'hc-person-name'; name.textContent = player.nickname;
+      const pendingInvite = currentHousingRequests.some((request) => request.kind === 'invite' && request.buildingId === house.buildingId && request.requesterId === mine && request.targetId === player.id);
+      const inviteAction = houseActionButton(pendingInvite ? '已邀请' : '邀请', false, () => {
+        if (pendingInvite) return;
+        housePanelState = { houseId: null, mode: null };
+        multiplayer?.housing('invite', { buildingId: house.buildingId, userId: player.id });
+        showUnlockToast(`已邀请 ${player.nickname} 入住`);
+      }, 'primary');
+      inviteAction.disabled = pendingInvite;
+      row.append(name, inviteAction);
+      box.appendChild(row);
+    });
+    panel.appendChild(box);
+  } else if (mode === 'members') {
+    panel.appendChild(panelTitle('管理成员'));
+    const rows = document.createElement('div'); rows.className = 'hc-member-rows';
+    const others = house.members.filter((member) => member.userId !== mine);
+    if (!others.length) {
+      const empty = document.createElement('p'); empty.className = 'hc-person-empty'; empty.textContent = '还没有其他成员。'; rows.appendChild(empty);
+    }
+    others.forEach((member) => {
+      const row = document.createElement('div'); row.className = 'hc-person';
+      const name = document.createElement('span'); name.className = 'hc-person-name'; name.textContent = member.nickname;
+      row.append(name,
+        houseActionButton('转让', false, () => {
+          housePanelState = { houseId: null, mode: null };
+          multiplayer?.housing('transfer', { buildingId: house.buildingId, userId: member.userId });
+        }),
+        houseActionButton('踢出', false, () => {
+          housePanelState = { houseId: null, mode: null };
+          multiplayer?.housing('kick', { buildingId: house.buildingId, userId: member.userId });
+        }, 'danger'),
+      );
+      rows.appendChild(row);
+    });
+    panel.appendChild(rows);
+  } else if (mode === 'release' || mode === 'leave') {
+    const text = mode === 'release'
+      ? `确认放弃「${house.name || '这间住宅'}」？所有成员都会被移出。`
+      : `确认退出「${house.name || '这间住宅'}」？`;
+    const confirm = document.createElement('div'); confirm.className = 'hc-confirm';
+    const label = document.createElement('span'); label.textContent = text;
+    confirm.append(label,
+      houseActionButton('确认', false, () => {
+        housePanelState = { houseId: null, mode: null };
+        multiplayer?.housing(mode === 'release' ? 'release' : 'leave', { buildingId: house.buildingId });
+      }, 'danger'),
+      houseActionButton('取消', false, () => setHousePanel(house.buildingId, mode)),
+    );
+    panel.appendChild(confirm);
+  }
+  return panel;
+}
+
+// 被命名的住宅：在 3D 场景中挂上可点击的名字标签
+function syncResidenceLabels() {
+  const wrap = document.getElementById('labelsWrap');
+  if (!wrap) return;
+  residences.forEach((residence) => {
+    const house = currentHouses.find((item) => item.buildingId === residence.id);
+    const name = house?.name?.trim();
+    if (!name) {
+      if (residence.labelEl) { residence.labelEl.remove(); residence.labelEl = null; }
+      return;
+    }
+    if (!residence.labelEl) {
+      const el = document.createElement('button');
+      el.type = 'button'; el.className = 'house-map-label show';
+      el.innerHTML = `${HOUSE_ICON_SVG}<span class="hml-name"></span>`;
+      el.addEventListener('click', (event) => { event.stopPropagation(); openResidence(residence.id); });
+      wrap.appendChild(el);
+      residence.labelEl = el;
+    }
+    residence.labelEl.querySelector('.hml-name').textContent = name;
+  });
+}
+
+// 全景地图上同步显示已命名住宅的名字
+function renderMapHouseTags() {
+  const wrap = document.getElementById('mapIcons');
+  if (!wrap || !mapIconsBuilt) return;
+  wrap.querySelectorAll('.map-house-tag').forEach((el) => el.remove());
+  currentHouses.forEach((house) => {
+    const name = house.name?.trim();
+    if (!name) return;
+    const residence = residences.find((item) => item.id === house.buildingId);
+    if (!residence) return;
+    const tag = document.createElement('button');
+    tag.type = 'button'; tag.className = 'map-house-tag'; tag.textContent = name;
+    tag.style.left = ((residence.group.position.x + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN) * 100) + '%';
+    tag.style.top = ((MAP_SHOT_SPAN - residence.group.position.z) / (2 * MAP_SHOT_SPAN) * 100) + '%';
+    tag.addEventListener('click', () => { if (mapMode) toggleMapMode(); openResidence(house.buildingId); });
+    wrap.appendChild(tag);
+  });
+}
+
+function openResidence(residenceId) {
+  const residence = residences.find((item) => item.id === residenceId);
+  if (!residence) return;
+  selectedResidenceId = residenceId;
+  residenceClaimId = residenceId;
+  const house = currentHouses.find((item) => item.buildingId === residenceId);
+  const panel = document.getElementById('residenceClaim');
+  const title = document.getElementById('residenceClaimTitle');
+  const address = document.getElementById('residenceClaimAddress');
+  const status = document.getElementById('residenceClaimStatus');
+  const field = document.getElementById('residenceNameField');
+  const input = document.getElementById('residenceNameInput');
+  const submit = document.getElementById('residenceClaimSubmit');
+  const apply = document.getElementById('residenceApply');
+  const navigate = document.getElementById('residenceNavigate');
+  if (!panel || !title || !address || !status || !field || !submit || !apply || !navigate) return;
+  title.textContent = house?.name || '未命名住宅';
+  address.textContent = residence.label;
+  status.textContent = house
+    ? `已认领 · 房主 ${house.ownerNickname} · ${house.members.length}/10 名成员`
+    : '这栋住宅尚未被认领。';
+  field.hidden = Boolean(house);
+  submit.hidden = Boolean(house);
+  navigate.hidden = !house;
+  const mine = multiplayer?.user?.id;
+  const alreadyLivesSomewhere = currentHouses.some((item) => item.members.some((member) => member.userId === mine));
+  const canApply = Boolean(house && mine && !alreadyLivesSomewhere && house.ownerId !== mine);
+  const pendingApplication = currentHousingRequests.some((request) => request.kind === 'application' && request.buildingId === residenceId && request.requesterId === mine);
+  apply.hidden = !canApply;
+  apply.textContent = pendingApplication ? '申请中' : '申请入住';
+  apply.toggleAttribute('disabled', pendingApplication);
+  submit.removeAttribute('disabled');
+  if (input) input.value = house?.name || '';
+  panel.hidden = false;
+  if (!house) requestAnimationFrame(() => input?.focus());
+}
+
+function closeResidencePanel() {
+  const panel = document.getElementById('residenceClaim');
+  if (panel) panel.hidden = true;
+  residenceClaimId = null;
+}
+
+function navigateToResidence(residenceId) {
+  const residence = residences.find((item) => item.id === residenceId);
+  if (!residence) return;
+  closeResidencePanel();
+  movePlayerTo(residence.group.position.clone());
 }
 function onCanvasClick() {
   if (dialogOpen) return;
@@ -2860,6 +3208,13 @@ function updateLabels() {
     labelWorldPosition.project(camera);
     b.labelEl.style.transform=`translate3d(${(labelWorldPosition.x*0.5+0.5)*window.innerWidth}px,${((-labelWorldPosition.y)*0.5+0.5)*window.innerHeight}px,0) translate(-50%,-50%)`;
   });
+  residences.forEach(residence=>{
+    if(!residence.labelEl)return;
+    labelWorldPosition.copy(residence.group.position);
+    labelWorldPosition.y=residence.group.position.y+2.45;
+    labelWorldPosition.project(camera);
+    residence.labelEl.style.transform=`translate3d(${(labelWorldPosition.x*0.5+0.5)*window.innerWidth}px,${((-labelWorldPosition.y)*0.5+0.5)*window.innerHeight}px,0) translate(-50%,-50%)`;
+  });
 }
 
 // ── Loop ──────────────────────────────────────────────────────────────────────
@@ -2968,6 +3323,7 @@ function renderMapIcons() {
     el.addEventListener('click',()=>openMapTip(b));
     wrap.appendChild(el);
   });
+  renderMapHouseTags();
 }
 
 function teleportUnlocked() {

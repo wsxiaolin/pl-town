@@ -15,6 +15,9 @@ export type ClientMessage =
   | { type: 'housing.claim'; buildingId: string; name?: string }
   | { type: 'housing.rename'; buildingId: string; name: string }
   | { type: 'housing.invite'; buildingId: string; userId: string }
+  | { type: 'housing.apply'; buildingId: string }
+  | { type: 'housing.accept'; requestId: number }
+  | { type: 'housing.decline'; requestId: number }
   | { type: 'housing.kick'; buildingId: string; userId: string }
   | { type: 'housing.leave'; buildingId: string }
   | { type: 'housing.transfer'; buildingId: string; userId: string }

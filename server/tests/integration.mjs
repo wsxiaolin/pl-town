@@ -50,11 +50,14 @@ const waitForServer = () => new Promise((resolve, reject) => {
 
 let alice;
 let bob;
+let charlie;
 try {
   await waitForServer();
   alice = await connect('Alice');
   bob = await connect('Bob');
   await waitFor(alice, 'player.joined', (message) => message.player.id === bob.hello.user.id);
+  charlie = await connect('Charlie');
+  await waitFor(alice, 'player.joined', (message) => message.player.id === charlie.hello.user.id);
 
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
@@ -65,17 +68,30 @@ try {
   const buildingId = 'residence:3.00:4.00';
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
-  send(alice, { type: 'housing.invite', buildingId, userId: bob.hello.user.id });
+  send(bob, { type: 'housing.apply', buildingId });
+  const application = await waitFor(alice, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'application' && request.requesterId === bob.hello.user.id));
+  send(alice, { type: 'housing.accept', requestId: application.requests.find((request) => request.kind === 'application').id });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.members.length === 2));
+
+  send(alice, { type: 'housing.invite', buildingId, userId: charlie.hello.user.id });
+  const invitation = await waitFor(charlie, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'invite' && request.requesterId === alice.hello.user.id));
+  send(charlie, { type: 'housing.decline', requestId: invitation.requests.find((request) => request.kind === 'invite').id });
+  charlie.messages.length = 0;
+  await waitFor(charlie, 'housing.requests', (message) => !message.requests.some((request) => request.kind === 'invite'));
+  send(alice, { type: 'housing.invite', buildingId, userId: charlie.hello.user.id });
+  const secondInvitation = await waitFor(charlie, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'invite' && request.requesterId === alice.hello.user.id));
+  send(charlie, { type: 'housing.accept', requestId: secondInvitation.requests.find((request) => request.kind === 'invite').id });
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.members.length === 3));
   send(alice, { type: 'housing.transfer', buildingId, userId: bob.hello.user.id });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.ownerId === bob.hello.user.id));
   send(bob, { type: 'housing.release', buildingId });
   await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => house.buildingId === buildingId));
 
-  console.log('Integration passed: identity, position, chat, and housing lifecycle');
+  console.log('Integration passed: identity, position, chat, housing applications, invite decline/accept, and lifecycle');
 } finally {
   alice?.socket.close();
   bob?.socket.close();
+  charlie?.socket.close();
   server.kill();
   await new Promise((resolve) => server.once('exit', resolve));
   for (let attempt = 0; attempt < 5; attempt += 1) {

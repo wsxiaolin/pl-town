@@ -44,14 +44,55 @@
     </div>
   </div>
 
-  <aside class="online-dock" id="onlineDock" aria-live="polite">
-    <div class="online-dock-head"><span><i id="onlineStateDot"></i> <b id="onlineCount">离线</b></span><button id="onlinePanelToggle" type="button" aria-label="打开联机面板">联机</button></div>
-    <div class="online-panel" id="onlinePanel">
-      <div class="online-tabs"><button class="online-tab active" data-online-tab="chat">公聊</button><button class="online-tab" data-online-tab="houses">住宅</button></div>
-      <section class="online-view active" id="onlineChatView"><div class="chat-log" id="chatLog"></div><form class="chat-form" id="chatForm"><input id="chatInput" maxlength="500" autocomplete="off" placeholder="发送公聊消息" /><button type="submit" aria-label="发送">发送</button></form></section>
-      <section class="online-view" id="onlineHousesView"><div class="house-list" id="houseList"></div><p class="house-help">住宅操作会在服务器保存，所有成员共享同一份状态。</p></section>
+  <!-- Resident phone: folds online status / chat / housing into one floating handset -->
+  <button class="phone-fab" id="onlinePanelToggle" type="button" aria-label="打开居民手机" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.6"/><line x1="10.4" y1="5" x2="13.6" y2="5"/><circle cx="12" cy="18.6" r="0.9"/></svg>
+    <i class="phone-fab-state" id="phoneFabState"></i>
+    <span class="phone-fab-badge" id="phoneBadge" hidden>0</span>
+  </button>
+  <aside class="phone" id="onlinePanel" aria-label="居民手机">
+    <div class="phone-notch" aria-hidden="true"><span class="phone-speaker"></span><span class="phone-camera"></span></div>
+    <header class="phone-statusbar">
+      <span class="phone-net"><i id="onlineStateDot"></i><b id="onlineCount">离线</b></span>
+      <span class="phone-owner" id="phoneOwner">居民手机</span>
+      <button class="phone-close" id="phoneClose" type="button" aria-label="收起手机">✕</button>
+    </header>
+    <nav class="online-tabs phone-tabs">
+      <button class="online-tab active" data-online-tab="chat" type="button">公聊</button>
+      <button class="online-tab" data-online-tab="houses" type="button">住宅</button>
+    </nav>
+    <div class="phone-screen">
+      <section class="online-view active" id="onlineChatView">
+        <div class="chat-log" id="chatLog"></div>
+        <form class="chat-form" id="chatForm"><input id="chatInput" maxlength="500" autocomplete="off" placeholder="发送公聊消息…" /><button type="submit" aria-label="发送">发送</button></form>
+      </section>
+      <section class="online-view" id="onlineHousesView">
+        <div class="house-list" id="houseList"></div>
+        <p class="house-help">住宅状态保存在服务器，全镇居民共享。</p>
+      </section>
     </div>
+    <div class="phone-homebar" aria-hidden="true"></div>
   </aside>
+
+  <section class="residence-claim" id="residenceClaim" role="dialog" aria-modal="true" aria-labelledby="residenceClaimTitle" hidden>
+    <div class="residence-claim-card">
+      <button class="residence-claim-close" id="residenceClaimClose" type="button" aria-label="关闭住宅面板">✕</button>
+      <span class="residence-claim-kicker">RESIDENTIAL LOT</span>
+      <h2 id="residenceClaimTitle">住宅</h2>
+      <p class="residence-claim-address" id="residenceClaimAddress"></p>
+      <p class="residence-claim-status" id="residenceClaimStatus"></p>
+      <label class="residence-name-field" id="residenceNameField">
+        <span>住宅名称</span>
+        <input id="residenceNameInput" maxlength="24" autocomplete="off" placeholder="例如：晴风小屋" />
+      </label>
+      <div class="residence-claim-actions">
+        <button class="residence-action secondary" id="residenceClaimCancel" type="button">取消</button>
+        <button class="residence-action primary" id="residenceClaimSubmit" type="button">认领住宅</button>
+        <button class="residence-action secondary" id="residenceApply" type="button" hidden>申请入住</button>
+        <button class="residence-action primary" id="residenceNavigate" type="button" hidden>导航过去</button>
+      </div>
+    </div>
+  </section>
 
   <!-- City map paper -->
   <div class="map-overlay" id="mapOverlay" role="dialog" aria-label="全景地图">
