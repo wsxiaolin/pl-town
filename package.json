@@ -8,8 +8,8 @@
     "start": "npm run dev",
     "build": "tsc -p apps/web/tsconfig.json --noEmit && vite build --config apps/web/vite.config.ts && npm run build -w @minicity/server",
     "typecheck": "tsc -p apps/web/tsconfig.json --noEmit && npm run typecheck -w @minicity/server",
-    "test": "playwright test apps/web/playwright.config.ts && npm run test:integration -w @minicity/server",
-    "test:web": "playwright test apps/web/playwright.config.ts",
+    "test": "playwright test --config apps/web/playwright.config.ts && npm run test:integration -w @minicity/server",
+    "test:web": "playwright test --config apps/web/playwright.config.ts",
     "test:server": "npm run test:integration -w @minicity/server"
   },
   "devDependencies": {

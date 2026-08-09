@@ -651,7 +651,6 @@ body.night { --text-mid: #666662; }
   align-items: center;
   gap: 9px;
   pointer-events: all;
-  cursor: pointer;
 }
 
 .logo-dot {
@@ -1095,11 +1094,29 @@ body.night .time-display::before { background: #8FB4E8; }
 
 /* ===== LOGO USER TAG ===== */
 .logo-user {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
   font-size: 10px;
   font-weight: 500;
   color: var(--text-light);
   letter-spacing: 0.06em;
   margin-left: 2px;
+  cursor: default;
+}
+.logo-user.login-required {
+  color: var(--blue);
+  font-weight: 600;
+  cursor: pointer;
+}
+.logo-user.login-required:hover {
+  opacity: 0.72;
+}
+.logo-user.login-required:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 4px;
 }
 
 /* ===== LOGIN OVERLAY ===== */

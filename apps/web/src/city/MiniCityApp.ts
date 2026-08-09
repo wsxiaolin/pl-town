@@ -2483,6 +2483,9 @@ function setupEvents() {
   document.getElementById('loginBtn').addEventListener('click',doLogin,{signal});
   document.getElementById('loginInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();},{signal});
   document.getElementById('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();},{signal});
+  document.getElementById('logoUser').addEventListener('click',e=>{
+    if((e.currentTarget as HTMLElement).classList.contains('login-required')) showLogin();
+  },{signal});
 
   document.getElementById('cgSkip').addEventListener('click',skipCG,{signal});
 
@@ -2678,7 +2681,7 @@ function setupMultiplayer(nickname, password) {
       const fab = document.getElementById('onlinePanelToggle');
       dot?.classList.toggle('connected', state === 'connected');
       fab?.classList.toggle('connected', state === 'connected');
-      if (state !== 'connected' && count) count.textContent = '连接中';
+      if (state !== 'connected' && count) count.textContent = state === 'connecting' ? '连接中' : '离线';
     },
     connected: (user, players, houses) => {
       onlinePlayers = players.filter((player) => player.id !== user.id);
@@ -2711,6 +2714,20 @@ function setupMultiplayer(nickname, password) {
       pendingHousingRequests = requests.filter((request) => request.targetId === multiplayer?.user?.id).length;
       updatePhoneBadge();
       renderHouseList(currentHouses);
+    },
+    authenticationFailed: (message) => {
+      const previousNickname = localStorage.getItem('minicityUser') || nickname;
+      localStorage.removeItem('minicityUser');
+      multiplayer?.close();
+      multiplayer = null;
+      const input = document.getElementById('loginInput') as HTMLInputElement | null;
+      const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
+      const error = document.getElementById('loginError');
+      if (input) input.value = previousNickname;
+      if (passwordInput) passwordInput.value = '';
+      if (error) { error.textContent = message; error.hidden = false; }
+      showLoginEntry();
+      showUnlockToast(message);
     },
     error: (message) => {
       document.getElementById('residenceClaimSubmit')?.removeAttribute('disabled');
@@ -3896,6 +3913,7 @@ function checkLogin() {
   const name=localStorage.getItem('minicityUser');
   overlay.style.display='none';
   if(name) applyUsername(name);
+  else showLoginEntry();
   if(shouldShowCG()) startCG();
   else if(name) proceedToCity();
   else showLogin();
@@ -3936,7 +3954,20 @@ function doLogin() {
 
 function applyUsername(name) {
   const el=document.getElementById('logoUser');
-  if(el) el.textContent='— '+name;
+  if(!el)return;
+  el.textContent='— '+name;
+  el.classList.remove('login-required');
+  el.setAttribute('aria-label',`${name}，已登录`);
+  el.setAttribute('tabindex','-1');
+}
+
+function showLoginEntry() {
+  const el=document.getElementById('logoUser');
+  if(!el)return;
+  el.textContent='登录';
+  el.classList.add('login-required');
+  el.setAttribute('aria-label','登录');
+  el.removeAttribute('tabindex');
 }
 
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string) {

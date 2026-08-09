@@ -24,6 +24,7 @@ type Callbacks = {
   chat?: (message: { userId: string; nickname: string; text: string }) => void;
   houses?: (houses: House[]) => void;
   requests?: (requests: HousingRequest[]) => void;
+  authenticationFailed?: (message: string) => void;
   error?: (message: string) => void;
 };
 
@@ -70,13 +71,15 @@ export class MultiplayerClient {
     else if (message.type === 'housing.updated' || message.type === 'housing.list') this.callbacks.houses?.(message.houses ?? []);
     else if (message.type === 'housing.requests') this.callbacks.requests?.(message.requests ?? []);
     else if (message.type === 'error') {
-      this.callbacks.error?.(message.message ?? '服务器请求失败');
+      const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {
+        localStorage.removeItem(TOKEN_KEY);
+        this.callbacks.authenticationFailed?.(errorMessage);
         this.closed = true;
         window.clearTimeout(this.reconnectTimer);
         this.socket?.close();
         this.socket = null;
-      }
+      } else this.callbacks.error?.(errorMessage);
     }
   }
   private send(message: object) { if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message)); }
