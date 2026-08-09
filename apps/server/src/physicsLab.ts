@@ -1,6 +1,9 @@
 const API_BASE = 'https://physics-api-cn.turtlesim.com';
 const STATIC_BASE = 'https://physics-lab.oss-cn-hongkong.aliyuncs.com';
 const API_VERSION = 2502;
+// The account endpoint still expects the legacy client schema version. Other
+// authenticated endpoints use the current API version above.
+const ACCOUNT_LOGIN_VERSION = 2411;
 const CACHE_TTL = 5 * 60 * 1000;
 const VOLUNTEER_ROLES = new Set(['Volunteer', 'Junior', 'Emeritus', 'Editor', 'Administrator']);
 
@@ -17,11 +20,17 @@ const cache = new Map<string, { expiresAt: number; works: PublicWork[] }>();
 export async function authenticateAccount(login: string, password: string) {
   const response = await fetch(`${API_BASE}/Users/Authenticate`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ Login: login, Password: password, Version: API_VERSION, Device: { Identifier: '7db01528cf13e2199e141c402d79190e', Language: 'Chinese' } }),
+    body: JSON.stringify({ Login: login, Password: password, Version: ACCOUNT_LOGIN_VERSION, Device: { Identifier: '7db01528cf13e2199e141c402d79190e', Language: 'Chinese' } }),
     signal: AbortSignal.timeout(15_000),
   });
   const data = await response.json().catch(() => ({})) as Record<string, any>;
-  if (!response.ok || data.Status !== 200 || !data.AuthCode) throw new Error(data.Message || 'Physics Lab login failed');
+  if (!response.ok || data.Status !== 200 || !data.AuthCode) {
+    const message = String(data.Message || '');
+    if (message === 'Login.Password.Invalid') throw new Error('密码不正确，请检查登录方式和密码');
+    if (message === 'Login.Invalid') throw new Error('登录名或密码不正确');
+    if (message === 'Login.Expired') throw new Error('登录请求已过期，请稍后重试');
+    throw new Error(message || 'Physics Lab 登录失败');
+  }
   return { token: data.Token || '', authCode: data.AuthCode, user: data.Data?.User || null };
 }
 

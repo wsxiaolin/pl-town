@@ -8,3 +8,6 @@ test-results/
 playwright-report/
 apps/server/data/
 data/
+logs/
+apps/server/logs/
+docs/deployment.md

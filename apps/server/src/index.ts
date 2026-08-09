@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { authenticate } from './auth.js';
 import { HOST, PORT } from './config.js';
 import * as db from './db.js';
+import { logger } from './logger.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 
@@ -11,12 +12,16 @@ type Client = { socket: WebSocket; user: User; ready: boolean };
 const clients = new Map<string, Client>();
 const pendingPositions = new Map<string, Position>();
 const authAttempts = new Map<string, { count: number; startedAt: number }>();
+const physicsLoginAttempts = new Map<string, { count: number; startedAt: number }>();
 const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
 const physicsSessions = new Map<string, { token: string; authCode: string; user: User; expiresAt: number }>();
+const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGES_PER_SECOND = 60;
+const MAX_PHYSICS_LOGINS_PER_MINUTE = 10;
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
+const remoteAddress = (socket: WebSocket) => (socket as WebSocket & { _socket?: { remoteAddress?: string } })._socket?.remoteAddress ?? 'unknown';
 function broadcastHousingState() {
   const houses = db.listHouses();
   clients.forEach((client) => {
@@ -39,33 +44,44 @@ function flushPosition(userId: string) {
   pendingPositions.delete(userId);
 }
 setInterval(() => pendingPositions.forEach((_position, userId) => flushPosition(userId)), 1_000).unref();
+setInterval(() => {
+  const cutoff = Date.now() - 60_000;
+  for (const [ip, attempt] of authAttempts) if (attempt.startedAt < cutoff) authAttempts.delete(ip);
+  for (const [ip, attempt] of physicsLoginAttempts) if (attempt.startedAt < cutoff) physicsLoginAttempts.delete(ip);
+  const now = Date.now();
+  for (const [id, session] of physicsSessions) if (session.expiresAt <= now) physicsSessions.delete(id);
+}, 60_000).unref();
 
 function requireReady(client: Client, action: () => void) { if (!client.ready) fail(client.socket, 'Send hello before other messages'); else action(); }
 function handle(client: Client, raw: string) {
-  if (raw.length > 16_384) return fail(client.socket, 'Message too large');
+  if (raw.length > 16_384) { logger.warn('Oversized WebSocket message rejected', { bytes: raw.length, ip: remoteAddress(client.socket) }); return fail(client.socket, 'Message too large'); }
   const now = Date.now();
   const window = messageWindows.get(client.socket) ?? { startedAt: now, count: 0 };
   if (now - window.startedAt >= 1_000) { window.startedAt = now; window.count = 0; }
-  if (++window.count > MAX_MESSAGES_PER_SECOND) return fail(client.socket, 'Too many messages');
+  if (++window.count > MAX_MESSAGES_PER_SECOND) { logger.warn('Message rate limit exceeded', { ip: remoteAddress(client.socket) }); return fail(client.socket, 'Too many messages'); }
   messageWindows.set(client.socket, window);
   let message: ClientMessage;
   try { message = JSON.parse(raw) as ClientMessage; } catch { fail(client.socket, 'Invalid JSON'); return; }
   if (!message || typeof message !== 'object' || typeof message.type !== 'string') { fail(client.socket, 'Invalid message'); return; }
   if (message.type === 'hello') {
-    const address = (client.socket as WebSocket & { _socket?: { remoteAddress?: string } })._socket?.remoteAddress ?? 'unknown';
+    const address = remoteAddress(client.socket);
     const attempt = authAttempts.get(address) ?? { count: 0, startedAt: now };
     if (now - attempt.startedAt >= 60_000) { attempt.startedAt = now; attempt.count = 0; }
-    if (++attempt.count > 20) return fail(client.socket, 'Too many authentication attempts');
+    if (++attempt.count > 20) { logger.warn('Authentication rate limit exceeded', { ip: address, count: attempt.count }); return fail(client.socket, 'Too many authentication attempts'); }
     authAttempts.set(address, attempt);
     let result: ReturnType<typeof authenticate>;
     try {
       result = authenticate({ token: message.token, nickname: message.nickname, password: message.password });
       authAttempts.delete(address);
     } catch (error) {
-      fail(client.socket, error instanceof Error ? error.message : '登录失败');
+      const reason = error instanceof Error ? error.message : '登录失败';
+      const nickname = typeof message.nickname === 'string' ? message.nickname : '';
+      logger.warn('Login failed', { nickname, ip: address, reason });
+      fail(client.socket, reason);
       return;
     }
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
+    logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
     send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id) });
     broadcast({ type: 'player.joined', player: client.user }, client.user.id); return;
   }
@@ -126,41 +142,65 @@ async function readJson(request: import('node:http').IncomingMessage) {
   let raw = ''; for await (const chunk of request) { raw += chunk.toString(); if (raw.length > 64_000) throw new Error('Request too large'); }
   return raw ? JSON.parse(raw) : {};
 }
+const logApiError = (request: import('node:http').IncomingMessage, error: unknown) => logger.warn('API request failed', { url: request.url, error: error instanceof Error ? error.message : String(error) });
 const http = createServer(async (request, response) => {
-  const headers = { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'cache-control': 'public, max-age=60' };
+  const startedAt = Date.now();
+  const clientIp = request.socket.remoteAddress ?? '';
+  response.on('finish', () => {
+    const detail = { method: request.method ?? '', url: request.url ?? '', status: response.statusCode, ms: Date.now() - startedAt, ip: clientIp };
+    if (request.url === '/healthz') return logger.debug('HTTP', detail);
+    logger.info('HTTP', detail);
+  });
+  try {
+  const headers = { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'cache-control': 'public, max-age=60' };
   if (request.url === '/healthz') { response.writeHead(200, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ ok: true, online: clients.size })); return; }
   const match = request.url?.match(/^\/town-api\/works\?scope=(knowledge|senate|all|discussion|featured)$/);
   if (request.method === 'GET' && match) {
     try { response.writeHead(200, headers); response.end(JSON.stringify(await getPublicWorks(match[1] as 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured'))); }
-    catch (error) { response.writeHead(502, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Upstream unavailable' })); }
+    catch (error) { logApiError(request, error); response.writeHead(502, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Upstream unavailable' })); }
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/works/query') {
     try { const body=await readJson(request); response.writeHead(200,headers); response.end(JSON.stringify(await queryPublicWorks(body.query))); }
-    catch(error){ response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
+    catch(error){ logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/pl/login') {
     try {
+      const attempt = physicsLoginAttempts.get(clientIp) ?? { count: 0, startedAt: Date.now() };
+      if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
+      if (++attempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE) {
+        logger.warn('Physics Lab login rate limit exceeded', { ip: clientIp });
+        response.writeHead(429, { ...headers, 'cache-control': 'no-store', 'retry-after': '60' });
+        response.end(JSON.stringify({ error: 'Too many login attempts' }));
+        return;
+      }
+      physicsLoginAttempts.set(clientIp, attempt);
       const body = await readJson(request); const login = typeof body.login === 'string' ? body.login.trim() : ''; const password = typeof body.password === 'string' ? body.password : '';
       if (!login || !password || login.length > 160 || password.length > 256) throw new Error('Login details are invalid');
-      const result = await authenticateAccount(login, password); const id = randomUUID();
+      const result = await authenticateAccount(login, password); physicsLoginAttempts.delete(clientIp); const id = randomUUID();
       const user = { id: String(result.user?.ID || id), nickname: String(result.user?.Nickname || login), email: null, position: { x: 0, y: 0, z: -6 } };
-      physicsSessions.set(id, { token: result.token, authCode: result.authCode, user, expiresAt: Date.now() + 30 * 60 * 1000 });
+      physicsSessions.set(id, { token: result.token, authCode: result.authCode, user, expiresAt: Date.now() + PHYSICS_SESSION_TTL_MS });
       response.writeHead(200, headers); response.end(JSON.stringify({ session: id, user }));
-    } catch (error) { response.writeHead(401, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' })); }
+    } catch (error) { logApiError(request, error); response.writeHead(401, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' })); }
     return;
   }
-  const accountMatch = request.url?.match(/^\/town-api\/pl\/(messages|notifications)$/);
+  const accountMatch = request.url?.match(/^\/town-api\/pl\/(messages|notifications)(?:\?(.*))?$/);
   if (request.method === 'GET' && accountMatch) {
     const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
     if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
     try {
-      const path = accountMatch[1] === 'messages' ? '/Messages/GetMessages' : '/Messages/GetMessages';
-      const body = accountMatch[1] === 'messages' ? { CategoryID: 0, Skip: 0, Take: 16, NoTemplates: true } : { CategoryID: 4, Skip: 0, Take: 16, NoTemplates: false };
-      const data = await requestAccount(account, path, body); const items = data.Data?.Messages?.$values || data.Data?.$values || [];
-      response.writeHead(200, headers); response.end(JSON.stringify({ data: items, templates: data.Data?.Templates?.$values || [] }));
-    } catch (error) { response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
+      const path = '/Messages/GetMessages';
+      const params = new URLSearchParams(accountMatch[2] || '');
+      const skip = Math.max(0, Number.parseInt(params.get('skip') || '0', 10) || 0);
+      const take = Math.min(24, Math.max(1, Number.parseInt(params.get('take') || '20', 10) || 20));
+      const body = { CategoryID: 3, Skip: skip, Take: take, NoTemplates: accountMatch[1] === 'messages' };
+      const data = await requestAccount(account, path, body);
+      const collection = (value: any) => Array.isArray(value) ? value : Array.isArray(value?.$values) ? value.$values : [];
+      const items = collection(data.Data?.Messages).length ? collection(data.Data.Messages) : collection(data.Data);
+      const templates = collection(data.Data?.Templates);
+      response.writeHead(200, headers); response.end(JSON.stringify({ data: items, templates, hasMore: items.length >= take }));
+    } catch (error) { logApiError(request, error); response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
     return;
   }
   const socialMatch = request.url?.match(/^\/town-api\/pl\/social\?kind=(profile|following|followers|volunteers|mine|favorites)$/);
@@ -173,7 +213,7 @@ const http = createServer(async (request, response) => {
       else if (kind === 'following' || kind === 'followers' || kind === 'volunteers') result = await requestAccount(account, '/Users/GetRelations', { UserID: account.user.id, DisplayType: kind === 'following' ? 1 : kind === 'followers' ? 0 : 3, Skip: 0, Take: 24, Query: '' });
       else result = await requestAccount(account, '/Contents/QueryExperiments', { Query: { Category: 'Experiment', Languages: [], ExcludeLanguages: null, Tags: null, ExcludeTags: null, ModelTags: null, ModelID: null, ParentID: null, UserID: kind === 'mine' ? account.user.id : 'Favorite', Special: null, From: null, Skip: 0, Take: 24, Days: 0, Sort: 0, ShowAnnouncement: false } });
       response.writeHead(200, headers); response.end(JSON.stringify({ kind, data: result.Data }));
-    } catch (error) { response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
+    } catch (error) { logApiError(request, error); response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
     return;
   }
   const workMatch = request.url?.match(/^\/town-api\/pl\/work\/([A-Za-z0-9]+)(?:\/(comments|star|star-status|support|supporters|derivatives))?$/);
@@ -190,14 +230,14 @@ const http = createServer(async (request, response) => {
       if(action==='supporters'){path='/Contents/GetSupporters';body={ContentID:id,Category:category,Skip:0,Take:20};}
       if(action==='derivatives'){path='/Contents/GetDerivatives';body={ContentID:id,Category:category,WithSummary:true,Language:'Chinese'};}
       const data=await requestAccount(account,path,body); response.writeHead(200,headers); response.end(JSON.stringify({data:data.Data}));
-    } catch(error){response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Work request failed'}));}
+    } catch(error){logApiError(request, error);response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Work request failed'}));}
     return;
   }
   const libraryMatch=request.url?.match(/^\/town-api\/pl\/library\?kind=(experiments|discussions)$/);
   if(request.method==='GET'&&libraryMatch){
     const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
     if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
-    try{const identifier=libraryMatch[1]==='discussions'?'Discussions':'Experiments';const data=await requestAccount(account,'/Contents/GetLibrary',{Identifier:identifier,Language:'Chinese'});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}catch(error){response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Library unavailable'}));}return;
+    try{const identifier=libraryMatch[1]==='discussions'?'Discussions':'Experiments';const data=await requestAccount(account,'/Contents/GetLibrary',{Identifier:identifier,Language:'Chinese'});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}catch(error){logApiError(request, error);response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Library unavailable'}));}return;
   }
   if(request.method==='POST'&&request.url==='/town-api/pl/logout'){
     const key=request.headers['x-town-pl-session'];if(typeof key==='string')physicsSessions.delete(key);response.writeHead(200,{...headers,'cache-control':'no-store'});response.end(JSON.stringify({ok:true}));return;
@@ -206,10 +246,18 @@ const http = createServer(async (request, response) => {
     const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
     if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
     try{const input=await readJson(request);const targetId=typeof input.targetId==='string'?input.targetId:'';if(!/^[A-Za-z0-9]{12,40}$/.test(targetId))throw new Error('Invalid user');const data=await requestAccount(account,'/Users/Follow',{TargetID:targetId,Action:input.action===0?0:1});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}
-    catch(error){response.writeHead(400,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Follow request failed'}));}return;
+    catch(error){logApiError(request, error);response.writeHead(400,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Follow request failed'}));}return;
   }
   response.writeHead(404, { 'x-content-type-options': 'nosniff' }); response.end();
+  } catch (error) {
+    logger.error('Unhandled request error', { url: request.url, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
+    if (!response.headersSent) response.writeHead(500, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ error: 'Internal server error' }));
+  }
 });
 const wss = new WebSocketServer({ server: http, maxPayload: 16 * 1024 });
-wss.on('connection', (socket) => { const client = { socket, user: null as unknown as User, ready: false }; socket.on('message', (data) => handle(client, data.toString())); socket.on('close', () => { if (client.ready && clients.get(client.user.id)?.socket === socket) { flushPosition(client.user.id); clients.delete(client.user.id); broadcast({ type: 'player.left', playerId: client.user.id }); } }); });
-http.listen(PORT, HOST, () => console.log(`MiniCity server listening on http://${HOST}:${PORT}`));
+wss.on('connection', (socket) => { const client = { socket, user: null as unknown as User, ready: false }; const address = remoteAddress(socket); logger.info('WebSocket connected', { ip: address }); socket.on('message', (data) => handle(client, data.toString())); socket.on('close', () => { if (client.ready && clients.get(client.user.id)?.socket === socket) { flushPosition(client.user.id); clients.delete(client.user.id); logger.info('Resident left', { id: client.user.id, nickname: client.user.nickname, online: clients.size }); broadcast({ type: 'player.left', playerId: client.user.id }); } }); });
+http.requestTimeout = 15_000;
+http.headersTimeout = 20_000;
+http.keepAliveTimeout = 5_000;
+http.listen(PORT, HOST, () => logger.info(`MiniCity server listening on http://${HOST}:${PORT}`));

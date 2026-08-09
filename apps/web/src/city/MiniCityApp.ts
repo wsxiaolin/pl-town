@@ -6,7 +6,7 @@ import { InstancedBatch } from '../core/InstancedBatch';
 import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rendering/createRenderer';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './data/cityConfig';
-import { BUILDING_CONTENT, BUILDING_DEFS, BUILDING_API_QUERIES } from './data/buildings';
+import { BUILDING_DEFS, BUILDING_API_QUERIES } from './data/buildings';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -716,6 +716,12 @@ function computeGameTime(ms = Date.now()) {
 }
 let gameClock = computeGameTime();
 let multiplayer = null;
+let phoneNotificationsRequest = 0;
+let phoneNotificationsSkip = 0;
+let phoneNotificationsLoading = false;
+let phoneNotificationsHasMore = true;
+let phoneNotificationsObserver=null;
+let phoneNotificationTemplates=[];
 const remotePlayers = new Map();
 let lastNetworkPosition = 0;
 let onlinePlayers = [];
@@ -1636,7 +1642,7 @@ const PLOT_MAP = {
   pagoda:{tex:'ground4',size:4.0,color:0xC0D0A0}, market:{tex:'ground5',size:4.5,color:0xE4E3E0},
   greenhouse:{tex:'ground4',size:4.0,color:0xB8C888}, clocktower:{tex:'ground5',size:4.0,color:0xE4E3E0},
   temple:{tex:'ground5',size:4.5,color:0xF0EFEC}, factory:{tex:'ground2',size:5.0,color:0xC8C4B8},
-  mall:{tex:'ground5',size:5.5,color:0xD8D7D2}, school:{tex:'ground4',size:5.0,color:0xB8C888},
+  mall:{tex:'ground5',size:5.5,color:0xD8D7D2}, school:{tex:'ground4',size:4.5,color:0xB8C888},
   crown:{tex:'ground5',size:4.5,color:0xF0EFEC}, banana:{tex:'ground2',size:6.0,color:0xE0D8A0},
   qipai:{tex:'ground5',size:8.0,color:0xE4E3E0},
 };
@@ -1928,7 +1934,7 @@ function addTrees(positions) {
       resources.material({kind:'tree-trunk'},()=>stdMat({color:0xE0DFDC,roughness:0.9,tex:'wood',rx:1,ry:1})), 512);
     treeCrowns = new InstancedBatch(scene,
       resources.geometry(new THREE.SphereGeometry(0.30,12,12)),
-      resources.material({kind:'tree-crown'},()=>stdMat({color:0xF5F4F2,roughness:0.85})), 512);
+      resources.material({kind:'tree-crown'},()=>stdMat({color:0x6F9F4F,roughness:0.85,tex:'grass',rx:2,ry:2})), 512);
   }
   positions.forEach(([x,,z]) => {
     treeTrunks.add(x,0.19,z);
@@ -2474,14 +2480,14 @@ function setupEvents() {
   document.getElementById('spModeClean').addEventListener('click',()=>setStatsMode('clean'),{signal});
   document.getElementById('spModeRaw').addEventListener('click',()=>setStatsMode('raw'),{signal});
   document.getElementById('worksClose').addEventListener('click',closeWorksPanel,{signal});
-  document.getElementById('worksSearch').addEventListener('input',renderWorksPanel,{signal});
-  document.getElementById('workDetailClose').addEventListener('click',closeWorkDetail,{signal});
-  document.getElementById('workStar').addEventListener('click',toggleWorkStar,{signal});
-  document.getElementById('workCommentsTab').addEventListener('click',loadWorkComments,{signal});
-  document.getElementById('workDerivatives').addEventListener('click',loadWorkDerivatives,{signal});
-  document.getElementById('workSupport').addEventListener('click',toggleWorkSupport,{signal});
-  document.getElementById('workSupporters').addEventListener('click',loadWorkSupporters,{signal});
-  document.getElementById('workCommentForm').addEventListener('submit',postWorkComment,{signal});
+  // 作品详细内容板块暂时注释；保留可选绑定，恢复 HTML 后即可继续工作。
+  document.getElementById('workDetailClose')?.addEventListener('click',closeWorkDetail,{signal});
+  document.getElementById('workStar')?.addEventListener('click',toggleWorkStar,{signal});
+  document.getElementById('workCommentsTab')?.addEventListener('click',loadWorkComments,{signal});
+  document.getElementById('workDerivatives')?.addEventListener('click',loadWorkDerivatives,{signal});
+  document.getElementById('workSupport')?.addEventListener('click',toggleWorkSupport,{signal});
+  document.getElementById('workSupporters')?.addEventListener('click',loadWorkSupporters,{signal});
+  document.getElementById('workCommentForm')?.addEventListener('submit',postWorkComment,{signal});
   document.addEventListener('keydown',e=>{
       if(e.key==='Escape'){
         if(mapMode){toggleMapMode();return;}
@@ -2629,7 +2635,6 @@ function setupMultiplayerUI() {
   document.getElementById('phoneKnowledge')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('knowledgebase');},{signal:eventController.signal});
   document.getElementById('phoneSenate')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('senate');},{signal:eventController.signal});
   document.getElementById('phoneDiscussions')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('discussion');},{signal:eventController.signal});
-  document.getElementById('phoneBindFromNotifications')?.addEventListener('click',()=>openPhoneBinding(),{signal:eventController.signal});
   document.getElementById('phoneBindFromSocial')?.addEventListener('click',()=>openPhoneBinding(),{signal:eventController.signal});
   document.getElementById('phoneBindForm')?.addEventListener('submit',bindPhysicsLabAccount,{signal:eventController.signal});
   updatePhoneBindingState();
@@ -3204,12 +3209,6 @@ function navigateTo(b) {
   if(phoneBuildings[b.id]){openPhoneApp(...phoneBuildings[b.id]);trackInteraction(b.id);return;}
   const configuredQuery=BUILDING_API_QUERIES[b.id];
   if(configuredQuery){openWorksPanel(b.id,configuredQuery);trackInteraction(b.id);return;}
-  const archiveBuildings={knowledgebase:'knowledgebase',senate:'senate',activity:'all',research:'all',lab:'all',culturehall:'discussion',archive:'all',writingclub:'discussion',commons:'discussion',academy:'all',library:'knowledgebase',litreview:'featured',techhalf:'featured',blackhole:'discussion'};
-  if (archiveBuildings[b.id]) {
-    openWorksPanel(archiveBuildings[b.id]);
-    trackInteraction(b.id);
-    return;
-  }
   trackInteraction(b.id);
   openModal(b);
 }
@@ -3225,7 +3224,11 @@ function updatePhoneBindingState(){
   document.getElementById('phoneNotificationBind')?.toggleAttribute('hidden',bound);
   document.getElementById('phoneSocialBind')?.toggleAttribute('hidden',bound);
   document.getElementById('phoneSocialTools')?.toggleAttribute('hidden',!bound);
-  if(bound){document.getElementById('phoneNotifications')?.classList.add('bound');}
+  document.getElementById('phoneNotifications')?.classList.toggle('bound',bound);
+  if(!bound){
+    const form=document.getElementById('phoneBindForm');
+    if(form)form.hidden=false;
+  }
 }
 function handlePhysicsSessionExpired(){
   if(!localStorage.getItem('plSession')) return;
@@ -3233,12 +3236,13 @@ function handlePhysicsSessionExpired(){
   localStorage.removeItem('plUser');
   updatePhoneBindingState();
   setPhoneOpen(true);
-  document.querySelector('[data-online-tab="social"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  document.querySelector('[data-online-tab="notifications"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));
   const form=document.getElementById('phoneBindForm');
   if(form) form.hidden=false;
   const submit=form?.querySelector('button[type="submit"]');
   if(submit) submit.textContent='重新登录';
-  const prompt=document.getElementById('phoneSocialBind');
+  const prompt=document.getElementById('phoneNotificationBind');
+  prompt?.classList.add('expanded');
   prompt?.classList.add('session-expired');
   const title=prompt?.querySelector('strong');
   const description=prompt?.querySelector('p');
@@ -3249,29 +3253,79 @@ function handlePhysicsSessionExpired(){
 }
 function openPhoneBinding(){
   setPhoneOpen(true);
-  document.querySelector('[data-online-tab="social"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  document.querySelector('[data-online-tab="notifications"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));
   const form=document.getElementById('phoneBindForm');if(form)form.hidden=false;
+  document.getElementById('phoneNotificationBind')?.classList.add('expanded');
+  const error=document.getElementById('phoneBindError');if(error)error.textContent='';
   document.getElementById('phoneBindEmail')?.focus();
 }
 async function bindPhysicsLabAccount(event){
   event.preventDefault();
   const email=document.getElementById('phoneBindEmail').value.trim();const password=document.getElementById('phoneBindPassword').value;const error=document.getElementById('phoneBindError');const submit=event.currentTarget.querySelector('button[type="submit"]');
-  if(!email||!password){error.textContent='请输入邮箱和密码';return;} submit.disabled=true;error.textContent='正在绑定…';
-  try{const response=await fetch('/town-api/pl/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:email,password})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Physics Lab 登录失败');localStorage.setItem('plSession',payload.session);localStorage.setItem('plUser',JSON.stringify(payload.user||{}));document.getElementById('phoneBindForm').hidden=true;document.getElementById('phoneSocialBind')?.classList.remove('session-expired');submit.textContent='确认绑定';updatePhoneBindingState();showUnlockToast('Physics Lab 账号已绑定');loadPhoneMessages();}catch(caught){error.textContent=caught.message||'绑定失败';}finally{submit.disabled=false;}
+  if(!email||!password){error.textContent='请输入邮箱或手机号，以及密码';return;} submit.disabled=true;submit.textContent='正在验证…';error.textContent='';
+  try{const response=await fetch('/town-api/pl/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:email,password})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Physics Lab 登录失败');localStorage.setItem('plSession',payload.session);localStorage.setItem('plUser',JSON.stringify(payload.user||{}));document.getElementById('phoneBindForm').hidden=true;document.getElementById('phoneNotificationBind')?.classList.remove('session-expired');updatePhoneBindingState();showUnlockToast('Physics Lab 账号已连接');loadPhoneMessages();}catch(caught){error.textContent=caught.message||'绑定失败';}finally{submit.disabled=false;submit.textContent='确认连接';}
 }
 
-async function loadPhoneMessages(){
+async function loadPhoneMessages(append=false){
+  if(phoneNotificationsLoading)return;
   const feed=document.getElementById('phoneNotifications'); if(!feed)return;
+  let results=feed.querySelector('.phone-feed-results');
+  if(!results){results=document.createElement('div');results.className='phone-feed-results';feed.appendChild(results);}
   const session=localStorage.getItem('plSession');
-  if(!session){updatePhoneBindingState();return;}
-  feed.innerHTML='<div class="phone-feed-loading">正在同步通知…</div>';
+  if(!session){
+    results.remove();
+    updatePhoneBindingState();
+    document.getElementById('phoneNotificationBind')?.classList.add('expanded');
+    return;
+  }
+  if(!append){phoneNotificationsSkip=0;phoneNotificationsHasMore=true;phoneNotificationTemplates=[];results.replaceChildren();}
+  phoneNotificationsLoading=true;
+  const requestId=++phoneNotificationsRequest;
+  const bindPrompt=document.getElementById('phoneNotificationBind');
+  bindPrompt?.remove();
+  if(!append)results.innerHTML='<div class="phone-feed-loading">正在同步通知…</div>';
   try{
-    const response=await fetch('/town-api/pl/notifications',{headers:{'x-town-pl-session':session}});
-    if(response.status===401){handlePhysicsSessionExpired();return;}
+    const response=await fetch(`/town-api/pl/notifications?skip=${phoneNotificationsSkip}&take=20`,{headers:{'x-town-pl-session':session},signal:AbortSignal.timeout(20_000)});
+    if(response.status===401){
+      if(requestId===phoneNotificationsRequest){
+        phoneNotificationsRequest++;
+        phoneNotificationsLoading=false;
+        if(bindPrompt)feed.replaceChildren(bindPrompt);
+        handlePhysicsSessionExpired();
+      }
+      return;
+    }
     if(!response.ok)throw new Error('通知暂时无法同步');
-    const payload=await response.json(); const items=payload.data||[];
-    feed.replaceChildren(...(items.length?items.map(item=>{const row=document.createElement('article');row.className='phone-notice';row.innerHTML='<div class="pn-dot"></div><div><b></b><p></p><small></small></div>';row.querySelector('b').textContent=item.Title||item.Category||'社区通知';row.querySelector('p').textContent=item.Content||'有新的社区动态';row.querySelector('small').textContent=item.SendDate?new Date(item.SendDate).toLocaleString():'刚刚';return row;}):[Object.assign(document.createElement('div'),{className:'phone-feed-empty',textContent:'暂无新的通知。'})]));
-  }catch(error){feed.innerHTML=`<div class="phone-feed-empty">${error.message||'通知暂时无法同步'}</div>`;}
+    const payload=await response.json(); const items=Array.isArray(payload.data)?payload.data:Array.isArray(payload.data?.$values)?payload.data.$values:[]; const templates=Array.isArray(payload.templates)?payload.templates:[];
+    const knownTemplates=new Map(phoneNotificationTemplates.map(template=>[String(template.ID),template]));
+    templates.forEach(template=>knownTemplates.set(String(template.ID),template));
+    phoneNotificationTemplates=[...knownTemplates.values()];
+    if(requestId!==phoneNotificationsRequest)return;
+    const rows=items.map(item=>{const template=phoneNotificationTemplates.find(entry=>String(entry.ID)===String(item.TemplateID));const row=document.createElement('div');row.className='chat-line';const author=document.createElement('b');author.textContent=formatNotificationText(template?.Subject?.Chinese||item.Title||item.Category||'系统',item);const content=document.createElement('span');content.textContent=formatNotificationText(template?.Content?.Chinese||item.Content||item.Fields?.Content||'',item);row.append(author,content);return row;});
+    if(!append)results.replaceChildren();
+    results.append(...rows); phoneNotificationsSkip+=items.length; phoneNotificationsHasMore=Boolean(payload.hasMore)&&items.length>0;
+  }catch(error){if(requestId===phoneNotificationsRequest)results.innerHTML=`<div class="phone-feed-empty">${error.message||'通知暂时无法同步'}</div>`;}
+  finally{phoneNotificationsLoading=false;}
+  phoneNotificationsObserver?.disconnect();
+  if(phoneNotificationsHasMore){const sentinel=document.createElement('div');sentinel.className='works-sentinel';results.appendChild(sentinel);const scrollRoot=feed.parentElement||feed;phoneNotificationsObserver=new IntersectionObserver(e=>{if(e.some(x=>x.isIntersecting)&&!phoneNotificationsLoading)loadPhoneMessages(true);},{root:scrollRoot,rootMargin:'30%'});phoneNotificationsObserver.observe(sentinel);}
+  if(bindPrompt&&!feed.contains(bindPrompt))feed.prepend(bindPrompt);
+  updatePhoneBindingState();
+}
+
+function formatNotificationText(template,item){
+  const fields=item.Fields||{};
+  const users=(item.UserNames||[]).join(' ');
+  const work=fields.Discussion||fields.Experiment||'';
+  return String(template||'')
+    .replace(/{Users}/g,users)
+    .replace(/{Experiment}/g,work)
+    .replace(/{\$Content}/g,fields.Content||'')
+    .replace(/{\$TargetName}/g,fields.TargetName||'')
+    .replace(/{\$Until}/g,fields.Until||'')
+    .replace(/{\$Editor}/g,fields.Editor||'')
+    .replace(/{\$Gold}/g,String(item.Numbers?.Gold??''))
+    .replace(/undefined/g,'')
+    .trim();
 }
 
 async function loadPhoneSocial(kind){
@@ -3310,10 +3364,14 @@ const PUBLIC_WORKS = [
   { id:'garden-notes', title:'Conservatory Growing Notes', author:'Lin', role:'Contributor', year:'2026', category:'Stories', tags:['plants','care'], abstract:'Seasonal observations from the glasshouse and its keepers.', status:'New' }
 ];
 let worksContext='knowledgebase';
+let worksTitleOverride='';
 let worksCategory='All';
 let liveWorks=[];
 let worksLoading=false;
+let worksHasMore=false;
 let worksError='';
+let worksQuery=null;
+let worksObserver=null;
 let activeWorkId='';
 let activeWorkCategory='Experiment';
 let activeWorkStarred=false;
@@ -3367,29 +3425,44 @@ async function toggleWorkStar(){
 
 function openWorksPanel(context,queryOverride=null) {
   worksContext=context;
+  worksTitleOverride=queryOverride?.title||'';
+  worksQuery=queryOverride;
   worksCategory='All';
-  const input=document.getElementById('worksSearch');
-  if(input) input.value='';
+  worksObserver?.disconnect();
   document.getElementById('worksPanel')?.classList.add('open');
   loadWorks(context,queryOverride);
 }
-function closeWorksPanel(){ document.getElementById('worksPanel')?.classList.remove('open'); }
-async function loadWorks(context,queryOverride=null){
-  worksLoading=true; worksError=''; liveWorks=[]; renderWorksPanel();
+function closeWorksPanel(){ worksObserver?.disconnect(); document.getElementById('worksPanel')?.classList.remove('open'); }
+async function loadWorks(context,queryOverride=null,append=false){
+  if(worksLoading)return;
+  worksLoading=true; worksError='';
+  if(!append){liveWorks=[];worksHasMore=false;}
+  renderWorksPanel();
   const scope=['senate','all','discussion','featured'].includes(context)?context:'knowledge';
   try{
-    const request=queryOverride?fetch('/town-api/works/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:queryOverride})}):fetch(`/town-api/works?scope=${scope}`);
-    if(!worksRequests.has(scope)) worksRequests.set(scope,request.then(async response=>{
+    const {title: _title, ...configuredQuery}=queryOverride||{};
+    const take=Number(configuredQuery.Take)||24;
+    const query={...configuredQuery};
+    if(queryOverride){
+      query.Skip=(Number(configuredQuery.Skip)||0)+liveWorks.length;
+      query.From=append&&liveWorks.length?liveWorks[liveWorks.length-1].id:(configuredQuery.From??null);
+    }
+    const request=queryOverride?fetch('/town-api/works/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})}):fetch(`/town-api/works?scope=${scope}`);
+    const requestKey=`${context}:${JSON.stringify(query)}`;
+    if(!worksRequests.has(requestKey)) worksRequests.set(requestKey,request.then(async response=>{
       if(!response.ok) throw new Error('The public archive is temporarily unavailable.');
       return response.json();
-    }).finally(()=>worksRequests.delete(scope)));
-    const payload=await worksRequests.get(scope);
+    }).finally(()=>worksRequests.delete(requestKey)));
+    const payload=await worksRequests.get(requestKey);
     if(context!==worksContext)return;
-    liveWorks=(payload.works||[]).map(work=>({
+    const page=(payload.works||[]).map(work=>({
       ...work, role:work.verification||'Resident', year:new Date(work.createdAt).getFullYear().toString(),
       abstract:`${work.visits} views · ${work.stars} stars · ${work.comments} comments · ${work.remixes} remixes`,
       status:work.verification||'Public'
     }));
+    const known=new Set(liveWorks.map(work=>work.id));
+    liveWorks.push(...page.filter(work=>!known.has(work.id)));
+    worksHasMore=Boolean(queryOverride)&&page.length>=take;
   }catch(error){
     if(context!==worksContext)return;
     worksError=error instanceof Error?error.message:'The public archive is temporarily unavailable.';
@@ -3400,24 +3473,14 @@ async function loadWorks(context,queryOverride=null){
 function renderWorksPanel(){
   const isSenate=worksContext==='senate';
   const fallback=isSenate?PUBLIC_WORKS.filter(w=>w.role==='Volunteer'||w.role==='Steward'):PUBLIC_WORKS;
-  const source=liveWorks.length?liveWorks:fallback;
-  const query=(document.getElementById('worksSearch')?.value||'').trim().toLowerCase();
-  const categories=['All',...new Set(source.map(w=>w.category))];
-  const filtered=source.filter(w=>(worksCategory==='All'||w.category===worksCategory)&&(!query||[w.title,w.author,w.category,...w.tags].join(' ').toLowerCase().includes(query)));
+  const source=liveWorks.length?liveWorks:(worksError?fallback:[]);
+  const filtered=source;
   const viewCopy={discussion:['BLACK HOLE · DISCUSSIONS','Community discussions','Questions, stories and debates from the discussion district.'],featured:['REVIEW DESK · SELECTED','Selected works','Featured experiments chosen by the community.']};
   const copy=viewCopy[worksContext];
   document.getElementById('worksKicker').textContent=copy?.[0]||(isSenate?'UPPER HOUSE · CONTRIBUTIONS':worksContext==='all'?'CITY FEED · NEW WORKS':'KNOWLEDGE BASE · CATALOGUE');
-  document.getElementById('worksTitle').textContent=copy?.[1]||(isSenate?'Volunteer works':worksContext==='all'?'All public works':'The city knowledge base');
-  document.getElementById('worksSubtitle').textContent=copy?.[2]||(isSenate?'Published work by volunteers and stewards.':worksContext==='all'?'The latest public experiments and discussions.':'Research, guides and stories preserved by residents.');
-  const filters=document.getElementById('worksFilters');
-  filters.replaceChildren(...categories.map(category=>{
-    const button=document.createElement('button'); button.type='button'; button.textContent=category;
-    button.className=category===worksCategory?'active':'';
-    button.onclick=()=>{worksCategory=category;renderWorksPanel();}; return button;
-  }));
-  document.getElementById('worksSummary').textContent=worksLoading?'Connecting to Physics Lab…':`${filtered.length} of ${source.length} records${worksError?' · offline catalogue':''}`;
+  document.getElementById('worksTitle').textContent=worksTitleOverride||copy?.[1]||(isSenate?'Volunteer works':worksContext==='all'?'All public works':'The city knowledge base');
   const list=document.getElementById('worksList');
-  if(worksLoading){ list.innerHTML='<div class="works-loading"><i></i><span>Retrieving public works</span></div>'; return; }
+  if(worksLoading&&!liveWorks.length){ list.innerHTML='<div class="works-loading"><i></i><span>Retrieving public works</span></div>'; return; }
   list.replaceChildren(...filtered.map(work=>{
     const article=document.createElement('article'); article.className='work-record'; article.dataset.workId=work.id||'';
     const tags=work.tags.map(tag=>`<span>${tag}</span>`).join('');
@@ -3425,10 +3488,20 @@ function renderWorksPanel(){
     article.querySelector('h3').textContent=work.title;
     article.querySelector('.work-byline').textContent=`${work.author} · ${work.role}`;
     article.querySelector('.work-abstract').textContent=work.abstract;
-    article.addEventListener('click',()=>openWorkDetail(work));
+    // Work detail content is temporarily disabled; restore the click handler with the detail drawer.
     return article;
   }));
   if(!filtered.length){ const empty=document.createElement('p'); empty.className='works-empty'; empty.textContent='No matching records.'; list.appendChild(empty); }
+  if(worksHasMore||worksLoading){
+    const sentinel=document.createElement('div'); sentinel.className='works-sentinel';
+    if(worksLoading)sentinel.innerHTML='<div class="works-loading"><i></i><span>Retrieving public works</span></div>';
+    list.appendChild(sentinel);
+    worksObserver?.disconnect();
+    worksObserver=new IntersectionObserver(entries=>{
+      if(entries.some(entry=>entry.isIntersecting)&&worksHasMore&&!worksLoading)loadWorks(worksContext,worksQuery,true);
+    },{root:list,rootMargin:'30%',threshold:0});
+    worksObserver.observe(sentinel);
+  }else worksObserver?.disconnect();
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────

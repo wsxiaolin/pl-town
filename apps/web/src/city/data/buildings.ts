@@ -281,8 +281,8 @@ export const BUILDING_DEFS = [
     id: "mall_south",
     num: "26",
     label: "南门商场",
-    x: 0,
-    z: -27,
+    x: 22.5,
+    z: -22.5,
     shape: "mall",
     icon: I(
       `<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`,
@@ -292,8 +292,8 @@ export const BUILDING_DEFS = [
     id: "school_east",
     num: "27",
     label: "东区小学",
-    x: 27,
-    z: 0,
+    x: 31.5,
+    z: -15.25,
     shape: "school",
     icon: I(
       `<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`,
@@ -303,8 +303,8 @@ export const BUILDING_DEFS = [
     id: "mall_west",
     num: "28",
     label: "西门商场",
-    x: -27,
-    z: 0,
+    x: -22.5,
+    z: 22.5,
     shape: "mall",
     icon: I(
       `<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`,
@@ -314,8 +314,8 @@ export const BUILDING_DEFS = [
     id: "school_north",
     num: "29",
     label: "北区学院",
-    x: 0,
-    z: 27,
+    x: -22.5,
+    z: 15,
     shape: "school",
     icon: I(
       `<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`,
@@ -356,7 +356,7 @@ export const BUILDING_DEFS = [
     num: "33",
     label: "众议院",
     x: -33,
-    z: 0,
+    z: -9,
     shape: "temple",
     icon: I(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/>`),
   },
@@ -365,7 +365,7 @@ export const BUILDING_DEFS = [
     num: "34",
     label: "实验楼",
     x: 33,
-    z: 0,
+    z: 9,
     shape: "greenhouse",
     icon: I(
       `<path d="M9 3h6"/><path d="M10 3v5l-4 9a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-4-9V3"/>`,
@@ -480,7 +480,7 @@ export const BUILDING_DEFS = [
     id: "shrine",
     num: "45",
     label: "神社",
-    x: 0,
+    x: 9,
     z: -33,
     shape: "altar",
     facade: "facade_temple",
@@ -490,8 +490,8 @@ export const BUILDING_DEFS = [
     id: "beacon",
     num: "46",
     label: "灯塔",
-    x: 0,
-    z: 33,
+    x: 9,
+    z: 31.5,
     shape: "tower",
     facade: "facade_darktower",
     icon: I(`<path d="M8 21V5l4-3 4 3v16"/><path d="M8 21h8"/>`),
@@ -526,6 +526,7 @@ export const BUILDING_DEFS = [
 export const BUILDING_API_QUERIES = Object.freeze({
   // activity: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:30, Sort:1, ShowAnnouncement:false },
   knowledgebaseE: {
+    title: "实验知识库",
     Category: "Experiment",
     Languages: [],
     ExcludeLanguages: null,
@@ -544,6 +545,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
     ShowAnnouncement: false,
   },
   knowledgebaseD: {
+    title: "黑洞知识库",
     Category: "Discussion",
     Languages: [],
     ExcludeLanguages: null,
@@ -563,6 +565,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
   },
   // litreview: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['精选'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
   blackhole: {
+    title: "黑洞半城",
     Category: "Discussion",
     Languages: [],
     ExcludeLanguages: ["小作品"],
@@ -581,6 +584,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
     ShowAnnouncement: true,
   },
   culturehall: {
+    title: "文化馆",
     Category: "Discussion",
     Languages: [],
     ExcludeLanguages: null,
@@ -601,6 +605,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
   // lab: { Category:'Experiment', Languages:[], ExcludeLanguages:['小作品'], Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
   // research: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['大学'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
   senate: {
+    title: "参议院",
     Category: "Experiment",
     Languages: [],
     ExcludeLanguages: null,
@@ -945,6 +950,7 @@ export const BUILDING_CONTENT = {
     dialog: [
       "石阶尽头是一座小小的殿宇。",
       "「不必祈祷，只是站在这里就够了。」",
+      "我记得我之前曾经在这里拔出了一把刀",
     ],
   },
   beacon: {

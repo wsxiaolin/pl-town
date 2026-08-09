@@ -56,13 +56,13 @@ export const SATELLITE_CITY = Object.freeze({
 });
 
 export const CITY_CONFIG = Object.freeze({
-  cameraNearSize: 14,
-  cameraZoomMin: 5,
-  cameraZoomMax: 40,
-  cameraEdge: 0.55,
+  cameraNearSize: 10,
+  cameraZoomMin: 2,
+  cameraZoomMax: 15,
+  cameraEdge: 0.25,
   playerSpeed: 4.2,
   npcTalkRadius: 1.6,
-  buildingInteractRadius: 3.5,
+  buildingInteractRadius: 8.5,
 });
 
 export const CAMERA_OFFSET = new THREE.Vector3(24, 40, 24);
