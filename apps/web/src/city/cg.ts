@@ -552,9 +552,9 @@ function scene5(wrap: HTMLElement): void {
   const stage = sceneShell(wrap, 'cg-bg-title', `
     <div class="cg-title-block">
       <span class="cg-kicker">A CITY LIVES IN YOUR BROWSER</span>
-      <h1 class="cg-title">救救我救救我</h1>
+      <h1 class="cg-title">招募文案写手</h1>
       <p class="cg-title-en">M I N I C I T Y</p>
-      <p class="cg-tagline">招募文案写手</p>
+      <p class="cg-tagline">救救我救救我</p>
       <button class="cg-enter-btn" id="cgEnterBtn"><span>签署居民证，进入小城</span></button>
     </div>`);
 
