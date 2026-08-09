@@ -31,7 +31,7 @@ export const BUILDING_DEFS = [
     icon:I(`<rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="8" cy="12" r="2"/><line x1="13" y1="11" x2="18" y2="11"/><line x1="13" y1="14" x2="16" y2="14"/>`) },
   { id:'stats',      num:'15', label:'STATS',      x:-5.5,z:-5.5,shape:'observatory', isStats:true,
     icon:I(`<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>`) },
-  { id:'knowledgebase', num:'16', label:'知识库',   x:-15, z:-15, shape:'library',
+  { id:'knowledgebaseE', num:'16', label:'实验知识库',   x:-15, z:-15, shape:'library',
     icon:I(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/><path d="M11 8h5"/><path d="M11 12h4"/>`) },
   { id:'newsstand',     num:'17', label:'报摊',     x:-9,  z:-15, shape:'market',
     icon:I(`<path d="M4 7h16v11H4z"/><path d="M4 7l2-3h12l2 3"/><path d="M8 11h4"/><path d="M8 14h8"/>`) },
@@ -63,7 +63,7 @@ export const BUILDING_DEFS = [
   { id:'kingice',       num:'30', label:'King Ice',  x: 20, z: 20, shape:'crown',
     icon:I(`<path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/>`) },
   // ── 外环扩展建筑 ──
-  { id:'knowledgebase', num:'31', label:'知识库',   x:-33, z:-33, shape:'library',
+  { id:'knowledgebaseD', num:'31', label:'黑洞知识库',   x:-33, z:-33, shape:'library',
     icon:I(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/>`) },
   { id:'community',     num:'32', label:'社区中心', x: 33, z:-33, shape:'clocktower',
     icon:I(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>`) },
@@ -106,13 +106,14 @@ export const BUILDING_DEFS = [
 // Keep the payload close to the city's fiction so adding a new query is data-only.
 export const BUILDING_API_QUERIES = Object.freeze({
   // activity: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:30, Sort:1, ShowAnnouncement:false },
-  knowledgebase: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['知识库'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+  knowledgebaseE: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['知识库'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+  knowledgebaseD: { Category:'Discussion', Languages:[], ExcludeLanguages:null, Tags:['知识库'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
   // litreview: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['精选'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
-  blackhole: { Category:'Discussion', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:true },
-  culturehall: { Category:'Discussion', Languages:[], ExcludeLanguages:null, Tags:['精选'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
-  lab: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
-  research: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['大学'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
-  senate: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  blackhole: { Category:'Discussion', Languages:[], ExcludeLanguages:['小作品'], Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:true },
+  culturehall: { Category:'Discussion', Languages:[], ExcludeLanguages:null, Tags:['文学'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  // lab: { Category:'Experiment', Languages:[], ExcludeLanguages:['小作品'], Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+  // research: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['大学'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  senate: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['投票'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
   // tradingpost: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:'Favorite', Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
   // records: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:'Mine', Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
 });
@@ -120,7 +121,8 @@ export const BUILDING_API_QUERIES = Object.freeze({
 // Materialize the optional query on every matching building definition so the
 // renderer can treat this as ordinary building data instead of a hardcoded switch.
 BUILDING_DEFS.forEach((building: any) => {
-  if (BUILDING_API_QUERIES[building.id]) building.contentQuery = BUILDING_API_QUERIES[building.id];
+  const query = BUILDING_API_QUERIES[building.id as keyof typeof BUILDING_API_QUERIES];
+  if (query) building.contentQuery = query;
 });
 
 // ── Building dialog content (from copywriting) ────────────────────────────────
@@ -311,7 +313,7 @@ export const BUILDING_CONTENT = {
   },
   kingice: {
     name:'King Ice', slogan:'皇冠落座之处，冰与光交界。',
-    dialog:['Ice is good. Gugu is bad!']
+    dialog:['这段话是ice自己写的，他直接推送到我代码仓库里面了']
   },
   archive: { name:'档案馆', slogan:'过去不会消失，只是被收了起来。', dialog:['厚重的木门后面是成排的铁柜，标签已经泛黄。','每份档案都是城里发生过的事的记录。','「要理解一座城为什么变成现在这样，得先看它做过什么。」'] },
   tradingpost: { name:'交易所', slogan:'价值在这里被反复称量。', dialog:['柜台上摆着各种代币和凭证。','这里不仅交易货币，还交换信息、服务和承诺。','「价格会波动，但信用不会。」'] },

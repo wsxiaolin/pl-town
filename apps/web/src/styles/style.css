@@ -307,13 +307,14 @@ body.night { --text-mid: #666662; }
 .phone-archive-status b { margin-left:auto; color:#50a878; font-size:8px; }
 .phone-feed { min-height:100%; padding:14px; background:#f4f5f2; }
 .phone-feed-empty,.phone-feed-loading { padding:40px 12px; color:#898d88; text-align:center; font-size:10px; line-height:1.6; }
-.phone-bind-prompt { padding:26px 14px; border:1px solid #dfe1dd; background:#fff; }.phone-bind-prompt strong,.phone-bind-prompt p{display:block}.phone-bind-prompt strong{font-size:13px}.phone-bind-prompt p{margin-top:7px;color:#7d827c;font-size:10px;line-height:1.5}.phone-bind-prompt>button{width:auto!important;min-height:32px!important;margin-top:13px!important;padding:0 12px!important;background:#30363d!important;color:#fff!important;font-size:10px!important}.phone-bind-prompt form{display:grid;gap:7px;margin-top:12px}.phone-bind-prompt input{height:32px;padding:0 8px;border:1px solid #d5d8d3;font:inherit;font-size:10px}.phone-bind-prompt form button{height:32px;border:0;background:#3b6fe0;color:#fff;font-size:10px}.phone-bind-prompt small{color:#c45a4a;font-size:9px}.phone-social-tools[hidden],.phone-social-grid[hidden]{display:none}
+.phone-bind-prompt { padding:22px 16px 16px; border:1px solid #dfe1dd; background:#fff; box-shadow:0 5px 18px rgba(35,43,51,.06); }.phone-bind-prompt strong,.phone-bind-prompt p{display:block}.phone-bind-prompt strong{font-size:13px; letter-spacing:.01em}.phone-bind-prompt p{margin-top:7px;color:#7d827c;font-size:10px;line-height:1.6}.phone-bind-prompt>button{width:auto!important;min-height:32px!important;margin-top:13px!important;padding:0 14px!important;background:#30363d!important;color:#fff!important;font-size:10px!important}.phone-bind-prompt form{display:grid;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #eceeea}.phone-bind-prompt input{height:34px;padding:0 10px;border:1px solid #d5d8d3;background:#fbfcfa;border-radius:4px;font:inherit;font-size:10px;outline:none}.phone-bind-prompt input:focus{border-color:#6b8fd8;box-shadow:0 0 0 2px rgba(59,111,224,.12)}.phone-bind-prompt form button{height:34px;border:0;border-radius:4px;background:#3b6fe0;color:#fff;font-size:10px;font-weight:700}.phone-bind-prompt small{color:#c45a4a;font-size:9px}.phone-bind-prompt.session-expired{border-color:#e3c7a3;background:#fffdf8}.phone-bind-prompt.session-expired strong{color:#9a5a18}.phone-social-tools[hidden],.phone-social-grid[hidden]{display:none}
 .phone-notice { display:flex; gap:10px; padding:13px 2px; border-bottom:1px solid #dfe1dd; }
 .pn-dot { width:7px; height:7px; margin-top:5px; flex:none; border-radius:50%; background:#3b6fe0; }
 .phone-notice b,.phone-notice p,.phone-notice small { display:block; }
 .phone-notice b { font-size:11px; }
 .phone-notice p { margin-top:5px; color:#6d726d; font-size:10px; line-height:1.45; }
 .phone-notice small { margin-top:6px; color:#9a9e99; font-size:8px; }
+.phone-bind-prompt.session-expired{position:relative;border-color:#d8e1ef;background:#fbfcff;box-shadow:none}.phone-bind-prompt.session-expired:before{content:'';position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;background:#4f78c8}.phone-bind-prompt.session-expired strong{color:#273d67}.phone-bind-prompt.session-expired p{color:#6f7887}.phone-bind-prompt.session-expired form button{background:#315fae}
 .phone-social { min-height:100%; padding:20px 14px; background:#f4f5f2; }
 .phone-social-hero span { color:#3b6fe0; font-size:8px; font-weight:800; letter-spacing:.12em; }
 .phone-social-hero strong { display:block; margin-top:7px; font-size:18px; }
@@ -1954,6 +1955,26 @@ body.night .unlock-toast { background: rgba(220,219,216,0.95); }
 }
 .cg-skip:hover {
   color: rgba(255,255,255,0.85);
+}
+.cg-skip-hint {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(40px, 9vh, 92px);
+  z-index: 10;
+  transform: translate(-50%, 8px);
+  padding: 9px 16px;
+  border: 1px solid rgba(170,205,255,0.28);
+  background: rgba(8,14,28,0.82);
+  color: rgba(220,232,255,0.9);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.cg-skip-hint.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 @keyframes cgFadeIn {

@@ -3227,6 +3227,26 @@ function updatePhoneBindingState(){
   document.getElementById('phoneSocialTools')?.toggleAttribute('hidden',!bound);
   if(bound){document.getElementById('phoneNotifications')?.classList.add('bound');}
 }
+function handlePhysicsSessionExpired(){
+  if(!localStorage.getItem('plSession')) return;
+  localStorage.removeItem('plSession');
+  localStorage.removeItem('plUser');
+  updatePhoneBindingState();
+  setPhoneOpen(true);
+  document.querySelector('[data-online-tab="social"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  const form=document.getElementById('phoneBindForm');
+  if(form) form.hidden=false;
+  const submit=form?.querySelector('button[type="submit"]');
+  if(submit) submit.textContent='重新登录';
+  const prompt=document.getElementById('phoneSocialBind');
+  prompt?.classList.add('session-expired');
+  const title=prompt?.querySelector('strong');
+  const description=prompt?.querySelector('p');
+  if(title) title.textContent='重新连接 Physics Lab';
+  if(description) description.textContent='登录状态已过期。重新登录后，即可继续访问社区资料与作品。';
+  document.getElementById('phoneBindEmail')?.focus();
+  showUnlockToast('请在手机内重新登录 Physics Lab');
+}
 function openPhoneBinding(){
   setPhoneOpen(true);
   document.querySelector('[data-online-tab="social"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true}));
@@ -3237,7 +3257,7 @@ async function bindPhysicsLabAccount(event){
   event.preventDefault();
   const email=document.getElementById('phoneBindEmail').value.trim();const password=document.getElementById('phoneBindPassword').value;const error=document.getElementById('phoneBindError');const submit=event.currentTarget.querySelector('button[type="submit"]');
   if(!email||!password){error.textContent='请输入邮箱和密码';return;} submit.disabled=true;error.textContent='正在绑定…';
-  try{const response=await fetch('/town-api/pl/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:email,password})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Physics Lab 登录失败');localStorage.setItem('plSession',payload.session);localStorage.setItem('plUser',JSON.stringify(payload.user||{}));document.getElementById('phoneBindForm').hidden=true;updatePhoneBindingState();showUnlockToast('Physics Lab 账号已绑定');loadPhoneMessages();}catch(caught){error.textContent=caught.message||'绑定失败';}finally{submit.disabled=false;}
+  try{const response=await fetch('/town-api/pl/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:email,password})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Physics Lab 登录失败');localStorage.setItem('plSession',payload.session);localStorage.setItem('plUser',JSON.stringify(payload.user||{}));document.getElementById('phoneBindForm').hidden=true;document.getElementById('phoneSocialBind')?.classList.remove('session-expired');submit.textContent='确认绑定';updatePhoneBindingState();showUnlockToast('Physics Lab 账号已绑定');loadPhoneMessages();}catch(caught){error.textContent=caught.message||'绑定失败';}finally{submit.disabled=false;}
 }
 
 async function loadPhoneMessages(){
@@ -3247,6 +3267,7 @@ async function loadPhoneMessages(){
   feed.innerHTML='<div class="phone-feed-loading">正在同步通知…</div>';
   try{
     const response=await fetch('/town-api/pl/notifications',{headers:{'x-town-pl-session':session}});
+    if(response.status===401){handlePhysicsSessionExpired();return;}
     if(!response.ok)throw new Error('通知暂时无法同步');
     const payload=await response.json(); const items=payload.data||[];
     feed.replaceChildren(...(items.length?items.map(item=>{const row=document.createElement('article');row.className='phone-notice';row.innerHTML='<div class="pn-dot"></div><div><b></b><p></p><small></small></div>';row.querySelector('b').textContent=item.Title||item.Category||'社区通知';row.querySelector('p').textContent=item.Content||'有新的社区动态';row.querySelector('small').textContent=item.SendDate?new Date(item.SendDate).toLocaleString():'刚刚';return row;}):[Object.assign(document.createElement('div'),{className:'phone-feed-empty',textContent:'暂无新的通知。'})]));
@@ -3260,6 +3281,7 @@ async function loadPhoneSocial(kind){
   target.innerHTML='<p>正在同步社区数据…</p>';
   try{
     const response=await fetch(`/town-api/pl/social?kind=${kind}`,{headers:{'x-town-pl-session':session}}); const payload=await response.json();
+    if(response.status===401){handlePhysicsSessionExpired();return;}
     if(!response.ok)throw new Error(payload.error||'社区数据暂时不可用');
     if(kind==='profile'){
       const user=payload.data?.User||{}; const stats=payload.data?.Statistic||{};

@@ -9,7 +9,8 @@ type CGOptions = {
 };
 
 const SEEN_KEY = 'minicityCGSeenV3';
-const SCENE_SEC = 4.6;
+// Keep each act 20% shorter so scene transitions happen sooner.
+const SCENE_SEC = 4.6 * 0.8;
 const TAU = Math.PI * 2;
 
 let cgTimeline: gsap.core.Timeline | null = null;
@@ -156,7 +157,7 @@ function scene1(wrap: HTMLElement): void {
     <div class="cg-text-block">
       <span class="cg-kicker">DEEP FIELD · SIGNAL 0000</span>
       <p class="cg-line cg-line-large">一切，始于一粒光。</p>
-      <p class="cg-line" style="animation-delay:2s">在浏览器深处的黑暗里，有人点亮了第一颗像素。</p>
+      <p class="cg-line" style="animation-delay:2s">文案是AI写的qwq</p>
     </div>`);
   if (!stage) return;
 
@@ -551,9 +552,9 @@ function scene5(wrap: HTMLElement): void {
   const stage = sceneShell(wrap, 'cg-bg-title', `
     <div class="cg-title-block">
       <span class="cg-kicker">A CITY LIVES IN YOUR BROWSER</span>
-      <h1 class="cg-title">物实小城</h1>
+      <h1 class="cg-title">救救我救救我</h1>
       <p class="cg-title-en">M I N I C I T Y</p>
-      <p class="cg-tagline">WebGL 实时渲染 · 48 座建筑 · 一座永不打烊的社区</p>
+      <p class="cg-tagline">招募文案写手</p>
       <button class="cg-enter-btn" id="cgEnterBtn"><span>签署居民证，进入小城</span></button>
     </div>`);
 
@@ -605,10 +606,15 @@ function scene5(wrap: HTMLElement): void {
 // ─── exit paths ──────────────────────────────────────────────────────────────
 
 export function skipCG(): void {
-  if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
-  clearAutoEnter();
-  const wrap = document.getElementById('cgSceneWrap')!;
-  scene5(wrap);
+  // Resources are still loading during the opening CG, so skipping is disabled.
+  const hint = document.getElementById('cgSkipHint');
+  if (!hint) return;
+  hint.textContent = '后台在加载资源呢';
+  hint.classList.remove('show');
+  // Restart the transition so repeated clicks still provide feedback.
+  void hint.offsetWidth;
+  hint.classList.add('show');
+  window.setTimeout(() => hint.classList.remove('show'), 2200);
 }
 
 export function endCG(): void {
