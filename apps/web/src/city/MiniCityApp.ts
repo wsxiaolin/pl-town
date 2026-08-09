@@ -6,7 +6,7 @@ import { InstancedBatch } from '../core/InstancedBatch';
 import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rendering/createRenderer';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './data/cityConfig';
-import { BUILDING_DEFS, BUILDING_API_QUERIES } from './data/buildings';
+import { BUILDING_DEFS, BUILDING_API_QUERIES, BUILDING_CONTENT } from './data/buildings';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -2589,7 +2589,7 @@ function onMouseMove(e) {
   raycaster.setFromCamera(mouse2D,camera);
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
-    const id=hits[0].object.userData.buildingId;
+    const id=raycastUserData(hits[0].object,'buildingId');
     const b=buildings.find(x=>x.id===id);
     if(b&&b!==hoveredB){if(hoveredB)unhover(hoveredB);hover(b);}
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
@@ -2903,6 +2903,19 @@ function houseActionButton(label, active, onClick, variant) {
   return button;
 }
 
+// Raycasts often hit a facade/decoration child that was added after the
+// building was tagged. Walk up the hierarchy so every visible part remains
+// interactive.
+function raycastUserData(object, key) {
+  let node=object;
+  while(node){
+    const value=node.userData?.[key];
+    if(value) return value;
+    node=node.parent;
+  }
+  return null;
+}
+
 function setHousePanel(houseId, mode) {
   if (housePanelState.houseId === houseId && housePanelState.mode === mode) housePanelState = { houseId: null, mode: null };
   else housePanelState = { houseId, mode };
@@ -3155,9 +3168,9 @@ function onCanvasClick() {
   if(npcHit){ talkToOrWalk(npcHit); return; }
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
-    const residenceId=hits[0].object.userData.residenceId;
+    const residenceId=raycastUserData(hits[0].object,'residenceId');
     if(residenceId){ openResidence(residenceId); return; }
-    const b=buildings.find(x=>x.id===hits[0].object.userData.buildingId);
+    const b=buildings.find(x=>x.id===raycastUserData(hits[0].object,'buildingId'));
     if(b){ interactOrWalk(b); return; }
   }
   const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);
@@ -4470,8 +4483,14 @@ function setupModal() {
 }
 
 function openModal(b) {
-  const content = BUILDING_CONTENT[b.id];
-  if (!content) return;
+  // Some newer/auxiliary buildings do not have a authored entry yet. Keep
+  // them interactive with a small fallback instead of silently swallowing
+  // the click.
+  const content = BUILDING_CONTENT[b.id] || {
+    name: b.label || '小城建筑',
+    slogan: '这座小城的一角。',
+    dialog: ['这里还没有完整的介绍。', '先进去看看吧。'],
+  };
   const visitor = localStorage.getItem('minicityUser') || '旅人';
 
   document.getElementById('modalNum').textContent = b.num;
