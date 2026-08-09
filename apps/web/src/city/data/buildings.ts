@@ -102,6 +102,27 @@ export const BUILDING_DEFS = [
     icon:I(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`) },
 ];
 
+// Buildings with an entry here become configurable Physics Lab work queries.
+// Keep the payload close to the city's fiction so adding a new query is data-only.
+export const BUILDING_API_QUERIES = Object.freeze({
+  // activity: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:30, Sort:1, ShowAnnouncement:false },
+  knowledgebase: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['知识库'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+  // litreview: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['精选'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  blackhole: { Category:'Discussion', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:true },
+  culturehall: { Category:'Discussion', Languages:[], ExcludeLanguages:null, Tags:['精选'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  lab: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+  research: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:['大学'], ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  senate: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:null, Special:null, From:null, Skip:0, Take:24, Days:0, Sort:1, ShowAnnouncement:false },
+  // tradingpost: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:'Favorite', Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+  // records: { Category:'Experiment', Languages:[], ExcludeLanguages:null, Tags:null, ExcludeTags:null, ModelTags:null, ModelID:null, ParentID:null, UserID:'Mine', Special:null, From:null, Skip:0, Take:24, Days:0, Sort:0, ShowAnnouncement:false },
+});
+
+// Materialize the optional query on every matching building definition so the
+// renderer can treat this as ordinary building data instead of a hardcoded switch.
+BUILDING_DEFS.forEach((building: any) => {
+  if (BUILDING_API_QUERIES[building.id]) building.contentQuery = BUILDING_API_QUERIES[building.id];
+});
+
 // ── Building dialog content (from copywriting) ────────────────────────────────
 export const BUILDING_CONTENT = {
   activity: {
@@ -110,7 +131,8 @@ export const BUILDING_CONTENT = {
       '钱袋落在柜台上，发出一声闷响。',
       '"在这里想要生存，没钱可不行。"柜台后面的人头也没抬，"必要的时候买些东西，以及……贿赂。"',
       '你会有越来越多的追随者，没钱给他们可不行。',
-      '「马内的力量，还是大的。」'
+      '「马内的力量，还是大的。」',
+      '你不会以为我们真做了这个功能吧'
     ]
   },
   bulletin: {

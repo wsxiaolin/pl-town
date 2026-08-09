@@ -6,6 +6,47 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 },
 ] as const;
 
+test('resident phone opens the live public archive', async ({ page }) => {
+  await page.route('**/town-api/works?scope=knowledge', async (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ source: 'live', cached: false, works: [
+      { id: '6a77266b7669b917e571ed46', title: 'Precision resistance meter', category: 'Experiment', author: 'Lab volunteer', authorId: 'user-1', verification: 'Volunteer', tags: ['knowledge', 'circuit'], imageUrl: '', createdAt: 1786193515183, visits: 83, stars: 12, comments: 4, remixes: 2 },
+    ] }),
+  }));
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3', 'true');
+    localStorage.setItem('minicityUser', 'tester');
+    localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
+  });
+  await page.goto('/');
+  await page.locator('#onlinePanelToggle').click({ force: true });
+  await page.locator('[data-online-tab="archive"]').click();
+  await expect(page.locator('#onlineArchiveView')).toHaveClass(/active/);
+  await page.locator('#phoneKnowledge').click();
+  await expect(page.locator('#worksPanel')).toHaveClass(/open/);
+  await expect(page.locator('.work-record h3')).toHaveText('Precision resistance meter');
+  await expect(page.locator('#worksSummary')).toContainText('1 of 1 records');
+  await page.locator('.work-record').click();
+  await expect(page.locator('#workDetailPanel')).toHaveClass(/open/);
+  await expect(page.locator('#workDetailTitle')).toHaveText('Precision resistance meter');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('Physics Lab social terminal renders proxied profile data', async ({ page }) => {
+  await page.route('**/town-api/pl/social?kind=profile', route => route.fulfill({ contentType:'application/json', body:JSON.stringify({ kind:'profile', data:{ User:{ Nickname:'CircuitFox', Verification:'Volunteer', Level:25 }, Statistic:{ ExperimentCount:18, FollowerCount:42, FollowingCount:9 } } }) }));
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3','true'); localStorage.setItem('minicityUser','tester'); localStorage.setItem('plSession','test-session');
+    localStorage.setItem('minicityRenderSettings',JSON.stringify({resolution:1,antialias:false,anisotropy:1,shadows:false,exposure:1.18}));
+  });
+  await page.goto('/');
+  await page.locator('#onlinePanelToggle').click({force:true});
+  await page.locator('[data-online-tab="social"]').click();
+  await page.locator('[data-pl-social="profile"]').click();
+  await expect(page.locator('.social-profile>strong')).toHaveText('CircuitFox');
+  await expect(page.locator('.social-profile')).toContainText('Volunteer');
+  await expect(page.locator('.social-profile')).toContainText('18 作品');
+});
+
 for (const viewport of viewports) {
   test(`${viewport.name} renders a stable WebGL frame`, async ({ page }) => {
     const errors: string[] = [];

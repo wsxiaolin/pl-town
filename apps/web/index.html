@@ -83,6 +83,8 @@
     <nav class="online-tabs phone-tabs">
       <button class="online-tab active" data-online-tab="chat" type="button">公聊</button>
       <button class="online-tab" data-online-tab="houses" type="button">住宅</button>
+      <button class="online-tab" data-online-tab="notifications" type="button">通知</button>
+      <button class="online-tab" data-online-tab="social" type="button">社交</button>
     </nav>
     <div class="phone-screen">
       <section class="online-view active" id="onlineChatView">
@@ -93,6 +95,8 @@
         <div class="house-list" id="houseList"></div>
         <p class="house-help">住宅状态保存在服务器，全镇居民共享。</p>
       </section>
+      <section class="online-view" id="onlineNotificationsView"><div class="phone-feed" id="phoneNotifications"><div class="phone-bind-prompt" id="phoneNotificationBind"><strong>绑定 Physics Lab 账号</strong><p>绑定后在这里接收通知、评论和作品动态。</p><button type="button" id="phoneBindFromNotifications">绑定账号</button></div></div></section>
+      <section class="online-view" id="onlineSocialView"><div class="phone-social"><div class="phone-social-hero"><span>PHYSICS LAB</span><strong>社区终端</strong><p>账号资料、作品和居民关系。</p></div><div class="phone-bind-prompt" id="phoneSocialBind"><strong>先绑定 Physics Lab</strong><p>绑定后可查看个人资料、收藏、关注和志愿者列表。</p><button type="button" id="phoneBindFromSocial">绑定账号</button><form id="phoneBindForm" hidden><input id="phoneBindEmail" type="email" placeholder="Physics Lab 邮箱" autocomplete="username"><input id="phoneBindPassword" type="password" placeholder="密码" autocomplete="current-password"><button type="submit">确认绑定</button><small id="phoneBindError"></small></form></div><div class="phone-social-grid" id="phoneSocialTools"><button data-pl-social="profile" type="button">我的资料</button><button data-pl-social="mine" type="button">我的作品</button><button data-pl-social="favorites" type="button">我的收藏</button><button data-pl-social="following" type="button">我的关注</button><button data-pl-social="followers" type="button">我的粉丝</button><button data-pl-social="volunteers" type="button">志愿者</button></div><div class="phone-social-results" id="phoneSocialResults"><p>选择一项社区服务。</p></div><button class="phone-social-wide" id="phoneOpenWorks" type="button">打开全城作品动态 <b>›</b></button></div></section>
     </div>
     <div class="phone-homebar" aria-hidden="true"></div>
   </aside>
@@ -165,6 +169,35 @@
     </div>
     <div class="sp-body" id="spBody"></div>
   </div>
+
+  <!-- Public works archive: opened by civic buildings -->
+  <aside class="works-panel" id="worksPanel" role="dialog" aria-modal="false" aria-labelledby="worksTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker" id="worksKicker">CITY ARCHIVE</span>
+        <h2 id="worksTitle">Public works</h2>
+        <p id="worksSubtitle"></p>
+      </div>
+      <button class="works-close" id="worksClose" type="button" aria-label="Close">&times;</button>
+    </header>
+    <div class="works-tools">
+      <label class="works-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="worksSearch" type="search" placeholder="Search title, author or tag" autocomplete="off" />
+      </label>
+      <div class="works-filters" id="worksFilters" aria-label="Work categories"></div>
+    </div>
+    <div class="works-summary" id="worksSummary"></div>
+    <div class="works-list" id="worksList"></div>
+  </aside>
+  <aside class="work-detail-panel" id="workDetailPanel" role="dialog" aria-labelledby="workDetailTitle">
+    <button class="works-close" id="workDetailClose" type="button" aria-label="Close">&times;</button>
+    <div class="work-detail-kicker">PHYSICS LAB WORK</div><h2 id="workDetailTitle">作品详情</h2><p id="workDetailByline"></p>
+    <div class="work-detail-stats" id="workDetailStats"></div><p class="work-detail-summary" id="workDetailSummary"></p>
+    <div class="work-detail-actions"><button id="workStar" type="button">☆ 收藏/点赞</button><button id="workSupport" type="button">支持作品</button><button id="workCommentsTab" type="button">评论</button><button id="workDerivatives" type="button">衍生</button><button id="workSupporters" type="button">支持者</button></div>
+    <div class="work-comments" id="workComments"></div>
+    <form class="work-comment-form" id="workCommentForm"><input id="workCommentInput" maxlength="1200" placeholder="写下评论…" autocomplete="off"><button type="submit">发送</button></form>
+  </aside>
 
   <div class="stats-panel render-settings-panel" id="renderSettings" role="dialog" aria-label="画面设置">
      <div class="sp-head">

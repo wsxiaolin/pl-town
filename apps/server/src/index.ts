@@ -1,15 +1,18 @@
 import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { authenticate } from './auth.js';
 import { HOST, PORT } from './config.js';
 import * as db from './db.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
+import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean };
 const clients = new Map<string, Client>();
 const pendingPositions = new Map<string, Position>();
 const authAttempts = new Map<string, { count: number; startedAt: number }>();
 const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
+const physicsSessions = new Map<string, { token: string; authCode: string; user: User; expiresAt: number }>();
 const MAX_MESSAGES_PER_SECOND = 60;
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
@@ -119,7 +122,94 @@ function handle(client: Client, raw: string) {
   });
 }
 
-const http = createServer((request, response) => { if (request.url === '/healthz') { response.writeHead(200, { 'content-type': 'application/json', 'x-content-type-options': 'nosniff', 'cache-control': 'no-store' }); response.end(JSON.stringify({ ok: true, online: clients.size })); return; } response.writeHead(404, { 'x-content-type-options': 'nosniff' }); response.end(); });
+async function readJson(request: import('node:http').IncomingMessage) {
+  let raw = ''; for await (const chunk of request) { raw += chunk.toString(); if (raw.length > 64_000) throw new Error('Request too large'); }
+  return raw ? JSON.parse(raw) : {};
+}
+const http = createServer(async (request, response) => {
+  const headers = { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'cache-control': 'public, max-age=60' };
+  if (request.url === '/healthz') { response.writeHead(200, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ ok: true, online: clients.size })); return; }
+  const match = request.url?.match(/^\/town-api\/works\?scope=(knowledge|senate|all|discussion|featured)$/);
+  if (request.method === 'GET' && match) {
+    try { response.writeHead(200, headers); response.end(JSON.stringify(await getPublicWorks(match[1] as 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured'))); }
+    catch (error) { response.writeHead(502, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Upstream unavailable' })); }
+    return;
+  }
+  if (request.method === 'POST' && request.url === '/town-api/works/query') {
+    try { const body=await readJson(request); response.writeHead(200,headers); response.end(JSON.stringify(await queryPublicWorks(body.query))); }
+    catch(error){ response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
+    return;
+  }
+  if (request.method === 'POST' && request.url === '/town-api/pl/login') {
+    try {
+      const body = await readJson(request); const login = typeof body.login === 'string' ? body.login.trim() : ''; const password = typeof body.password === 'string' ? body.password : '';
+      if (!login || !password || login.length > 160 || password.length > 256) throw new Error('Login details are invalid');
+      const result = await authenticateAccount(login, password); const id = randomUUID();
+      const user = { id: String(result.user?.ID || id), nickname: String(result.user?.Nickname || login), email: null, position: { x: 0, y: 0, z: -6 } };
+      physicsSessions.set(id, { token: result.token, authCode: result.authCode, user, expiresAt: Date.now() + 30 * 60 * 1000 });
+      response.writeHead(200, headers); response.end(JSON.stringify({ session: id, user }));
+    } catch (error) { response.writeHead(401, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' })); }
+    return;
+  }
+  const accountMatch = request.url?.match(/^\/town-api\/pl\/(messages|notifications)$/);
+  if (request.method === 'GET' && accountMatch) {
+    const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
+    if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
+    try {
+      const path = accountMatch[1] === 'messages' ? '/Messages/GetMessages' : '/Messages/GetMessages';
+      const body = accountMatch[1] === 'messages' ? { CategoryID: 0, Skip: 0, Take: 16, NoTemplates: true } : { CategoryID: 4, Skip: 0, Take: 16, NoTemplates: false };
+      const data = await requestAccount(account, path, body); const items = data.Data?.Messages?.$values || data.Data?.$values || [];
+      response.writeHead(200, headers); response.end(JSON.stringify({ data: items, templates: data.Data?.Templates?.$values || [] }));
+    } catch (error) { response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
+    return;
+  }
+  const socialMatch = request.url?.match(/^\/town-api\/pl\/social\?kind=(profile|following|followers|volunteers|mine|favorites)$/);
+  if (request.method === 'GET' && socialMatch) {
+    const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
+    if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
+    try {
+      const kind = socialMatch[1]; let result;
+      if (kind === 'profile') result = await requestAccount(account, '/Users/GetUser', { ID: account.user.id });
+      else if (kind === 'following' || kind === 'followers' || kind === 'volunteers') result = await requestAccount(account, '/Users/GetRelations', { UserID: account.user.id, DisplayType: kind === 'following' ? 1 : kind === 'followers' ? 0 : 3, Skip: 0, Take: 24, Query: '' });
+      else result = await requestAccount(account, '/Contents/QueryExperiments', { Query: { Category: 'Experiment', Languages: [], ExcludeLanguages: null, Tags: null, ExcludeTags: null, ModelTags: null, ModelID: null, ParentID: null, UserID: kind === 'mine' ? account.user.id : 'Favorite', Special: null, From: null, Skip: 0, Take: 24, Days: 0, Sort: 0, ShowAnnouncement: false } });
+      response.writeHead(200, headers); response.end(JSON.stringify({ kind, data: result.Data }));
+    } catch (error) { response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
+    return;
+  }
+  const workMatch = request.url?.match(/^\/town-api\/pl\/work\/([A-Za-z0-9]+)(?:\/(comments|star|star-status|support|supporters|derivatives))?$/);
+  if (workMatch && (request.method === 'GET' || request.method === 'POST')) {
+    const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
+    if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
+    try {
+      const id=workMatch[1]; const action=workMatch[2]; const category=request.headers['x-town-work-category']==='Discussion'?'Discussion':'Experiment'; let path='/Contents/GetSummary'; let body:any={ContentID:id,Category:category};
+      if(action==='comments'&&request.method==='GET'){path='/Messages/GetComments';body={TargetID:id,TargetType:category,Skip:0,Take:16};}
+      if(action==='comments'&&request.method==='POST'){const input=await readJson(request);const content=typeof input.content==='string'?input.content.trim().slice(0,1200):'';if(!content)throw new Error('Comment cannot be empty');path='/Messages/PostComment';body={TargetID:id,TargetType:category,Content:content,Language:'Chinese'};}
+      if(action==='star'){const input=await readJson(request);path='/Contents/StarContent';body={ContentID:id,Category:category,Status:input.action!==0,Type:0};}
+      if(action==='star-status'){path='/Contents/IsStarred';body={ContentID:id,Category:category};}
+      if(action==='support'){const input=await readJson(request);path='/Contents/StarContent';body={ContentID:id,Category:category,Status:input.action!==0,Type:1};}
+      if(action==='supporters'){path='/Contents/GetSupporters';body={ContentID:id,Category:category,Skip:0,Take:20};}
+      if(action==='derivatives'){path='/Contents/GetDerivatives';body={ContentID:id,Category:category,WithSummary:true,Language:'Chinese'};}
+      const data=await requestAccount(account,path,body); response.writeHead(200,headers); response.end(JSON.stringify({data:data.Data}));
+    } catch(error){response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Work request failed'}));}
+    return;
+  }
+  const libraryMatch=request.url?.match(/^\/town-api\/pl\/library\?kind=(experiments|discussions)$/);
+  if(request.method==='GET'&&libraryMatch){
+    const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
+    if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
+    try{const identifier=libraryMatch[1]==='discussions'?'Discussions':'Experiments';const data=await requestAccount(account,'/Contents/GetLibrary',{Identifier:identifier,Language:'Chinese'});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}catch(error){response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Library unavailable'}));}return;
+  }
+  if(request.method==='POST'&&request.url==='/town-api/pl/logout'){
+    const key=request.headers['x-town-pl-session'];if(typeof key==='string')physicsSessions.delete(key);response.writeHead(200,{...headers,'cache-control':'no-store'});response.end(JSON.stringify({ok:true}));return;
+  }
+  if(request.method==='POST'&&request.url==='/town-api/pl/social/follow'){
+    const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
+    if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
+    try{const input=await readJson(request);const targetId=typeof input.targetId==='string'?input.targetId:'';if(!/^[A-Za-z0-9]{12,40}$/.test(targetId))throw new Error('Invalid user');const data=await requestAccount(account,'/Users/Follow',{TargetID:targetId,Action:input.action===0?0:1});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}
+    catch(error){response.writeHead(400,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Follow request failed'}));}return;
+  }
+  response.writeHead(404, { 'x-content-type-options': 'nosniff' }); response.end();
+});
 const wss = new WebSocketServer({ server: http, maxPayload: 16 * 1024 });
 wss.on('connection', (socket) => { const client = { socket, user: null as unknown as User, ready: false }; socket.on('message', (data) => handle(client, data.toString())); socket.on('close', () => { if (client.ready && clients.get(client.user.id)?.socket === socket) { flushPosition(client.user.id); clients.delete(client.user.id); broadcast({ type: 'player.left', playerId: client.user.id }); } }); });
 http.listen(PORT, HOST, () => console.log(`MiniCity server listening on http://${HOST}:${PORT}`));
