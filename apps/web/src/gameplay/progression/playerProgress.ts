@@ -11,6 +11,7 @@ export type PlayerProgress = {
 export type ProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
+  buildingUnlockable?: Record<string, boolean>;
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };

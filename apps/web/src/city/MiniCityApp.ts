@@ -64,6 +64,7 @@ let cameraZoom; // 当前视野宽度，由滚轮/双指缩放调整
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
+const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
 let currentFilter = 'all';
 let statsMode = 'clean';
 let mapMode = false; // 全景地图弹层是否打开
@@ -151,6 +152,7 @@ function init() {
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
     getIsNight: () => isNight, makeMaterial: stdMat, makeMesh: mk, addPart: part,
     addRaycastGroup: (group) => raycastBuildingGroups.push(group),
+    addObstacleGroup: (group) => roadNavigation.registerObstacleGroup(group),
   });
   npcSystem = createNpcSystem({
     scene, profiles: NPC_PROFILES, npcList,
@@ -188,7 +190,7 @@ function init() {
   addRealBuildingModels(scene, buildings)
     .then(() => { mapShotData = null; })
     .catch(error => console.error('3D model loading failed', error));
-  addLabels(); applyRenames();
+  addLabels(); applyRenames(); applyStoryLockedBuildings();
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
@@ -286,7 +288,7 @@ function setupScene() {
     },
     interactBuilding: (buildingId: string) => {
       const building=buildings.find(item=>item.id===buildingId);
-      if(!building)return false;
+      if(!building||isStoryLockedBuilding(building))return false;
       navigateTo(building);
       return true;
     },
@@ -354,7 +356,6 @@ const buildingMeshFactory = createBuildingMeshFactory({
   addPart: part,
 });
 
-// Pigeon sculpture
 const PLOT_MAP = {
   bank:{tex:'ground5',size:4.5,color:0xE8E7E4}, board:{tex:'ground5',size:3.0,color:0xE4E3E0},
   tower:{tex:'ground5',size:4.0,color:0xD8D7D2}, darktower:{tex:'ground6',size:4.0,color:0x9A988E},
@@ -395,7 +396,7 @@ function addBuildings() {
     factory:'facade_factory',mall:'facade_mall',school:'facade_school',
     banana:'facade_banana',qipai:'facade_qipai'
   };
-  BUILDING_DEFS.forEach(cfg => {
+  BUILDING_DEFS.filter(cfg => !cfg.disabled).forEach(cfg => {
     const b = SHAPE_FNS[cfg.shape](cfg);
     // Facade planes are only valid for rectangular bodies. Curved buildings
     // carry their facade texture directly on the mesh so their outline stays
@@ -406,14 +407,17 @@ function addBuildings() {
       const bw = p.width, bh = p.height, bd = p.depth;
       const fk = cfg.facade || FACADE_MAP[cfg.shape];
       if (isBoxBody && fk && bw > 0.3 && bh > 0.3) {
-        addFacade(b.group, fk, bw, bh, b.body.position.y, bd/2 + 0.012);
-        const f2 = addFacade(b.group, fk, bw, bh, b.body.position.y, -(bd/2 + 0.012));
+        // A physical gap is more stable than polygon offset alone at low render
+        // resolution and prevents distant wall facades from z-fighting.
+        const facadeOffset = 0.024;
+        addFacade(b.group, fk, bw, bh, b.body.position.y, bd/2 + facadeOffset);
+        const f2 = addFacade(b.group, fk, bw, bh, b.body.position.y, -(bd/2 + facadeOffset));
         if (f2) f2.rotation.y = Math.PI;
         if (bd > 0.3) {
           const f3 = addFacade(b.group, fk, bd, bh, b.body.position.y, 0, 0);
-          if (f3) { f3.position.x = -(bw/2 + 0.012); f3.rotation.y = -Math.PI/2; }
+          if (f3) { f3.position.x = -(bw/2 + facadeOffset); f3.rotation.y = -Math.PI/2; }
           const f4 = addFacade(b.group, fk, bd, bh, b.body.position.y, 0, 0);
-          if (f4) { f4.position.x = bw/2 + 0.012; f4.rotation.y = Math.PI/2; }
+          if (f4) { f4.position.x = bw/2 + facadeOffset; f4.rotation.y = Math.PI/2; }
         }
       }
     }
@@ -444,12 +448,12 @@ function npcForRaycast() { return npcSystem.npcForRaycast(); }
 
 function addLabels() {
   const wrap=document.getElementById('labelsWrap');
-  buildings.forEach(b=>{
+  buildings.filter((building) => !isStoryLockedBuilding(building)).forEach(b=>{
     const el=document.createElement('a');
     el.className='b-label-item'; el.href='#'; el.tabIndex=0;
     el.dataset.buildingId=b.id;
     el.setAttribute('aria-label',`${b.label}${b.isStats?' — open stats panel':' — 查看详情'}`);
-    el.innerHTML=`<span class="bl-num">${b.num}</span><span class="bl-icon">${b.icon}</span><span class="bl-name">${b.label}</span>`;
+    el.innerHTML=`<span class="bl-icon">${b.icon}</span><span class="bl-name">${b.label}</span>`;
     el.addEventListener('click',e=>{e.preventDefault();interactOrWalk(b);});
     el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();interactOrWalk(b);}});
     if (!b.isStats) {
@@ -590,6 +594,32 @@ function setupEvents() {
   },{signal});
 }
 
+function isStoryLockedBuilding(building) { return STORY_LOCKED_BUILDINGS.has(building.id); }
+
+function applyStoryLockedBuildings() {
+  buildings.filter(isStoryLockedBuilding).forEach((building) => {
+    building.group.userData.storyLocked = true;
+    if (building.labelEl) { building.labelEl.hidden = true; building.labelEl.tabIndex = -1; }
+    // Keep the locked landmark in the city, but make its material read as
+    // abandoned without mutating materials shared by other buildings.
+    building.group.traverse((object) => {
+      if (!object.isMesh) return;
+      const hasMaterialArray = Array.isArray(object.material);
+      const materials = hasMaterialArray ? object.material : [object.material];
+      const lockedMaterials = materials.map((material) => {
+        const lockedMaterial = material.clone();
+        lockedMaterial.color?.multiplyScalar(0.48);
+        if ('roughness' in lockedMaterial) lockedMaterial.roughness = Math.max(lockedMaterial.roughness, 0.9);
+        if ('metalness' in lockedMaterial) lockedMaterial.metalness = Math.min(lockedMaterial.metalness, 0.05);
+        if (lockedMaterial.emissive) lockedMaterial.emissive.setHex(0x000000);
+        lockedMaterial.emissiveIntensity = 0;
+        return lockedMaterial;
+      });
+      object.material = hasMaterialArray ? lockedMaterials : lockedMaterials[0];
+    });
+  });
+}
+
 function setupRenderSettings(signal: AbortSignal) {
   setupRenderSettingsController({
     signal,
@@ -615,8 +645,9 @@ function onMouseMove(e) {
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
     const id=raycastUserData(hits[0].object,'buildingId');
-    const b=buildings.find(x=>x.id===id);
+    const b=buildings.find(x=>x.id===id && !isStoryLockedBuilding(x));
     if(b&&b!==hoveredB){if(hoveredB)unhover(hoveredB);hover(b);}
+    if(!b&&hoveredB){unhover(hoveredB);hoveredB=null;}
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
 }
 
@@ -651,7 +682,7 @@ function onCanvasClick() {
   if(hits.length){
     const residenceId=raycastUserData(hits[0].object,'residenceId');
     if(residenceId){ openResidence(residenceId); return; }
-    const b=buildings.find(x=>x.id===raycastUserData(hits[0].object,'buildingId'));
+    const b=buildings.find(x=>x.id===raycastUserData(hits[0].object,'buildingId') && !isStoryLockedBuilding(x));
     if(b){ interactOrWalk(b); return; }
   }
   const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);
@@ -672,6 +703,7 @@ function talkToOrWalk(npc) {
 }
 
 function interactOrWalk(b) {
+  if (isStoryLockedBuilding(b)) return;
   const buildingDistance = cursorChar ? Math.hypot(
     cursorChar.position.x - b.group.position.x,
     cursorChar.position.z - b.group.position.z
@@ -698,9 +730,11 @@ function unhover(b) {
   b.labelEl&&b.labelEl.classList.remove('hovered');
 }
 function navigateTo(b) {
+  if (isStoryLockedBuilding(b)) return;
   multiplayerHousing?.progression.interactBuilding(b.id,()=>navigateUnlocked(b));
 }
 function navigateUnlocked(b) {
+  if (isStoryLockedBuilding(b)) return;
   if (b.isStats) { openStatsPanel(); trackInteraction('stats'); return; }
   if (b.id === 'mall_south' || b.id === 'mall_west') { multiplayerHousing.progression.openShop(); trackInteraction(b.id); return; }
   const phoneBuildings={bulletin:['notifications'],news:['notifications'],newsstand:['notifications'],community:['social','profile'],records:['social','mine'],tradingpost:['social','favorites'],guildhall:['social','volunteers'],mutualaid:['social','following']};
@@ -807,7 +841,7 @@ function initAnimations() {
 
 // ── Label projection ──────────────────────────────────────────────────────────
 function updateLabels() {
-  buildings.forEach(b=>{
+  buildings.filter((building) => !isStoryLockedBuilding(building)).forEach(b=>{
     if(!b.labelEl)return;
     labelWorldPosition.copy(b.group.position);
     labelWorldPosition.y=b.group.position.y+b.labelY;
@@ -919,10 +953,11 @@ function renderMapIcons() {
   const wrap=document.getElementById('mapIcons');
   if(!wrap||mapIconsBuilt)return;
   mapIconsBuilt=true;
-  buildings.forEach(b=>{
+  buildings.filter((building) => !isStoryLockedBuilding(building)).forEach(b=>{
     const el=document.createElement('button');
     el.type='button';
     el.className='map-icon';
+    el.dataset.buildingId=b.id;
     el.title=b.label;
     el.innerHTML=b.icon;
     el.style.left=((b.group.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';

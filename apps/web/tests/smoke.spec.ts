@@ -236,6 +236,52 @@ for (const viewport of viewports) {
   });
 }
 
+test('story-locked literature review stays unlabelled and non-interactive', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3', 'true');
+    localStorage.setItem('minicityUser', 'locked-building-tester');
+    localStorage.setItem('minicityRenderSettings', JSON.stringify({
+      resolution: 0.5,
+      antialias: false,
+      anisotropy: 1,
+      shadows: false,
+      exposure: 1.18,
+    }));
+    const NativeWebSocket = window.WebSocket;
+    class OfflineGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      send() {}
+      close() { this.readyState = NativeWebSocket.CLOSED; }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new OfflineGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+  });
+
+  await page.goto('/');
+  await expect(page.locator('.bl-num')).toHaveCount(0);
+  await expect(page.locator('[data-building-id="litreview"]')).toHaveCount(0);
+  await expect(page.locator('.b-label-item[data-building-id="library"]')).toHaveCount(1, { timeout: 30_000 });
+  await page.locator('#mapToggle').click({ force: true });
+  await expect(page.locator('.map-icon[data-building-id="litreview"]')).toHaveCount(0);
+  await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).__mini().interactBuilding('litreview'))).toBe(false);
+
+  const lockedAudit = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    let storyLocked = false;
+    let emissiveIntensity = -1;
+    mini.scene.traverse((object: any) => {
+      if (object.userData?.storyLocked) storyLocked = true;
+      if (object.userData?.buildingId === 'litreview' && object.material && emissiveIntensity < 0) {
+        emissiveIntensity = Number(object.material.emissiveIntensity ?? 0);
+      }
+    });
+    return { storyLocked, emissiveIntensity };
+  });
+  expect(lockedAudit).toEqual({ storyLocked: true, emissiveIntensity: 0 });
+});
+
 test('satellite city loads its buildings and roads', async ({ page }) => {
   const errors: string[] = [];
   page.on('console', (message) => {

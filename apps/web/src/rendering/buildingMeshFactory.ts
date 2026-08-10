@@ -39,7 +39,9 @@ export function createBuildingMeshFactory(options) {
     // Gold dome
     part(g, new THREE.SphereGeometry(0.42,16,8,0,Math.PI*2,0,Math.PI/2), {color:0xF0EFEC,roughness:0.12,tex:'metal',rx:2,ry:1}, [0,top+0.1,0]);
     part(g, new THREE.SphereGeometry(0.07,10,10), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.35}, [0,top+0.1+0.42+0.07,0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    // Keep the entry marker clear of the platform top (0.3), whose coplanar
+    // depth value otherwise flickers during camera movement.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.1+0.42+0.5};
   }
@@ -60,7 +62,7 @@ export function createBuildingMeshFactory(options) {
     // Posted papers
     part(g, new THREE.BoxGeometry(0.4,0.3,0.02), {color:0xF8F4E8,roughness:0.9}, [-0.3,0.15+1.15,0.05]);
     part(g, new THREE.BoxGeometry(0.35,0.25,0.02), {color:0xF5F0E0,roughness:0.9}, [0.25,0.15+1.05,0.05]);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.15+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.15+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body:board, bodyMat:boardMat, labelEl:null, labelY:0.15+1.64+0.5};
   }
@@ -83,7 +85,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.CylinderGeometry(0.022,0.022,0.7,8), {color:0xD0CFCC,roughness:0.5,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.16+0.35,0]);
     const tipY = top+0.12+0.72+0.16+0.35+0.35+0.07;
     part(g, new THREE.SphereGeometry(0.07,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.4}, [0,tipY,0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:tipY+0.5};
   }
@@ -105,8 +107,8 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.TorusGeometry(0.9,0.04,8,24), {color:0x6B4FE8,emissive:0x6B4FE8,emissiveIntensity:0.3}, [0,PLH+bh*0.35,0], false).rotation.x = Math.PI/2;
     // Dark orb on top
     part(g, new THREE.SphereGeometry(0.15,12,12), {color:0x1a1a2e,emissive:0x4B3FE8,emissiveIntensity:0.15}, [0,top+1.4+0.15,0], false);
-    // Blue entrance disc
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    // Blue entrance disc. Keep it clear of the platform's top face.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+1.4+0.5};
   }
@@ -124,7 +126,7 @@ export function createBuildingMeshFactory(options) {
     const coneH=1.05;
     part(g, new THREE.CylinderGeometry(0.08,1.38,coneH,24), {color:0xF0EFEC,roughness:0.35,tex:'rooftile',rx:3,ry:1}, [0,bodyTop+0.1+coneH/2,0]);
     part(g, new THREE.SphereGeometry(0.1,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.3}, [0,bodyTop+0.1+coneH+0.1,0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:bodyTop+0.1+coneH+0.6};
   }
@@ -150,7 +152,7 @@ export function createBuildingMeshFactory(options) {
     // Book silo (round reading room on roof)
     part(g, new THREE.CylinderGeometry(0.5,0.5,0.7,16), {color:0xF0EFEC,roughness:0.15,tex:'stone',rx:2,ry:1}, [0,top+0.1+0.35,0]);
     part(g, new THREE.SphereGeometry(0.5,16,8,0,Math.PI*2,0,Math.PI/2), {color:0xEEEDEA,roughness:0.1,tex:'rooftile',rx:2,ry:1}, [0,top+0.1+0.7,0]);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.1+0.7+0.5+0.4};
   }
@@ -174,8 +176,10 @@ export function createBuildingMeshFactory(options) {
     // Overgrown vine
     part(g, new THREE.SphereGeometry(0.18,8,8), {color:0x8A8870,roughness:0.95}, [-0.8,0.22+0.3,0.8]);
     part(g, new THREE.SphereGeometry(0.15,8,8), {color:0x7A7860,roughness:0.95}, [0.9,0.22+0.2,-0.6]);
-    // Faded entrance disc
-    part(g, new THREE.CylinderGeometry(0.12,0.12,0.04,16), {color:0x7A7A82,emissive:0x4A4A52,emissiveIntensity:0.1}, [0,0.22+0.022,0], false);
+    // Story-locked ruins have no entrance marker until narrative content opts in.
+    if (!cfg.storyLocked) {
+      part(g, new THREE.CylinderGeometry(0.12,0.12,0.04,16), {color:0x7A7A82,emissive:0x4A4A52,emissiveIntensity:0.1}, [0,0.22+0.045,0], false);
+    }
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.6};
   }
@@ -203,7 +207,8 @@ export function createBuildingMeshFactory(options) {
     // Wind chimes
     part(g, new THREE.CylinderGeometry(0.02,0.02,0.3,6), {color:0xD4D3D0,roughness:0.5}, [-0.5,top+0.1+0.15,0]);
     part(g, new THREE.CylinderGeometry(0.02,0.02,0.25,6), {color:0xD4D3D0,roughness:0.5}, [0.5,top+0.1+0.12,0]);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    // Keep the entry marker clear of the platform top to avoid depth flicker.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
   }
@@ -225,7 +230,7 @@ export function createBuildingMeshFactory(options) {
     [[-0.7,0.22],[0,0.18],[0.75,0.26]].forEach(([rx,rh]) => {
       part(g, new THREE.BoxGeometry(0.32,rh,0.32), {color:0xF0EFEC,roughness:0.3,tex:'stone',rx:1,ry:1}, [rx,mainTop+0.1+rh/2,-0.5]);
     });
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:mainTop+0.7};
   }
@@ -252,7 +257,7 @@ export function createBuildingMeshFactory(options) {
     // Sign on top
     part(g, new THREE.BoxGeometry(bw*0.6,0.3,0.05), {color:accentColor,roughness:0.4,tex:'wood',rx:1,ry:1}, [0,top+0.08+0.15,0]);
     // Blue accent disc
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
   }
@@ -281,7 +286,7 @@ export function createBuildingMeshFactory(options) {
     // Antenna on top
     part(g, new THREE.CylinderGeometry(0.03,0.03,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0,top+0.12+0.25,0]);
     part(g, new THREE.SphereGeometry(0.06,8,8), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.3}, [0,top+0.12+0.5,0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.12+0.5+0.5};
   }
@@ -307,7 +312,8 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.BoxGeometry(0.1,0.08,0.02), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.3}, [0,PLH+bh-0.4,bw/2+0.02], false);
     // Top indicator light
     part(g, new THREE.SphereGeometry(0.06,8,8), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.4}, [0,top+0.1+0.06,0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    // Keep the entry marker clear of the platform top to avoid depth flicker.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
   }
@@ -337,7 +343,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0.7,top+0.3,0]);
     // Quill pen
     part(g, new THREE.CylinderGeometry(0.02,0.02,0.4,6), {color:0xE8E7E4,roughness:0.5}, [0.3,top+0.12+0.2,0.2]);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5+0.3};
   }
@@ -356,7 +362,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.CylinderGeometry(1.12,1.12,0.06,24), glowMat, [0,bodyTop+0.1+0.03,0], false);
     const domeY = bodyTop+0.1+0.06;
     part(g, new THREE.SphereGeometry(1.1,20,10,0,Math.PI*2,0,Math.PI/2), {color:0xF8F7F5,roughness:0.06,metalness:0.05,tex:'metal',rx:2,ry:1}, [0,domeY,0]);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     const labelY = domeY+1.1+0.5;
     return {...cfg, group:g, body, bodyMat, glowMat, labelEl:null, labelY};
@@ -382,7 +388,7 @@ export function createBuildingMeshFactory(options) {
       y += tierH + 0.2;
     }
     part(g, new THREE.ConeGeometry(0.08, 0.35, 6), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.2}, [0, y, 0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:y+0.5};
   }
@@ -409,7 +415,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.SphereGeometry(0.08,8,8), {color:0xE8A838,roughness:0.8}, [0.5,0.2+0.5,-0.4], false);
     // Counter
     part(g, new THREE.BoxGeometry(1.4,0.55,0.45), {color:0xC4A86D,roughness:0.6,tex:'wood',rx:2,ry:1}, [0,0.2+0.275,0.65]);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:0.2+bh+0.5};
   }
@@ -430,7 +436,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0x8A6A3A,roughness:0.8,tex:'wood',rx:1,ry:1}, [0,0.2+0.25,0], false);
     part(g, new THREE.SphereGeometry(0.2,10,10), {color:0x7AAA5A,roughness:0.9}, [0,0.2+0.5,0], false);
     part(g, new THREE.SphereGeometry(0.15,10,10), {color:0xE85858,roughness:0.8}, [0.3,0.2+0.6,0.1], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:0.2+bh+bw/2+0.3};
   }
@@ -445,18 +451,25 @@ export function createBuildingMeshFactory(options) {
     body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
     const top = PLH+bh;
     // Clock face (4 sides)
-    const clockPositions = [[0,0,bw/2+0.03],[0,0,-bw/2-0.03],[bw/2+0.03,0,0],[-bw/2-0.03,0,0]];
-    const clockRotations = [0, Math.PI, Math.PI/2, -Math.PI/2];
-    clockPositions.forEach(([px,,pz], i) => {
-      part(g, new THREE.CylinderGeometry(0.3,0.3,0.04,20), {color:0xF8F4E8,roughness:0.3,emissive:0xF8F4E8,emissiveIntensity:0.05}, [px, top-0.6, pz], false).rotation.x = Math.PI/2;
-      part(g, new THREE.BoxGeometry(0.02,0.28,0.02), {color:0x2A2A2A,roughness:0.4}, [px, top-0.55, pz], false);
-      part(g, new THREE.BoxGeometry(0.22,0.02,0.02), {color:0x2A2A2A,roughness:0.4}, [px, top-0.5, pz], false);
+    const clockFaces = [
+      { position: [0, top-0.6, bw/2+0.04], rotation: 0 },
+      { position: [0, top-0.6, -bw/2-0.04], rotation: Math.PI },
+      { position: [bw/2+0.04, top-0.6, 0], rotation: Math.PI/2 },
+      { position: [-bw/2-0.04, top-0.6, 0], rotation: -Math.PI/2 },
+    ];
+    clockFaces.forEach(({position, rotation}) => {
+      const face = new THREE.Group();
+      const disc = part(face, new THREE.CylinderGeometry(0.3,0.3,0.04,20), {color:0xF8F4E8,roughness:0.3,emissive:0xF8F4E8,emissiveIntensity:0.05}, [0,0,0], false);
+      disc.rotation.x = Math.PI/2;
+      part(face, new THREE.BoxGeometry(0.02,0.28,0.02), {color:0x2A2A2A,roughness:0.4}, [0,0.05,0.02], false);
+      part(face, new THREE.BoxGeometry(0.22,0.02,0.02), {color:0x2A2A2A,roughness:0.4}, [0,0.1,0.02], false);
+      face.position.set(...position); face.rotation.y = rotation; g.add(face);
     });
     // Pyramidal roof
     part(g, new THREE.ConeGeometry(1.1,0.8,4), {color:0x8A5A3A,roughness:0.5,tex:'rooftile',rx:2,ry:1}, [0,top+0.4,0]).rotation.y = Math.PI/4;
     // Weather vane
     part(g, new THREE.CylinderGeometry(0.02,0.02,0.3,6), {color:0xD0CFCC,roughness:0.5,tex:'metal',rx:1,ry:1}, [0,top+0.8+0.15,0], false);
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.8+0.5};
   }
@@ -484,7 +497,7 @@ export function createBuildingMeshFactory(options) {
     ped.rotation.y = Math.PI/6; ped.position.y = top+0.1+0.25; g.add(ped);
     // Roof
     part(g, new THREE.ConeGeometry(1.8,0.4,4), {color:0xC45A4A,roughness:0.4,tex:'pagoda_tile',rx:2,ry:1}, [0,top+0.1+0.5+0.2,0]).rotation.y = Math.PI/4;
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.8+0.5};
   }
@@ -505,15 +518,17 @@ export function createBuildingMeshFactory(options) {
     // Smoke
     part(g, new THREE.SphereGeometry(0.15,10,10), {color:0xD0CFCC,transparent:true,opacity:0.4,roughness:1}, [bw/2-0.4,top+1.8+0.15,0], false);
     part(g, new THREE.SphereGeometry(0.1,10,10), {color:0xD0CFCC,transparent:true,opacity:0.3,roughness:1}, [bw/2-0.4,top+2.1,0], false);
-    // Loading door
-    part(g, new THREE.BoxGeometry(0.6,0.8,0.04), {color:0x4A6FA8,roughness:0.3,metalness:0.4,tex:'metal',rx:1,ry:1}, [0,0.2+0.4,bw/2+0.02], false);
+    // Loading door. Keep all facade details fully in front of the generated
+    // facade plane; overlapping it made the Writing Club visibly flicker.
+    const facadeGap = 0.055;
+    part(g, new THREE.BoxGeometry(0.6,0.8,0.04), {color:0x4A6FA8,roughness:0.3,metalness:0.4,tex:'metal',rx:1,ry:1}, [0,0.2+0.4,bw/2+facadeGap], false);
     // Side pipes
-    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x8A8A8E,roughness:0.4,metalness:0.3,tex:'metal',rx:1,ry:1}, [-bw/2+0.3,0.2+0.6,bw/2+0.02], false);
+    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x8A8A8E,roughness:0.4,metalness:0.3,tex:'metal',rx:1,ry:1}, [-bw/2+0.3,0.2+0.6,bw/2+facadeGap], false);
     // Windows
     for (let i = 0; i < 3; i++) {
-      part(g, new THREE.BoxGeometry(0.4,0.4,0.02), {color:0xA8C8F8,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [-0.8+i*0.8, 0.2+bh*0.6, bw/2+0.02], false);
+      part(g, new THREE.BoxGeometry(0.4,0.4,0.02), {color:0xA8C8F8,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [-0.8+i*0.8, 0.2+bh*0.6, bw/2+facadeGap], false);
     }
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+1.5};
   }
@@ -554,7 +569,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.BoxGeometry(0.3,2.8,0.3), {color:P.MALL_FRAME,roughness:0.4,metalness:0.5,tex:'metal',rx:1,ry:2}, [pylonX,0.25+1.4,pylonZ]);
     part(g, new THREE.SphereGeometry(0.12,12,12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.35}, [pylonX,0.25+2.8+0.12,pylonZ], false);
     // Blue entrance disc
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.18+0.55+0.5};
   }
@@ -603,7 +618,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.BoxGeometry(1.4,1.0,1.2), {color:P.SCHOOL_BRICK,roughness:0.4,tex:'schoolbrick',rx:1,ry:1}, [-bw/2-0.9,0.22+0.5,-bw/2+0.3]);
     part(g, new THREE.CylinderGeometry(0.7,0.7,0.18,16), {color:0xC0BFBC,roughness:0.5,tex:'metal',rx:3,ry:1}, [-bw/2-0.9,0.22+1.0+0.09,-bw/2+0.3]);
     // Blue entrance disc
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.7};
   }
@@ -628,7 +643,8 @@ export function createBuildingMeshFactory(options) {
     // Gold rim at top of band
     part(g, new THREE.CylinderGeometry(1.58, 1.58, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, top + 0.04, 0]);
     // Gold rim at bottom of band
-    part(g, new THREE.CylinderGeometry(1.62, 1.62, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, 0.34, 0]);
+    // Do not let the lower gold ring share the stone base's top face.
+    part(g, new THREE.CylinderGeometry(1.62, 1.62, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, 0.355, 0]);
     // 5 crown points (teeth) — evenly spaced around the top rim
     const pointCount = 5;
     const crownGemColors = [0x3B6FE0, 0xE85858, 0x5A8A3A, 0xA858E8, 0xE8A838];
@@ -653,7 +669,7 @@ export function createBuildingMeshFactory(options) {
       part(g, new THREE.SphereGeometry(0.06, 8, 8), {color:0xFFF8E0,emissive:0xFFF8E0,emissiveIntensity:0.25,roughness:0.2,metalness:0.3}, [px, top + 0.08 + pointH + 0.06, pz], false);
     }
     // Blue entrance disc at base
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.3+0.026,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.3+0.05,0], false);
     // Label Y for floating tag
     const labelY = top + 0.08 + 0.85 + 0.5;
     g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
@@ -685,7 +701,7 @@ export function createBuildingMeshFactory(options) {
       win.lookAt(Math.cos(a)*bw, PLH+bh*0.5, Math.sin(a)*bd); g.add(win);
     }
     part(g, new THREE.BoxGeometry(0.6, 0.8, 0.06), {color:0x8A5A00, roughness:0.6, tex:'wood', rx:1, ry:1}, [0, PLH+0.4, bd/2+0.02], false);
-    part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.026, 0], false);
+    part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.05, 0], false);
     g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: PLH+bh+0.4+1.5+0.5};
   }
@@ -733,9 +749,9 @@ export function createBuildingMeshFactory(options) {
     // Checker floor
     for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
       const cw = 0.4, cx = -1.5 + c*cw + cw/2, cz = bd/2 + 0.3 + r*cw + cw/2;
-      part(g, new THREE.BoxGeometry(cw-0.02, 0.02, cw-0.02), {color:(r+c)%2===0?0x2A2A2E:0xF8F7F5, roughness:0.3}, [cx, PLH+0.01, cz], false);
+      part(g, new THREE.BoxGeometry(cw-0.02, 0.02, cw-0.02), {color:(r+c)%2===0?0x2A2A2E:0xF8F7F5, roughness:0.3}, [cx, PLH+0.035, cz], false);
     }
-    part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.026, 0], false);
+    part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.05, 0], false);
     g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: top+0.3+0.25+0.5};
   }

@@ -69,6 +69,7 @@ export const BUILDING_DEFS = [
   {
     id: "litreview",
     num: "07",
+    storyLocked: true,
     label: "文学审核部",
     x: -9,
     z: 3,
@@ -373,7 +374,7 @@ export const BUILDING_DEFS = [
   },
   {
     id: "teahouse",
-    num: "35",
+    disabled: true,
     label: "茶馆",
     x: 33,
     z: 33,

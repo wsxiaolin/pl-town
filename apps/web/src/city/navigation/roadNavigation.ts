@@ -14,6 +14,13 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const CITY_LIMIT = options.cityLimit;
   const buildings = options.getBuildings();
   const buildingBoxes = [];
+  const obstacleGroups = [];
+  function registerObstacleGroup(group) {
+    if (!group || obstacleGroups.includes(group)) return;
+    obstacleGroups.push(group);
+    cacheBuildingBoxes();
+    roadGraph = null;
+  }
 
   function buildRoadPath(from, rawTarget) {
     const start=roadEntry(from);
@@ -293,6 +300,11 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
         minZ:b.min.z-0.15, maxZ:b.max.z+0.15
       });
     });
+    obstacleGroups.forEach(group=>{
+      b.setFromObject(group);
+      if (!Number.isFinite(b.min.x)) return;
+      buildingBoxes.push({minX:b.min.x-0.12,maxX:b.max.x+0.12,minZ:b.min.z-0.12,maxZ:b.max.z+0.12});
+    });
   }
   
   function segHitsBuilding(x1,z1,x2,z2) {
@@ -361,6 +373,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     buildingRoadEntry,
     pointInAnyBuilding,
     cacheBuildingBoxes,
+    registerObstacleGroup,
     nearestRoadCoord,
     clamp,
   };

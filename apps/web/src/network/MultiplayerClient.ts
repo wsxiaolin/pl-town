@@ -18,6 +18,7 @@ export type NetPlayerProgress = { currency: number; inventory: Record<string, nu
 export type NetProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
+  buildingUnlockable?: Record<string, boolean>;
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };

@@ -212,6 +212,10 @@ export function createCloudProgressionController(options: Options) {
       return true;
     }
     const price = catalog.buildingPrices[buildingId];
+    if (catalog.buildingUnlockable && catalog.buildingUnlockable[buildingId] !== true) {
+      options.showToast('这座建筑尚未开放');
+      return false;
+    }
     if (price === undefined) { options.showToast('这座建筑暂时无法解锁'); return false; }
     if (progress.currency < price) { options.showToast(`解锁需要 ${price} 物实币，余额不足`); return false; }
     pendingBuilding = { id: buildingId, phase: 'unlock', continueInteraction };

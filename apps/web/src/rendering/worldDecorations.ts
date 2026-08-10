@@ -9,31 +9,11 @@ export function createWorldDecorations(options) {
     scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
     getIsNight, makeMaterial: stdMat, makeMesh: mk, addPart: part, addRaycastGroup,
+    addObstacleGroup,
   } = options;
   let treeTrunks, treeCrowns, lampPosts, lampLights;
   const orangeGroveCenter={x:-15,z:-3};
 
-  function addPigeonSculpture(x, y, z, rotY) {
-    const g = new THREE.Group();
-    part(g, new THREE.BoxGeometry(0.6, 0.08, 0.6), {color:0xD4D3D0, roughness:0.8, tex:'stone', rx:1, ry:1}, [0, 0.04, 0]);
-    part(g, new THREE.BoxGeometry(0.5, 0.4, 0.5), {color:0xE0DFDC, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, 0.08+0.2, 0]);
-    part(g, new THREE.BoxGeometry(0.55, 0.05, 0.55), {color:0xD4D3D0, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, 0.08+0.4+0.025, 0]);
-    const topY = 0.08 + 0.4 + 0.05;
-    const bodyG = mk(new THREE.SphereGeometry(0.18, 14, 12), stdMat({color:0xC0BFB8, roughness:0.4, metalness:0.3}));
-    bodyG.position.set(0, topY+0.18, 0); bodyG.scale.set(1.3, 1.0, 1.8); bodyG.castShadow = true; g.add(bodyG);
-    const head = mk(new THREE.SphereGeometry(0.12, 12, 10), stdMat({color:0xC8C7C0, roughness:0.4, metalness:0.3}));
-    head.position.set(0, topY+0.3, 0.15); head.castShadow = true; g.add(head);
-    const beak = mk(new THREE.ConeGeometry(0.04, 0.1, 6), stdMat({color:0xE8A838, roughness:0.3}));
-    beak.position.set(0, topY+0.3, 0.25); beak.rotation.x = Math.PI/2; g.add(beak);
-    [-0.06, 0.06].forEach(dx => { const eye = mk(new THREE.SphereGeometry(0.015, 8, 8), stdMat({color:0x2A2A2E, roughness:0.1})); eye.position.set(dx, topY+0.32, 0.2); g.add(eye); });
-    [-0.2, 0.2].forEach(dx => { const wing = mk(new THREE.SphereGeometry(0.1, 10, 8), stdMat({color:0xB0AFA8, roughness:0.4, metalness:0.3})); wing.position.set(dx, topY+0.18, -0.02); wing.scale.set(0.5, 1.0, 1.5); wing.castShadow = true; g.add(wing); });
-    const tail = mk(new THREE.ConeGeometry(0.08, 0.2, 6), stdMat({color:0xB0AFA8, roughness:0.4}));
-    tail.position.set(0, topY+0.15, -0.18); tail.rotation.x = -Math.PI/2; tail.rotation.z = Math.PI; g.add(tail);
-    [-0.05, 0.05].forEach(dx => { part(g, new THREE.CylinderGeometry(0.015, 0.015, 0.08, 6), {color:0xE8A838, roughness:0.3}, [dx, topY+0.04, 0.05], false); });
-    part(g, new THREE.BoxGeometry(0.3, 0.08, 0.02), {color:0xC4A86D, roughness:0.5, metalness:0.3}, [0, 0.08+0.15, 0.26], false);
-    g.position.set(x, y, z); if (rotY) g.rotation.y = rotY; scene.add(g);
-  }
-  
   // ── Building ground plots ──
   function addDecorations() {
     addDistrictBuildings();
@@ -67,10 +47,6 @@ export function createWorldDecorations(options) {
     // City gate lamp pillars at the cardinal entrances (where new malls/schools sit)
     addLamps([[0,0,-22],[0,0,22],[-22,0,0],[22,0,0],[0,0,-38],[0,0,38],[-38,0,0],[38,0,0]]);
     // ── 外环装饰 ──
-    addPigeonSculpture(0, 0, -12, 0);
-    addPigeonSculpture(-12, 0, 12, Math.PI/3);
-    addPigeonSculpture(-24, 0, 0, 0.5);
-    addPigeonSculpture(24, 0, 0, -0.3);
     addTrees([[-15,0,-15],[-21,0,-21],[-27,0,-27],[-12,0,-27],[-27,0,-12],
               [27,0,27],[21,0,21],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],
               [-27,0,27],[-21,0,27],[-27,0,0],[27,0,0],[0,0,-27],[0,0,27],
@@ -206,7 +182,11 @@ export function createWorldDecorations(options) {
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
-        const blocked=buildings.some(b=>Math.hypot(b.x-lx,b.z-lz)<2.8);
+        const blocked=buildings.some(b=>{
+          const box=new THREE.Box3().setFromObject(b.group);
+          return lx>=box.min.x-1.35&&lx<=box.max.x+1.35
+            &&lz>=box.min.z-1.35&&lz<=box.max.z+1.35;
+        });
         if(!blocked) lots.push([lx,lz,(Math.abs(Math.round(lx+lz))+k)%3]);
       });
     }));
@@ -280,6 +260,11 @@ export function createWorldDecorations(options) {
       lampGlobes.push(globeMaterial);
     }
     positions.forEach(([x,,z]) => {
+      const blocked=[...buildings.map(b=>b.group),...residences.map(r=>r.group)].some(group=>{
+        const box=new THREE.Box3().setFromObject(group);
+        return x>=box.min.x-0.8&&x<=box.max.x+0.8&&z>=box.min.z-0.8&&z<=box.max.z+0.8;
+      });
+      if(blocked)return;
       lampPosts.add(x,0.575,z);
       lampLights.add(x,1.28,z);
     });
@@ -384,7 +369,9 @@ export function createWorldDecorations(options) {
   function addPavers() {
     [[-1.9,0,-1.9],[1.9,0,-1.9],[-1.9,0,1.9],[1.9,0,1.9]].forEach(([x,,z])=>{
       const p=mk(new THREE.BoxGeometry(0.6,0.04,0.6),stdMat({color:0xE4E3E0,roughness:0.9,tex:'stone',rx:1,ry:1}));
-      p.position.set(x,0.02,z); p.receiveShadow=true; scene.add(p);
+      // Pavers sit beside the central fountain. Raise their whole volume above
+      // the plaza overlay instead of intersecting its shallow depth layer.
+      p.position.set(x,0.07,z); p.receiveShadow=true; scene.add(p);
     });
   }
   
@@ -472,7 +459,9 @@ export function createWorldDecorations(options) {
       part(g, new THREE.BoxGeometry(0.3, 0.2, 0.3), {color:0xB8956B, roughness:0.7, tex:'wood', rx:1, ry:1}, [-0.2, 0.6, 0.3], false);
       part(g, new THREE.BoxGeometry(0.25, 0.15, 0.25), {color:colors[(i+1)%5], roughness:0.6}, [0.2, 0.58, 0.3], false);
       part(g, new THREE.SphereGeometry(0.07, 8, 8), {color:0xE85858, roughness:0.8}, [-0.1, 0.68, 0.3], false);
-      g.position.set(px, 0, pz); scene.add(g);
+      g.position.set(px, 0, pz);
+      g.userData.collisionGroup='market-stall';
+      scene.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
     }
   }
   

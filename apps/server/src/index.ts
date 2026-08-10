@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { logger } from './logger.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS } from './progression.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean };
 const clients = new Map<string, Client>();
@@ -96,6 +96,7 @@ function handle(client: Client, raw: string) {
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
+      if (BUILDING_UNLOCKABLE[message.buildingId] !== true) return fail(client.socket, 'Building is story-locked');
       const progress = db.getPlayerProgress(userId);
       if (!progress.unlockedBuildings.includes(message.buildingId)) return fail(client.socket, 'Building is locked');
       const result = db.recordBuildingVisit(userId, message.buildingId);
@@ -104,6 +105,7 @@ function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.building.unlock') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
+      if (BUILDING_UNLOCKABLE[message.buildingId] !== true) return fail(client.socket, 'Building is story-locked');
       try {
         const result = db.purchaseBuilding(userId, message.buildingId, BUILDING_PRICES[message.buildingId]!);
         send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'building.unlocked', buildingId: message.buildingId, purchased: result.unlocked } });

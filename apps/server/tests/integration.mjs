@@ -75,6 +75,12 @@ try {
 
   if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
+  if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
+
+  send(alice, { type: 'progress.building.unlock', buildingId: 'litreview' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
+  send(alice, { type: 'progress.building.visit', buildingId: 'litreview' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
 
   send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is locked');

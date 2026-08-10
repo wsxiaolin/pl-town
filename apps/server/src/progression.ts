@@ -15,6 +15,13 @@ export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
   Object.fromEntries(BUILDING_IDS.map((id) => [id, 0])),
 );
 
+// Building access can be story-controlled. Keep prices in the catalog for
+// forward compatibility; litreview is deliberately held back for a future
+// story rule while the existing free-unlock buildings retain their behavior.
+export const BUILDING_UNLOCKABLE: Readonly<Record<string, boolean>> = Object.freeze(
+  Object.fromEntries(BUILDING_IDS.map((id) => [id, id !== 'litreview'])),
+);
+
 export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.freeze({
   citizen: 20,
   first_building: 20,
@@ -42,6 +49,7 @@ export const DAILY_REWARDS = Object.freeze({
 export type ProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
+  buildingUnlockable: Record<string, boolean>;
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };
@@ -55,6 +63,7 @@ export function getProgressionCatalog(): ProgressionCatalog {
   return {
     initialCurrency: INITIAL_CURRENCY,
     buildingPrices: { ...BUILDING_PRICES },
+    buildingUnlockable: { ...BUILDING_UNLOCKABLE },
     achievementRewards: { ...ACHIEVEMENT_REWARDS },
     products: { ...SHOP_PRODUCTS },
   };
