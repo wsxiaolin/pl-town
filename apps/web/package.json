@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test:unit": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.test-run.json && node ../../node_modules/.cache/minicity-tests/tests/unit/questEngine.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/legacyStats.test.js",
+    "test:unit": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.test-run.json && node ../../node_modules/.cache/minicity-tests/tests/unit/questEngine.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/legacyStats.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/playerProgress.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/sceneInteractions.test.js",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

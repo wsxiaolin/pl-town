@@ -35,6 +35,20 @@ export interface BuildingLike {
   label?: string;
 }
 
+export interface StoryDialogOption {
+  text: string;
+  onPick: () => void | Promise<void>;
+}
+
+export interface StoryDialogModel {
+  title: string;
+  role?: string;
+  text: string;
+  tone?: 'default' | 'green';
+  options?: readonly StoryDialogOption[];
+  onClose?: () => void;
+}
+
 export interface CityDialogControllerOptions {
   document: Document;
   buildingContent: Readonly<Record<string, BuildingContentLike>>;
@@ -53,6 +67,7 @@ export interface CityDialogController {
   openBuilding(building: BuildingLike): void;
   closeBuilding(): void;
   openNpc(npc: NpcEntityLike, playerPosition?: { x: number; z: number }): void;
+  openStory(story: StoryDialogModel): void;
   closeNpc(): void;
 }
 
@@ -66,6 +81,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const { document } = options;
   let npcOpen = false;
   let activeNpc: NpcEntityLike | null = null;
+  let activeStoryClose: (() => void) | undefined;
   const firstNode = (npc: NpcEntityLike): LegacyDialogueNode => npc.profile.dialog[0] ?? { text: '……', options: [] };
 
   const renderOptions = (items: readonly { text: string; onPick: () => void }[]): void => {
@@ -80,9 +96,10 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     });
   };
 
-  const renderLine = (text: string): void => {
+  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default'): void => {
     const line = getElement<HTMLParagraphElement>(document, 'npcLine');
     line.textContent = text;
+    line.style.color = tone === 'green' ? '#3f8a4f' : '';
     line.style.animation = 'none';
     void line.offsetWidth;
     line.style.animation = '';
@@ -185,10 +202,29 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.add('open');
       renderNode(firstNode(npc));
     },
+    openStory(story) {
+      options.pauseNpcs();
+      npcOpen = true;
+      activeNpc = null;
+      activeStoryClose = story.onClose;
+      getElement<HTMLElement>(document, 'npcName').textContent = story.title;
+      getElement<HTMLElement>(document, 'npcRole').textContent = story.role ?? '城市见闻';
+      getElement<HTMLElement>(document, 'npcAvatar').style.background = story.tone === 'green'
+        ? 'linear-gradient(135deg,#8bbf78,#315f49)'
+        : 'linear-gradient(135deg,#e9dfc9,#a9a295)';
+      getElement<HTMLDivElement>(document, 'npcOverlay').classList.add('open');
+      renderLine(story.text, story.tone);
+      renderOptions((story.options ?? []).map((item) => ({
+        text: item.text,
+        onPick: () => { void item.onPick(); },
+      })));
+    },
     closeNpc() {
       if (!npcOpen) return;
       npcOpen = false;
       activeNpc = null;
+      activeStoryClose?.();
+      activeStoryClose = undefined;
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('open');
       options.resumeNpcs();
     },

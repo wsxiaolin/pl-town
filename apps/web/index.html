@@ -197,40 +197,62 @@
   -->
 
   <div class="stats-panel render-settings-panel" id="renderSettings" role="dialog" aria-label="画面设置">
-     <div class="sp-head">
-       <div>
+     <div class="sp-head render-settings-head">
+       <div class="render-settings-heading">
          <span class="sp-title">RENDER SETTINGS</span>
          <p class="render-settings-subtitle">按设备能力自由组合画面质量</p>
        </div>
        <button class="sp-close" id="renderSettingsClose" type="button" aria-label="关闭画面设置">✕</button>
      </div>
      <div class="sp-body render-settings-body">
-       <section class="render-settings-section">
-         <div class="render-settings-section-head"><h2>分辨率倍率</h2><output id="renderResolutionValue">1.5x</output></div>
-         <p>提高渲染缓冲区尺寸，直接改善细节清晰度。</p>
-         <input class="render-range" id="renderResolution" type="range" min="0.5" max="4" step="0.25" value="1.5" />
-         <div class="render-range-labels"><span>0.5x 省电</span><span>4x 极致</span></div>
+       <section class="render-capability" aria-labelledby="renderDeviceTitle">
+         <div class="render-capability-copy">
+           <span class="render-capability-dot" aria-hidden="true"></span>
+           <div><h2 id="renderDeviceTitle">设备能力</h2><p id="renderDeviceHint">正在读取图形能力...</p></div>
+         </div>
+         <div class="render-capability-metrics" aria-label="设备图形能力">
+           <span>屏幕 <strong id="renderDeviceDpr">1x</strong></span>
+           <span>纹理 <strong id="renderDeviceTexture">--</strong></span>
+           <span>过滤 <strong id="renderDeviceAnisotropy">--</strong></span>
+         </div>
        </section>
-       <section class="render-settings-section">
-         <div class="render-settings-section-head"><h2>边缘平滑</h2><label class="render-switch"><input id="renderAntialias" type="checkbox" /><span></span></label></div>
-         <p>开启 WebGL 原生抗锯齿。会增加显存和绘制开销。</p>
+       <section class="render-presets" aria-labelledby="renderPresetTitle">
+         <div class="render-presets-head"><h2 id="renderPresetTitle">快速选择</h2><span id="renderPresetStatus">自定义</span></div>
+         <div class="render-preset-options">
+           <button type="button" data-render-preset="saving">节能</button>
+           <button type="button" data-render-preset="balanced">均衡</button>
+           <button type="button" data-render-preset="high">高清</button>
+           <button type="button" data-render-preset="ultra">极致</button>
+         </div>
        </section>
-       <section class="render-settings-section">
-         <div class="render-settings-section-head"><h2>纹理过滤</h2><output id="renderAnisotropyValue">16x</output></div>
-         <p>斜角地面、道路和建筑贴图的远近清晰度。</p>
-         <select class="render-select" id="renderAnisotropy">
-           <option value="1">1x · 省电</option><option value="4" selected>4x · 标准</option><option value="8">8x · 清晰</option><option value="16">16x · 极致</option>
-         </select>
-       </section>
-       <section class="render-settings-section">
-         <div class="render-settings-section-head"><h2>实时阴影</h2><label class="render-switch"><input id="renderShadows" type="checkbox" /><span></span></label></div>
-         <p>为建筑和装饰加入动态阴影。高耗能，适合性能充足的设备。</p>
-       </section>
-       <section class="render-settings-section">
-         <div class="render-settings-section-head"><h2>曝光</h2><output id="renderExposureValue">1.18</output></div>
-         <p>调整整体亮度，不影响渲染分辨率。</p>
-         <input class="render-range" id="renderExposure" type="range" min="0.8" max="1.5" step="0.01" value="1.18" />
-       </section>
+       <div class="render-settings-grid">
+         <section class="render-settings-section render-settings-section-wide">
+           <div class="render-settings-section-head"><h2>分辨率倍率</h2><output id="renderResolutionValue">1.5x</output></div>
+           <p>提高渲染缓冲区尺寸，改善轮廓和细节清晰度。</p>
+           <input class="render-range" id="renderResolution" type="range" min="0.5" max="4" step="0.25" value="1.5" />
+           <div class="render-range-labels"><span>0.5x 省电</span><span id="renderResolutionMaxLabel">4x 设备上限</span></div>
+         </section>
+         <section class="render-settings-section render-settings-toggle-section">
+           <div class="render-settings-section-head"><h2>边缘平滑</h2><label class="render-switch"><input id="renderAntialias" type="checkbox" /><span></span></label></div>
+           <p>平滑模型边缘，会增加显存占用。</p>
+         </section>
+         <section class="render-settings-section render-settings-toggle-section">
+           <div class="render-settings-section-head"><h2>实时阴影</h2><label class="render-switch"><input id="renderShadows" type="checkbox" /><span></span></label></div>
+           <p>增强建筑层次，性能开销较高。</p>
+         </section>
+         <section class="render-settings-section">
+           <div class="render-settings-section-head"><h2>纹理过滤</h2><output id="renderAnisotropyValue">16x</output></div>
+           <p>提升斜角道路和建筑贴图的远处清晰度。</p>
+           <select class="render-select" id="renderAnisotropy">
+             <option value="1">1x · 省电</option><option value="4">4x · 标准</option><option value="8">8x · 清晰</option><option value="16">16x · 极致</option>
+           </select>
+         </section>
+         <section class="render-settings-section">
+           <div class="render-settings-section-head"><h2>曝光</h2><output id="renderExposureValue">1.18</output></div>
+           <p>调整整体亮度，不改变渲染负载。</p>
+           <input class="render-range" id="renderExposure" type="range" min="0.8" max="1.5" step="0.01" value="1.18" />
+         </section>
+       </div>
        <div class="render-settings-actions">
          <button class="render-reset" id="renderSettingsReset" type="button">恢复默认设置</button>
          <button class="render-apply" id="renderSettingsApply" type="button">应用设置</button>

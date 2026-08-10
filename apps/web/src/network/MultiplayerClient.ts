@@ -14,6 +14,13 @@ export type HousingRequest = {
   kind: 'invite' | 'application';
   createdAt: string;
 };
+export type NetPlayerProgress = { currency: number; inventory: Record<string, number>; achievements: string[]; unlockedBuildings: string[]; visitedBuildings: string[] };
+export type NetProgressionCatalog = {
+  initialCurrency: number;
+  buildingPrices: Record<string, number>;
+  achievementRewards: Record<string, number>;
+  products: Record<string, { itemId: string; name: string; unitPrice: number }>;
+};
 
 type Callbacks = {
   connected?: (user: NetUser, players: NetUser[], houses: House[]) => void;
@@ -24,6 +31,7 @@ type Callbacks = {
   chat?: (message: { userId: string; nickname: string; text: string }) => void;
   houses?: (houses: House[]) => void;
   requests?: (requests: HousingRequest[]) => void;
+  progress?: (progress: NetPlayerProgress, catalog: NetProgressionCatalog, event?: Record<string, unknown>) => void;
   authenticationFailed?: (message: string) => void;
   error?: (message: string) => void;
 };
@@ -63,13 +71,14 @@ export class MultiplayerClient {
   private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(this.credentials.nickname, this.credentials.password), 2500); }
   private handle(raw: string) {
     let message: any; try { message = JSON.parse(raw); } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.user = message.user; this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.user = message.user; this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress, message.catalog); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
     else if (message.type === 'chat') this.callbacks.chat?.(message);
     else if (message.type === 'housing.updated' || message.type === 'housing.list') this.callbacks.houses?.(message.houses ?? []);
     else if (message.type === 'housing.requests') this.callbacks.requests?.(message.requests ?? []);
+    else if (message.type === 'progress.updated') this.callbacks.progress?.(message.progress, message.catalog, message.event);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {
@@ -82,7 +91,7 @@ export class MultiplayerClient {
       } else this.callbacks.error?.(errorMessage);
     }
   }
-  private send(message: object) { if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message)); }
+  send(message: object): boolean { if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(JSON.stringify(message)); return true; }
   position(position: NetPosition) { this.send({ type: 'position', position }); }
   chat(text: string) { this.send({ type: 'chat', text }); }
   housing(type: string, payload: Record<string, unknown> = {}) { this.send({ type: `housing.${type}`, ...payload }); }

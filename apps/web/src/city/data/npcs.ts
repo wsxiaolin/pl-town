@@ -193,6 +193,7 @@ export const NPC_PROFILES = [...COMMUNITY_NPCS,
   },
   {
     id:'bunala', name:'布拿拉工', role:'布拿拉宫主人', core:true, spawnChance:1,
+    npcType:'story', type:'story',
     behavior:'field', workHours:[8,20],
     head:0xF5E838, body:0x4A4A00, home:[-30,30], work:[-30,30], patrolRadius:6,
     dialog:[

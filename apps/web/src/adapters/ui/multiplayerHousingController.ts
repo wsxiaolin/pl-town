@@ -2,12 +2,14 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import { MultiplayerClient } from '../../network/MultiplayerClient';
+import { createCloudProgressionController } from './cloudProgressionController';
 
 export function createMultiplayerHousingController(options) {
   const {
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
     showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
     getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
+    getLegacyAchievements = () => [],
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -24,9 +26,16 @@ export function createMultiplayerHousingController(options) {
   let pendingHousingRequests = 0;
   let residenceClaimId = null;
   let housePanelState = { houseId: null, mode: null };
+  const progression = createCloudProgressionController({
+    document,
+    signal,
+    showToast: showUnlockToast,
+    send: (command) => multiplayer?.send(command) ?? false,
+  });
   const HOUSE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/><path d="M10.2 20v-5h3.6v5"/></svg>';
 
   function setupMultiplayerUI() {
+    progression.setup();
     const toggle = document.getElementById('onlinePanelToggle');
     const panel = document.getElementById('onlinePanel');
     const closeBtn = document.getElementById('phoneClose');
@@ -131,6 +140,7 @@ export function createMultiplayerHousingController(options) {
     if (multiplayer) return;
     multiplayer = new MultiplayerClient({
       connection: (state) => {
+        progression.setConnection(state === 'connected');
         const dot = document.getElementById('onlineStateDot');
         const count = document.getElementById('onlineCount');
         const fab = document.getElementById('onlinePanelToggle');
@@ -170,6 +180,10 @@ export function createMultiplayerHousingController(options) {
         updatePhoneBadge();
         renderHouseList(currentHouses);
       },
+      progress: (progress, catalog, event) => {
+        progression.applySnapshot(progress, catalog, event);
+        if (!event) progression.syncAchievements(getLegacyAchievements());
+      },
       authenticationFailed: (message) => {
         const previousNickname = localStorage.getItem('minicityUser') || nickname;
         localStorage.removeItem('minicityUser');
@@ -185,6 +199,7 @@ export function createMultiplayerHousingController(options) {
         showUnlockToast(message);
       },
       error: (message) => {
+        progression.handleError();
         document.getElementById('residenceClaimSubmit')?.removeAttribute('disabled');
         document.getElementById('residenceApply')?.removeAttribute('disabled');
         showUnlockToast(message);
@@ -598,11 +613,13 @@ export function createMultiplayerHousingController(options) {
     multiplayer?.close();
     multiplayer = null;
     remotePlayers.clear();
+    progression.destroy();
   }
 
   return {
     setupUI: setupMultiplayerUI, connect: setupMultiplayer, updateRemotePlayers,
     setPhoneOpen, renderMapHouseTags, openResidence, closeResidencePanel,
     navigateToResidence, raycastUserData, sendLocalPosition, destroy,
+    progression,
   };
 }

@@ -1,0 +1,67 @@
+import type { PlayerProgress } from './types.js';
+
+export const INITIAL_CURRENCY = 1200;
+
+const BUILDING_IDS = [
+  'activity', 'bulletin', 'techhalf', 'blackhole', 'laws', 'library', 'litreview', 'catcafe',
+  'academy', 'news', 'mutualaid', 'screen', 'elevator', 'residentid', 'stats', 'knowledgebaseE',
+  'newsstand', 'community', 'research', 'commons', 'senate', 'writingclub', 'lab', 'culturehall',
+  'teahouse', 'mall_south', 'school_east', 'mall_west', 'school_north', 'kingice', 'knowledgebaseD',
+  'archive', 'tradingpost', 'records', 'guildhall', 'musichall', 'conservatory', 'arena',
+  'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall',
+] as const;
+
+export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
+  Object.fromEntries(BUILDING_IDS.map((id) => [id, 0])),
+);
+
+export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.freeze({
+  citizen: 20,
+  first_building: 20,
+  explorer_5: 35,
+  explorer_10: 60,
+  walker_100: 30,
+  walker_500: 80,
+  chat_1: 20,
+  chat_all: 60,
+  night_owl: 25,
+  unlock_3: 40,
+  cat_cafe_note: 30,
+  minicity_origin: 50,
+  dragonwell_assimilation: 80,
+});
+
+export const SHOP_PRODUCTS = Object.freeze({
+  dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
+});
+
+export const DAILY_REWARDS = Object.freeze({
+  mandarin_daily: { itemId: 'mandarin', quantity: 1 },
+});
+
+export type ProgressionCatalog = {
+  initialCurrency: number;
+  buildingPrices: Record<string, number>;
+  achievementRewards: Record<string, number>;
+  products: Record<string, { itemId: string; name: string; unitPrice: number }>;
+};
+
+export type ProgressionState = {
+  progress: PlayerProgress;
+  catalog: ProgressionCatalog;
+};
+
+export function getProgressionCatalog(): ProgressionCatalog {
+  return {
+    initialCurrency: INITIAL_CURRENCY,
+    buildingPrices: { ...BUILDING_PRICES },
+    achievementRewards: { ...ACHIEVEMENT_REWARDS },
+    products: { ...SHOP_PRODUCTS },
+  };
+}
+
+export function shanghaiDayKey(at = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(at);
+}

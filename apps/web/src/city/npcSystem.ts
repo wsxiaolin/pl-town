@@ -2,6 +2,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import { gsap } from 'gsap';
+import { getNpcType } from './data/npcTypes';
 
 export function createNpcSystem(options) {
   const {
@@ -59,7 +60,7 @@ export function createNpcSystem(options) {
     if (REDUCED) return;
     NPC_PROFILES.forEach(profile=>{
       const g=makeCharacter(profile.head,profile.body);
-      g.traverse(c=>{ if(c.isMesh) c.userData.npcId=profile.id; });
+      g.traverse(c=>{ if(c.isMesh) { c.userData.npcId=profile.id; c.userData.npcType=getNpcType(profile); } });
       const start=new THREE.Vector3(profile.home[0],0,profile.home[1]);
       g.position.copy(start); scene.add(g);
       const npc={profile, mesh:g, tween:null, spawnTimer:Math.random()*10, idleTimer:0};

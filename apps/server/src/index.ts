@@ -7,6 +7,7 @@ import * as db from './db.js';
 import { logger } from './logger.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS } from './progression.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean };
 const clients = new Map<string, Client>();
@@ -36,6 +37,9 @@ const validPosition = (position: unknown): position is Position => {
 };
 const validId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 100;
 const validResidenceId = (value: unknown) => typeof value === 'string' && /^residence:-?\d+(?:\.\d{2})?:-?\d+(?:\.\d{2})?$/.test(value);
+const validQuantity = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 20;
+const progressState = (userId: string) => ({ progress: db.getPlayerProgress(userId), catalog: getProgressionCatalog() });
+const sendProgress = (socket: WebSocket, userId: string, event?: Record<string, unknown>) => send(socket, { type: 'progress.updated', ...progressState(userId), event });
 
 function flushPosition(userId: string) {
   const position = pendingPositions.get(userId);
@@ -82,13 +86,63 @@ function handle(client: Client, raw: string) {
     }
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
-    send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id) });
+    send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), ...progressState(client.user.id) });
     broadcast({ type: 'player.joined', player: client.user }, client.user.id); return;
   }
   requireReady(client, () => {
     const userId = client.user.id;
     if (message.type === 'position') { if (!validPosition(message.position)) return fail(client.socket, 'Invalid position'); pendingPositions.set(userId, message.position); client.user.position = message.position; broadcast({ type: 'player.moved', playerId: userId, position: message.position }, userId); return; }
     if (message.type === 'chat') { if (typeof message.text !== 'string') return fail(client.socket, 'Invalid chat message'); const text = message.text.trim().slice(0, 500); if (text) broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); return; }
+    if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
+    if (message.type === 'progress.building.visit') {
+      if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
+      const progress = db.getPlayerProgress(userId);
+      if (!progress.unlockedBuildings.includes(message.buildingId)) return fail(client.socket, 'Building is locked');
+      const result = db.recordBuildingVisit(userId, message.buildingId);
+      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'building.visited', buildingId: message.buildingId, welcomeItemsGranted: result.welcomeItemsGranted } });
+      return;
+    }
+    if (message.type === 'progress.building.unlock') {
+      if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
+      try {
+        const result = db.purchaseBuilding(userId, message.buildingId, BUILDING_PRICES[message.buildingId]!);
+        send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'building.unlocked', buildingId: message.buildingId, purchased: result.unlocked } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not unlock building'); }
+      return;
+    }
+    if (message.type === 'progress.achievement.unlock') {
+      if (!validId(message.achievementId) || !(message.achievementId in ACHIEVEMENT_REWARDS)) return fail(client.socket, 'Achievement is not available');
+      const result = db.unlockAchievement(userId, message.achievementId, ACHIEVEMENT_REWARDS[message.achievementId]!);
+      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'achievement.unlocked', achievementId: message.achievementId, reward: result.unlocked ? ACHIEVEMENT_REWARDS[message.achievementId] : 0 } });
+      return;
+    }
+    if (message.type === 'progress.shop.buy') {
+      if (!validId(message.productId) || !(message.productId in SHOP_PRODUCTS)) return fail(client.socket, 'Product is not available');
+      const quantity = message.quantity ?? 1;
+      if (!validQuantity(quantity)) return fail(client.socket, 'Invalid quantity');
+      const product = SHOP_PRODUCTS[message.productId as keyof typeof SHOP_PRODUCTS];
+      try {
+        const progress = db.purchaseItem(userId, product.itemId, quantity, product.unitPrice);
+        send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'shop.purchased', productId: message.productId, quantity } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Purchase failed'); }
+      return;
+    }
+    if (message.type === 'progress.item.consume') {
+      const quantity = message.quantity ?? 1;
+      if (message.itemId !== 'dragonwell_tea' || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
+      try {
+        const progress = db.consumeItem(userId, message.itemId, quantity);
+        send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'item.consumed', itemId: message.itemId, quantity } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not consume item'); }
+      return;
+    }
+    if (message.type === 'progress.reward.claim') {
+      if (!validId(message.rewardId) || !(message.rewardId in DAILY_REWARDS)) return fail(client.socket, 'Reward is not available');
+      const reward = DAILY_REWARDS[message.rewardId as keyof typeof DAILY_REWARDS];
+      const result = db.claimReward(userId, message.rewardId, shanghaiDayKey(), reward.itemId, reward.quantity);
+      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
+      return;
+    }
     if (message.type === 'housing.list') { send(client.socket, { type: 'housing.list', houses: db.listHouses() }); send(client.socket, { type: 'housing.requests', requests: db.listHousingRequestsForUser(userId) }); return; }
     if (message.type === 'housing.accept' || message.type === 'housing.decline') {
       if (!Number.isInteger(message.requestId)) return fail(client.socket, 'Invalid housing request');

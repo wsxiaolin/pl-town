@@ -11,6 +11,7 @@ export function createWorldDecorations(options) {
     getIsNight, makeMaterial: stdMat, makeMesh: mk, addPart: part, addRaycastGroup,
   } = options;
   let treeTrunks, treeCrowns, lampPosts, lampLights;
+  const orangeGroveCenter={x:-15,z:-3};
 
   function addPigeonSculpture(x, y, z, rotY) {
     const g = new THREE.Group();
@@ -203,6 +204,8 @@ export function createWorldDecorations(options) {
         if(seeded>density)return;
         const lx=x+dx, lz=z+dz;
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
+        // Reserve a complete clearing for the interactive mandarin tree.
+        if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
         const blocked=buildings.some(b=>Math.hypot(b.x-lx,b.z-lz)<2.8);
         if(!blocked) lots.push([lx,lz,(Math.abs(Math.round(lx+lz))+k)%3]);
       });
@@ -247,9 +250,10 @@ export function createWorldDecorations(options) {
     const pmat = stdMat({color: getIsNight() ? Math.floor(plotCol*0.7) : plotCol, roughness:0.9, tex:plotTex, rx:1, ry:1});
     pmat.depthWrite = false;
     const plot = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), pmat);
+    plot.userData.residenceId = residenceId;
     const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
     plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
-    plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
+    plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot); addRaycastGroup(plot);
   }
   
   function addTrees(positions) {
@@ -262,6 +266,7 @@ export function createWorldDecorations(options) {
         resources.material({kind:'tree-crown'},()=>stdMat({color:0x6F9F4F,roughness:0.85,tex:'grass',rx:2,ry:2})), 512);
     }
     positions.forEach(([x,,z]) => {
+      if(Math.hypot(x-orangeGroveCenter.x,z-orangeGroveCenter.z)<2.4)return;
       treeTrunks.add(x,0.19,z);
       treeCrowns.add(x,0.66,z);
     });

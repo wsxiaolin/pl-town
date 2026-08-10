@@ -73,6 +73,46 @@ try {
   charlie = await connect('Charlie');
   await waitFor(alice, 'player.joined', (message) => message.player.id === charlie.hello.user.id);
 
+  if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
+  if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
+
+  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is locked');
+  send(alice, { type: 'progress.building.unlock', buildingId: 'activity' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'activity' && message.progress.currency === 1200);
+  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.progress.visitedBuildings.includes('activity'));
+  send(alice, { type: 'progress.building.unlock', buildingId: 'bulletin' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'bulletin');
+  send(alice, { type: 'progress.building.visit', buildingId: 'bulletin' });
+  const secondVisit = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'bulletin');
+  if (!secondVisit.event.welcomeItemsGranted || secondVisit.progress.inventory.city_guide !== 1 || secondVisit.progress.inventory.city_badge !== 1) throw new Error('Second unique building visit must grant the starter inventory once');
+  send(alice, { type: 'progress.building.visit', buildingId: 'bulletin' });
+  const duplicateVisit = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'bulletin' && message.event.welcomeItemsGranted === false);
+  if (duplicateVisit.event.welcomeItemsGranted || duplicateVisit.progress.inventory.city_guide !== 1) throw new Error('Repeated building visits must not duplicate starter items');
+
+  send(alice, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 2 });
+  const purchase = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'shop.purchased');
+  if (purchase.progress.inventory.dragonwell_tea !== 2 || purchase.progress.currency !== 1140) throw new Error('Shop purchase must atomically merge inventory and deduct currency');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
+  const achievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building');
+  if (achievement.event.reward !== 20 || achievement.progress.currency !== 1160) throw new Error('Achievement must grant its configured currency reward');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
+  const duplicateAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building' && message.event.reward === 0);
+  if (duplicateAchievement.progress.currency !== 1160) throw new Error('Achievement rewards must be idempotent');
+  send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
+  const consumed = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed');
+  if (consumed.progress.inventory.dragonwell_tea !== 1) throw new Error('Consuming an item must persist the remaining quantity');
+  send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
+  const consumedLast = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed' && message.progress.inventory.dragonwell_tea === undefined);
+  if ('dragonwell_tea' in consumedLast.progress.inventory) throw new Error('Consuming the last item must remove its inventory row');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'mandarin_daily' });
+  const daily = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'reward.claimed' && message.event.claimed === true);
+  if (daily.progress.inventory.mandarin !== 1) throw new Error('Daily reward must grant one item');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'mandarin_daily' });
+  const repeatedDaily = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'reward.claimed' && message.event.claimed === false);
+  if (repeatedDaily.progress.inventory.mandarin !== 1) throw new Error('Daily reward must only be granted once per Shanghai day');
+
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
 
@@ -115,9 +155,10 @@ try {
   const aliceAgain = await connect('Alice');
   if (aliceAgain.hello.user.id !== alice.hello.user.id) throw new Error('Logging in again with the same nickname must restore the same user ID');
   if (aliceAgain.hello.user.id === bob.hello.user.id) throw new Error('Different residents must not share an ID');
+  if ('dragonwell_tea' in aliceAgain.hello.progress.inventory || !aliceAgain.hello.progress.achievements.includes('first_building') || !aliceAgain.hello.progress.unlockedBuildings.includes('activity')) throw new Error('Cloud progression must survive reconnecting');
   aliceAgain.socket.close();
 
-  console.log('Integration passed: identity, position, chat, housing applications, invite decline/accept, and lifecycle');
+  console.log('Integration passed: identity, cloud progression, position, chat, housing applications, invite decline/accept, and lifecycle');
 } finally {
   alice?.socket.close();
   bob?.socket.close();

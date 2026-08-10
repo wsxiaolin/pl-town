@@ -7,10 +7,25 @@ export type User = {
   position: Position;
 };
 
+export type PlayerProgress = {
+  currency: number;
+  inventory: Record<string, number>;
+  achievements: string[];
+  unlockedBuildings: string[];
+  visitedBuildings: string[];
+};
+
 export type ClientMessage =
   | { type: 'hello'; token?: string; nickname?: string; password?: string }
   | { type: 'position'; position: Position }
   | { type: 'chat'; text: string }
+  | { type: 'progress.get' }
+  | { type: 'progress.building.visit'; buildingId: string }
+  | { type: 'progress.building.unlock'; buildingId: string }
+  | { type: 'progress.achievement.unlock'; achievementId: string }
+  | { type: 'progress.shop.buy'; productId: string; quantity?: number }
+  | { type: 'progress.item.consume'; itemId: string; quantity?: number }
+  | { type: 'progress.reward.claim'; rewardId: string }
   | { type: 'housing.list' }
   | { type: 'housing.claim'; buildingId: string; name?: string }
   | { type: 'housing.rename'; buildingId: string; name: string }

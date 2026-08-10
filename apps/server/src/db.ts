@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { DATABASE_PATH } from './config.js';
-import type { Position, User } from './types.js';
+import { INITIAL_CURRENCY } from './progression.js';
+import type { PlayerProgress, Position, User } from './types.js';
 
 export type House = {
   buildingId: string;
@@ -67,6 +68,44 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS housing_requests_target_idx ON housing_requests(target_id, created_at);
   CREATE INDEX IF NOT EXISTS housing_requests_requester_idx ON housing_requests(requester_id, created_at);
+  CREATE TABLE IF NOT EXISTS player_progress (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    currency INTEGER NOT NULL CHECK (currency >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS player_inventory (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, item_id)
+  );
+  CREATE TABLE IF NOT EXISTS player_achievements (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    achievement_id TEXT NOT NULL,
+    unlocked_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, achievement_id)
+  );
+  CREATE TABLE IF NOT EXISTS player_building_unlocks (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    building_id TEXT NOT NULL,
+    unlocked_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, building_id)
+  );
+  CREATE TABLE IF NOT EXISTS player_building_visits (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    building_id TEXT NOT NULL,
+    first_visited_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, building_id)
+  );
+  CREATE TABLE IF NOT EXISTS player_reward_claims (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reward_id TEXT NOT NULL,
+    claim_key TEXT NOT NULL,
+    claimed_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, reward_id, claim_key)
+  );
 `);
 {
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
@@ -112,6 +151,107 @@ export function updateUserProfile(id: string, nickname: string, email?: string):
 }
 export function savePosition(id: string, position: Position): void {
   db.prepare('UPDATE users SET position_x = ?, position_y = ?, position_z = ?, rotation = ?, updated_at = ? WHERE id = ?').run(position.x, position.y, position.z, position.rotation ?? null, now(), id);
+}
+
+function ensureProgress(userId: string): void {
+  const timestamp = now();
+  db.prepare('INSERT OR IGNORE INTO player_progress (user_id, currency, created_at, updated_at) VALUES (?, ?, ?, ?)')
+    .run(userId, INITIAL_CURRENCY, timestamp, timestamp);
+}
+
+function addInventory(userId: string, itemId: string, quantity: number): void {
+  db.prepare(`
+    INSERT INTO player_inventory (user_id, item_id, quantity, updated_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity, updated_at = excluded.updated_at
+  `).run(userId, itemId, quantity, now());
+}
+
+export function getPlayerProgress(userId: string): PlayerProgress {
+  ensureProgress(userId);
+  const currency = (db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(userId) as { currency: number }).currency;
+  const inventoryRows = db.prepare('SELECT item_id, quantity FROM player_inventory WHERE user_id = ? ORDER BY item_id').all(userId) as Array<{ item_id: string; quantity: number }>;
+  const inventory = Object.fromEntries(inventoryRows.map((row) => [row.item_id, row.quantity]));
+  const achievements = (db.prepare('SELECT achievement_id FROM player_achievements WHERE user_id = ? ORDER BY unlocked_at, achievement_id').all(userId) as Array<{ achievement_id: string }>).map((row) => row.achievement_id);
+  const unlockedBuildings = (db.prepare('SELECT building_id FROM player_building_unlocks WHERE user_id = ? ORDER BY unlocked_at, building_id').all(userId) as Array<{ building_id: string }>).map((row) => row.building_id);
+  const visitedBuildings = (db.prepare('SELECT building_id FROM player_building_visits WHERE user_id = ? ORDER BY first_visited_at, building_id').all(userId) as Array<{ building_id: string }>).map((row) => row.building_id);
+  return { currency, inventory, achievements, unlockedBuildings, visitedBuildings };
+}
+
+export function recordBuildingVisit(userId: string, buildingId: string): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
+  let welcomeItemsGranted = false;
+  db.transaction(() => {
+    ensureProgress(userId);
+    const inserted = db.prepare('INSERT OR IGNORE INTO player_building_visits (user_id, building_id, first_visited_at) VALUES (?, ?, ?)').run(userId, buildingId, now());
+    if (!inserted.changes) return;
+    const count = (db.prepare('SELECT COUNT(*) AS count FROM player_building_visits WHERE user_id = ?').get(userId) as { count: number }).count;
+    if (count === 2) {
+      addInventory(userId, 'city_guide', 1);
+      addInventory(userId, 'city_badge', 1);
+      welcomeItemsGranted = true;
+    }
+  })();
+  return { progress: getPlayerProgress(userId), welcomeItemsGranted };
+}
+
+export function unlockAchievement(userId: string, achievementId: string, currencyReward: number): { progress: PlayerProgress; unlocked: boolean } {
+  let unlocked = false;
+  db.transaction(() => {
+    ensureProgress(userId);
+    const result = db.prepare('INSERT OR IGNORE INTO player_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)').run(userId, achievementId, now());
+    if (!result.changes) return;
+    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(currencyReward, now(), userId);
+    unlocked = true;
+  })();
+  return { progress: getPlayerProgress(userId), unlocked };
+}
+
+export function purchaseBuilding(userId: string, buildingId: string, price: number): { progress: PlayerProgress; unlocked: boolean } {
+  let unlocked = false;
+  db.transaction(() => {
+    ensureProgress(userId);
+    if (db.prepare('SELECT 1 FROM player_building_unlocks WHERE user_id = ? AND building_id = ?').get(userId, buildingId)) return;
+    if (price > 0) {
+      const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(price, now(), userId, price);
+      if (!charged.changes) throw new Error('Insufficient currency');
+    }
+    db.prepare('INSERT INTO player_building_unlocks (user_id, building_id, unlocked_at) VALUES (?, ?, ?)').run(userId, buildingId, now());
+    unlocked = true;
+  })();
+  return { progress: getPlayerProgress(userId), unlocked };
+}
+
+export function purchaseItem(userId: string, itemId: string, quantity: number, unitPrice: number): PlayerProgress {
+  db.transaction(() => {
+    ensureProgress(userId);
+    const total = quantity * unitPrice;
+    const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(total, now(), userId, total);
+    if (!charged.changes) throw new Error('Insufficient currency');
+    addInventory(userId, itemId, quantity);
+  })();
+  return getPlayerProgress(userId);
+}
+
+export function consumeItem(userId: string, itemId: string, quantity: number): PlayerProgress {
+  db.transaction(() => {
+    ensureProgress(userId);
+    const row = db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, itemId) as { quantity: number } | undefined;
+    if (!row || row.quantity < quantity) throw new Error('Item is not available');
+    if (row.quantity === quantity) db.prepare('DELETE FROM player_inventory WHERE user_id = ? AND item_id = ?').run(userId, itemId);
+    else db.prepare('UPDATE player_inventory SET quantity = quantity - ?, updated_at = ? WHERE user_id = ? AND item_id = ?').run(quantity, now(), userId, itemId);
+  })();
+  return getPlayerProgress(userId);
+}
+
+export function claimReward(userId: string, rewardId: string, claimKey: string, itemId: string, quantity: number): { progress: PlayerProgress; claimed: boolean } {
+  let claimed = false;
+  db.transaction(() => {
+    ensureProgress(userId);
+    const inserted = db.prepare('INSERT OR IGNORE INTO player_reward_claims (user_id, reward_id, claim_key, claimed_at) VALUES (?, ?, ?, ?)').run(userId, rewardId, claimKey, now());
+    if (!inserted.changes) return;
+    addInventory(userId, itemId, quantity);
+    claimed = true;
+  })();
+  return { progress: getPlayerProgress(userId), claimed };
 }
 export function listHouses(): House[] {
   const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as any[];

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { ResourcePool } from '../core/ResourcePool';
 import { InstancedBatch } from '../core/InstancedBatch';
-import { createRenderer, RENDER_SETTINGS_KEY, readRenderSettings } from '../rendering/createRenderer';
+import { createRenderer, readRenderSettings } from '../rendering/createRenderer';
 import { createProceduralTextureLibrary } from '../rendering/proceduralTextureLibrary';
 import { createBuildingMeshFactory } from '../rendering/buildingMeshFactory';
 import { createWorldDecorations } from '../rendering/worldDecorations';
@@ -20,9 +20,13 @@ import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
 import { createCityDialogController, type CityDialogController, type NpcEntityLike } from '../adapters/ui/cityDialogController';
 import { createCommunityPanelController } from '../adapters/ui/communityPanelController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
+import { setupRenderSettingsController } from '../adapters/ui/renderSettingsController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
 import { createNpcSystem } from './npcSystem';
+import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
+import { createSceneInterestPointController } from './sceneInterestPointController';
+import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 
 const resources = new ResourcePool();
 let animationFrame = 0;
@@ -31,6 +35,7 @@ let trackingInterval = 0;
 let started = false;
 let eventController = new AbortController();
 let raycastBuildingGroups = [];
+const buildingPlotTargets = [];
 const labelWorldPosition = new THREE.Vector3();
 
 const MOBILE  = () => window.innerWidth <= 680;
@@ -73,6 +78,9 @@ let communityPanels;
 let multiplayerHousing;
 let worldDecorations;
 let npcSystem;
+let sceneInterestPoints;
+let sceneInterestPointController;
+let pendingSceneInterestPoint = null;
 let pendingDistance = 0;
 let questEventSequence = 0;
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
@@ -119,6 +127,9 @@ const ACHIEVEMENTS = [
   } },
   { id:'night_owl',     name:'守夜人',        desc:'第一次在夜里看这座城市',                check:s=>(s.nightToggles||0)>=1 },
   { id:'unlock_3',      name:'城市生长',      desc:'解锁 3 次城市变化',                     check:s=>(s.unlockLevel||0)>=3 },
+  { id:'cat_cafe_note', name:'猫咖拾遗',      desc:'发现猫咖馆旁掉落的纸张',                  check:()=>false, directOnly:true },
+  { id:'minicity_origin',name:'物实城缘起',    desc:'触碰城中守望已久的沃柑树',                check:()=>false, directOnly:true },
+  { id:'dragonwell_assimilation',name:'被龙井同化',desc:'向爬满绿色植物的石井献上龙井茶',          check:()=>false, directOnly:true },
 ];
 
 function checkAchievements() {
@@ -127,7 +138,7 @@ function checkAchievements() {
   let gained=false;
   ACHIEVEMENTS.forEach(a=>{
     if(s.achievements.includes(a.id))return;
-    if(a.check(s)){ s.achievements.push(a.id); gained=true; showUnlockToast('成就解锁 · '+a.name); }
+    if(a.check(s)){ s.achievements.push(a.id); gained=true; multiplayerHousing?.progression.unlockAchievement(a.id); showUnlockToast('成就解锁 · '+a.name); }
   });
   if(gained) saveStats(s);
 }
@@ -173,6 +184,7 @@ function init() {
   });
   addFountain();
   addBuildings(); cacheBuildingBoxes(); addDecorations(); addCharacters();
+  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
   addRealBuildingModels(scene, buildings)
     .then(() => { mapShotData = null; })
     .catch(error => console.error('3D model loading failed', error));
@@ -183,6 +195,7 @@ function init() {
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => mapIconsBuilt,
     mapShotSpan: MAP_SHOT_SPAN, getMapMode: () => mapMode, toggleMapMode, communityPanels,
+    getLegacyAchievements: () => getStats().achievements || [],
   });
   cityDialogs=createCityDialogController({
     document,
@@ -196,6 +209,44 @@ function init() {
     signal: eventController.signal,
   });
   cityDialogs.setup();
+  sceneInterestPointController=createSceneInterestPointController({
+    dialogs: cityDialogs,
+    inventory: {
+      isOnline: () => multiplayerHousing.progression.isOnline(),
+      hasItem: (itemId, count=1) => multiplayerHousing.progression.isOnline()
+        && (multiplayerHousing.progression.getProgress().inventory[itemId] ?? 0) >= count,
+      consumeItem: (itemId, count) => multiplayerHousing.progression.consumeItem(itemId, count),
+      claimDailyReward: (rewardId) => multiplayerHousing.progression.claimDailyReward(rewardId),
+    },
+    awardAchievement: (achievementId, achievementName) => {
+      const accepted=multiplayerHousing.progression.unlockAchievement(achievementId);
+      if(!accepted){
+        if(!multiplayerHousing.progression.isOnline()) showUnlockToast(`离线时无法解锁成就 · ${achievementName}`);
+        return;
+      }
+      const stats=getStats();
+      stats.achievements=stats.achievements||[];
+      if(!stats.achievements.includes(achievementId)){
+        stats.achievements.push(achievementId);
+        saveStats(stats);
+        showUnlockToast(`成就解锁 · ${achievementName}`);
+      }
+    },
+    showToast: showUnlockToast,
+    setWellPhase: (phase) => {
+      sceneInterestPoints?.setWellPhase(phase);
+      if (!camera) return;
+      if (phase === 'focus' || phase === 'engulf') {
+        cameraZoom = Math.min(cameraZoom, 5.2);
+        updateCameraProjection(cameraZoom);
+        document.body.dataset.wellVision = phase;
+      } else {
+        cameraZoom = CONFIG.cameraNearSize;
+        updateCameraProjection(cameraZoom);
+        delete document.body.dataset.wellVision;
+      }
+    },
+  });
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
   initAnimations();
@@ -237,6 +288,13 @@ function setupScene() {
       const building=buildings.find(item=>item.id===buildingId);
       if(!building)return false;
       navigateTo(building);
+      return true;
+    },
+    interactInterestPoint: (id: SceneInterestPointId) => {
+      const entity=sceneInterestPoints?.entities.get(id);
+      if(!entity||!cursorChar)return false;
+      cursorChar.position.set(entity.interactionPosition.x+0.5,0,entity.interactionPosition.z);
+      interactWithSceneInterestPoint(id);
       return true;
     },
   });
@@ -312,14 +370,16 @@ const PLOT_MAP = {
   crown:{tex:'ground5',size:4.5,color:0xF0EFEC}, banana:{tex:'ground2',size:6.0,color:0xE0D8A0},
   qipai:{tex:'ground5',size:8.0,color:0xE4E3E0},
 };
-function addBuildingPlot(x, z, shape) {
+function addBuildingPlot(x, z, shape, buildingId) {
   const p = PLOT_MAP[shape] || {tex:'ground5', size:3.5, color:0xE4E3E0};
   const mat = stdMat({color: isNight ? Math.floor(p.color*0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,p.size/2), ry:Math.max(1,p.size/2)});
   mat.depthWrite = false;
   const plot = new THREE.Mesh(new THREE.PlaneGeometry(p.size, p.size), mat);
+  plot.userData.buildingId = buildingId;
   const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
   plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
   plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
+  buildingPlotTargets.push(plot);
 }
 
 const SHAPE_FNS = buildingMeshFactory.builders;
@@ -360,9 +420,9 @@ function addBuildings() {
     b.group.position.y = -3; // Start hidden below ground for entrance animation
     scene.add(b.group); buildings.push(b);
     // Add ground plot under the building
-    addBuildingPlot(cfg.x, cfg.z, cfg.shape);
+    addBuildingPlot(cfg.x, cfg.z, cfg.shape, cfg.id);
   });
-  raycastBuildingGroups = buildings.map(b => b.group);
+  raycastBuildingGroups = [...buildings.map(b => b.group), ...buildingPlotTargets];
 }
 
 // ── Decorations ───────────────────────────────────────────────────────────────
@@ -531,66 +591,12 @@ function setupEvents() {
 }
 
 function setupRenderSettings(signal: AbortSignal) {
-  const toggle = document.getElementById('renderSettingsToggle');
-  const panel = document.getElementById('renderSettings');
-  if (!toggle || !panel) return;
-  const settings = readRenderSettings();
-  const resolution = panel.querySelector('#renderResolution') as HTMLInputElement;
-  const resolutionValue = panel.querySelector('#renderResolutionValue');
-  const antialias = panel.querySelector('#renderAntialias') as HTMLInputElement;
-  const anisotropy = panel.querySelector('#renderAnisotropy') as HTMLSelectElement;
-  const anisotropyValue = panel.querySelector('#renderAnisotropyValue');
-  const shadows = panel.querySelector('#renderShadows') as HTMLInputElement;
-  const exposure = panel.querySelector('#renderExposure') as HTMLInputElement;
-  const exposureValue = panel.querySelector('#renderExposureValue');
-  resolution.value = String(settings.resolution);
-  // Let the user push resolution all the way to (and beyond) the device pixel
-  // ratio; on high-DPI screens that is real supersampling, not a no-op.
-  if(resolution) {
-    const dpr=window.devicePixelRatio||1;
-    resolution.min='0.5';
-    resolution.max=String(Math.max(4, dpr));
-    resolution.step='0.25';
-  }
-  antialias.checked = settings.antialias;
-  anisotropy.value = String(settings.anisotropy);
-  shadows.checked = settings.shadows;
-  exposure.value = String(settings.exposure);
-  const updateLabels = () => {
-    resolutionValue.textContent = `${resolution.value}x`;
-    anisotropyValue.textContent = `${anisotropy.value}x`;
-    exposureValue.textContent = Number(exposure.value).toFixed(2);
-  };
-  updateLabels();
-  const close = closeRenderSettings;
-  const saveAndReload = () => {
-    localStorage.setItem(RENDER_SETTINGS_KEY, JSON.stringify({
-      resolution: Number(resolution.value),
-      antialias: antialias.checked,
-      anisotropy: Number(anisotropy.value),
-      shadows: shadows.checked,
-      exposure: Number(exposure.value),
-    }));
-    window.location.reload();
-  };
-  toggle.addEventListener('click',e=>{
-    e.stopPropagation();
-    if (panel.classList.contains('open')) close();
-    else {
-      panel.classList.add('open');
-      toggle.setAttribute('aria-expanded', 'true');
-    }
-  },{signal});
-  resolution.addEventListener('input',updateLabels,{signal});
-  exposure.addEventListener('input',updateLabels,{signal});
-  panel.querySelector('#renderSettingsApply').addEventListener('click',saveAndReload,{signal});
-  panel.querySelector('#renderSettingsReset').addEventListener('click',()=>{
-    localStorage.removeItem(RENDER_SETTINGS_KEY);
-    window.location.reload();
-  },{signal});
-  document.addEventListener('click',e=>{
-    if (panel.classList.contains('open') && !panel.contains(e.target as Node) && e.target !== toggle) close();
-  },{signal});
+  setupRenderSettingsController({
+    signal,
+    maxAnisotropy: renderer.capabilities.getMaxAnisotropy(),
+    maxTextureSize: renderer.capabilities.maxTextureSize,
+    close: closeRenderSettings,
+  });
 }
 
 function closeRenderSettings() {
@@ -634,6 +640,13 @@ function onCanvasClick() {
   }
   const npcHit=npcForRaycast();
   if(npcHit){ talkToOrWalk(npcHit); return; }
+  const interestHits=sceneInterestPoints
+    ? raycaster.intersectObjects(sceneInterestPoints.raycastTargets,true)
+    : [];
+  if(interestHits.length){
+    const id=raycastUserData(interestHits[0].object,'sceneInterestPointId') as SceneInterestPointId | undefined;
+    if(id){ interactWithSceneInterestPoint(id); return; }
+  }
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
     const residenceId=raycastUserData(hits[0].object,'residenceId');
@@ -685,13 +698,33 @@ function unhover(b) {
   b.labelEl&&b.labelEl.classList.remove('hovered');
 }
 function navigateTo(b) {
+  multiplayerHousing?.progression.interactBuilding(b.id,()=>navigateUnlocked(b));
+}
+function navigateUnlocked(b) {
   if (b.isStats) { openStatsPanel(); trackInteraction('stats'); return; }
+  if (b.id === 'mall_south' || b.id === 'mall_west') { multiplayerHousing.progression.openShop(); trackInteraction(b.id); return; }
   const phoneBuildings={bulletin:['notifications'],news:['notifications'],newsstand:['notifications'],community:['social','profile'],records:['social','mine'],tradingpost:['social','favorites'],guildhall:['social','volunteers'],mutualaid:['social','following']};
   if(phoneBuildings[b.id]){openPhoneApp(...phoneBuildings[b.id]);trackInteraction(b.id);return;}
   const configuredQuery=BUILDING_API_QUERIES[b.id];
   if(configuredQuery){openWorksPanel(b.id,configuredQuery);trackInteraction(b.id);return;}
   trackInteraction(b.id);
   openModal(b);
+}
+
+function interactWithSceneInterestPoint(id: SceneInterestPointId) {
+  const entity=sceneInterestPoints?.entities.get(id);
+  if(!entity||!cursorChar)return;
+  const distance=Math.hypot(
+    cursorChar.position.x-entity.interactionPosition.x,
+    cursorChar.position.z-entity.interactionPosition.z,
+  );
+  if(distance<=3.5){
+    pendingSceneInterestPoint=null;
+    void sceneInterestPointController?.interact(id);
+    return;
+  }
+  pendingSceneInterestPoint=id;
+  movePlayerTo(entity.interactionPosition);
 }
 
 function openPhoneApp(tab, kind) { communityPanels.openPhoneApp(tab, kind); }
@@ -803,6 +836,7 @@ function loop() {
     npcYieldToPlayer(npc);
   });
   updateCameraFollow(delta);
+  sceneInterestPoints?.update(now/1000);
   updateLabels();
   renderer.render(scene,camera);
   if(mapMode) updateMapMarker(); // 玩家走动时同步地图上的位置标记
@@ -932,27 +966,16 @@ function mapTeleport(b) {
   }
 }
 
-function updateCameraFollow(delta) {
+function updateCameraFollow(_delta) {
   if(!cursorChar||mapMode)return;
   const p=cursorChar.position;
-  labelWorldPosition.copy(p); labelWorldPosition.y=0.4; labelWorldPosition.project(camera);
-  const ox=Math.abs(labelWorldPosition.x), oz=Math.abs(labelWorldPosition.y);
-  if(ox<=CONFIG.cameraEdge&&oz<=CONFIG.cameraEdge)return;
-  // 玩家当前 NDC 超出边缘，休息点 = 让玩家刚好回到边缘的目标位置
-  const maxo=Math.max(ox,oz);
-  const scale=1-CONFIG.cameraEdge/maxo;
-  const dx=p.x-cameraTarget.x, dz=p.z-cameraTarget.z;
-  const rx=cameraTarget.x+dx*scale, rz=cameraTarget.z+dz*scale;
-  const t=1-Math.exp(-6*delta); // 帧率无关的连续缓动
-  setCameraTarget(
-    cameraTarget.x+(rx-cameraTarget.x)*t,
-    cameraTarget.z+(rz-cameraTarget.z)*t,
-    true
-  );
+  // The camera looks directly at the player every frame, keeping the local
+  // character projected at the exact viewport center while walking.
+  setCameraTarget(p.x,p.z,true);
 }
 
 function setCameraTarget(x,z,instant) {
-  const nx=clamp(x,-38,38), nz=clamp(z,-38,112);
+  const nx=x, nz=z;
   if(instant){
     cameraTarget.set(nx,0,nz);
     camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
@@ -983,6 +1006,17 @@ function updatePlayerMovement(delta) {
       const b=pendingBuilding;
       const distance=Math.hypot(cursorChar.position.x-b.group.position.x,cursorChar.position.z-b.group.position.z);
       if(distance<=CONFIG.buildingInteractRadius){ pendingBuilding=null; navigateTo(b); }
+    }
+    if(pendingSceneInterestPoint && cursorChar){
+      const id=pendingSceneInterestPoint;
+      const entity=sceneInterestPoints?.entities.get(id);
+      if(entity){
+        const distance=Math.hypot(
+          cursorChar.position.x-entity.interactionPosition.x,
+          cursorChar.position.z-entity.interactionPosition.z,
+        );
+        if(distance<=3.5){ pendingSceneInterestPoint=null; void sceneInterestPointController?.interact(id); }
+      }
     }
     return;
   }
@@ -1065,10 +1099,7 @@ function trackInteraction(buildingId) {
 }
 
 function updateWelcome() {
-  const s=getStats();
-  const show=(s.interactions||0)<2; // 第二次与建筑交互后不再显示
-  const el=document.querySelector('.welcome-block');
-  if(el) el.classList.toggle('hidden',!show);
+  // Cloud progression owns the unique-building threshold and inventory entry.
 }
 
 function checkUnlocks(s) {
@@ -1312,11 +1343,10 @@ function setFilter(filter) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function getQuestProgressView() {
-  const stats=getStats();
-  return {
+  return multiplayerHousing?.progression.getQuestProgressView() ?? {
     flags:{},
     inventory:{},
-    achievements:new Set(stats.achievements||[]),
+    achievements:new Set(),
     unlockedBuildings:new Set(),
     unlockedDistricts:new Set(),
   };
@@ -1405,8 +1435,13 @@ export function destroyMiniCity() {
   mapShotRenderer=null;
   renderer?.dispose();
   renderer?.forceContextLoss();
+  sceneInterestPoints?.dispose();
   scene?.clear();
   resources.dispose();
+  buildingPlotTargets.length=0;
+  sceneInterestPoints=null;
+  sceneInterestPointController=null;
+  pendingSceneInterestPoint=null;
   document.getElementById('labelsWrap')?.replaceChildren();
   document.getElementById('mapIcons')?.replaceChildren();
 }
