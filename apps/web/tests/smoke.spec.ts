@@ -6,13 +6,7 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 },
 ] as const;
 
-test('resident phone opens the live public archive', async ({ page }) => {
-  await page.route('**/town-api/works?scope=knowledge', async (route) => route.fulfill({
-    contentType: 'application/json',
-    body: JSON.stringify({ source: 'live', cached: false, works: [
-      { id: '6a77266b7669b917e571ed46', title: 'Precision resistance meter', category: 'Experiment', author: 'Lab volunteer', authorId: 'user-1', verification: 'Volunteer', tags: ['knowledge', 'circuit'], imageUrl: '', createdAt: 1786193515183, visits: 83, stars: 12, comments: 4, remixes: 2 },
-    ] }),
-  }));
+test('resident phone opens the notification binding view', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'tester');
@@ -20,31 +14,24 @@ test('resident phone opens the live public archive', async ({ page }) => {
   });
   await page.goto('/');
   await page.locator('#onlinePanelToggle').click({ force: true });
-  await page.locator('[data-online-tab="archive"]').click();
-  await expect(page.locator('#onlineArchiveView')).toHaveClass(/active/);
-  await page.locator('#phoneKnowledge').click();
-  await expect(page.locator('#worksPanel')).toHaveClass(/open/);
-  await expect(page.locator('.work-record h3')).toHaveText('Precision resistance meter');
-  await expect(page.locator('#worksSummary')).toContainText('1 of 1 records');
-  await page.locator('.work-record').click();
-  await expect(page.locator('#workDetailPanel')).toHaveClass(/open/);
-  await expect(page.locator('#workDetailTitle')).toHaveText('Precision resistance meter');
+  await expect(page.locator('#onlinePanel')).toHaveClass(/open/);
+  await page.locator('[data-online-tab="notifications"]').click();
+  await expect(page.locator('#onlineNotificationsView')).toHaveClass(/active/);
+  await expect(page.locator('#phoneBindForm')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });
 
-test('Physics Lab social terminal renders proxied profile data', async ({ page }) => {
-  await page.route('**/town-api/pl/social?kind=profile', route => route.fulfill({ contentType:'application/json', body:JSON.stringify({ kind:'profile', data:{ User:{ Nickname:'CircuitFox', Verification:'Volunteer', Level:25 }, Statistic:{ ExperimentCount:18, FollowerCount:42, FollowingCount:9 } } }) }));
+test('resident phone switches between housing and chat', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('minicityCGSeenV3','true'); localStorage.setItem('minicityUser','tester'); localStorage.setItem('plSession','test-session');
+    localStorage.setItem('minicityCGSeenV3','true'); localStorage.setItem('minicityUser','tester');
     localStorage.setItem('minicityRenderSettings',JSON.stringify({resolution:1,antialias:false,anisotropy:1,shadows:false,exposure:1.18}));
   });
   await page.goto('/');
   await page.locator('#onlinePanelToggle').click({force:true});
-  await page.locator('[data-online-tab="social"]').click();
-  await page.locator('[data-pl-social="profile"]').click();
-  await expect(page.locator('.social-profile>strong')).toHaveText('CircuitFox');
-  await expect(page.locator('.social-profile')).toContainText('Volunteer');
-  await expect(page.locator('.social-profile')).toContainText('18 作品');
+  await page.locator('[data-online-tab="houses"]').click();
+  await expect(page.locator('#onlineHousesView')).toHaveClass(/active/);
+  await page.locator('[data-online-tab="chat"]').click();
+  await expect(page.locator('#onlineChatView')).toHaveClass(/active/);
 });
 
 for (const viewport of viewports) {
@@ -98,7 +85,7 @@ test('satellite city loads its buildings and roads', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket;
     class OfflineGameWebSocket extends EventTarget {
-      readyState = NativeWebSocket.CONNECTING;
+      readyState: number = NativeWebSocket.CONNECTING;
       send() {}
       close() { this.readyState = NativeWebSocket.CLOSED; }
     }
@@ -132,6 +119,71 @@ test('satellite city loads its buildings and roads', async ({ page }) => {
     return { buildings: buildings.length, designed: designed.length, roads: satelliteRoads.length, connectors: connectors.length, positioned };
   }), { timeout: 30_000 }).toEqual({ buildings: 13, designed: 5, roads: 6, connectors: 1, positioned: true });
   expect(errors).toEqual([]);
+});
+
+test('NPC side quest flows from offer to building objective to delivery', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3', 'true');
+    localStorage.setItem('minicityUser', 'quest-tester');
+    localStorage.removeItem('minicityQuestJournal.v1');
+    localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
+    const NativeWebSocket = window.WebSocket;
+    class OfflineGameWebSocket extends EventTarget {
+      readyState: number = NativeWebSocket.CONNECTING;
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      send() {}
+      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new OfflineGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => {
+    const mini = (window as any).__mini?.();
+    return !!mini?.player?.visible && !!mini?.npcs?.some((npc: any) => npc.profile.id === 'azi');
+  }, undefined, { timeout: 30_000 });
+
+  const clickWorldEntity = async (kind: 'npc' | 'building', id: string) => {
+    const handled = await page.evaluate(({ kind: entityKind, id: entityId }) => {
+      const mini = (window as any).__mini();
+      const entity = entityKind === 'npc'
+        ? mini.npcs.find((npc: any) => npc.profile.id === entityId).mesh
+        : (() => {
+            let found: any;
+            mini.scene.traverse((object: any) => { if (!found && object.userData?.buildingId === entityId) found = object; });
+            return found;
+          })();
+      const world = new mini.THREE.Vector3();
+      entity.getWorldPosition(world);
+      mini.player.position.set(world.x + 0.5, 0, world.z);
+      return entityKind === 'npc' ? mini.interactNpc(entityId) : mini.interactBuilding(entityId);
+    }, { kind, id });
+    expect(handled).toBe(true);
+  };
+
+  await clickWorldEntity('npc', 'azi');
+  await expect(page.locator('#npcOverlay')).toHaveClass(/open/);
+  await page.locator('.npc-opt').filter({ hasText: '支线：调查夜灯传闻' }).click();
+  await page.locator('.npc-opt').filter({ hasText: '我去调查' }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('minicityQuestJournal.v1') || '{}').quests?.['side.azi.night-lights']?.status)).toBe('active');
+  await page.locator('.npc-opt').filter({ hasText: '告辞' }).click();
+
+  await clickWorldEntity('building', 'research');
+  await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('minicityQuestJournal.v1') || '{}').quests?.['side.azi.night-lights']?.status)).toBe('ready');
+  await page.locator('#modalClose').click();
+
+  await clickWorldEntity('npc', 'azi');
+  const reportOption = page.locator('.npc-opt').first();
+  await expect(reportOption).toHaveText('汇报研究院的发现');
+  await reportOption.click();
+  const deliveryOption = page.locator('.npc-opt').filter({ hasText: '讲述调查经过' });
+  await expect(deliveryOption).toHaveText('讲述调查经过');
+  await deliveryOption.evaluate((element: HTMLButtonElement) => element.click());
+  await expect(page.locator('#npcLine')).toContainText('调查员');
+  await expect(page.locator('#utText')).toContainText('任务已完成');
 });
 
 test('an expired session can log in again from the header', async ({ page }) => {

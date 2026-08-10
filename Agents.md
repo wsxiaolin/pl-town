@@ -110,3 +110,22 @@ npm test                 # 前端 Playwright + 服务端集成测试
 ## 不确定信息的核实
 
 AI 对事实、接口、依赖版本、运行参数、平台规则或外部项目行为不确定时，必须先进行网络搜索或查阅官方/一手资料，再作出实现决定；不得凭记忆臆测。搜索结果应尽量使用官方文档、项目源码或维护者发布的信息，并在代码注释、文档或最终说明中标明重要外部依据。网络搜索不得替代对当前仓库代码的阅读，也不得泄露本地凭据、令牌、用户数据或未公开配置。
+
+## 当前前端模块边界
+
+`apps/web/src/city/MiniCityApp.ts` 现阶段仍是组合根，负责启动、销毁、帧循环和跨模块装配。新增业务逻辑不得继续写入该文件；迁移完成前，只允许在这里保留必要的兼容 wrapper。
+
+- `gameplay/`：严格 TypeScript 的任务、对话、条件、效果、存档适配和声明式内容，不依赖 DOM、Three.js、网络或 `localStorage`。
+- `adapters/ui/`：对话、社区面板、多人和住房等 DOM/API 适配器，内部状态不能回流到 `gameplay/`。
+- `city/navigation/`、`city/npcSystem.ts`：道路寻路、碰撞、NPC 生成、日程和巡逻行为。
+- `city/progression/`：旧统计数据的兼容读写和迁移边界。
+- `rendering/`：程序纹理、建筑网格工厂、城市装饰和场景视觉资源。
+- `city/data/`、`gameplay/content/`：配置和内容目录，可以较长，但不得承载运行时业务逻辑或函数回调。
+
+## 逻辑文件体积
+
+根脚本 `npm run check:source-size` 扫描前后端源码：普通逻辑文件上限为 1,000 行，迁移期的 `MiniCityApp.ts` 上限为 1,500 行；`data/` 和 `content/` 配置目录豁免。该检查已接入根级 `npm run typecheck` 和 `npm run build`。超过限制时，应按职责拆分模块，而不是提高上限或把逻辑伪装成配置。
+
+## 前端迁移验证
+
+涉及领域规则或模块边界时，至少运行 `npm run check:source-size`、`npm run typecheck`、`npm run test:domain` 和 `npm run build`。只有修改浏览器交互、布局、WebGL 或端到端流程时才运行 `npm run test:web`；如果环境无法启动 Chromium，应在交付说明中明确记录。
