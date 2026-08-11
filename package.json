@@ -2,7 +2,7 @@
   "name": "minicity-workspace",
   "private": true,
   "version": "1.0.0",
-  "engines": { "node": ">=20" },
+  "engines": { "node": "22.x" },
   "workspaces": ["apps/web", "apps/server"],
   "scripts": {
     "dev": "concurrently -k -n WEB,SERVER -c cyan,green \"npm run dev -w @minicity/web\" \"npm run dev -w @minicity/server\"",
