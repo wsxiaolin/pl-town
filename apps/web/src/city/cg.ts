@@ -605,18 +605,6 @@ function scene5(wrap: HTMLElement): void {
 
 // ─── exit paths ──────────────────────────────────────────────────────────────
 
-export function skipCG(): void {
-  // Resources are still loading during the opening CG, so skipping is disabled.
-  const hint = document.getElementById('cgSkipHint');
-  if (!hint) return;
-  hint.textContent = '后台在加载资源呢';
-  hint.classList.remove('show');
-  // Restart the transition so repeated clicks still provide feedback.
-  void hint.offsetWidth;
-  hint.classList.add('show');
-  window.setTimeout(() => hint.classList.remove('show'), 2200);
-}
-
 export function endCG(): void {
   if (cgTimeline) { cgTimeline.kill(); cgTimeline = null; }
   stopLoop();

@@ -1255,14 +1255,6 @@ body.night .time-display::before { background: #8FB4E8; }
   width: 90%;
 }
 
-.login-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--blue);
-  margin-bottom: 24px;
-  display: block;
-}
-
 .login-title {
   font-size: 24px;
   font-weight: 300;
@@ -2103,46 +2095,6 @@ body.night .unlock-toast { background: rgba(220,219,216,0.95); }
   color: #fff;
   transform: translateY(-2px);
   box-shadow: 0 6px 32px rgba(150,190,255,0.28), inset 0 0 18px rgba(150,190,255,0.12);
-}
-
-/* skip button */
-.cg-skip {
-  position: fixed;
-  bottom: clamp(40px, 9vh, 92px);
-  right: 28px;
-  z-index: 10;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  color: rgba(255,255,255,0.38);
-  background: none;
-  border: none;
-  cursor: pointer;
-  letter-spacing: 0.14em;
-  transition: color 0.2s;
-  padding: 8px 16px;
-}
-.cg-skip:hover {
-  color: rgba(255,255,255,0.85);
-}
-.cg-skip-hint {
-  position: fixed;
-  left: 50%;
-  bottom: clamp(40px, 9vh, 92px);
-  z-index: 10;
-  transform: translate(-50%, 8px);
-  padding: 9px 16px;
-  border: 1px solid rgba(170,205,255,0.28);
-  background: rgba(8,14,28,0.82);
-  color: rgba(220,232,255,0.9);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s;
-}
-.cg-skip-hint.show {
-  opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 @keyframes cgFadeIn {

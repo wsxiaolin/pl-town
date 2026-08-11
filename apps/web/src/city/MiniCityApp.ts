@@ -13,7 +13,7 @@ import { BUILDING_DEFS, BUILDING_API_QUERIES, BUILDING_CONTENT } from './data/bu
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
-import { destroyCG, initCG, shouldShowCG, skipCG, startCG } from './cg';
+import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { ECHO_STORY } from '../gameplay/content/stories/echoStory';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
@@ -679,8 +679,6 @@ function setupEvents() {
   document.getElementById('logoUser').addEventListener('click',e=>{
     if((e.currentTarget as HTMLElement).classList.contains('login-required')) showLogin();
   },{signal});
-
-  document.getElementById('cgSkip').addEventListener('click',skipCG,{signal});
 
   window.addEventListener('resize',()=>{
     renderer.setSize(window.innerWidth,window.innerHeight);
