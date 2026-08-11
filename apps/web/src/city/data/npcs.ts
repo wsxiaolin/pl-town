@@ -2,6 +2,14 @@ import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
 export const NPC_PROFILES = [...COMMUNITY_NPCS,
   {
+    id:'linche', name:'林澈', role:'气象观测站守望人', core:false, spawnChance:1,
+    npcType:'story', type:'story', behavior:'field', workHours:[0,24],
+    head:0xD6B2A0, body:0x526D88, home:[0,55], work:[0,55], patrolRadius:0,
+    dialog:[
+      { text:'「……好久没见到人了。」', options:[{ text:'和林澈聊聊', next:null }] },
+    ],
+  },
+  {
     id:'linxu', name:'林叙', role:'图书馆管理员', core:true, spawnChance:1,
     behavior:'field', workHours:[9,17],
     head:0xD4A574, body:0x8B9DBF, home:[-6,6], work:[-4,3], patrolRadius:8,

@@ -45,7 +45,9 @@ export interface StoryDialogModel {
   role?: string;
   text: string;
   tone?: 'default' | 'green';
+  variant?: 'default' | 'story' | 'cg';
   options?: readonly StoryDialogOption[];
+  onAdvance?: () => void;
   onClose?: () => void;
 }
 
@@ -199,7 +201,12 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       getElement<HTMLElement>(document, 'npcName').textContent = npc.profile.name;
       getElement<HTMLElement>(document, 'npcRole').textContent = npc.profile.role;
       getElement<HTMLElement>(document, 'npcAvatar').style.background = `linear-gradient(135deg,#${npc.profile.head.toString(16).padStart(6, '0')},#${npc.profile.body.toString(16).padStart(6, '0')})`;
+      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('story-mode');
+      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('cg-mode');
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.add('open');
+      const npcLine = getElement<HTMLParagraphElement>(document, 'npcLine');
+      npcLine.onclick = null;
+      npcLine.style.cursor = '';
       renderNode(firstNode(npc));
     },
     openStory(story) {
@@ -212,8 +219,14 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       getElement<HTMLElement>(document, 'npcAvatar').style.background = story.tone === 'green'
         ? 'linear-gradient(135deg,#8bbf78,#315f49)'
         : 'linear-gradient(135deg,#e9dfc9,#a9a295)';
-      getElement<HTMLDivElement>(document, 'npcOverlay').classList.add('open');
+      const overlay = getElement<HTMLDivElement>(document, 'npcOverlay');
+      overlay.classList.toggle('story-mode', story.variant === 'story' || story.variant === 'cg');
+      overlay.classList.toggle('cg-mode', story.variant === 'cg');
+      overlay.classList.add('open');
       renderLine(story.text, story.tone);
+      const storyLine = getElement<HTMLParagraphElement>(document, 'npcLine');
+      storyLine.onclick = story.onAdvance ?? null;
+      storyLine.style.cursor = story.onAdvance ? 'pointer' : '';
       renderOptions((story.options ?? []).map((item) => ({
         text: item.text,
         onPick: () => { void item.onPick(); },
@@ -226,6 +239,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       activeStoryClose?.();
       activeStoryClose = undefined;
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('open');
+      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('story-mode');
+      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('cg-mode');
       options.resumeNpcs();
     },
   };

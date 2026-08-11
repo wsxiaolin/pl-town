@@ -36,6 +36,15 @@ const validPosition = (position: unknown): position is Position => {
   return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z) && (value.rotation === undefined || Number.isFinite(value.rotation));
 };
 const validId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 100;
+const validStoryId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(value);
+const validStoryNodeId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(value);
+const validStoryFlags = (value: unknown): value is Record<string, boolean | number | string | null> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > 64) return false;
+  return entries.every(([key, item]) => /^[A-Za-z0-9_.:-]{1,64}$/.test(key)
+    && (item === null || typeof item === 'boolean' || (typeof item === 'number' && Number.isFinite(item)) || (typeof item === 'string' && item.length <= 500)));
+};
 const validResidenceId = (value: unknown) => typeof value === 'string' && /^residence:-?\d+(?:\.\d{2})?:-?\d+(?:\.\d{2})?$/.test(value);
 const validQuantity = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 20;
 const progressState = (userId: string) => ({ progress: db.getPlayerProgress(userId), catalog: getProgressionCatalog() });
@@ -143,6 +152,22 @@ function handle(client: Client, raw: string) {
       const reward = DAILY_REWARDS[message.rewardId as keyof typeof DAILY_REWARDS];
       const result = db.claimReward(userId, message.rewardId, shanghaiDayKey(), reward.itemId, reward.quantity);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
+      return;
+    }
+    if (message.type === 'story.get') {
+      if (!validStoryId(message.storyId)) return fail(client.socket, 'Invalid story ID');
+      send(client.socket, { type: 'story.updated', story: db.getStoryProgress(userId, message.storyId), event: { type: 'story.loaded', storyId: message.storyId } });
+      return;
+    }
+    if (message.type === 'story.update') {
+      if (!validStoryId(message.storyId)) return fail(client.socket, 'Invalid story ID');
+      if (message.definitionVersion !== undefined && (!Number.isInteger(message.definitionVersion) || message.definitionVersion < 1 || message.definitionVersion > 1_000_000)) return fail(client.socket, 'Invalid story definition version');
+      if (message.nodeId !== undefined && !validStoryNodeId(message.nodeId)) return fail(client.socket, 'Invalid story node');
+      if (message.flags !== undefined && !validStoryFlags(message.flags)) return fail(client.socket, 'Invalid story flags');
+      if (message.ending !== undefined && message.ending !== null && !validStoryNodeId(message.ending)) return fail(client.socket, 'Invalid story ending');
+      if (message.visit !== undefined && typeof message.visit !== 'boolean') return fail(client.socket, 'Invalid story visit');
+      const story = db.updateStoryProgress(userId, message.storyId, { definitionVersion: message.definitionVersion, nodeId: message.nodeId, flags: message.flags, ending: message.ending, visit: message.visit });
+      send(client.socket, { type: 'story.updated', story, event: { type: 'story.updated', storyId: message.storyId } });
       return;
     }
     if (message.type === 'housing.list') { send(client.socket, { type: 'housing.list', houses: db.listHouses() }); send(client.socket, { type: 'housing.requests', requests: db.listHousingRequestsForUser(userId) }); return; }

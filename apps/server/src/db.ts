@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { DATABASE_PATH } from './config.js';
 import { INITIAL_CURRENCY } from './progression.js';
-import type { PlayerProgress, Position, User } from './types.js';
+import type { PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
 
 export type House = {
   buildingId: string;
@@ -106,10 +106,26 @@ db.exec(`
     claimed_at TEXT NOT NULL,
     PRIMARY KEY (user_id, reward_id, claim_key)
   );
+  CREATE TABLE IF NOT EXISTS story_progress (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    story_id TEXT NOT NULL,
+    definition_version INTEGER NOT NULL DEFAULT 1 CHECK (definition_version >= 1),
+    node_id TEXT NOT NULL DEFAULT 'start',
+    flags_json TEXT NOT NULL DEFAULT '{}',
+    ending TEXT,
+    visit_count INTEGER NOT NULL DEFAULT 0 CHECK (visit_count >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, story_id)
+  );
 `);
 {
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'password_hash')) db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+}
+{
+  const columns = db.prepare('PRAGMA table_info(story_progress)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'definition_version')) db.exec('ALTER TABLE story_progress ADD COLUMN definition_version INTEGER NOT NULL DEFAULT 1');
 }
 {
   const existing = db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'users_nickname_unique'`).get() as { count: number };
@@ -253,6 +269,64 @@ export function claimReward(userId: string, rewardId: string, claimKey: string, 
   })();
   return { progress: getPlayerProgress(userId), claimed };
 }
+
+const STORY_DEFAULT_NODE = 'start';
+const parseStoryFlags = (raw: unknown): Record<string, StoryFlagValue> => {
+  if (typeof raw !== 'string') return {};
+  try {
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item === null || typeof item === 'string' || typeof item === 'boolean' || (typeof item === 'number' && Number.isFinite(item)))) as Record<string, StoryFlagValue>;
+  } catch { return {}; }
+};
+
+const rowStoryProgress = (row: any): StoryProgress => ({
+  storyId: row.story_id,
+  definitionVersion: row.definition_version,
+  nodeId: row.node_id,
+  flags: parseStoryFlags(row.flags_json),
+  ending: row.ending ?? null,
+  visitCount: row.visit_count,
+  updatedAt: row.updated_at,
+});
+
+function ensureStoryProgress(userId: string, storyId: string): void {
+  const timestamp = now();
+  db.prepare('INSERT OR IGNORE INTO story_progress (user_id, story_id, definition_version, node_id, flags_json, ending, visit_count, created_at, updated_at) VALUES (?, ?, 1, ?, ?, NULL, 0, ?, ?)')
+    .run(userId, storyId, STORY_DEFAULT_NODE, '{}', timestamp, timestamp);
+}
+
+export function getStoryProgress(userId: string, storyId: string): StoryProgress {
+  ensureStoryProgress(userId, storyId);
+  const row = db.prepare('SELECT story_id, definition_version, node_id, flags_json, ending, visit_count, updated_at FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId);
+  if (!row) throw new Error('Story progress is unavailable');
+  return rowStoryProgress(row);
+}
+
+export type StoryProgressPatch = {
+  definitionVersion?: number;
+  nodeId?: string;
+  flags?: Record<string, StoryFlagValue>;
+  ending?: string | null;
+  visit?: boolean;
+};
+
+/** Merge a client decision into server-owned story state atomically. */
+export function updateStoryProgress(userId: string, storyId: string, patch: StoryProgressPatch): StoryProgress {
+  db.transaction(() => {
+    ensureStoryProgress(userId, storyId);
+    const current = db.prepare('SELECT definition_version, node_id, flags_json, ending, visit_count FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as any;
+    const definitionVersion = patch.definitionVersion ?? current.definition_version;
+    const flags = { ...parseStoryFlags(current.flags_json), ...(patch.flags ?? {}) };
+    const nodeId = patch.nodeId ?? current.node_id;
+    const ending = patch.ending === undefined ? current.ending : patch.ending;
+    const visitCount = current.visit_count + (patch.visit ? 1 : 0);
+    db.prepare('UPDATE story_progress SET definition_version = ?, node_id = ?, flags_json = ?, ending = ?, visit_count = ?, updated_at = ? WHERE user_id = ? AND story_id = ?')
+      .run(definitionVersion, nodeId, JSON.stringify(flags), ending ?? null, visitCount, now(), userId, storyId);
+  })();
+  return getStoryProgress(userId, storyId);
+}
+
 export function listHouses(): House[] {
   const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as any[];
   return rows.map((row) => ({ buildingId: row.building_id, name: row.name, ownerId: row.owner_id, ownerNickname: row.owner_nickname, members: (db.prepare('SELECT hm.user_id, u.nickname FROM house_members hm JOIN users u ON u.id = hm.user_id WHERE hm.building_id = ? ORDER BY hm.joined_at').all(row.building_id) as any[]).map((m) => ({ userId: m.user_id, nickname: m.nickname })) }));

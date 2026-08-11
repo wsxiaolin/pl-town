@@ -22,6 +22,15 @@ export type NetProgressionCatalog = {
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };
+export type NetStoryProgress = {
+  storyId: string;
+  definitionVersion: number;
+  nodeId: string;
+  flags: Record<string, boolean | number | string | null>;
+  ending: string | null;
+  visitCount: number;
+  updatedAt: string;
+};
 
 type Callbacks = {
   connected?: (user: NetUser, players: NetUser[], houses: House[]) => void;
@@ -33,6 +42,7 @@ type Callbacks = {
   houses?: (houses: House[]) => void;
   requests?: (requests: HousingRequest[]) => void;
   progress?: (progress: NetPlayerProgress, catalog: NetProgressionCatalog, event?: Record<string, unknown>) => void;
+  story?: (story: NetStoryProgress, event?: Record<string, unknown>) => void;
   authenticationFailed?: (message: string) => void;
   error?: (message: string) => void;
 };
@@ -80,6 +90,7 @@ export class MultiplayerClient {
     else if (message.type === 'housing.updated' || message.type === 'housing.list') this.callbacks.houses?.(message.houses ?? []);
     else if (message.type === 'housing.requests') this.callbacks.requests?.(message.requests ?? []);
     else if (message.type === 'progress.updated') this.callbacks.progress?.(message.progress, message.catalog, message.event);
+    else if (message.type === 'story.updated') this.callbacks.story?.(message.story, message.event);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {

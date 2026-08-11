@@ -21,6 +21,7 @@ import { createCityDialogController, type CityDialogController, type NpcEntityLi
 import { createCommunityPanelController } from '../adapters/ui/communityPanelController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
 import { setupRenderSettingsController } from '../adapters/ui/renderSettingsController';
+import { createEchoObservatoryGuide } from '../adapters/ui/echoObservatoryGuide';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
 import { createNpcSystem } from './npcSystem';
@@ -75,6 +76,7 @@ const MAP_SHOT_SPAN = 48;  // 半边长：只框住主城（外围环线 r≈38�
 let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
 let cityDialogs: CityDialogController | null = null;
+let echoObservatoryGuide = null;
 let communityPanels;
 let multiplayerHousing;
 let worldDecorations;
@@ -190,7 +192,7 @@ function init() {
   addRealBuildingModels(scene, buildings)
     .then(() => { mapShotData = null; })
     .catch(error => console.error('3D model loading failed', error));
-  addLabels(); applyRenames(); applyStoryLockedBuildings();
+  addLabels(); addEchoObservatoryLabel(); applyRenames(); applyStoryLockedBuildings();
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
@@ -619,6 +621,8 @@ function applyStoryLockedBuildings() {
     });
   });
 }
+
+function addEchoObservatoryLabel() { echoObservatoryGuide = createEchoObservatoryGuide(document, () => movePlayerTo(new THREE.Vector3(0, 0, 55))); }
 
 function setupRenderSettings(signal: AbortSignal) {
   setupRenderSettingsController({
@@ -1126,6 +1130,7 @@ function trackInteraction(buildingId) {
     buildingId,
     at:Date.now(),
   });
+  echoObservatoryGuide?.update(camera);
   const ready=transition.changes.find(change=>change.type==='quest.ready');
   if(ready){
     const quest=SIDE_QUESTS.find(item=>item.id===ready.questId);
@@ -1479,4 +1484,6 @@ export function destroyMiniCity() {
   pendingSceneInterestPoint=null;
   document.getElementById('labelsWrap')?.replaceChildren();
   document.getElementById('mapIcons')?.replaceChildren();
+  echoObservatoryGuide?.dispose();
+  echoObservatoryGuide = null;
 }

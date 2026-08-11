@@ -77,6 +77,16 @@ try {
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
   if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
 
+  send(alice, { type: 'story.get', storyId: 'sample-story' });
+  const freshStory = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
+  if (freshStory.story.nodeId !== 'start' || freshStory.story.visitCount !== 0 || Object.keys(freshStory.story.flags).length !== 0) throw new Error('New story progress must start from a clean server state');
+  send(alice, { type: 'story.update', storyId: 'sample-story', definitionVersion: 3, nodeId: 'first-signal', flags: { heardWhisper: true, signalCount: 1 }, visit: true });
+  const storyStep = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.updated' && message.story?.nodeId === 'first-signal');
+  if (storyStep.story.definitionVersion !== 3 || !storyStep.story.flags.heardWhisper || storyStep.story.flags.signalCount !== 1 || storyStep.story.visitCount !== 1) throw new Error('Story decisions must persist definition version, node, flags, and visit count');
+  send(alice, { type: 'story.update', storyId: 'sample-story', ending: 'reconciled', flags: { heardWhisper: false } });
+  const storyEnding = await waitFor(alice, 'story.updated', (message) => message.story?.ending === 'reconciled');
+  if (storyEnding.story.flags.heardWhisper !== false || storyEnding.story.visitCount !== 1) throw new Error('Story updates must merge flags without resetting other state');
+
   send(alice, { type: 'progress.building.unlock', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
   send(alice, { type: 'progress.building.visit', buildingId: 'litreview' });
@@ -162,9 +172,12 @@ try {
   if (aliceAgain.hello.user.id !== alice.hello.user.id) throw new Error('Logging in again with the same nickname must restore the same user ID');
   if (aliceAgain.hello.user.id === bob.hello.user.id) throw new Error('Different residents must not share an ID');
   if ('dragonwell_tea' in aliceAgain.hello.progress.inventory || !aliceAgain.hello.progress.achievements.includes('first_building') || !aliceAgain.hello.progress.unlockedBuildings.includes('activity')) throw new Error('Cloud progression must survive reconnecting');
+  send(aliceAgain, { type: 'story.get', storyId: 'sample-story' });
+  const restoredStory = await waitFor(aliceAgain, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
+  if (restoredStory.story.definitionVersion !== 3 || restoredStory.story.nodeId !== 'first-signal' || restoredStory.story.ending !== 'reconciled' || restoredStory.story.visitCount !== 1 || restoredStory.story.flags.heardWhisper !== false || restoredStory.story.flags.signalCount !== 1) throw new Error('Story progress must survive reconnecting');
   aliceAgain.socket.close();
 
-  console.log('Integration passed: identity, cloud progression, position, chat, housing applications, invite decline/accept, and lifecycle');
+  console.log('Integration passed: identity, cloud and story progression, position, chat, housing applications, invite decline/accept, and lifecycle');
 } finally {
   alice?.socket.close();
   bob?.socket.close();

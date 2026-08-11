@@ -15,6 +15,19 @@ export type PlayerProgress = {
   visitedBuildings: string[];
 };
 
+export type StoryFlagValue = boolean | number | string | null;
+
+/** Server-owned state for a client-defined story. Story text/content stays client-side. */
+export type StoryProgress = {
+  storyId: string;
+  definitionVersion: number;
+  nodeId: string;
+  flags: Record<string, StoryFlagValue>;
+  ending: string | null;
+  visitCount: number;
+  updatedAt: string;
+};
+
 export type ClientMessage =
   | { type: 'hello'; token?: string; nickname?: string; password?: string }
   | { type: 'position'; position: Position }
@@ -26,6 +39,8 @@ export type ClientMessage =
   | { type: 'progress.shop.buy'; productId: string; quantity?: number }
   | { type: 'progress.item.consume'; itemId: string; quantity?: number }
   | { type: 'progress.reward.claim'; rewardId: string }
+  | { type: 'story.get'; storyId: string }
+  | { type: 'story.update'; storyId: string; definitionVersion?: number; nodeId?: string; flags?: Record<string, StoryFlagValue>; ending?: string | null; visit?: boolean }
   | { type: 'housing.list' }
   | { type: 'housing.claim'; buildingId: string; name?: string }
   | { type: 'housing.rename'; buildingId: string; name: string }
