@@ -13,6 +13,14 @@ export function createWorldDecorations(options) {
   } = options;
   let treeTrunks, treeCrowns, lampPosts, lampLights;
   const orangeGroveCenter={x:-15,z:-3};
+  const roadWidth=(position)=>position===0?2.4:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
+
+  function treeCenterIsOnRoad(x,z) {
+    return ROAD_COORDS.some((position)=>
+      Math.abs(x-position)<=roadWidth(position)/2
+      || Math.abs(z-position)<=roadWidth(position)/2,
+    );
+  }
 
   // ── Building ground plots ──
   function addDecorations() {
@@ -92,35 +100,7 @@ export function createWorldDecorations(options) {
     // One small building beside the feature; the path itself stays open.
     addSuburbHouse(12, 32, 90);
   
-    // Edge pond: SW of city, mirror of the grass
-    const pondX = -15, pondZ = -30, pondR = 2.5;
-    // Pond water
-    const pondMat = stdMat({color:P.RIVER, roughness:0.05, metalness:0.25, tex:'river', rx:2, ry:2});
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(pondR, 32), pondMat);
-    pond.rotation.x = -Math.PI/2; pond.position.set(pondX, 0.05, pondZ); pond.receiveShadow = true;
-    scene.add(pond);
-    // Stone border
-    for (let i = 0; i < 16; i++) {
-      const a = (i/16)*Math.PI*2;
-      const stone = part(null, new THREE.SphereGeometry(0.2+Math.random()*0.1, 8, 8), {color:0xC4A86D, roughness:0.7, tex:'stone', rx:1, ry:1});
-      stone.position.set(pondX+Math.cos(a)*pondR, 0.06, pondZ+Math.sin(a)*pondR);
-      scene.add(stone);
-    }
-    // Reeds
-    for (let i = 0; i < 6; i++) {
-      const a = (i/6)*Math.PI*2;
-      const reed = part(null, new THREE.ConeGeometry(0.08, 0.5+Math.random()*0.3, 6), {color:0x6A8A4A, roughness:0.9, tex:'grass', rx:1, ry:1});
-      reed.position.set(pondX+Math.cos(a)*pondR*0.85, 0.25, pondZ+Math.sin(a)*pondR*0.85);
-      scene.add(reed);
-    }
-    // Lily pads
-    for (let i = 0; i < 4; i++) {
-      const a = Math.random()*Math.PI*2, d = Math.random()*pondR*0.6;
-      const lily = part(null, new THREE.CircleGeometry(0.15+Math.random()*0.05, 8), {color:0x5A8A3A, roughness:0.9, tex:'grass', rx:1, ry:1});
-      lily.rotation.x = -Math.PI/2; lily.position.set(pondX+Math.cos(a)*d, 0.06, pondZ+Math.sin(a)*d);
-      scene.add(lily);
-    }
-    // Straight path from ring-road side to pond — going south from (-15, -25) to (-15, -27.5)
+    // Straight path from the ring road to the nearby suburb house.
     const path2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 5.5), pathMat);
     path2.position.set(-15, 0.04, -27.5); path2.receiveShadow = true; scene.add(path2);
     // One small building beside the feature; the path itself stays open.
@@ -247,6 +227,7 @@ export function createWorldDecorations(options) {
     }
     positions.forEach(([x,,z]) => {
       if(Math.hypot(x-orangeGroveCenter.x,z-orangeGroveCenter.z)<2.4)return;
+      if(treeCenterIsOnRoad(x,z))return;
       treeTrunks.add(x,0.19,z);
       treeCrowns.add(x,0.66,z);
     });
