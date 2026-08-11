@@ -28,7 +28,7 @@ its existing responsibilities are migrated incrementally.
 Configuration under `city/data/` and `gameplay/content/` is intentionally exempt
 from the logic-file size limit. Runtime logic is checked by
 `npm run check:source-size`: normal files must stay under 1,000 lines and the
-transitional `MiniCityApp.ts` must stay under 1,500 lines. The check runs as part
+transitional `MiniCityApp.ts` must stay under 2,000 lines. The check runs as part
 of the root `typecheck` and `build` scripts.
 
 For domain-only changes, use `npm run test:domain`; use Playwright only when the

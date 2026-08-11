@@ -279,6 +279,16 @@ export const BUILDING_DEFS = [
   },
   // ── New city-life buildings (malls & schools) ──
   {
+    id: "photostudio",
+    num: "26A",
+    label: "照相馆",
+    x: 21,
+    z: 15,
+    shape: "kiosk",
+    facade: "facade_market",
+    icon: I(`<rect x="3" y="7" width="18" height="12" rx="1"/><circle cx="12" cy="13" r="3"/><path d="M7 7l2-3h6l2 3"/>`),
+  },
+  {
     id: "mall_south",
     num: "26",
     label: "南门商场",

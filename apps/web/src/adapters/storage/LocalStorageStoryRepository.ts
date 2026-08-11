@@ -1,5 +1,6 @@
 import { createInitialStoryState } from '../../gameplay/stories/StoryRuntime';
 import type { StoryDefinition, StoryFlagValue, StoryRepository, StoryState } from '../../gameplay/stories/types';
+import { townGameDay } from '../../gameplay/time/townClock';
 
 export class LocalStorageStoryRepository implements StoryRepository {
   constructor(
@@ -11,21 +12,26 @@ export class LocalStorageStoryRepository implements StoryRepository {
     if (storyId !== this.definition.id) return null;
     try {
       const value = JSON.parse(this.storage.getItem(this.key()) ?? 'null') as Partial<StoryState> | null;
-      if (!value || value.storyId !== storyId || typeof value.nodeId !== 'string' || !this.definition.nodes[value.nodeId]) return null;
+      const nodeId = typeof value?.nodeId === 'string'
+        ? (this.definition.nodes[value.nodeId] ? value.nodeId : this.definition.legacyNodeAliases?.[value.nodeId])
+        : undefined;
+      if (!value || value.storyId !== storyId || !nodeId || !this.definition.nodes[nodeId]) return null;
+      const updatedAt = typeof value.updatedAt === 'number' ? value.updatedAt : Date.now();
       return {
         ...createInitialStoryState(this.definition),
-        nodeId: value.nodeId,
+        nodeId,
         flags: this.readFlags(value.flags),
         ending: typeof value.ending === 'string' ? value.ending : undefined,
         visitCount: Number.isInteger(value.visitCount) && (value.visitCount ?? -1) >= 0 ? value.visitCount! : 0,
-        updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now(),
+        nodeEnteredGameDay: Number.isInteger(value.nodeEnteredGameDay) ? value.nodeEnteredGameDay : townGameDay(updatedAt),
+        updatedAt,
       };
     } catch {
       return null;
     }
   }
 
-  update(storyId: string, patch: { nodeId: string; flags?: Readonly<Record<string, StoryFlagValue>>; ending?: string; visit?: boolean }): StoryState | null {
+  update(storyId: string, patch: { nodeId: string; flags?: Readonly<Record<string, StoryFlagValue>>; ending?: string; visit?: boolean; nodeEnteredGameDay?: number }): StoryState | null {
     if (storyId !== this.definition.id || !this.definition.nodes[patch.nodeId]) return null;
     const current = this.get(storyId) ?? createInitialStoryState(this.definition);
     const next: StoryState = {
@@ -34,6 +40,7 @@ export class LocalStorageStoryRepository implements StoryRepository {
       flags: patch.flags ?? current.flags,
       ending: patch.ending ?? current.ending,
       visitCount: current.visitCount + (patch.visit ? 1 : 0),
+      nodeEnteredGameDay: patch.nodeEnteredGameDay ?? current.nodeEnteredGameDay,
       updatedAt: Date.now(),
     };
     this.storage.setItem(this.key(), JSON.stringify(next));

@@ -53,3 +53,34 @@ assert(observed[0] === 'story.choice', 'subscribers should receive choice transi
 runtime.publish('grid.power-restored', { district: 'south' }, 11);
 assert(getStoryEventCount(stored!, 'grid.power-restored') === 2, 'external events should be publishable and persisted');
 assert(observed[1] === 'story.event', 'subscribers should receive externally published events');
+
+const delayedDefinition: StoryDefinition = {
+  schemaVersion: 1,
+  definitionVersion: 1,
+  id: 'main.daily-visits',
+  title: 'Daily visits',
+  startNode: 'visit',
+  nodes: {
+    visit: { id: 'visit', title: 'Visit', text: 'First visit.', choices: [{ id: 'finish', label: 'Finish', next: 'waiting' }] },
+    waiting: {
+      id: 'waiting', title: 'Waiting', text: 'Come back tomorrow.', interactionOnly: true, unlockAfterGameDays: 1,
+      choices: [{ id: 'return', label: 'Return', next: 'complete' }],
+    },
+    complete: { id: 'complete', title: 'Complete', text: 'Welcome back.', terminal: true },
+  },
+};
+
+let delayedState: StoryState | null = createInitialStoryState(delayedDefinition, 1);
+const delayedRuntime = new StoryRuntime(delayedDefinition, {
+  get: () => delayedState,
+  update: (_storyId, patch) => {
+    delayedState = { ...delayedState!, ...patch, flags: patch.flags ?? delayedState!.flags, visitCount: delayedState!.visitCount + (patch.visit ? 1 : 0), updatedAt: 2 };
+    return delayedState;
+  },
+});
+
+assert(delayedRuntime.choose('finish', 2, { gameDay: 12 }), 'finishing a visit should enter its waiting node');
+assert(!delayedRuntime.isNodeAvailable({ gameDay: 12 }), 'the next visit should stay locked on the same game day');
+assert(delayedRuntime.choices({ gameDay: 12 }).length === 0, 'waiting-node choices should be hidden until another game day');
+assert(delayedRuntime.isNodeAvailable({ gameDay: 13 }), 'the next visit should unlock after the game day changes');
+assert(delayedRuntime.choose('return', 3, { gameDay: 13 }), 'the unlocked visit should advance normally');

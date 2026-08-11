@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 
 export interface SceneInterestPointEntity {
@@ -22,6 +23,7 @@ export interface SceneInterestPoints {
   raycastTargets: readonly THREE.Object3D[];
   update(elapsedSeconds: number): void;
   setWellPhase(phase: 'idle' | 'focus' | 'engulf' | 'recede'): void;
+  setActiveStoryPoints(ids: readonly SceneInterestPointId[]): void;
   dispose(): void;
 }
 
@@ -35,10 +37,10 @@ function addMesh(
   group: THREE.Group,
   options: SceneInterestPointOptions,
   geometry: THREE.BufferGeometry,
-  material: Record<string, unknown>,
+  material: Record<string, unknown> | THREE.Material,
   position: readonly [number, number, number],
 ): THREE.Mesh {
-  const mesh = options.makeMesh(geometry, options.materialFor(material));
+  const mesh = options.makeMesh(geometry, material instanceof THREE.Material ? material : options.materialFor(material));
   mesh.position.set(...position);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -163,6 +165,183 @@ function createLongjingWell(options: SceneInterestPointOptions): SceneInterestPo
   return { id: 'longjing-well', object, interactionPosition: object.position.clone().add(new THREE.Vector3(2.1, 0, 1.6)) };
 }
 
+const ECHO_STORY_POINT_IDS = ['echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
+
+function addInvestigationMarker(
+  object: THREE.Group,
+  options: SceneInterestPointOptions,
+  position: readonly [number, number, number] = [0, 1.28, 0],
+): THREE.Mesh {
+  const marker = addMesh(object, options, new THREE.ConeGeometry(0.2, 0.36, 4), { color: 0xf2c94c, emissive: 0x8a6500, emissiveIntensity: 0.5, roughness: 0.55 }, position);
+  marker.rotation.z = Math.PI;
+  marker.userData.investigationMarker = true;
+  marker.userData.storyActivationVisual = true;
+  marker.userData.storyInteractionTarget = true;
+  marker.userData.markerBaseY = position[1];
+  marker.visible = false;
+  return marker;
+}
+
+function addStoryHitbox(
+  object: THREE.Group,
+  options: SceneInterestPointOptions,
+  size: readonly [number, number, number],
+  position: readonly [number, number, number],
+): THREE.Mesh {
+  const hitbox = addMesh(object, options, new THREE.BoxGeometry(...size), { color: 0xffffff, transparent: true, opacity: 0.001, depthWrite: false }, position);
+  hitbox.userData.storyActivationVisual = true;
+  hitbox.userData.storyHitbox = true;
+  hitbox.userData.storyInteractionTarget = true;
+  hitbox.visible = false;
+  return hitbox;
+}
+
+function createEchoStonePile(options: SceneInterestPointOptions): SceneInterestPointEntity {
+  const object = new THREE.Group();
+  const rockMaterials = [
+    { color: 0x858a86, roughness: 1 },
+    { color: 0x9da19a, roughness: 0.98 },
+    { color: 0xb4b5ad, roughness: 0.96 },
+    { color: 0x737a78, roughness: 1 },
+  ];
+  const layerCounts = [20, 16, 12, 8, 5];
+  let rockIndex = 0;
+  layerCounts.forEach((count, layer) => {
+    const ringRadiusX = 1.45 - layer * 0.22;
+    const ringRadiusZ = 0.92 - layer * 0.14;
+    for (let index = 0; index < count; index += 1) {
+      const angle = (index / count) * Math.PI * 2 + layer * 0.37;
+      const jitter = 0.88 + ((index * 11 + layer * 7) % 7) * 0.035;
+      const x = Math.cos(angle) * ringRadiusX * jitter;
+      const z = Math.sin(angle) * ringRadiusZ * jitter;
+      const y = 0.13 + layer * 0.22 + ((index * 5 + layer) % 4) * 0.035;
+      const radius = 0.24 - layer * 0.018 + ((index * 3) % 5) * 0.018;
+      const rock = addMesh(object, options, new THREE.DodecahedronGeometry(0.5, 1), rockMaterials[rockIndex % rockMaterials.length]!, [x, y, z]);
+      rock.scale.set(radius * (1.15 + (index % 3) * 0.12), radius * (0.82 + (index % 4) * 0.1), radius * (0.92 + (index % 2) * 0.18));
+      rock.rotation.set(index * 0.47, index * 0.83, layer * 0.29 + index * 0.17);
+      rock.userData.stoneIndex = rockIndex;
+      rockIndex += 1;
+    }
+  });
+  const moss = { color: 0x627c5c, roughness: 1, emissive: 0x142116, emissiveIntensity: 0.04 };
+  const mossPositions: readonly (readonly [number, number, number])[] = [
+    [-0.76, 0.5, 0.18], [0.42, 0.72, -0.1], [0.05, 1.0, 0.12], [0.84, 0.32, -0.25], [-0.2, 0.32, -0.54],
+  ];
+  mossPositions.forEach(([x, y, z], index) => {
+    const patch = addMesh(object, options, new THREE.SphereGeometry(0.16, 8, 6), moss, [x, y, z]);
+    patch.scale.set(1.5, 0.18 + (index % 2) * 0.08, 0.9);
+    patch.rotation.y = index * 0.8;
+  });
+  addStoryHitbox(object, options, [3.5, 1.85, 2.7], [0, 0.85, 0]);
+  addInvestigationMarker(object, options, [0, 2.05, 0]);
+  object.position.set(ECHO_OBSERVATORY_AREA.stonePile[0], 0, ECHO_OBSERVATORY_AREA.stonePile[1]);
+  options.scene.add(object);
+  return { id: 'echo-stone-pile', object, interactionPosition: object.position.clone().add(new THREE.Vector3(1.75, 0, 1.1)) };
+}
+
+function createEchoTable(options: SceneInterestPointOptions): SceneInterestPointEntity {
+  const object = new THREE.Group();
+  const tableWood = { color: 0x76523b, roughness: 0.9, tex: 'wood', rx: 2, ry: 1 };
+  const tableDark = { color: 0x4f3427, roughness: 0.95, tex: 'wood', rx: 1, ry: 2 };
+  const brass = { color: 0xc59a52, roughness: 0.3, metalness: 0.75, tex: 'metal', rx: 1, ry: 1 };
+  const ceramic = { color: 0xe8e4d8, roughness: 0.55, tex: 'stone', rx: 1, ry: 1 };
+  const darkMetal = { color: 0x343d42, roughness: 0.5, metalness: 0.35, tex: 'metal', rx: 1, ry: 1 };
+  // Thick top made from three boards, with an inset edge and a visible apron.
+  [-0.39, 0, 0.39].forEach((x, index) => {
+    const plank = addMesh(object, options, new THREE.BoxGeometry(0.76, 0.12, 1.18), options.materialFor({ ...tableWood, rx: index === 1 ? 1 : 2 }), [x, 0.88, 0]);
+    plank.rotation.y = (index - 1) * 0.012;
+  });
+  addMesh(object, options, new THREE.BoxGeometry(2.48, 0.1, 0.1), options.materialFor(tableDark), [0, 0.79, -0.59]);
+  addMesh(object, options, new THREE.BoxGeometry(2.48, 0.1, 0.1), options.materialFor(tableDark), [0, 0.79, 0.59]);
+  addMesh(object, options, new THREE.BoxGeometry(2.2, 0.25, 0.1), options.materialFor(tableDark), [0, 0.58, -0.57]);
+  const legPositions: readonly (readonly [number, number, number])[] = [[-0.92, 0.38, -0.43], [0.92, 0.38, -0.43], [-0.92, 0.38, 0.43], [0.92, 0.38, 0.43]];
+  legPositions.forEach((position, index) => {
+    const leg = addMesh(object, options, new THREE.BoxGeometry(0.17, 0.76, 0.17), options.materialFor(tableDark), position);
+    leg.rotation.z = (index % 2 ? -1 : 1) * 0.025;
+    addMesh(object, options, new THREE.BoxGeometry(0.26, 0.08, 0.26), options.materialFor(tableWood), [position[0], 0.03, position[2]]);
+  });
+  addMesh(object, options, new THREE.BoxGeometry(1.82, 0.11, 0.11), options.materialFor(tableDark), [0, 0.25, 0.43]);
+  addMesh(object, options, new THREE.BoxGeometry(1.82, 0.11, 0.11), options.materialFor(tableDark), [0, 0.25, -0.43]);
+  // Drawer, handle and corner joinery.
+  addMesh(object, options, new THREE.BoxGeometry(0.82, 0.28, 0.08), options.materialFor(tableWood), [0, 0.64, -0.63]);
+  addMesh(object, options, new THREE.BoxGeometry(0.18, 0.045, 0.05), options.materialFor(brass), [0, 0.65, -0.69]);
+  [[-1.1, 0.83, -0.5], [1.1, 0.83, -0.5], [-1.1, 0.83, 0.5], [1.1, 0.83, 0.5]].forEach((position) => addMesh(object, options, new THREE.BoxGeometry(0.12, 0.08, 0.12), options.materialFor(brass), position as [number, number, number]));
+
+  // Leftover dishes, chopsticks, a recorder and a small music box make the clue readable.
+  addMesh(object, options, new THREE.CylinderGeometry(0.29, 0.25, 0.045, 24), options.materialFor(ceramic), [-0.53, 0.97, 0.08]);
+  addMesh(object, options, new THREE.TorusGeometry(0.16, 0.035, 8, 18), options.materialFor(tableDark), [-0.53, 1.0, 0.08]);
+  addMesh(object, options, new THREE.CylinderGeometry(0.2, 0.17, 0.13, 18), options.materialFor(ceramic), [0.16, 1.0, 0.12]);
+  addMesh(object, options, new THREE.CylinderGeometry(0.15, 0.15, 0.025, 18), options.materialFor({ color: 0xa8b9c2, roughness: 0.35, metalness: 0.15 }), [0.16, 1.08, 0.12]);
+  [-0.08, 0.02].forEach((x) => {
+    const chopstick = addMesh(object, options, new THREE.CylinderGeometry(0.018, 0.018, 0.68, 8), options.materialFor(tableDark), [x, 1.02, -0.32]);
+    chopstick.rotation.x = Math.PI / 2;
+    chopstick.rotation.z = x * 0.4;
+  });
+  addMesh(object, options, new THREE.BoxGeometry(0.48, 0.1, 0.26), options.materialFor(darkMetal), [0.55, 0.99, -0.27]);
+  addMesh(object, options, new THREE.BoxGeometry(0.32, 0.025, 0.12), options.materialFor({ color: 0x9da9a5, roughness: 0.45, metalness: 0.2 }), [0.55, 1.055, -0.27]);
+  [0.45, 0.58, 0.71].forEach((x) => addMesh(object, options, new THREE.SphereGeometry(0.025, 8, 6), options.materialFor(brass), [x, 1.07, -0.27]));
+  addMesh(object, options, new THREE.BoxGeometry(0.44, 0.23, 0.34), options.materialFor(tableWood), [0.76, 1.08, 0.34]);
+  addMesh(object, options, new THREE.BoxGeometry(0.3, 0.025, 0.23), options.materialFor(brass), [0.76, 1.205, 0.34]);
+  addMesh(object, options, new THREE.CylinderGeometry(0.035, 0.035, 0.18, 8), options.materialFor(brass), [1.02, 1.1, 0.34]).rotation.z = Math.PI / 2;
+  addMesh(object, options, new THREE.BoxGeometry(0.32, 0.04, 0.42), options.materialFor({ color: 0x8c6c54, roughness: 0.94, tex: 'fabric', rx: 1, ry: 1 }), [-0.92, 0.98, 0.25]);
+  addStoryHitbox(object, options, [3.1, 1.55, 2.05], [0, 0.78, 0]);
+  addInvestigationMarker(object, options, [0, 1.9, 0]);
+  object.position.set(ECHO_OBSERVATORY_AREA.table[0], 0, ECHO_OBSERVATORY_AREA.table[1]);
+  options.scene.add(object);
+  return { id: 'echo-table', object, interactionPosition: object.position.clone().add(new THREE.Vector3(-1.65, 0, 1.25)) };
+}
+
+function createEchoCabin(options: SceneInterestPointOptions): SceneInterestPointEntity {
+  const object = new THREE.Group();
+  // The exterior home is rotated toward the south-facing road. Keep this
+  // marker at the end of the porch so the story interaction never resolves
+  // against the rear wall or inside the cabin footprint.
+  const entrance = new THREE.Vector3(
+    ECHO_OBSERVATORY_AREA.home[0],
+    0,
+    ECHO_OBSERVATORY_AREA.home[1] - 5.65,
+  );
+  const ring = addMesh(object, options, new THREE.TorusGeometry(0.28, 0.055, 8, 20), { color: 0xf2c94c, emissive: 0x8a6500, emissiveIntensity: 0.5, roughness: 0.55 }, [0, 1.55, 0]);
+  ring.rotation.x = Math.PI / 2;
+  ring.userData.storyActivationVisual = true;
+  ring.userData.storyInteractionTarget = true;
+  ring.visible = false;
+  addInvestigationMarker(object, options, [0, 1.96, 0]);
+  addStoryHitbox(object, options, [1.2, 2.2, 1.2], [0, 1.1, 0]);
+  object.position.copy(entrance);
+  options.scene.add(object);
+  return { id: 'echo-cabin', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0, 0, 0.45)) };
+}
+
+function createEchoDiary(options: SceneInterestPointOptions): SceneInterestPointEntity {
+  const object = new THREE.Group();
+  addMesh(object, options, new THREE.BoxGeometry(0.72, 0.12, 0.96), { color: 0x4d6484, roughness: 0.8 }, [0, 2.56, 0]);
+  addMesh(object, options, new THREE.BoxGeometry(0.62, 0.025, 0.86), { color: 0xe9dfc7, roughness: 0.95 }, [0, 2.63, 0]);
+  addInvestigationMarker(object, options, [0, 3.15, 0]);
+  addStoryHitbox(object, options, [1.2, 1.2, 1.4], [0, 2.55, 0]);
+  object.position.set(ECHO_OBSERVATORY_AREA.interior[0] + 2.2, 0, ECHO_OBSERVATORY_AREA.interior[1]);
+  options.scene.add(object);
+  return { id: 'echo-diary', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0.65, 0, -0.4)) };
+}
+
+function createEchoPhotoWall(options: SceneInterestPointOptions): SceneInterestPointEntity {
+  const object = new THREE.Group();
+  addStoryHitbox(object, options, [17.5, 6.2, 0.35], [0, 5.2, 0]);
+  addInvestigationMarker(object, options, [0, 7.2, -0.3]);
+  object.position.set(ECHO_OBSERVATORY_AREA.interior[0], 0, ECHO_OBSERVATORY_AREA.interior[1] + 10.4);
+  options.scene.add(object);
+  return { id: 'echo-photo-wall', object, interactionPosition: new THREE.Vector3(ECHO_OBSERVATORY_AREA.interior[0], 0, ECHO_OBSERVATORY_AREA.interior[1] + 7.4) };
+}
+
+function createEchoCabinDoor(options: SceneInterestPointOptions): SceneInterestPointEntity {
+  const object = new THREE.Group();
+  addStoryHitbox(object, options, [3.8, 3.6, 0.45], [0, 1.8, 0]);
+  addInvestigationMarker(object, options, [0, 4.0, 0]);
+  object.position.set(ECHO_OBSERVATORY_AREA.interior[0], 0, ECHO_OBSERVATORY_AREA.interior[1] - 10.6);
+  options.scene.add(object);
+  return { id: 'echo-cabin-door', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0, 0, 1.5)) };
+}
+
 export function createSceneInterestPoints(input: SceneInterestPointOptionsInput): SceneInterestPoints {
   const materialCache = new Map<string, THREE.MeshStandardMaterial>();
   const options: SceneInterestPointOptions = {
@@ -176,8 +355,24 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       return material;
     },
   };
-  const list = [createCatCafeNote(options), createOrangeTree(options), createLongjingWell(options)];
+  const list = [createCatCafeNote(options), createOrangeTree(options), createLongjingWell(options), createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options)];
   const entities = new Map(list.map((entity) => [entity.id, entity]));
+  const storyEntities = ECHO_STORY_POINT_IDS
+    .map((id) => entities.get(id))
+    .filter((entity): entity is SceneInterestPointEntity => Boolean(entity));
+  const baseRaycastTargets = list
+    .filter((entity) => !ECHO_STORY_POINT_IDS.includes(entity.id as (typeof ECHO_STORY_POINT_IDS)[number]))
+    .map((entity) => entity.object);
+  const storyRaycastTargets = storyEntities.map((entity) => {
+    const targets: THREE.Object3D[] = [];
+    entity.object.traverse((child) => { if (child.userData.storyInteractionTarget) targets.push(child); });
+    return { entity, targets };
+  });
+  const raycastTargets: THREE.Object3D[] = [...baseRaycastTargets];
+  const investigationMarkers: THREE.Mesh[] = [];
+  storyEntities.forEach((entity) => entity.object.traverse((child) => {
+    if (child instanceof THREE.Mesh && child.userData.investigationMarker) investigationMarkers.push(child);
+  }));
   const orangeTree = entities.get('origin-orange-tree')?.object;
   const well = entities.get('longjing-well')?.object;
   const vines: THREE.Mesh[] = [];
@@ -187,7 +382,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
 
   return {
     entities,
-    raycastTargets: list.map((entity) => entity.object),
+    raycastTargets,
     update(elapsedSeconds) {
       orangeTree?.traverse((object) => {
         if (!(object instanceof THREE.Mesh) || typeof object.userData.orangeFruitIndex !== 'number') return;
@@ -205,8 +400,32 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
           mesh.rotation.z = Math.sin(elapsedSeconds * 3 + index) * 0.12 * amount;
         });
       }
+      investigationMarkers.forEach((marker, index) => {
+        if (!marker.visible) return;
+        const baseY = Number(marker.userData.markerBaseY) || marker.position.y;
+        marker.position.y = baseY + Math.sin(elapsedSeconds * 2.2 + index * 0.7) * 0.06;
+        marker.rotation.y = elapsedSeconds * 0.8 + index * 0.35;
+      });
     },
     setWellPhase(phase) { wellPhase = phase; wellPhaseStarted = performance.now() / 1000; },
+    setActiveStoryPoints(ids) {
+      const active = new Set(ids);
+      storyEntities.forEach((entity) => {
+        const isActive = active.has(entity.id);
+        entity.object.traverse((child) => {
+          if (child.userData.storyActivationVisual) child.visible = isActive;
+          if (child.userData.storyInteractionTarget) {
+            if (isActive) child.userData.sceneInterestPointId = entity.id;
+            else delete child.userData.sceneInterestPointId;
+          }
+        });
+      });
+      raycastTargets.length = 0;
+      raycastTargets.push(
+        ...baseRaycastTargets,
+        ...storyRaycastTargets.filter(({ entity }) => active.has(entity.id)).flatMap(({ targets }) => targets),
+      );
+    },
     dispose() {
       materialCache.forEach((material) => material.dispose());
       materialCache.clear();

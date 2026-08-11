@@ -16,6 +16,7 @@ export type StoryBuildingState = 'default' | 'hidden' | 'disabled' | 'damaged' |
 export interface StoryConditionContext {
   inventory?: Readonly<Record<string, number | undefined>>;
   achievements?: ReadonlySet<string>;
+  gameDay?: number;
 }
 
 export type StoryCondition =
@@ -28,7 +29,8 @@ export type StoryCondition =
 export type StoryEffect =
   | { type: 'flag.set'; flagId: string; value: StoryFlagValue }
   | { type: 'event.publish'; eventType: string; payload?: StoryEventPayload }
-  | { type: 'building.state.set'; buildingId: string; state: StoryBuildingState };
+  | { type: 'building.state.set'; buildingId: string; state: StoryBuildingState }
+  | { type: 'inventory.remove'; itemId: string; quantity: number };
 
 export interface StoryState {
   storyId: StoryId;
@@ -37,6 +39,7 @@ export interface StoryState {
   flags: Readonly<Record<string, StoryFlagValue>>;
   ending?: string;
   visitCount: number;
+  nodeEnteredGameDay?: number;
   updatedAt: number;
 }
 
@@ -50,6 +53,9 @@ export interface StoryChoice {
   requiresItem?: string;
   availableWhen?: readonly StoryCondition[];
   effects?: readonly StoryEffect[];
+  hidden?: boolean;
+  /** Linear transition with no player choice or visible option. */
+  autoAdvance?: boolean;
 }
 
 export interface StoryNode {
@@ -58,10 +64,17 @@ export interface StoryNode {
   role?: string;
   text: string;
   tone?: 'default' | 'green';
-  presentation?: 'dialogue' | 'cg' | 'document';
+  presentation?: 'dialogue' | 'cg' | 'document' | 'blackout';
+  image?: string;
   choices?: readonly StoryChoice[];
   achievement?: { id: string; name: string };
   terminal?: boolean;
+  /** Interaction gate that closes the current dialogue when entered. */
+  interactionOnly?: boolean;
+  /** Number of game-day changes required before this node can be interacted with. */
+  unlockAfterGameDays?: number;
+  guide?: { title: string; objective: string };
+  activeActorIds?: readonly string[];
 }
 
 export interface StoryDefinition {
@@ -70,15 +83,21 @@ export interface StoryDefinition {
   id: StoryId;
   title: string;
   startNode: string;
+  entryActorId?: string;
+  interactions?: readonly { actorId: string; nodeId: string; choiceId: string }[];
+  buildingInteractions?: readonly { buildingId: string; nodeId: string; choiceId: string }[];
+  worldInteractions?: readonly { interestPointId: string; nodeId: string; choiceId: string }[];
   triggerWhen?: readonly StoryCondition[];
   nodes: Readonly<Record<string, StoryNode>>;
+  /** Nodes removed from a shipped story can be redirected without resetting saves. */
+  legacyNodeAliases?: Readonly<Record<string, string>>;
   /** Verbatim client-side source for editorial audits; never sent to the server. */
   sourceText?: string;
 }
 
 export interface StoryRepository {
   get(storyId: StoryId): StoryState | null;
-  update(storyId: StoryId, patch: { nodeId: string; flags?: Readonly<Record<string, StoryFlagValue>>; ending?: string; visit?: boolean }): StoryState | null;
+  update(storyId: StoryId, patch: { nodeId: string; flags?: Readonly<Record<string, StoryFlagValue>>; ending?: string; visit?: boolean; nodeEnteredGameDay?: number }): StoryState | null;
 }
 
 export interface StoryTransition {

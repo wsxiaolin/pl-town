@@ -129,7 +129,7 @@ export function createCloudProgressionController(options: Options) {
         row.dataset.itemId = entry.itemId;
         const icon = options.document.createElement('span');
         icon.className = 'inventory-item-icon';
-        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'city_badge' ? '章' : '册';
+        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : '册';
         const name = options.document.createElement('span');
         name.className = 'sp-ul-name';
         name.textContent = entry.name;

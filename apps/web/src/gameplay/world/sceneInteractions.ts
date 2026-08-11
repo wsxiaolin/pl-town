@@ -1,4 +1,4 @@
-export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'origin-orange-tree', 'longjing-well'] as const;
+export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'origin-orange-tree', 'longjing-well', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
 
 export type SceneInterestPointId = (typeof SCENE_INTEREST_POINT_IDS)[number];
 

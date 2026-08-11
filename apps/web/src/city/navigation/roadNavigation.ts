@@ -4,6 +4,7 @@ import * as THREE from 'three';
 export interface RoadNavigationOptions {
   roadCoords: readonly number[];
   satelliteCity: any;
+  echoObservatoryArea?: any;
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
 }
@@ -11,6 +12,7 @@ export interface RoadNavigationOptions {
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const ROAD_COORDS = [...options.roadCoords];
   const SATELLITE_CITY = options.satelliteCity;
+  const ECHO_OBSERVATORY_AREA = options.echoObservatoryArea || { roadNodes: [], roadSegments: [] };
   const CITY_LIMIT = options.cityLimit;
   const buildings = options.getBuildings();
   const buildingBoxes = [];
@@ -123,6 +125,11 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const mainSouth=nodes[nodeIdx.get('0,38')];
     const satelliteNorth=nodes[nodeIdx.get('0,55')];
     if(mainSouth&&satelliteNorth) addEdge(mainSouth,satelliteNorth);
+
+    ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
+    ECHO_OBSERVATORY_AREA.roadSegments.forEach(([x1,z1,x2,z2])=>{
+      addEdge(nodes[nodeIdx.get(x1+','+z1)],nodes[nodeIdx.get(x2+','+z2)]);
+    });
   
     // Inner plaza loop: the walkable counterpart of the central ring mesh added
     // in addPaths(). It connects to each arterial without entering the fountain.
@@ -210,6 +217,11 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       .filter(node=>node && node.adj.length)
       .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
     if(satelliteNode && p.z>=44 && !pathBlocked(p.x,p.z,satelliteNode.x,satelliteNode.z)) return satelliteNode;
+    const echoNode = ECHO_OBSERVATORY_AREA.roadNodes
+      .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z)])
+      .filter(node=>node && node.adj.length)
+      .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+    if(echoNode && p.x>=44 && !pathBlocked(p.x,p.z,echoNode.x,echoNode.z)) return echoNode;
     let best=null, bestD=Infinity;
     for(const node of graph.nodes){
       if(!node.adj.length) continue;
@@ -264,9 +276,27 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
         : p.x;
       candidates.push(new THREE.Vector3(x,0,z));
     });
+    // The echo house sits beside a short, dedicated road rather than on a
+    // main-grid centerline. Add perimeter points so an interaction target can
+    // stop at its nearest doorway-facing edge instead of ending several metres
+    // away at [68, 0] (which becomes unreachable after the house is enlarged).
+    if (p.x >= 44) {
+      const clearance = 0.7;
+      const x = clamp(p.x, owner.minX, owner.maxX);
+      const z = clamp(p.z, owner.minZ, owner.maxZ);
+      candidates.push(
+        new THREE.Vector3(x, 0, owner.minZ - clearance),
+        new THREE.Vector3(x, 0, owner.maxZ + clearance),
+        new THREE.Vector3(owner.minX - clearance, 0, z),
+        new THREE.Vector3(owner.maxX + clearance, 0, z),
+      );
+    }
     // Satellite-town buildings live off the main grid; snap to their road nodes.
     if(p.z>=44){
       SATELLITE_CITY.roadNodes.forEach(([x,z])=>candidates.push(new THREE.Vector3(x,0,z)));
+    }
+    if(p.x>=44){
+      ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>candidates.push(new THREE.Vector3(x,0,z)));
     }
     candidates.sort((a,b)=>{
       const da=a.distanceTo(p), db=b.distanceTo(p);
@@ -308,12 +338,18 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   }
   
   function segHitsBuilding(x1,z1,x2,z2) {
-    const dx=x2-x1, dz=z2-z1, len2=dx*dx+dz*dz;
-    if(len2<1e-6) return false;
+    const dx=x2-x1, dz=z2-z1;
+    if(Math.abs(dx)<1e-8&&Math.abs(dz)<1e-8) return pointInAnyBuilding(x1,z1);
     for(const bx of buildingBoxes){
-      const t=clamp(((bx.minX-x1)*dx+(bx.minZ-z1)*dz)/len2,0,1);
-      const cx=x1+dx*t, cz=z1+dz*t;
-      if(cx>=bx.minX&&cx<=bx.maxX&&cz>=bx.minZ&&cz<=bx.maxZ) return true;
+      let near=0, far=1;
+      const clip=(origin,delta,min,max)=>{
+        if(Math.abs(delta)<1e-8) return origin>=min&&origin<=max;
+        let a=(min-origin)/delta, b=(max-origin)/delta;
+        if(a>b){const t=a;a=b;b=t;}
+        near=Math.max(near,a); far=Math.min(far,b);
+        return near<=far;
+      };
+      if(clip(x1,dx,bx.minX,bx.maxX)&&clip(z1,dz,bx.minZ,bx.maxZ)&&far>=0&&near<=1) return true;
     }
     return false;
   }
@@ -326,6 +362,16 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     if(p.z>=44){
       const nearest=SATELLITE_CITY.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
       const q=new THREE.Vector3(nearest[0],0,nearest[1]);
+      return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
+    }
+    if(p.x>=44 && ECHO_OBSERVATORY_AREA.roadNodes.length){
+      const nearest=ECHO_OBSERVATORY_AREA.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
+      const q=new THREE.Vector3(nearest[0],0,nearest[1]);
+      // Echo story markers (notably the porch ring) live a few metres off the
+      // short road. Keep a nearby clear marker as the final approach target so
+      // pending interactions can complete instead of stopping at [68, 0].
+      const nearRoad = Math.hypot(p.x-q.x,p.z-q.z) <= 5;
+      if (nearRoad && !pointInAnyBuilding(p.x,p.z) && !pathBlocked(p.x,p.z,q.x,q.z)) return p.clone();
       return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
     }
     // Otherwise snap to the NEAREST road-line point that can be reached with a
@@ -343,6 +389,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     ROAD_COORDS.forEach(z=>{ tryPoint(p.x,z); tryPoint(nearestRoadCoord(p.x),z); });
     PLAZA_POINTS.forEach(([x,z])=>tryPoint(x,z));
     SATELLITE_CITY.roadNodes.forEach(([x,z])=>tryPoint(x,z));
+    ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
     if(bestD<Infinity) return best;
     return nearestRoadPoint(p);
   }

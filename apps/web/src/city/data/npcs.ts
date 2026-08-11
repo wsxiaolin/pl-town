@@ -1,13 +1,27 @@
+import { ECHO_OBSERVATORY_AREA } from './cityConfig';
 import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
 export const NPC_PROFILES = [...COMMUNITY_NPCS,
   {
     id:'linche', name:'林澈', role:'气象观测站守望人', core:false, spawnChance:1,
     npcType:'story', type:'story', behavior:'field', workHours:[0,24],
-    head:0xD6B2A0, body:0x526D88, home:[0,55], work:[0,55], patrolRadius:0,
+    head:0xD6B2A0, body:0x526D88,
+    home:[...ECHO_OBSERVATORY_AREA.linche], work:[...ECHO_OBSERVATORY_AREA.linche], patrolRadius:0,
     dialog:[
       { text:'「……好久没见到人了。」', options:[{ text:'和林澈聊聊', next:null }] },
     ],
+  },
+  {
+    id:'photo_owner', name:'照相馆老板', role:'照片冲印师', core:false, spawnChance:1,
+    npcType:'story', type:'story', behavior:'field', workHours:[8,21],
+    head:0xC89973, body:0x596273, home:[21,15], work:[21,15], patrolRadius:1,
+    dialog:[{ text:'「要冲印照片吗？把文件交给我就好。」', options:[{ text:'暂时不用', next:null }] }],
+  },
+  {
+    id:'archive_elder', name:'档案馆老人', role:'旧城居民', core:false, spawnChance:1, storyOnly:true,
+    npcType:'story', type:'story', behavior:'field', workHours:[0,24],
+    head:0xBFA58E, body:0x6E716B, home:[-21,-27], work:[-21,-27], patrolRadius:0,
+    dialog:[{ text:'「来查旧档案吗？有些事，纸上写得比人记得清楚。」', options:[{ text:'先不打扰', next:null }] }],
   },
   {
     id:'linxu', name:'林叙', role:'图书馆管理员', core:true, spawnChance:1,

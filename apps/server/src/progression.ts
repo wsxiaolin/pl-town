@@ -36,10 +36,17 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   cat_cafe_note: 30,
   minicity_origin: 50,
   dragonwell_assimilation: 80,
+  echo_unnoticed: 30,
+  echo_eternal_lie: 40,
+  echo_real_echo: 80,
+  echo_true_dawn: 120,
 });
 
 export const SHOP_PRODUCTS = Object.freeze({
   dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
+  beef: { itemId: 'beef', name: '牛肉', unitPrice: 45 },
+  radish: { itemId: 'radish', name: '萝卜', unitPrice: 20 },
+  music_box: { itemId: 'music_box', name: '音乐盒', unitPrice: 120 },
 });
 
 export const DAILY_REWARDS = Object.freeze({

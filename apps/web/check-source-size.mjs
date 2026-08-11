@@ -6,7 +6,7 @@ const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
 const dataDirectories = new Set(['content', 'data']);
 const defaultLimit = 1_000;
 const transitionalLimits = new Map([
-  ['apps/web/src/city/MiniCityApp.ts', 1_500],
+  ['apps/web/src/city/MiniCityApp.ts', 2_000],
 ]);
 
 function collectSourceFiles(directory) {

@@ -10,6 +10,7 @@ export function createNpcSystem(options) {
     reduced: REDUCED, isMobile: MOBILE, getGameClock, getCurrentFilter,
     nearestRoadCoord, buildRoadPath, makeMaterial: stdMat, makeMesh: mk,
     view, updateCameraProjection,
+    getActiveStoryActorIds,
   } = options;
 
   function makeCharacter(headHex, bodyHex) {
@@ -66,6 +67,7 @@ export function createNpcSystem(options) {
       const npc={profile, mesh:g, tween:null, spawnTimer:Math.random()*10, idleTimer:0};
       npcList.push(npc);
       if(profile.behavior==='rare') g.visible=false;
+      if(profile.storyOnly) g.visible=false;
       if (!MOBILE()) npcRoutine(npc);
     });
     actors.cursorChar=makeCharacter(0xA8C8F8,0x3B6FE0);
@@ -160,6 +162,11 @@ export function createNpcSystem(options) {
         return;
       }
       const behavior=npc.profile.behavior||'field';
+      if (npc.profile.storyOnly && !getActiveStoryActorIds().has(npc.profile.id)) {
+        npc.mesh.visible=false;
+        if(npc.tween){ npc.tween.kill(); npc.tween=null; }
+        return;
+      }
       if (behavior==='rare') {
         npc.spawnTimer-=1;
         if(npc.spawnTimer<=0){

@@ -15,6 +15,7 @@ interface SceneInterestPointControllerOptions {
   awardAchievement: (achievementId: string, achievementName: string) => void | Promise<void>;
   showToast: (message: string) => void;
   setWellPhase?: (phase: 'idle' | 'focus' | 'engulf' | 'recede') => void;
+  interactWithStory?: (id: SceneInterestPointId) => boolean;
 }
 
 export interface SceneInterestPointController {
@@ -77,6 +78,7 @@ export function createSceneInterestPointController(
 
   return {
     async interact(id) {
+      if (options.interactWithStory?.(id)) return;
       if (id === 'cat-cafe-note') {
         options.dialogs.openStory({ title: '掉落的纸', role: '猫咖馆旁', text: '' });
         const achievement = WORLD_ACHIEVEMENTS.catCafeNote;

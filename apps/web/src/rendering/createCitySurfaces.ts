@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { SATELLITE_CITY } from '../city/data/cityConfig';
+import { ECHO_OBSERVATORY_AREA, SATELLITE_CITY } from '../city/data/cityConfig';
 
 type MaterialOptions = THREE.MeshStandardMaterialParameters & {
   tex?: string;
@@ -98,12 +98,21 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     satellite.renderOrder = RENDER_ORDER.district;
     scene.add(satellite);
 
+    const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 8, ry: 6 });
+    const echoGround = new THREE.Mesh(new THREE.PlaneGeometry(ECHO_OBSERVATORY_AREA.width, ECHO_OBSERVATORY_AREA.depth), echoGroundMat);
+    echoGround.rotation.x = -Math.PI / 2;
+    echoGround.position.set(ECHO_OBSERVATORY_AREA.center[0], SURFACE_Y.district, ECHO_OBSERVATORY_AREA.center[1]);
+    echoGround.receiveShadow = true;
+    echoGround.renderOrder = RENDER_ORDER.district;
+    scene.add(echoGround);
+
     groundMaterials.push(
       { mat: farMat, day: 0xd8d4cc, night: 0x9a988e },
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
       { mat: satelliteMat, day: 0xe0d8cc, night: 0xb4b0a4 },
+      { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
     );
   }
 
@@ -154,6 +163,27 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       road.userData.district = index === 0 ? 'satellite-connector' : 'satellite-road';
       scene.add(road);
     });
+
+    ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
+      const [x1, z1, x2, z2] = segment as [number, number, number, number];
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const length = Math.hypot(dx, dz);
+      const road = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.04, length), createLayerMaterial({
+        color: pathColor,
+        roughness: 1,
+        tex: 'pavement',
+        rx: 1,
+        ry: Math.max(1, length / 3),
+      }));
+      road.position.set((x1 + x2) / 2, SURFACE_Y.road, (z1 + z2) / 2);
+      road.rotation.y = -Math.atan2(dx, dz);
+      road.renderOrder = RENDER_ORDER.road;
+      road.receiveShadow = true;
+      road.userData.district = 'echo-observatory-road';
+      scene.add(road);
+    });
+    addLamps([[44, 0, -1.3], [52, 0, 1.3], [60, 0, -1.3], [66, 0, 1.3]]);
 
     const minorCoords = roadCoords.filter((position) => position !== 0);
     for (const position of minorCoords) {

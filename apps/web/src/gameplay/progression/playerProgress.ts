@@ -49,6 +49,9 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   city_guide: '城市导览册',
   city_badge: '居民纪念徽章',
   dragonwell_tea: '龙井茶',
+  beef: '牛肉',
+  radish: '萝卜',
+  music_box: '音乐盒',
   mandarin: '沃柑',
 });
 

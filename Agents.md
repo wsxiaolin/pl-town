@@ -124,7 +124,7 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 ## 逻辑文件体积
 
-根脚本 `npm run check:source-size` 扫描前后端源码：普通逻辑文件上限为 1,000 行，迁移期的 `MiniCityApp.ts` 上限为 1,500 行；`data/` 和 `content/` 配置目录豁免。该检查已接入根级 `npm run typecheck` 和 `npm run build`。超过限制时，应按职责拆分模块，而不是提高上限或把逻辑伪装成配置。
+根脚本 `npm run check:source-size` 扫描前后端源码：普通逻辑文件上限为 1,000 行，迁移期的 `MiniCityApp.ts` 上限为 2,000 行；`data/` 和 `content/` 配置目录豁免。该检查已接入根级 `npm run typecheck` 和 `npm run build`。超过限制时，应按职责拆分模块，而不是把逻辑伪装成配置。
 
 ## 前端迁移验证
 

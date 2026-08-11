@@ -2517,7 +2517,11 @@ body.night .modal-paper {
   background: linear-gradient(to bottom, rgba(5,8,14,0.02) 38%, rgba(5,8,14,0.48) 74%, rgba(5,8,14,0.86) 100%);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
+
+.npc-overlay.story-mode * { -webkit-tap-highlight-color: transparent; }
 
 .npc-overlay.story-mode .npc-panel {
   width: 100%;
@@ -2526,47 +2530,53 @@ body.night .modal-paper {
   border: 0;
   border-top: 1px solid rgba(232,211,166,0.28);
   border-radius: 0;
-  background: linear-gradient(180deg, rgba(8,12,19,0.88), rgba(5,8,13,0.96));
-  box-shadow: 0 -18px 42px rgba(0,0,0,0.32);
-  padding: 34px max(32px, calc((100vw - 1120px) / 2)) 28px;
+  background: linear-gradient(180deg, rgba(8,12,19,0.16), rgba(5,8,13,0.3));
+  box-shadow: 0 -8px 22px rgba(0,0,0,0.08);
+  min-height: 210px;
+  padding: 20px max(40px, calc((100vw - 1120px) / 2)) 18px;
   overflow: visible;
   transform: translateY(36px);
 }
 
 .npc-overlay.story-mode .npc-avatar {
-  position: absolute;
-  left: max(32px, calc((100vw - 1120px) / 2));
-  bottom: 100%;
-  width: 92px;
-  height: 92px;
-  border-radius: 6px;
+  position: static;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   background: #526d88 !important;
-  border-color: rgba(232,211,166,0.68);
-  box-shadow: 0 8px 22px rgba(0,0,0,0.46);
+  border-color: rgba(168,200,248,0.35);
+  box-shadow: 0 0 16px rgba(168,200,248,0.2);
 }
 
-.npc-overlay.story-mode .npc-head { position: absolute; left: 50%; top: -17px; transform: translateX(-50%); margin: 0; z-index: 2; }
-.npc-overlay.story-mode .npc-id { background: #caa95f; min-width: 148px; padding: 5px 22px 6px; align-items: center; border: 1px solid rgba(255,236,174,0.72); box-shadow: 0 3px 10px rgba(0,0,0,0.36); }
-.npc-overlay.story-mode .npc-name { color: #17130c; font-size: 17px; letter-spacing: 0.08em; white-space: nowrap; }
-.npc-overlay.story-mode .npc-close { position: absolute; right: 0; bottom: calc(100% + 10px); color: rgba(255,255,255,0.72); }
+.npc-overlay.story-mode .npc-head { position: static; transform: none; margin: 0 0 22px; }
+.npc-overlay.story-mode .npc-id { min-width: 0; padding: 0; align-items: flex-start; background: none; border: 0; box-shadow: none; }
+.npc-overlay.story-mode .npc-name { color: #eaf0fb; font-size: 19px; letter-spacing: 0.06em; white-space: nowrap; }
+.npc-overlay.story-mode .npc-close { position: static; color: rgba(255,255,255,0.5); }
 
 .npc-overlay.story-mode .npc-role {
-  color: rgba(23,19,12,0.72);
+  color: #d2a858;
   letter-spacing: 0;
 }
 
 .npc-overlay.story-mode .npc-line {
-  width: min(760px, 64vw);
-  min-height: 50px;
+  width: 100%;
+  min-height: 72px;
   margin: 0;
   color: #f0eee8;
   line-height: 1.8;
   font-size: 17px;
+  text-align: center;
   text-shadow: 0 1px 3px #000;
 }
 
-.npc-overlay.story-mode .npc-body { overflow: visible; }
-.npc-overlay.story-mode .npc-options { position: absolute; right: max(32px, calc((100vw - 1120px) / 2)); bottom: 28px; width: min(360px, 29vw); gap: 8px; }
+.npc-overlay.story-mode .npc-body { width: min(880px, 56vw); margin-inline: auto; overflow: visible; }
+.npc-overlay.story-mode .npc-options {
+  position: absolute;
+  right: max(40px, calc((100vw - 1120px) / 2));
+  bottom: calc(100% + 24px);
+  width: min(360px, 29vw);
+  gap: 8px;
+}
 
 .npc-overlay.story-mode .npc-opt {
   border-radius: 2px;
@@ -2585,7 +2595,18 @@ body.night .modal-paper {
 }
 
 .npc-overlay.story-mode.cg-mode {
-  background: linear-gradient(to bottom, transparent 62%, rgba(2,5,12,0.84) 100%);
+  background: transparent;
+}
+
+.npc-overlay.story-mode.cg-mode::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: linear-gradient(to bottom, transparent 62%, rgba(2,5,12,0.84) 100%), var(--story-cg-image);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
 }
 
 .npc-overlay.story-mode.cg-mode .npc-panel {
@@ -2593,11 +2614,13 @@ body.night .modal-paper {
   max-width: none;
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 0 max(24px, calc((100vw - 1040px) / 2)) max(28px, env(safe-area-inset-bottom));
+  padding: 0 max(24px, calc((100vw - 1040px) / 2)) max(72px, calc(env(safe-area-inset-bottom) + 44px));
   justify-content: flex-end;
   background: transparent;
   border: 0;
   box-shadow: none;
+  position: relative;
+  z-index: 1;
 }
 
 .npc-overlay.story-mode.cg-mode .npc-body {
@@ -2613,10 +2636,52 @@ body.night .modal-paper {
   font-size: 18px;
   line-height: 1.8;
   text-align: center;
+  animation-duration: .7s;
 }
 
 .npc-overlay.story-mode.cg-mode .npc-head,
 .npc-overlay.story-mode.cg-mode .npc-options { display: none; }
+
+.npc-overlay.story-mode.blackout-mode {
+  align-items: stretch;
+  background: #000;
+}
+
+.npc-overlay.story-mode.blackout-mode .npc-panel {
+  width: 100vw;
+  max-width: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 0 max(24px, calc((100vw - 1040px) / 2));
+  justify-content: center;
+  background: #000;
+  border: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+.npc-overlay.story-mode.blackout-mode .npc-head,
+.npc-overlay.story-mode.blackout-mode .npc-options { display: none; }
+
+.npc-overlay.story-mode.blackout-mode .npc-body {
+  width: min(900px, 86vw);
+  margin: 0 auto;
+}
+
+.npc-overlay.story-mode.blackout-mode .npc-line {
+  min-height: 0;
+  color: rgba(255,255,255,0.92);
+  font-size: 21px;
+  line-height: 2.05;
+  text-align: center;
+  text-shadow: none;
+  animation: blackoutTextIn 1.25s ease both;
+}
+
+@keyframes blackoutTextIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .echo-story-nav {
   position: fixed;
@@ -2625,22 +2690,22 @@ body.night .modal-paper {
   top: 92px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 8px 12px;
-  border: 1px solid rgba(180, 135, 62, .55);
-  border-radius: 6px;
-  background: rgba(250, 247, 239, .94);
-  color: #41382d;
-  box-shadow: 0 5px 18px rgba(30, 25, 18, .16);
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 0;
+  border-left: 2px solid #caa95f;
+  border-radius: 0;
+  background: rgba(12, 16, 23, .78);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, .2);
   cursor: pointer;
 }
 
-.echo-story-nav > span:first-child { color: #9a692a; font-size: 22px; }
+.echo-guide-mark { width: 5px; height: 5px; flex: none; border-radius: 50%; background: #caa95f; }
 .echo-story-nav > span:last-child { display: grid; text-align: left; }
-.echo-story-nav strong { font-size: 12px; }
-.echo-story-nav small { margin-top: 2px; color: #786b5d; font-size: 10px; }
-.echo-story-nav:hover { border-color: #9a692a; transform: translateY(-1px); }
+.echo-story-nav strong { color: #f1eee7; font-size: 11px; font-weight: 600; }
+.echo-story-nav small { margin-top: 2px; color: #aaa69c; font-size: 9px; }
+.echo-story-nav:hover { background: rgba(20, 25, 34, .9); transform: translateY(-1px); }
 .echo-location-label .bl-name,
 .echo-location-icon { color: #9a692a; }
 
@@ -2685,10 +2750,19 @@ body.night .modal-paper {
   .npc-overlay.story-mode .npc-panel {
     width: 100%;
     max-height: calc(100dvh - 20px);
-    padding: 42px 16px 18px;
+    min-height: 240px;
+    padding: 18px 16px 16px;
   }
-  .npc-overlay.story-mode .npc-avatar { left: 16px; width: 62px; height: 62px; }
-  .npc-overlay.story-mode .npc-line { width: 100%; min-height: 42px; font-size: 15px; }
-  .npc-overlay.story-mode .npc-options { position: static; width: 100%; margin-top: 14px; }
-  .npc-overlay.story-mode .npc-close { right: 4px; bottom: calc(100% + 8px); }
+  .npc-overlay.story-mode .npc-avatar { width: 40px; height: 40px; }
+  .npc-overlay.story-mode .npc-head { margin-bottom: 18px; }
+  .npc-overlay.story-mode .npc-line { width: 100%; min-height: 64px; font-size: 15px; }
+  .npc-overlay.story-mode .npc-body { width: 100%; }
+  .npc-overlay.story-mode .npc-options {
+    position: absolute;
+    right: 12px;
+    bottom: calc(100% + 12px);
+    width: calc(100vw - 24px);
+    margin: 0;
+  }
+  .npc-overlay.story-mode.cg-mode .npc-panel { min-height: 100dvh; padding-bottom: max(56px, calc(env(safe-area-inset-bottom) + 32px)); }
 }

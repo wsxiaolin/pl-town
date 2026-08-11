@@ -140,7 +140,7 @@ function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.item.consume') {
       const quantity = message.quantity ?? 1;
-      if (message.itemId !== 'dragonwell_tea' || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
+      if (!Object.values(SHOP_PRODUCTS).some((product) => product.itemId === message.itemId) || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
       try {
         const progress = db.consumeItem(userId, message.itemId, quantity);
         send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'item.consumed', itemId: message.itemId, quantity } });

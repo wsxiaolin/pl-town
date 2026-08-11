@@ -11,3 +11,4 @@ apps/server/data/
 logs/
 apps/server/logs/
 docs/deployment.md
+todo.txt

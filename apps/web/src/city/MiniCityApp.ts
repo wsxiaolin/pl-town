@@ -8,14 +8,14 @@ import { createProceduralTextureLibrary } from '../rendering/proceduralTextureLi
 import { createBuildingMeshFactory } from '../rendering/buildingMeshFactory';
 import { createWorldDecorations } from '../rendering/worldDecorations';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
-import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './data/cityConfig';
+import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_API_QUERIES, BUILDING_CONTENT } from './data/buildings';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, skipCG, startCG } from './cg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
-import { ECHO_ACT_ONE } from '../gameplay/content/stories/echoActOne';
+import { ECHO_STORY } from '../gameplay/content/stories/echoStory';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
 import { LocalStorageStoryRepository } from '../adapters/storage/LocalStorageStoryRepository';
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
@@ -27,11 +27,13 @@ import { setupRenderSettingsController } from '../adapters/ui/renderSettingsCont
 import { createEchoObservatoryGuide } from '../adapters/ui/echoObservatoryGuide';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
+import { createEchoCabinNavigation } from './navigation/echoCabinNavigation';
 import { createNpcSystem } from './npcSystem';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
+import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
-
+import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 const resources = new ResourcePool();
 let animationFrame = 0;
 let clockInterval = 0;
@@ -69,15 +71,27 @@ let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
 const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
+const ECHO_CABIN_NODES = new Set(['fifth-hub', 'photo-wall-investigation', 'diary-investigation', 'diary-page-89', 'diary-page-132', 'diary-page-198', 'diary-page-245', 'diary-page-67', 'diary-page-30', 'diary-page-1', 'fifth-act-complete']);
 let currentFilter = 'all';
 let statsMode = 'clean';
 let mapMode = false; // 全景地图弹层是否打开
 let mapShotData = null;    // 启动时俯视截取的全城图（dataURL）
 let mapShotRenderer = null, mapShotCam = null;
 const MAP_SHOT = 1024;     // 截图像素边长
-const MAP_SHOT_SPAN = 48;  // 半边长：只框住主城（外围环线 r≈38），卫星城在下方便不进入画面
+const MAP_SHOT_SPAN = 64;
+const MAP_SHOT_CENTER_X = 16;
 let mapIconsBuilt = false, mapTipB = null;
 const cameraTarget = new THREE.Vector3(0,0,0);
+// The interior camera is kept above the roof line and inside the floor footprint.
+// The roof is hidden while inside, so this avoids a near-wall/roof clip while
+// still letting the camera look down into the complete room.
+const ECHO_INTERIOR_CAMERA_ANCHOR = new THREE.Vector3(8.2,15.5,-8.2);
+const ECHO_EXTERIOR_CAMERA_OFFSET = new THREE.Vector3(-20,32,-20);
+const echoCameraOffset = new THREE.Vector3();
+const echoInteriorLookAt = new THREE.Vector3();
+let echoCabinNavigation = null;
+let echoExteriorCameraZoom = 7;
+let echoInteriorView = false;
 let cityDialogs: CityDialogController | null = null;
 let echoObservatoryGuide = null;
 let communityPanels;
@@ -88,18 +102,65 @@ let sceneInterestPoints;
 let sceneInterestPointController;
 let pendingSceneInterestPoint = null;
 let pendingDistance = 0;
-let questEventSequence = 0;
+let questEventSequence = 0, activeStoryActorIds = new Set<string>();
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
-const echoActOne = createStoryDialogFlow(ECHO_ACT_ONE, new LocalStorageStoryRepository(ECHO_ACT_ONE));
-// 游戏时间算法（写死）：由现实北京时间推算，全程统一，全中国同一现实时刻 = 同一游戏时间。
-// 基准：现实北京时间 00:00 视为游戏 00:00；加速不变，现实 1 分钟 = 游戏 1 小时。
-function computeGameTime(ms = Date.now()) {
-  const beijing = ms + 8 * 3600 * 1000;      // 统一 UTC+8，不受本机时区影响
-  const dayStart = beijing - (beijing % 86400000); // 现实当日 00:00（北京时间）
-  const gameH = ((beijing - dayStart) / 60000);     // 现实分钟数即游戏小时数
-  return gameH % 24;                                // 溢出 24 小时回绕
+const echoStory = createStoryDialogFlow(ECHO_STORY, new LocalStorageStoryRepository(ECHO_STORY), { getContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }), onEvent: handleEchoStoryEvent, onEffects: (effects) => effects.forEach((effect) => { if (effect.type === 'inventory.remove') void multiplayerHousing?.progression.consumeItem(effect.itemId, effect.quantity); }), onWorldInteractionsChanged: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]), onActiveActorsChanged: (ids) => { activeStoryActorIds = new Set(ids); npcSystem?.updateNpcSchedules(); } });
+
+const ECHO_STORY_ACHIEVEMENTS = {
+  'echo.achievement.unnoticed': { id: 'echo_unnoticed', name: '无人问津' },
+  'echo.achievement.eternal-lie': { id: 'echo_eternal_lie', name: '永恒的谎言' },
+  'echo.achievement.real-echo': { id: 'echo_real_echo', name: '真正的回声' },
+  'echo.achievement.true-dawn': { id: 'echo_true_dawn', name: '真正的黎明' },
+};
+
+function handleEchoStoryEvent(event) {
+  echoObservatoryGuide?.applyEvent(event);
+  const achievement = ECHO_STORY_ACHIEVEMENTS[event.type];
+  if (achievement) awardDirectAchievement(achievement.id, achievement.name);
+  if (!cursorChar) return;
+  if (event.type === 'echo.cabin.exited') {
+    teleportFromEchoCabin();
+    return;
+  }
+  if (event.type !== 'echo.cabin.entered') return;
+  teleportToEchoCabin();
 }
-let gameClock = computeGameTime();
+
+function teleportToEchoCabin() {
+  if (!cursorChar) return;
+  setEchoInteriorView(true);
+  playerPath = [];
+  cursorChar.position.set(ECHO_OBSERVATORY_AREA.interior[0], 0, ECHO_OBSERVATORY_AREA.interior[1] - 8.2);
+  const spawn = echoCabinNavigation?.clampToWalkable(cursorChar.position);
+  if (spawn) cursorChar.position.copy(spawn);
+  setCameraTarget(cursorChar.position.x, cursorChar.position.z, true);
+}
+
+function teleportFromEchoCabin() {
+  if (!cursorChar) return;
+  setEchoInteriorView(false);
+  playerPath = [];
+  cursorChar.position.set(ECHO_OBSERVATORY_AREA.linche[0] - 1.5, 0, ECHO_OBSERVATORY_AREA.linche[1]);
+  setCameraTarget(ECHO_OBSERVATORY_AREA.linche[0], ECHO_OBSERVATORY_AREA.linche[1], true);
+  multiplayerHousing?.sendLocalPosition({ x: cursorChar.position.x, y: 0, z: cursorChar.position.z, rotation: cursorChar.rotation.y }, performance.now());
+}
+
+function setEchoInteriorView(active) {
+  const changed = active !== echoInteriorView;
+  if (active && changed) echoExteriorCameraZoom = cameraZoom || 7;
+  if (changed) gsap.killTweensOf(cameraTarget);
+  echoInteriorView = active;
+  scene?.traverse((object) => {
+    if (object.userData.echoInteriorRoof || object.userData.echoInteriorCeiling || object.userData.echoCabinCameraOccluder) {
+      object.visible = !active;
+    }
+  });
+  if (camera && changed) {
+    cameraZoom = active ? (MOBILE() ? 6.4 : 8.8) : Math.max(2, Math.min(15, echoExteriorCameraZoom || 7));
+    updateCameraProjection(cameraZoom);
+  }
+}
+let gameClock = townGameHour();
 const residences = [];
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
@@ -137,7 +198,29 @@ const ACHIEVEMENTS = [
   { id:'cat_cafe_note', name:'猫咖拾遗',      desc:'发现猫咖馆旁掉落的纸张',                  check:()=>false, directOnly:true },
   { id:'minicity_origin',name:'物实城缘起',    desc:'触碰城中守望已久的沃柑树',                check:()=>false, directOnly:true },
   { id:'dragonwell_assimilation',name:'被龙井同化',desc:'向爬满绿色植物的石井献上龙井茶',          check:()=>false, directOnly:true },
+  { id:'echo_unnoticed',name:'无人问津',desc:'在回声中选择离开',check:()=>false,directOnly:true },
+  { id:'echo_eternal_lie',name:'永恒的谎言',desc:'让故事继续循环',check:()=>false,directOnly:true },
+  { id:'echo_real_echo',name:'真正的回声',desc:'以真实回应林澈',check:()=>false,directOnly:true },
+  { id:'echo_true_dawn',name:'真正的黎明',desc:'完成回声的全部后日谈',check:()=>false,directOnly:true },
 ];
+
+function awardDirectAchievement(achievementId, achievementName) {
+  const stats=getStats();
+  stats.achievements=stats.achievements||[];
+  if(stats.achievements.includes(achievementId))return;
+  stats.achievements.push(achievementId);
+  saveStats(stats);
+  multiplayerHousing?.progression.unlockAchievement(achievementId);
+  showUnlockToast(`成就解锁 · ${achievementName}`);
+}
+
+function restoreEchoStoryAchievements() {
+  const nodeId=echoStory.state().nodeId;
+  if(nodeId==='forgotten-complete') awardDirectAchievement('echo_unnoticed','无人问津');
+  if(nodeId==='loop-complete') awardDirectAchievement('echo_eternal_lie','永恒的谎言');
+  if(nodeId==='truth-complete'||nodeId.startsWith('visit-')||nodeId==='epilogue-complete') awardDirectAchievement('echo_real_echo','真正的回声');
+  if(nodeId==='epilogue-complete') awardDirectAchievement('echo_true_dawn','真正的黎明');
+}
 
 function checkAchievements() {
   const s=getStats();
@@ -177,7 +260,7 @@ function init() {
       get cameraZoom() { return cameraZoom; },
       set cameraZoom(value) { cameraZoom = value; },
     },
-    updateCameraProjection,
+    updateCameraProjection, getActiveStoryActorIds: () => activeStoryActorIds,
   });
   createCitySurfaces({
     scene,
@@ -190,8 +273,25 @@ function init() {
     groundMaterials: groundMats,
     addLamps,
   });
-  addFountain();
-  addBuildings(); cacheBuildingBoxes(); addDecorations(); addCharacters();
+  addFountain(); addBuildings();
+  addEchoObservatoryArea({
+    scene,
+    makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => stdMat(parameters)),
+  }).forEach(group => roadNavigation.registerObstacleGroup(group));
+  echoCabinNavigation = createEchoCabinNavigation({
+    getInterior: () => scene?.getObjectByName('linche-home-interior'),
+    fallbackBounds: {
+      minX: ECHO_OBSERVATORY_AREA.interior[0] - 14.4,
+      maxX: ECHO_OBSERVATORY_AREA.interior[0] + 14.4,
+      minZ: ECHO_OBSERVATORY_AREA.interior[1] - 10.0,
+      maxZ: ECHO_OBSERVATORY_AREA.interior[1] + 10.0,
+    },
+  });
+  echoCabinNavigation.refresh();
+  // Re-apply the current state after a fresh scene/HMR rebuild. This prevents
+  // an interior session restored into a new scene from briefly showing the roof.
+  setEchoInteriorView(echoInteriorView);
+  cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
   addRealBuildingModels(scene, buildings)
     .then(() => { mapShotData = null; })
@@ -205,6 +305,7 @@ function init() {
     mapShotSpan: MAP_SHOT_SPAN, getMapMode: () => mapMode, toggleMapMode, communityPanels,
     getLegacyAchievements: () => getStats().achievements || [],
   });
+  restoreEchoStoryAchievements();
   cityDialogs=createCityDialogController({
     document,
     buildingContent: BUILDING_CONTENT,
@@ -226,21 +327,9 @@ function init() {
       consumeItem: (itemId, count) => multiplayerHousing.progression.consumeItem(itemId, count),
       claimDailyReward: (rewardId) => multiplayerHousing.progression.claimDailyReward(rewardId),
     },
-    awardAchievement: (achievementId, achievementName) => {
-      const accepted=multiplayerHousing.progression.unlockAchievement(achievementId);
-      if(!accepted){
-        if(!multiplayerHousing.progression.isOnline()) showUnlockToast(`离线时无法解锁成就 · ${achievementName}`);
-        return;
-      }
-      const stats=getStats();
-      stats.achievements=stats.achievements||[];
-      if(!stats.achievements.includes(achievementId)){
-        stats.achievements.push(achievementId);
-        saveStats(stats);
-        showUnlockToast(`成就解锁 · ${achievementName}`);
-      }
-    },
+    awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
+    interactWithStory: (id) => cityDialogs ? echoStory.interactInterestPoint(id, cityDialogs) : false,
     setWellPhase: (phase) => {
       sceneInterestPoints?.setWellPhase(phase);
       if (!camera) return;
@@ -626,8 +715,7 @@ function applyStoryLockedBuildings() {
   });
 }
 
-function addEchoObservatoryLabel() { echoObservatoryGuide = createEchoObservatoryGuide(document, () => movePlayerTo(new THREE.Vector3(0, 0, 55))); }
-
+function addEchoObservatoryLabel() { echoObservatoryGuide = createEchoObservatoryGuide(document, () => { if (echoStory.state().nodeId === 'confrontation-active') { teleportFromEchoCabin(); return; } movePlayerTo(new THREE.Vector3(ECHO_OBSERVATORY_AREA.linche[0], 0, ECHO_OBSERVATORY_AREA.linche[1])); }); echoStory.announceGuide(); echoStory.syncWorldInteractions(); echoStory.syncActiveActors(); }
 function setupRenderSettings(signal: AbortSignal) {
   setupRenderSettingsController({
     signal,
@@ -743,6 +831,7 @@ function navigateTo(b) {
 }
 function navigateUnlocked(b) {
   if (isStoryLockedBuilding(b)) return;
+  if (cityDialogs && echoStory.interactBuilding(b.id, cityDialogs)) { trackInteraction(b.id); return; }
   if (b.isStats) { openStatsPanel(); trackInteraction('stats'); return; }
   if (b.id === 'mall_south' || b.id === 'mall_west') { multiplayerHousing.progression.openShop(); trackInteraction(b.id); return; }
   const phoneBuildings={bulletin:['notifications'],news:['notifications'],newsstand:['notifications'],community:['social','profile'],records:['social','mine'],tradingpost:['social','favorites'],guildhall:['social','volunteers'],mutualaid:['social','following']};
@@ -807,7 +896,8 @@ function tweenColor(c,hex,dur) {
 }
 
 function syncTimeAndTheme() {
-  gameClock = computeGameTime(); // 写死算法：由现实北京时间推算，全中国同一时刻游戏时间一致
+  gameClock = townGameHour();
+  echoStory.announceGuide();
   const night = gameClock>=19 || gameClock<6;
   if (night!==isNight) {
     isNight=night;
@@ -904,9 +994,9 @@ function captureMapShot() {
   if(!mapShotCam){
     mapShotCam=new THREE.OrthographicCamera(
       -MAP_SHOT_SPAN,MAP_SHOT_SPAN,MAP_SHOT_SPAN,-MAP_SHOT_SPAN,0.1,130);
-    mapShotCam.position.set(0,90,0);
+    mapShotCam.position.set(MAP_SHOT_CENTER_X,90,0);
     mapShotCam.up.set(0,0,1); // 图像顶端=北
-    mapShotCam.lookAt(0,0,0);
+    mapShotCam.lookAt(MAP_SHOT_CENTER_X,0,0);
     mapShotCam.updateProjectionMatrix();
   }
   if(!mapShotRenderer){
@@ -950,7 +1040,7 @@ function updateMapImage() {
 function updateMapMarker() {
   const marker=document.getElementById('mapMarker');
   if(!marker||!cursorChar)return;
-  const left=((cursorChar.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
+  const left=((cursorChar.position.x-MAP_SHOT_CENTER_X+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN))*100;
    const top=((MAP_SHOT_SPAN-cursorChar.position.z)/(2*MAP_SHOT_SPAN))*100;
   marker.style.left=clamp(left,0,100)+'%';
   marker.style.top=clamp(top,0,100)+'%';
@@ -968,7 +1058,7 @@ function renderMapIcons() {
     el.dataset.buildingId=b.id;
     el.title=b.label;
     el.innerHTML=b.icon;
-    el.style.left=((b.group.position.x+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';
+    el.style.left=((b.group.position.x-MAP_SHOT_CENTER_X+MAP_SHOT_SPAN)/(2*MAP_SHOT_SPAN)*100)+'%';
      el.style.top=((MAP_SHOT_SPAN-b.group.position.z)/(2*MAP_SHOT_SPAN)*100)+'%';
     el.addEventListener('click',()=>openMapTip(b));
     wrap.appendChild(el);
@@ -1011,6 +1101,35 @@ function mapTeleport(b) {
 
 function updateCameraFollow(_delta) {
   if(!cursorChar||mapMode)return;
+  const insideLegacyEchoCabin = Math.abs(cursorChar.position.x - 110) <= 15
+    && Math.abs(cursorChar.position.z) <= 11;
+  // Keep compatibility with saves from the old isolated cabin, but do not
+  // hijack a normal world position near x=110 when the story is inactive.
+  if (insideLegacyEchoCabin && (echoInteriorView || ECHO_CABIN_NODES.has(echoStory.state().nodeId))) {
+    if (echoStory.state().nodeId === 'confrontation-active') teleportFromEchoCabin();
+    else teleportToEchoCabin();
+    return;
+  }
+  const insideEchoCabin = echoCabinNavigation
+    ? echoCabinNavigation.contains(cursorChar.position, 0.8)
+    : Math.abs(cursorChar.position.x - ECHO_OBSERVATORY_AREA.interior[0]) <= 14.5
+      && Math.abs(cursorChar.position.z - ECHO_OBSERVATORY_AREA.interior[1]) <= 10.2;
+  if (insideEchoCabin && echoStory.state().nodeId === 'confrontation-active') {
+    teleportFromEchoCabin();
+    return;
+  }
+  if (insideEchoCabin && !echoInteriorView) {
+    setEchoInteriorView(true);
+  }
+  if (!insideEchoCabin && echoInteriorView) {
+    setEchoInteriorView(false);
+  }
+  if (echoInteriorView) {
+    // Follow the player as the look-at point. The camera anchor itself remains
+    // inside the room, so edge movement cannot push the camera through a wall.
+    setCameraTarget(cursorChar.position.x, cursorChar.position.z, true);
+    return;
+  }
   const p=cursorChar.position;
   // The camera looks directly at the player every frame, keeping the local
   // character projected at the exact viewport center while walking.
@@ -1019,15 +1138,39 @@ function updateCameraFollow(_delta) {
 
 function setCameraTarget(x,z,instant) {
   const nx=x, nz=z;
-  if(instant){
-    cameraTarget.set(nx,0,nz);
-    camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+  const applyCameraPose = () => {
+    if (echoInteriorView) {
+      const cx = ECHO_OBSERVATORY_AREA.interior[0];
+      const cz = ECHO_OBSERVATORY_AREA.interior[1];
+      camera.position.set(
+        cx + ECHO_INTERIOR_CAMERA_ANCHOR.x,
+        ECHO_INTERIOR_CAMERA_ANCHOR.y,
+        cz + ECHO_INTERIOR_CAMERA_ANCHOR.z,
+      );
+      echoInteriorLookAt.set(cameraTarget.x, 0.75, cameraTarget.z);
+      camera.lookAt(echoInteriorLookAt);
+      return;
+    }
+    const echoDistance = Math.hypot(
+      cameraTarget.x - ECHO_OBSERVATORY_AREA.center[0],
+      cameraTarget.z - ECHO_OBSERVATORY_AREA.center[1],
+    );
+    // Ease into a camera placed on the road-facing (south-west) side of the
+    // echo house. The global north-east offset otherwise lands behind its roof
+    // and produces the cutaway/occluded view reported in the story area.
+    const t = Math.max(0, Math.min(1, (30 - echoDistance) / 12));
+    echoCameraOffset.copy(CAMERA_OFFSET).lerp(ECHO_EXTERIOR_CAMERA_OFFSET, t);
+    camera.position.copy(cameraTarget).add(echoCameraOffset);
     camera.lookAt(cameraTarget);
+  };
+  if(instant){
+    gsap.killTweensOf(cameraTarget);
+    cameraTarget.set(nx,0,nz);
+    applyCameraPose();
     return;
   }
   gsap.to(cameraTarget,{x:nx,z:nz,duration:0.55,ease:'power2.out',onUpdate:()=>{
-    camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
-    camera.lookAt(cameraTarget);
+    applyCameraPose();
   }});
 }
 
@@ -1040,11 +1183,24 @@ function updateCameraProjection(vs) {
 function movePlayerTo(target) {
   if(!cursorChar||cityDialogs?.isOpen())return;
   cursorChar.visible=true;
+  if (echoInteriorView) {
+    playerPath = echoCabinNavigation
+      ? echoCabinNavigation.buildPath(cursorChar.position, target)
+      : [new THREE.Vector3(
+        clamp(target.x, ECHO_OBSERVATORY_AREA.interior[0] - 14, ECHO_OBSERVATORY_AREA.interior[0] + 14),
+        0,
+        clamp(target.z, ECHO_OBSERVATORY_AREA.interior[1] - 9.5, ECHO_OBSERVATORY_AREA.interior[1] + 9.5),
+      )];
+    return;
+  }
   playerPath = buildRoadPath(cursorChar.position, target);
 }
 
 function updatePlayerMovement(delta) {
   if(!cursorChar||!playerPath.length){
+    if (echoInteriorView && echoCabinNavigation) {
+      cursorChar?.position.copy(echoCabinNavigation.clampToWalkable(cursorChar.position));
+    }
     if(pendingBuilding && cursorChar){
       const b=pendingBuilding;
       const distance=Math.hypot(cursorChar.position.x-b.group.position.x,cursorChar.position.z-b.group.position.z);
@@ -1088,6 +1244,11 @@ function updatePlayerMovement(delta) {
       cursorChar.position.z+=oz*push;
     }
   });
+  if (echoInteriorView && echoCabinNavigation) {
+    // NPC separation can nudge the player off the planned visibility path;
+    // project that nudge back into the walkable room/furniture envelope.
+    cursorChar.position.copy(echoCabinNavigation.clampToWalkable(cursorChar.position));
+  }
   cursorChar.rotation.y=Math.atan2(dx,dz);
   multiplayerHousing?.sendLocalPosition({x:cursorChar.position.x,y:cursorChar.position.y,z:cursorChar.position.z,rotation:cursorChar.rotation.y}, performance.now());
   pendingDistance+=step;
@@ -1104,7 +1265,7 @@ function flushDistance(amount) {
 
 const roadNavigation = createRoadNavigationSystem({
   roadCoords: ROAD_COORDS,
-  satelliteCity: SATELLITE_CITY,
+  satelliteCity: SATELLITE_CITY, echoObservatoryArea: ECHO_OBSERVATORY_AREA,
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
 });
@@ -1416,9 +1577,12 @@ function recordNpcInteraction(npcId) {
 }
 
 function openNpcDialog(npc) {
-  if (npc.profile.id === 'linche' && cityDialogs) {
+  if (npc.profile.id === 'linche' && ECHO_CABIN_NODES.has(echoStory.state().nodeId) && cursorChar) {
+    const distanceToInterior = Math.hypot(cursorChar.position.x - ECHO_OBSERVATORY_AREA.interior[0], cursorChar.position.z - ECHO_OBSERVATORY_AREA.interior[1]);
+    if (distanceToInterior > 20) teleportToEchoCabin();
+  }
+  if (cityDialogs && echoStory.interact(npc.profile.id, cityDialogs)) {
     recordNpcInteraction(npc.profile.id);
-    echoActOne.open(cityDialogs);
     return;
   }
   cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
@@ -1490,6 +1654,9 @@ export function destroyMiniCity() {
   buildingPlotTargets.length=0;
   sceneInterestPoints=null;
   sceneInterestPointController=null;
+  echoCabinNavigation=null;
+  echoInteriorView=false;
+  echoExteriorCameraZoom=7;
   pendingSceneInterestPoint=null;
   document.getElementById('labelsWrap')?.replaceChildren();
   document.getElementById('mapIcons')?.replaceChildren();

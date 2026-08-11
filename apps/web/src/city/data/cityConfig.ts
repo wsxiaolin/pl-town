@@ -55,6 +55,24 @@ export const SATELLITE_CITY = Object.freeze({
   depth: 50,
 });
 
+export const ECHO_OBSERVATORY_AREA = Object.freeze({
+  roadNodes: Object.freeze([
+    [38, 0], [48, 0], [58, 0], [68, 0],
+  ]),
+  roadSegments: Object.freeze([
+    [38, 0, 48, 0], [48, 0, 58, 0], [58, 0, 68, 0],
+  ]),
+  center: Object.freeze([68, 0] as const),
+  observatory: Object.freeze([72, -4] as const),
+  home: Object.freeze([72, 5] as const),
+  linche: Object.freeze([67, 0] as const),
+  stonePile: Object.freeze([65.5, 3.4] as const),
+  table: Object.freeze([65.5, -3.0] as const),
+  interior: Object.freeze([220, 0] as const),
+  width: 25,
+  depth: 17,
+});
+
 export const CITY_CONFIG = Object.freeze({
   cameraNearSize: 10,
   cameraZoomMin: 2,

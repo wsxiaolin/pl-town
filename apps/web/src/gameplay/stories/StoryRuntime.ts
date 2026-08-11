@@ -102,14 +102,23 @@ export class StoryRuntime {
 
   choices(context: StoryConditionContext = {}): readonly StoryChoice[] {
     const state = this.state();
+    if (!this.isNodeAvailable(context)) return [];
     return (this.node().choices ?? []).filter((choice) => conditionsMatch(choice.availableWhen, state, context));
+  }
+
+  isNodeAvailable(context: StoryConditionContext = {}): boolean {
+    const state = this.state();
+    const delay = this.node().unlockAfterGameDays ?? 0;
+    if (delay <= 0) return true;
+    if (context.gameDay === undefined || state.nodeEnteredGameDay === undefined) return false;
+    return context.gameDay >= state.nodeEnteredGameDay + delay;
   }
 
   choose(choiceId: string, now = Date.now(), context: StoryConditionContext = {}): StoryTransition | null {
     const state = this.state();
     const node = this.definition.nodes[state.nodeId];
     const choice = node?.choices?.find((item) => item.id === choiceId);
-    if (!node || !choice || !this.definition.nodes[choice.next] || !conditionsMatch(choice.availableWhen, state, context)) return null;
+    if (!node || !choice || !this.definition.nodes[choice.next] || !this.isNodeAvailable(context) || !conditionsMatch(choice.availableWhen, state, context)) return null;
     const legacyEffects: StoryEffect[] = Object.entries(choice.set ?? {}).map(([flagId, value]) => ({ type: 'flag.set', flagId, value }));
     const effects = [...legacyEffects, ...(choice.effects ?? [])];
     const applied = applyEffects(state, effects, now);
@@ -119,12 +128,14 @@ export class StoryRuntime {
       flags,
       ending: choice.ending,
       visit: choice.visit,
+      nodeEnteredGameDay: context.gameDay,
     }) ?? {
       ...state,
       nodeId: choice.next,
       flags,
       ending: choice.ending ?? state.ending,
       visitCount: state.visitCount + (choice.visit ? 1 : 0),
+      nodeEnteredGameDay: context.gameDay,
       updatedAt: now,
     };
     const transition = { state: next, node: this.definition.nodes[next.nodeId]!, choice, events: applied.events, effects };
