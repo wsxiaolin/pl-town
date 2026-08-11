@@ -23,15 +23,16 @@ export function createStoryDialogFlow(
 
   const announceGuide = (): void => {
     const node = runtime.node();
+    const guide = runtime.state().activeGuide;
     const available = runtime.isNodeAvailable(options.getContext?.());
     const guideState = `${node.id}:${available ? 'available' : 'waiting'}`;
     if (announcedGuideState === guideState) return;
     announcedGuideState = guideState;
-    if (!node.guide || !available) {
+    if (!guide || !available) {
       runtime.publish('story.guide.cleared', { nodeId: node.id });
       return;
     }
-    runtime.publish('story.guide.updated', { title: node.guide.title, objective: node.guide.objective, nodeId: node.id });
+    runtime.publish('story.guide.updated', { title: guide.title, objective: guide.objective, nodeId: node.id });
   };
 
   const syncWorldInteractions = (): void => {

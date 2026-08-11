@@ -71,7 +71,7 @@ let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 let hoveredB   = null, mouseOnScene = false;
 const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
-const ECHO_CABIN_NODES = new Set(['fifth-hub', 'photo-wall-investigation', 'diary-investigation', 'diary-page-89', 'diary-page-132', 'diary-page-198', 'diary-page-245', 'diary-page-67', 'diary-page-30', 'diary-page-1', 'fifth-act-complete']);
+const ECHO_CABIN_NODES = new Set(['fifth-hub', 'photo-wall-investigation', 'diary-investigation', 'diary-page-89', 'diary-page-67', 'diary-page-30', 'diary-page-1', 'fifth-act-complete']);
 let currentFilter = 'all';
 let statsMode = 'clean';
 let mapMode = false; // 全景地图弹层是否打开

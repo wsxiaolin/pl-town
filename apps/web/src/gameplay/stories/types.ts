@@ -13,6 +13,11 @@ export interface StoryEvent {
 
 export type StoryBuildingState = 'default' | 'hidden' | 'disabled' | 'damaged' | 'restored';
 
+export interface StoryGuide {
+  title: string;
+  objective: string;
+}
+
 export interface StoryConditionContext {
   inventory?: Readonly<Record<string, number | undefined>>;
   achievements?: ReadonlySet<string>;
@@ -40,6 +45,7 @@ export interface StoryState {
   ending?: string;
   visitCount: number;
   nodeEnteredGameDay?: number;
+  activeGuide?: StoryGuide;
   updatedAt: number;
 }
 
@@ -60,8 +66,8 @@ export interface StoryChoice {
 
 export interface StoryNode {
   id: string;
-  title: string;
-  role?: string;
+  title?: string | null;
+  role?: string | null;
   text: string;
   tone?: 'default' | 'green';
   presentation?: 'dialogue' | 'cg' | 'document' | 'blackout';
@@ -73,7 +79,8 @@ export interface StoryNode {
   interactionOnly?: boolean;
   /** Number of game-day changes required before this node can be interacted with. */
   unlockAfterGameDays?: number;
-  guide?: { title: string; objective: string };
+  /** Omit to inherit, provide a value to replace, or use null to clear. */
+  guide?: StoryGuide | null;
   activeActorIds?: readonly string[];
 }
 
@@ -89,15 +96,13 @@ export interface StoryDefinition {
   worldInteractions?: readonly { interestPointId: string; nodeId: string; choiceId: string }[];
   triggerWhen?: readonly StoryCondition[];
   nodes: Readonly<Record<string, StoryNode>>;
-  /** Nodes removed from a shipped story can be redirected without resetting saves. */
-  legacyNodeAliases?: Readonly<Record<string, string>>;
   /** Verbatim client-side source for editorial audits; never sent to the server. */
   sourceText?: string;
 }
 
 export interface StoryRepository {
   get(storyId: StoryId): StoryState | null;
-  update(storyId: StoryId, patch: { nodeId: string; flags?: Readonly<Record<string, StoryFlagValue>>; ending?: string; visit?: boolean; nodeEnteredGameDay?: number }): StoryState | null;
+  update(storyId: StoryId, patch: { nodeId: string; flags?: Readonly<Record<string, StoryFlagValue>>; ending?: string; visit?: boolean; nodeEnteredGameDay?: number; activeGuide?: StoryGuide | null }): StoryState | null;
 }
 
 export interface StoryTransition {

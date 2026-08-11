@@ -32,7 +32,17 @@ let stored: StoryState | null = createInitialStoryState(definition, 1);
 const runtime = new StoryRuntime(definition, {
   get: () => stored,
   update: (_storyId, patch) => {
-    stored = { ...stored!, ...patch, flags: patch.flags ?? stored!.flags, visitCount: stored!.visitCount + (patch.visit ? 1 : 0), updatedAt: 2 };
+    stored = {
+      ...stored!,
+      ...patch,
+      flags: patch.flags ?? stored!.flags,
+      visitCount: stored!.visitCount + (patch.visit ? 1 : 0),
+      activeGuide:
+        patch.activeGuide === null
+          ? undefined
+          : patch.activeGuide ?? stored!.activeGuide,
+      updatedAt: 2,
+    };
     return stored;
   },
 });
@@ -61,12 +71,15 @@ const delayedDefinition: StoryDefinition = {
   title: 'Daily visits',
   startNode: 'visit',
   nodes: {
-    visit: { id: 'visit', title: 'Visit', text: 'First visit.', choices: [{ id: 'finish', label: 'Finish', next: 'waiting' }] },
+    visit: {
+      id: 'visit', title: 'Visit', text: 'First visit.', guide: { title: 'Daily visit', objective: 'Visit today' },
+      choices: [{ id: 'finish', label: 'Finish', next: 'waiting' }],
+    },
     waiting: {
       id: 'waiting', title: 'Waiting', text: 'Come back tomorrow.', interactionOnly: true, unlockAfterGameDays: 1,
       choices: [{ id: 'return', label: 'Return', next: 'complete' }],
     },
-    complete: { id: 'complete', title: 'Complete', text: 'Welcome back.', terminal: true },
+    complete: { id: 'complete', title: 'Complete', text: 'Welcome back.', terminal: true, guide: null },
   },
 };
 
@@ -74,13 +87,21 @@ let delayedState: StoryState | null = createInitialStoryState(delayedDefinition,
 const delayedRuntime = new StoryRuntime(delayedDefinition, {
   get: () => delayedState,
   update: (_storyId, patch) => {
-    delayedState = { ...delayedState!, ...patch, flags: patch.flags ?? delayedState!.flags, visitCount: delayedState!.visitCount + (patch.visit ? 1 : 0), updatedAt: 2 };
+    delayedState = {
+      ...delayedState!, ...patch,
+      flags: patch.flags ?? delayedState!.flags,
+      visitCount: delayedState!.visitCount + (patch.visit ? 1 : 0),
+      activeGuide: patch.activeGuide === null ? undefined : patch.activeGuide ?? delayedState!.activeGuide,
+      updatedAt: 2,
+    };
     return delayedState;
   },
 });
 
 assert(delayedRuntime.choose('finish', 2, { gameDay: 12 }), 'finishing a visit should enter its waiting node');
+assert(delayedRuntime.state().activeGuide?.title === 'Daily visit', 'a node without guide copy should inherit the previous guide');
 assert(!delayedRuntime.isNodeAvailable({ gameDay: 12 }), 'the next visit should stay locked on the same game day');
 assert(delayedRuntime.choices({ gameDay: 12 }).length === 0, 'waiting-node choices should be hidden until another game day');
 assert(delayedRuntime.isNodeAvailable({ gameDay: 13 }), 'the next visit should unlock after the game day changes');
 assert(delayedRuntime.choose('return', 3, { gameDay: 13 }), 'the unlocked visit should advance normally');
+assert(delayedRuntime.state().activeGuide === undefined, 'guide: null should explicitly clear the inherited guide');

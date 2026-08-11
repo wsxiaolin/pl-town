@@ -68,12 +68,14 @@ function applyEffects(
 }
 
 export function createInitialStoryState(definition: StoryDefinition, now = Date.now()): StoryState {
+  const startGuide = definition.nodes[definition.startNode]?.guide;
   return {
     storyId: definition.id,
     definitionVersion: definition.definitionVersion,
     nodeId: definition.startNode,
     flags: {},
     visitCount: 0,
+    activeGuide: startGuide && typeof startGuide === 'object' ? startGuide : undefined,
     updatedAt: now,
   };
 }
@@ -123,12 +125,15 @@ export class StoryRuntime {
     const effects = [...legacyEffects, ...(choice.effects ?? [])];
     const applied = applyEffects(state, effects, now);
     const flags = applied.flags;
+    const declaredGuide = this.definition.nodes[choice.next]!.guide;
+    const activeGuide = declaredGuide === null ? null : declaredGuide ?? state.activeGuide;
     const next = this.repository.update(this.definition.id, {
       nodeId: choice.next,
       flags,
       ending: choice.ending,
       visit: choice.visit,
       nodeEnteredGameDay: context.gameDay,
+      activeGuide,
     }) ?? {
       ...state,
       nodeId: choice.next,
@@ -136,6 +141,7 @@ export class StoryRuntime {
       ending: choice.ending ?? state.ending,
       visitCount: state.visitCount + (choice.visit ? 1 : 0),
       nodeEnteredGameDay: context.gameDay,
+      activeGuide: activeGuide ?? undefined,
       updatedAt: now,
     };
     const transition = { state: next, node: this.definition.nodes[next.nodeId]!, choice, events: applied.events, effects };

@@ -41,8 +41,8 @@ export interface StoryDialogOption {
 }
 
 export interface StoryDialogModel {
-  title: string;
-  role?: string;
+  title?: string | null;
+  role?: string | null;
   text: string;
   tone?: 'default' | 'green';
   variant?: 'default' | 'story' | 'cg' | 'blackout';
@@ -78,6 +78,13 @@ function getElement<T extends HTMLElement>(document: Document, id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing city dialog element #${id}`);
   return element as T;
+}
+
+function setIdentityField(document: Document, id: string, value: string | null | undefined): void {
+  const element = getElement<HTMLElement>(document, id);
+  const text = value ?? '';
+  element.textContent = text;
+  element.hidden = text.trim().length === 0;
 }
 
 export function createCityDialogController(options: CityDialogControllerOptions): CityDialogController {
@@ -206,8 +213,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       if (playerPosition) {
         npc.mesh.rotation.y = Math.atan2(playerPosition.x - npc.mesh.position.x, playerPosition.z - npc.mesh.position.z);
       }
-      getElement<HTMLElement>(document, 'npcName').textContent = npc.profile.name;
-      getElement<HTMLElement>(document, 'npcRole').textContent = npc.profile.role;
+      setIdentityField(document, 'npcName', npc.profile.name);
+      setIdentityField(document, 'npcRole', npc.profile.role);
       getElement<HTMLElement>(document, 'npcAvatar').style.background = `linear-gradient(135deg,#${npc.profile.head.toString(16).padStart(6, '0')},#${npc.profile.body.toString(16).padStart(6, '0')})`;
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('story-mode');
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('cg-mode');
@@ -225,8 +232,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       activeNpc = null;
       activeStoryClose = story.onClose;
       activeStoryAdvance = story.onAdvance;
-      getElement<HTMLElement>(document, 'npcName').textContent = story.title;
-      getElement<HTMLElement>(document, 'npcRole').textContent = story.role ?? '城市见闻';
+      setIdentityField(document, 'npcName', story.title);
+      setIdentityField(document, 'npcRole', story.role);
       getElement<HTMLElement>(document, 'npcAvatar').style.background = story.tone === 'green'
         ? 'linear-gradient(135deg,#8bbf78,#315f49)'
         : 'linear-gradient(135deg,#e9dfc9,#a9a295)';
