@@ -15,9 +15,12 @@ import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, skipCG, startCG } from './cg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
+import { ECHO_ACT_ONE } from '../gameplay/content/stories/echoActOne';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
+import { LocalStorageStoryRepository } from '../adapters/storage/LocalStorageStoryRepository';
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
 import { createCityDialogController, type CityDialogController, type NpcEntityLike } from '../adapters/ui/cityDialogController';
+import { createStoryDialogFlow } from '../adapters/ui/storyDialogFlow';
 import { createCommunityPanelController } from '../adapters/ui/communityPanelController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
 import { setupRenderSettingsController } from '../adapters/ui/renderSettingsController';
@@ -87,6 +90,7 @@ let pendingSceneInterestPoint = null;
 let pendingDistance = 0;
 let questEventSequence = 0;
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
+const echoActOne = createStoryDialogFlow(ECHO_ACT_ONE, new LocalStorageStoryRepository(ECHO_ACT_ONE));
 // 游戏时间算法（写死）：由现实北京时间推算，全程统一，全中国同一现实时刻 = 同一游戏时间。
 // 基准：现实北京时间 00:00 视为游戏 00:00；加速不变，现实 1 分钟 = 游戏 1 小时。
 function computeGameTime(ms = Date.now()) {
@@ -1412,6 +1416,11 @@ function recordNpcInteraction(npcId) {
 }
 
 function openNpcDialog(npc) {
+  if (npc.profile.id === 'linche' && cityDialogs) {
+    recordNpcInteraction(npc.profile.id);
+    echoActOne.open(cityDialogs);
+    return;
+  }
   cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
 }
 function closeNpcDialog() { cityDialogs?.closeNpc(); }
