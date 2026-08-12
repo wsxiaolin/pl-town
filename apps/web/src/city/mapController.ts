@@ -160,7 +160,7 @@ export function createMapController(options: MapControllerOptions) {
     const cursor = options.getCursor();
     if (!cursor) return;
     const entry = options.getBuildingRoadEntry(building.group.position);
-    if (!entry) {
+    if (!entry || !Number.isFinite(entry.x) || !Number.isFinite(entry.z)) {
       options.movePlayerTo(building.group.position);
       return;
     }

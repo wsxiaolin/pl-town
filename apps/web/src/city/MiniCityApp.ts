@@ -265,7 +265,7 @@ function init() {
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isStoryLocked: isStoryLockedBuilding,
-    getBuildingRoadEntry: (position) => nearestRoadCoord(position.x, position.z),
+    getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget,
     movePlayerTo,
     clearPlayerPath: () => { playerPath = []; },
