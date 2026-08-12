@@ -10,6 +10,11 @@
 </head>
 <body class="day">
 
+  <div class="landscape-required" id="landscapeRequired" role="alert" aria-live="assertive">
+    <strong>请横屏使用</strong>
+    <span>旋转设备后即可进入小城</span>
+  </div>
+
   <!-- First-paint shell shown while the WebGL city is being prepared. -->
   <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
     <div class="boot-grid" aria-hidden="true"></div>
@@ -83,7 +88,7 @@
     <nav class="online-tabs phone-tabs">
       <button class="online-tab active" data-online-tab="chat" type="button">公聊</button>
       <button class="online-tab" data-online-tab="houses" type="button">住宅</button>
-      <button class="online-tab" data-online-tab="notifications" type="button">通知</button>
+      <button class="online-tab" data-online-tab="inventory" type="button">背包</button>
       <!-- 社交板块暂时注释，待后续恢复：
       <button class="online-tab" data-online-tab="social" type="button">社交</button>
       -->
@@ -97,7 +102,9 @@
         <div class="house-list" id="houseList"></div>
         <p class="house-help">住宅状态保存在服务器，全镇居民共享。</p>
       </section>
+      <!-- 通知板块暂时停用，保留结构以便后续恢复。
       <section class="online-view" id="onlineNotificationsView"><div class="phone-feed" id="phoneNotifications"><div class="phone-bind-prompt" id="phoneNotificationBind"><form id="phoneBindForm"><label><span>账号</span><input id="phoneBindEmail" type="text" placeholder="邮箱或手机号" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label><span>密码</span><input id="phoneBindPassword" type="password" placeholder="密码" autocomplete="current-password"></label><button type="submit">绑定</button><small id="phoneBindError" role="alert"></small></form></div></div></section>
+      -->
       <!-- 社交板块暂时注释，待后续恢复：
       <section class="online-view" id="onlineSocialView"><div class="phone-social"><div class="phone-social-hero"><span>PHYSICS LAB</span><strong>社区终端</strong><p>账号资料、作品和居民关系。</p></div><div class="phone-bind-prompt" id="phoneSocialBind"><strong>先绑定 Physics Lab</strong><p>绑定后可查看个人资料、收藏、关注和志愿者列表。</p><button type="button" id="phoneBindFromSocial">绑定账号</button><form id="phoneBindForm" hidden><input id="phoneBindEmail" type="email" placeholder="Physics Lab 邮箱" autocomplete="username"><input id="phoneBindPassword" type="password" placeholder="密码" autocomplete="current-password"><button type="submit">确认绑定</button><small id="phoneBindError"></small></form></div><div class="phone-social-grid" id="phoneSocialTools"><button data-pl-social="profile" type="button">我的资料</button><button data-pl-social="mine" type="button">我的作品</button><button data-pl-social="favorites" type="button">我的收藏</button><button data-pl-social="following" type="button">我的关注</button><button data-pl-social="followers" type="button">我的粉丝</button><button data-pl-social="volunteers" type="button">志愿者</button></div><div class="phone-social-results" id="phoneSocialResults"><p>选择一项社区服务。</p></div><button class="phone-social-wide" id="phoneOpenWorks" type="button">打开全城作品动态 <b>›</b></button></div></section>
       -->

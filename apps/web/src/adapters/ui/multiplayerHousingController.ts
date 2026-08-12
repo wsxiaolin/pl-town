@@ -66,10 +66,14 @@ export function createMultiplayerHousingController(options) {
     document.querySelectorAll('[data-online-tab]').forEach((tab) => tab.addEventListener('click', () => {
       const target = tab.dataset.onlineTab;
       document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item === tab));
-      const views={chat:'onlineChatView',houses:'onlineHousesView',archive:'onlineArchiveView',notifications:'onlineNotificationsView',social:'onlineSocialView'};
+      if (target === 'inventory') {
+        setPhoneOpen(false);
+        progression.openInventory();
+        return;
+      }
+      const views={chat:'onlineChatView',houses:'onlineHousesView',archive:'onlineArchiveView',social:'onlineSocialView'};
       document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === views[target]));
       if (target === 'chat') clearUnreadChats();
-      if (target === 'notifications') loadPhoneMessages();
     }, { signal: signal }));
     document.getElementById('phoneKnowledge')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('knowledgebase');},{signal:signal});
     document.getElementById('phoneSenate')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('senate');},{signal:signal});

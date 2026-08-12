@@ -832,7 +832,7 @@ function navigateUnlocked(b) {
   if (cityDialogs && echoStory.interactBuilding(b.id, cityDialogs)) { trackInteraction(b.id); return; }
   if (b.isStats) { openStatsPanel(); trackInteraction('stats'); return; }
   if (b.id === 'mall_south' || b.id === 'mall_west') { multiplayerHousing.progression.openShop(); trackInteraction(b.id); return; }
-  const phoneBuildings={bulletin:['notifications'],news:['notifications'],newsstand:['notifications'],community:['social','profile'],records:['social','mine'],tradingpost:['social','favorites'],guildhall:['social','volunteers'],mutualaid:['social','following']};
+  const phoneBuildings={bulletin:['inventory'],news:['inventory'],newsstand:['inventory'],community:['social','profile'],records:['social','mine'],tradingpost:['social','favorites'],guildhall:['social','volunteers'],mutualaid:['social','following']};
   if(phoneBuildings[b.id]){openPhoneApp(...phoneBuildings[b.id]);trackInteraction(b.id);return;}
   const configuredQuery=BUILDING_API_QUERIES[b.id];
   if(configuredQuery){openWorksPanel(b.id,configuredQuery);trackInteraction(b.id);return;}

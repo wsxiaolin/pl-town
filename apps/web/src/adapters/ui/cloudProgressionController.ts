@@ -38,25 +38,10 @@ export function createCloudProgressionController(options: Options) {
   let currencyValue: HTMLElement | null = null;
   let shopArea: HTMLElement | null = null;
   let panelTitle: HTMLElement | null = null;
-  let welcomeButton: HTMLButtonElement | null = null;
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
   const pendingRewards = new Map<string, (claimed: boolean) => void>();
 
   function setup(): void {
-    const welcome = options.document.querySelector<HTMLElement>('.welcome-block');
-    if (welcome && !welcome.querySelector('[data-inventory-button]')) {
-      welcomeButton = options.document.createElement('button');
-      welcomeButton.type = 'button';
-      welcomeButton.dataset.inventoryButton = '';
-      welcomeButton.className = 'inventory-trigger';
-      welcomeButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8.5V7a5 5 0 0 1 10 0v1.5"/><path d="M5.5 8.5h13a1 1 0 0 1 1 1v8.8a2.2 2.2 0 0 1-2.2 2.2H6.7a2.2 2.2 0 0 1-2.2-2.2V9.5a1 1 0 0 1 1-1Z"/><path d="M8.5 12.5h7M8.5 15.5h7"/></svg>';
-      welcomeButton.title = '打开背包';
-      welcomeButton.hidden = true;
-      welcomeButton.style.pointerEvents = 'auto';
-      welcomeButton.addEventListener('click', openInventory, { signal: options.signal });
-      welcome.appendChild(welcomeButton);
-    }
-
     panel = options.document.createElement('aside');
     panel.id = 'inventoryPanel';
     panel.className = 'stats-panel inventory-panel';
@@ -145,7 +130,6 @@ export function createCloudProgressionController(options: Options) {
     const welcome = options.document.querySelector<HTMLElement>('.welcome-block');
     welcome?.classList.remove('hidden');
     welcome?.querySelectorAll<HTMLElement>('.welcome-main, .welcome-sub, .welcome-accent').forEach((element) => { element.hidden = hasInventory; });
-    if (welcomeButton) welcomeButton.hidden = !hasInventory;
   }
 
   function renderShop(): void {
