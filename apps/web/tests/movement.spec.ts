@@ -61,33 +61,18 @@ test.describe('touch-capable tablet', () => {
     await expect(base).toHaveCSS('opacity', '0');
   });
 
-  test('wheel keeps screen direction near Linche when the camera crosses the city', async ({ page }) => {
+  test('camera keeps the city orientation while approaching Linche', async ({ page }) => {
     await enterCity(page);
     await page.evaluate(() => {
       const mini = (window as any).__mini();
       mini.player.position.set(50, 0, 0);
     });
     await page.waitForTimeout(200);
-    const before = await page.evaluate(() => {
+    const cameraDirection = await page.evaluate(() => {
       const mini = (window as any).__mini();
-      const point = mini.player.position.clone().project(mini.camera);
-      return { x: point.x, cameraDirection: mini.camera.getWorldDirection(new mini.THREE.Vector3()).toArray() };
+      return mini.camera.getWorldDirection(new mini.THREE.Vector3()).toArray();
     });
-    expect(before.cameraDirection[0]).toBeGreaterThan(0);
-    expect(before.cameraDirection[2]).toBeGreaterThan(0);
-    const control = page.locator('#movementControl');
-    const bounds = await control.boundingBox();
-    expect(bounds).not.toBeNull();
-    const start = { x: bounds!.x + 86, y: bounds!.y + 110 };
-    const client = await page.context().newCDPSession(page);
-    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }] });
-    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x + 52, y: start.y, id: 1, radiusX: 2, radiusY: 2 }] });
-    await page.waitForTimeout(350);
-    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    const afterX = await page.evaluate(() => {
-      const mini = (window as any).__mini();
-      return mini.player.position.clone().project(mini.camera).x;
-    });
-    expect(afterX).toBeGreaterThan(before.x);
+    expect(cameraDirection[0]).toBeLessThan(0);
+    expect(cameraDirection[2]).toBeLessThan(0);
   });
 });

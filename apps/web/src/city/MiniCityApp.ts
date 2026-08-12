@@ -98,7 +98,6 @@ let sceneInterestPoints;
 let sceneInterestPointController;
 let pendingSceneInterestPoint = null;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
-const cameraForward = new THREE.Vector3();
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const residences = [];
@@ -154,7 +153,6 @@ function init() {
     getTarget: () => cameraTarget,
     isEchoInterior: () => Boolean(echoStoryController?.isInteriorView()),
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
-    echoCenter: ECHO_OBSERVATORY_AREA.center,
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
@@ -275,10 +273,7 @@ function init() {
     openResidence: () => undefined,
   });
   mapController.setup(eventController.signal);
-  movementInputController=createMovementInputController({ document,window,signal:eventController.signal,
-    onManualStart:()=>{playerPath=[];pendingBuilding=null;pendingSceneInterestPoint=null;},
-    getCameraForward:()=>{ camera?.getWorldDirection(cameraForward); return {x:cameraForward.x,z:cameraForward.z}; },
-  });
+  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];pendingBuilding=null;pendingSceneInterestPoint=null;}});
   playerController = createPlayerController({
     getCursor: () => cursorChar,
     getCamera: () => camera,

@@ -15,11 +15,3 @@ test('diagonal input is normalized and idle input stays zero', () => {
   assert.ok(Math.abs(Math.hypot(diagonal.x, diagonal.z) - 1) < 0.0001);
   assert.deepEqual(screenVectorToWorld(0, 0), { x: 0, z: 0 });
 });
-
-test('screen movement follows a camera that has crossed to the other side of town', () => {
-  const mirroredForward = { x: Math.SQRT1_2, z: Math.SQRT1_2 };
-  const up = screenVectorToWorld(0, -1, mirroredForward);
-  const right = screenVectorToWorld(1, 0, mirroredForward);
-  assert.ok(up.x > 0 && up.z > 0);
-  assert.ok(right.x < 0 && right.z > 0);
-});
