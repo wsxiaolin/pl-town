@@ -1,11 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { SATELLITE_CITY } from '../city/data/cityConfig';
-import { RENDER_ORDER, SURFACE_Y } from './layers';
 
 const MODEL_URLS = {
   banana: new URL('../assets/models/banana.glb', import.meta.url).href,
-  buildings: new URL('../assets/models/buildings.glb', import.meta.url).href,
 };
 
 export type ReplaceableBuilding = {
@@ -15,8 +12,6 @@ export type ReplaceableBuilding = {
 };
 
 const loader = new GLTFLoader();
-const PACK_POSITIONS = SATELLITE_CITY.buildingPositions.slice(0, 13).map(([x, z]) => ({ x, z }));
-const DESIGNED_POSITIONS = SATELLITE_CITY.buildingPositions.slice(13).map(([x, z]) => ({ x, z }));
 
 function detachedClone(source: THREE.Object3D): THREE.Object3D {
   source.updateWorldMatrix(true, true);
@@ -80,84 +75,8 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
   if (firstMaterial) building.bodyMat = firstMaterial;
 }
 
-function addBuildingPack(scene: THREE.Scene, sources: THREE.Object3D[]): void {
-  const plotMaterial = new THREE.MeshStandardMaterial({ color: 0xd6d3cc, roughness: 0.92 });
-  PACK_POSITIONS.forEach((position, index) => {
-    const x = position.x!;
-    const z = position.z!;
-    const source = sources[index % sources.length];
-    if (!source) return;
-    const model = normalizeModel(detachedClone(source), new THREE.Vector3(7, 8, 7));
-    model.name = `imported-building-${index + 1}`;
-    model.userData.assetPack = 'buildings';
-    model.position.set(x, 0, z);
-    // Keep each house facing the same direction so the satellite rows read as
-    // a continuous, orderly residential block.
-    model.rotation.y = 0;
-    scene.add(model);
-    const plot = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 8.4), plotMaterial);
-    plot.rotation.x = -Math.PI / 2;
-    plot.position.set(x, SURFACE_Y.buildingPlot, z);
-    plot.receiveShadow = true;
-    plot.renderOrder = RENDER_ORDER.buildingPlot;
-    scene.add(plot);
-  });
-}
-
-function addDesignedBuildings(scene: THREE.Scene, buildings: ReplaceableBuilding[]): void {
-  const plotMaterial = new THREE.MeshStandardMaterial({ color: 0xd6d3cc, roughness: 0.92 });
-  const sources = ['library', 'academy', 'catcafe', 'teahouse', 'qipai_hall']
-    .map(id => buildings.find(building => building.id === id)?.group)
-    .filter((group): group is THREE.Group => Boolean(group));
-  DESIGNED_POSITIONS.forEach((position, index) => {
-    const x = position.x!;
-    const z = position.z!;
-    const source = sources[index % sources.length];
-    if (!source) return;
-    const model = normalizeModel(detachedClone(source), new THREE.Vector3(7, 7, 7));
-    model.name = `satellite-designed-${index + 1}`;
-    model.userData.assetPack = 'main-city-design';
-    model.position.set(x, 0, z);
-    model.rotation.y = 0;
-    scene.add(model);
-    const plot = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 7.4), plotMaterial);
-    plot.rotation.x = -Math.PI / 2;
-    plot.position.set(x, SURFACE_Y.buildingPlot, z);
-    plot.receiveShadow = true;
-    plot.renderOrder = RENDER_ORDER.buildingPlot;
-    scene.add(plot);
-  });
-}
-
-// Collect atomic building units: nodes whose children are all leaf meshes.
-// Multi-mesh units (a building made of walls/roof/shops parts) stay as one model.
-// Merged clusters (a node containing nested groups) are skipped since they cannot be split.
-function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
-  const units: THREE.Object3D[] = [];
-  const visit = (node: THREE.Object3D) => {
-    let meshCount = 0;
-    let nestedGroups = 0;
-    for (const child of node.children) {
-      if ((child as THREE.Mesh).isMesh) meshCount += 1;
-      else nestedGroups += 1;
-    }
-    if (meshCount > 0 && nestedGroups === 0) units.push(node);
-    for (const child of node.children) {
-      if (!(child as THREE.Mesh).isMesh) visit(child);
-    }
-  };
-  visit(root);
-  return units;
-}
-
-export async function addRealBuildingModels(scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
+export async function addRealBuildingModels(_scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
   const bananaBuilding = buildings.find(building => building.id === 'banana_palace');
-  const [banana, buildingPack] = await Promise.all([
-    loader.loadAsync(MODEL_URLS.banana),
-    loader.loadAsync(MODEL_URLS.buildings),
-  ]);
+  const banana = await loader.loadAsync(MODEL_URLS.banana);
   if (bananaBuilding) replaceBuilding(bananaBuilding, banana.scene);
-  const candidates = collectUnits(buildingPack.scene);
-  addBuildingPack(scene, candidates);
-  addDesignedBuildings(scene, buildings);
 }

@@ -8,7 +8,7 @@ import { createProceduralTextureLibrary } from '../rendering/proceduralTextureLi
 import { createBuildingMeshFactory } from '../rendering/buildingMeshFactory';
 import { createWorldDecorations } from '../rendering/worldDecorations';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
-import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS, SATELLITE_CITY } from './data/cityConfig';
+import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_API_QUERIES, BUILDING_CONTENT } from './data/buildings';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
@@ -798,7 +798,7 @@ function flushDistance(amount) {
 
 const roadNavigation = createRoadNavigationSystem({
   roadCoords: ROAD_COORDS,
-  satelliteCity: SATELLITE_CITY, echoObservatoryArea: ECHO_OBSERVATORY_AREA,
+  echoObservatoryArea: ECHO_OBSERVATORY_AREA,
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
 });
