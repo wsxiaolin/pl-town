@@ -129,3 +129,12 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 ## 前端迁移验证
 
 涉及领域规则或模块边界时，至少运行 `npm run check:source-size`、`npm run typecheck`、`npm run test:domain` 和 `npm run build`。只有修改浏览器交互、布局、WebGL 或端到端流程时才运行 `npm run test:web`；如果环境无法启动 Chromium，应在交付说明中明确记录。
+
+## 3D 渲染：远镜头下的 z-fighting
+
+所有 agent 在改动画布内容或场景几何时，必须严肃考虑**远镜头（拉远视角 / 全图视野）下的 z-fighting（深度冲突、深度闪烁）**问题：
+
+- 任何新增或修改的平面、贴地网格、道路标记或覆盖层，不要与其他表面共用完全相同的 `y` 高度。`apps/web/src/rendering/layers.ts` 的 `SURFACE_Y` 各层之间必须保留明确、足够的 Y 差（例如 plaza 与 landscape 至少相差 0.004）。
+- 当多个表面在同一高度或极近高度叠加、且都依赖 `renderOrder` 或 `depthWrite=false` 时，远镜头拉远或相机移动过程中会出现帧间闪烁的正方形 / 覆盖层重影。
+- 修改贴地覆盖层前，先在脑中模拟全图视野（`cameraZoom` 拉大到 15 左右）与接近地面视野两种情况，确认不会出现上述闪烁；涉及可见改动的提交建议至少手动拉一次远视图核对。
+- 排查疑似 z-fighting 时，优先检查是否存在 `y` 完全相等或差值小于 0.001 的共面网格，而不只是改纹理或颜色。
