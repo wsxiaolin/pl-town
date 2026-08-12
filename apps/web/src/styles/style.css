@@ -918,8 +918,7 @@ body.night .time-display::before { background: #8FB4E8; }
 }
 .map-paper {
   position: relative;
-  width: 100%;
-  max-width: 640px;
+  width: min(640px, calc(100vw - 40px), calc(100dvh - 84px));
   background: linear-gradient(135deg, #F5E6C8 0%, #EEDCB3 40%, #E8D5A8 100%);
   border: 1px solid #C4A86D;
   border-radius: 14px;
@@ -928,6 +927,7 @@ body.night .time-display::before { background: #8FB4E8; }
     0 4px 12px rgba(0,0,0,0.15),
     inset 0 1px 0 rgba(255,255,255,0.4);
   padding: 18px 20px 20px;
+  box-sizing: border-box;
 }
 .map-title {
   margin: 0 0 10px;
@@ -995,6 +995,17 @@ body.night .time-display::before { background: #8FB4E8; }
   overflow: hidden;
   border: 1px solid #C4A86D;
   background: #F0E2C0;
+}
+
+@media (max-width: 680px), (max-height: 540px) {
+  .map-overlay { padding: 8px; }
+  .map-paper {
+    width: min(calc(100vw - 16px), calc(100dvh - 48px));
+    padding: 8px;
+    border-radius: 8px;
+  }
+  .map-title { margin-bottom: 5px; font-size: 10px; }
+  .map-close { top: 5px; right: 5px; width: 24px; height: 24px; }
 }
 .map-image-wrap img {
   display: block;

@@ -266,6 +266,7 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   await page.locator('#mapToggle').click({ force: true });
   await expect(page.locator('.map-icon[data-building-id="litreview"]')).toHaveCount(0);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1);
+  await expect(page.locator('.map-icon[data-building-id="echo-observatory"]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__mini().interactBuilding('litreview'))).toBe(false);
 
   const lockedAudit = await page.evaluate(() => {
