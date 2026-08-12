@@ -51,12 +51,10 @@ let eventController = new AbortController();
 let raycastBuildingGroups = [];
 const buildingPlotTargets = [];
 const labelWorldPosition = new THREE.Vector3();
-
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
 
 const P = PALETTE;
-
 const proceduralTextures = createProceduralTextureLibrary(
   resources,
   () => renderer,
@@ -138,6 +136,7 @@ const ACHIEVEMENTS = [
   { id:'cat_cafe_note', name:'猫咖拾遗',      desc:'发现猫咖馆旁掉落的纸张',                  check:()=>false, directOnly:true },
   { id:'minicity_origin',name:'物实城缘起',    desc:'触碰城中守望已久的沃柑树',                check:()=>false, directOnly:true },
   { id:'dragonwell_assimilation',name:'被龙井同化',desc:'向爬满绿色植物的石井献上龙井茶',          check:()=>false, directOnly:true },
+  { id:'west_beach_encounter',name:'海神的考验',desc:'在城市西侧海滩通过亦航海神的考验',check:()=>false,directOnly:true },
   { id:'echo_unnoticed',name:'无人问津',desc:'在回声中选择离开',check:()=>false,directOnly:true },
   { id:'echo_eternal_lie',name:'永恒的谎言',desc:'让故事继续循环',check:()=>false,directOnly:true },
   { id:'echo_real_echo',name:'真正的回声',desc:'以真实回应林澈',check:()=>false,directOnly:true },
@@ -337,7 +336,7 @@ function init() {
       hasItem: (itemId, count=1) => multiplayerHousing.progression.isOnline()
         && (multiplayerHousing.progression.getProgress().inventory[itemId] ?? 0) >= count,
       consumeItem: (itemId, count) => multiplayerHousing.progression.consumeItem(itemId, count),
-      claimDailyReward: (rewardId) => multiplayerHousing.progression.claimDailyReward(rewardId),
+      claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId), hasAchievement: (achievementId) => multiplayerHousing.progression.getProgress().achievements.includes(achievementId),
     },
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
@@ -355,6 +354,7 @@ function init() {
         delete document.body.dataset.wellVision;
       }
     },
+    setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
   });
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
@@ -755,6 +755,8 @@ function loop() {
   });
   playerController?.updateCamera();
   sceneInterestPoints?.update(now/1000);
+  const beach=cursorChar?.visible&&!cityDialogs?.isOpen()?sceneInterestPoints?.entities.get('west-beach'):null;
+  if(beach&&cursorChar.position.distanceTo(beach.interactionPosition)<=3.2) void sceneInterestPointController?.interact('west-beach');
   updateLabels();
   renderer.render(scene,camera);
   if(mapController?.isOpen()) mapController.updateMarker();

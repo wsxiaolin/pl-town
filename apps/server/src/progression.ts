@@ -36,6 +36,7 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   cat_cafe_note: 30,
   minicity_origin: 50,
   dragonwell_assimilation: 80,
+  west_beach_encounter: 50,
   echo_unnoticed: 30,
   echo_eternal_lie: 40,
   echo_real_echo: 80,
@@ -51,6 +52,10 @@ export const SHOP_PRODUCTS = Object.freeze({
 
 export const DAILY_REWARDS = Object.freeze({
   mandarin_daily: { itemId: 'mandarin', quantity: 1 },
+});
+
+export const ONE_TIME_REWARDS = Object.freeze({
+  tirpitz_beach: { itemId: 'tirpitz_card', quantity: 1 },
 });
 
 export type ProgressionCatalog = {

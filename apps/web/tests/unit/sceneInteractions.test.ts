@@ -3,6 +3,8 @@ import test from 'node:test';
 import type { StoryDialogModel } from '../../src/adapters/ui/cityDialogController';
 import { getNpcType } from '../../src/city/data/npcTypes';
 import { createSceneInterestPointController } from '../../src/city/sceneInterestPointController';
+import { NPC_PROFILES } from '../../src/city/data/npcs';
+import { residenceStyleFor } from '../../src/rendering/residenceStyles';
 import {
   beijingDayKey,
   evaluateDailyOrange,
@@ -49,7 +51,8 @@ test('scene controller claims server reward and completes the well story', async
     isOnline: () => true,
     hasItem: (itemId) => itemId === WORLD_ITEM_IDS.longjingTea,
     consumeItem: async (itemId) => { consumed.push(itemId); return true; },
-    claimDailyReward: async (rewardId) => { claims.push(rewardId); return true; },
+    claimReward: async (rewardId) => { claims.push(rewardId); return true; },
+    hasAchievement: () => false,
   };
   const controller = createSceneInterestPointController({
     dialogs: { openStory: (story) => { activeStory = story; } },
@@ -82,7 +85,8 @@ test('cat cafe note deliberately opens with blank copy and awards discovery', as
       isOnline: () => false,
       hasItem: () => false,
       consumeItem: () => false,
-      claimDailyReward: () => false,
+      claimReward: () => false,
+      hasAchievement: () => false,
     },
     awardAchievement: (id) => { awards.push(id); },
     showToast: () => undefined,
@@ -90,4 +94,51 @@ test('cat cafe note deliberately opens with blank copy and awards discovery', as
   await controller.interact('cat-cafe-note');
   assert.equal(activeStory?.text, '');
   assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.catCafeNote.id]);
+});
+
+test('亦航 keeps the requested schedule, park spawn, and dialogue branches', () => {
+  const yihang = NPC_PROFILES.find((profile) => profile.id === 'yihang') as any;
+  assert.ok(yihang);
+  assert.deepEqual(yihang.workHours, [10, 22]);
+  assert.deepEqual(yihang.spawnArea, [15, 30, 2.4]);
+  assert.equal(yihang.spawnChance, 1);
+  assert.equal(yihang.guaranteedSpawn, true);
+  assert.equal(yihang.dialog[0].options.length, 3);
+  assert.match(yihang.dialog[2].text, /棍母/);
+});
+
+test('residence styles cover ten models while neighboring lots share a family', () => {
+  const styles = new Set<number>();
+  for (let x = -39; x <= 39; x += 3) {
+    for (let z = -39; z <= 39; z += 3) styles.add(residenceStyleFor(x, z, Math.abs(x * 31 + z)));
+  }
+  assert.deepEqual([...styles].sort((a, b) => a - b), [0,1,2,3,4,5,6,7,8,9]);
+  const family = Math.floor(residenceStyleFor(-30, -30, 0) / 2);
+  assert.equal(Math.floor(residenceStyleFor(-27, -27, 8) / 2), family);
+});
+
+test('west beach encounter grants Tirpitz once and awards the achievement', async () => {
+  let activeStory: StoryDialogModel | undefined;
+  const claims: string[] = [];
+  const awards: string[] = [];
+  const phases: string[] = [];
+  const controller = createSceneInterestPointController({
+    dialogs: { openStory: (story) => { activeStory = story; } },
+    inventory: {
+      isOnline: () => true,
+      hasItem: () => false,
+      consumeItem: () => false,
+      claimReward: async (rewardId) => { claims.push(rewardId); return true; },
+      hasAchievement: () => false,
+    },
+    awardAchievement: (id) => { awards.push(id); },
+    showToast: () => undefined,
+    setBeachEncounterPhase: (phase) => { phases.push(phase); },
+  });
+  await controller.interact('west-beach');
+  for (let step = 0; step < 5; step += 1) await activeStory?.options?.[0]?.onPick();
+  assert.deepEqual(claims, ['tirpitz_beach']);
+  assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.westBeachEncounter.id]);
+  assert.ok(phases.includes('revealed') && phases.includes('reward'));
+  assert.equal(activeStory?.role, '皮尔皮茨号 ×1');
 });

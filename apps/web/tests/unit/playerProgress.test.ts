@@ -25,6 +25,8 @@ assert(!canInteractWithBuilding(normalized, 'library'), 'locked buildings should
 
 const items = inventoryEntries(normalized);
 assert(items.some((item) => item.itemId === 'dragonwell_tea' && item.name === '龙井茶' && item.quantity === 2), 'inventory entries should expose labels and merged quantities');
+const card = inventoryEntries(normalizePlayerProgress({ ...normalized, inventory: { tirpitz_card: 1 } }));
+assert(card[0]?.name === '皮尔皮茨号', 'beach reward should use its inventory label');
 
 const questView = toQuestProgressView(normalized);
 assert(questView.inventory.mandarin === 1, 'quest view should expose cloud inventory');

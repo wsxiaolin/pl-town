@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { logger } from './logger.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS } from './progression.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean };
 const clients = new Map<string, Client>();
@@ -148,9 +148,12 @@ function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'progress.reward.claim') {
-      if (!validId(message.rewardId) || !(message.rewardId in DAILY_REWARDS)) return fail(client.socket, 'Reward is not available');
-      const reward = DAILY_REWARDS[message.rewardId as keyof typeof DAILY_REWARDS];
-      const result = db.claimReward(userId, message.rewardId, shanghaiDayKey(), reward.itemId, reward.quantity);
+      if (!validId(message.rewardId)) return fail(client.socket, 'Reward is not available');
+      const dailyReward = DAILY_REWARDS[message.rewardId as keyof typeof DAILY_REWARDS];
+      const oneTimeReward = ONE_TIME_REWARDS[message.rewardId as keyof typeof ONE_TIME_REWARDS];
+      const reward = dailyReward ?? oneTimeReward;
+      if (!reward) return fail(client.socket, 'Reward is not available');
+      const result = db.claimReward(userId, message.rewardId, oneTimeReward ? 'once' : shanghaiDayKey(), reward.itemId, reward.quantity);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
       return;
     }

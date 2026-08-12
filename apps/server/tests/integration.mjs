@@ -128,6 +128,12 @@ try {
   send(alice, { type: 'progress.reward.claim', rewardId: 'mandarin_daily' });
   const repeatedDaily = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'reward.claimed' && message.event.claimed === false);
   if (repeatedDaily.progress.inventory.mandarin !== 1) throw new Error('Daily reward must only be granted once per Shanghai day');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'tirpitz_beach' });
+  const beachReward = await waitFor(alice, 'progress.updated', (message) => message.event?.rewardId === 'tirpitz_beach' && message.event.claimed === true);
+  if (beachReward.progress.inventory.tirpitz_card !== 1) throw new Error('Beach reward must grant the Tirpitz card');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'tirpitz_beach' });
+  const repeatedBeachReward = await waitFor(alice, 'progress.updated', (message) => message.event?.rewardId === 'tirpitz_beach' && message.event.claimed === false);
+  if (repeatedBeachReward.progress.inventory.tirpitz_card !== 1) throw new Error('Beach reward must only be granted once');
 
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);

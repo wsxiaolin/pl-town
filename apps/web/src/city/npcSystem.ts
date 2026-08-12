@@ -62,9 +62,9 @@ export function createNpcSystem(options) {
     NPC_PROFILES.forEach(profile=>{
       const g=makeCharacter(profile.head,profile.body);
       g.traverse(c=>{ if(c.isMesh) { c.userData.npcId=profile.id; c.userData.npcType=getNpcType(profile); } });
-      const start=new THREE.Vector3(profile.home[0],0,profile.home[1]);
+      const start=randomSpawnPosition(profile) ?? new THREE.Vector3(profile.home[0],0,profile.home[1]);
       g.position.copy(start); scene.add(g);
-      const npc={profile, mesh:g, tween:null, spawnTimer:Math.random()*10, idleTimer:0};
+      const npc={profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0};
       npcList.push(npc);
       if(profile.behavior==='rare') g.visible=false;
       if(profile.storyOnly) g.visible=false;
@@ -76,6 +76,14 @@ export function createNpcSystem(options) {
     actors.cursorChar.visible=false; scene.add(actors.cursorChar);
     actors.playerMarker=makePlayerMarker();
     actors.playerMarker.position.y=0.95; actors.cursorChar.add(actors.playerMarker);
+  }
+
+  function randomSpawnPosition(profile) {
+    if (!profile.spawnArea) return null;
+    const [x,z,radius]=profile.spawnArea;
+    const angle=Math.random()*Math.PI*2;
+    const distance=Math.sqrt(Math.random())*radius;
+    return new THREE.Vector3(x+Math.cos(angle)*distance,0,z+Math.sin(angle)*distance);
   }
   
   function hoursInRange(h, wh) {
@@ -93,7 +101,7 @@ export function createNpcSystem(options) {
   }
   
   function pickPatrolSpot(npc) {
-    const radius = hoursInRange(getGameClock(), npc.profile.workHours) ? 3.5 : 2.5;
+    const radius = npc.profile.patrolRadius ?? (hoursInRange(getGameClock(), npc.profile.workHours) ? 3.5 : 2.5);
     const center = npcDesiredTarget(npc);
     const pool=[];
     ROAD_COORDS.forEach(x=>ROAD_COORDS.forEach(z=>{
@@ -168,16 +176,27 @@ export function createNpcSystem(options) {
         return;
       }
       if (behavior==='rare') {
+        if (!hoursInRange(getGameClock(), npc.profile.workHours)) {
+          npc.mesh.visible=false;
+          npc.spawnTimer=0;
+          if(npc.tween){ npc.tween.kill(); npc.tween=null; }
+          return;
+        }
         npc.spawnTimer-=1;
         if(npc.spawnTimer<=0){
           npc.spawnTimer=14+Math.random()*18;
           const appear=Math.random()<npc.profile.spawnChance;
+          const wasVisible=npc.mesh.visible;
           npc.mesh.visible=appear;
-          if(appear && visibleRare>=MAX_RARE_VISIBLE_NPCS){
+          if(appear && visibleRare>=MAX_RARE_VISIBLE_NPCS && !npc.profile.guaranteedSpawn){
             npc.mesh.visible=false;
             npc.spawnTimer=6+Math.random()*8;
           } else if(appear){
             visibleRare+=1;
+            if(!wasVisible){
+              const spawn=randomSpawnPosition(npc.profile);
+              if(spawn) npc.mesh.position.copy(spawn);
+            }
           } else if(!appear && npc.tween){ npc.tween.kill(); npc.tween=null; }
         }
       } else {

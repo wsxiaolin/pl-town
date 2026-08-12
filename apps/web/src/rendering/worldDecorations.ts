@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
+import { createResidenceModel } from './residenceStyles';
 
 export function createWorldDecorations(options) {
   const {
@@ -174,34 +175,12 @@ export function createWorldDecorations(options) {
   }
   
   function addSmallBlock(x,y,z,type,i) {
-    const g = new THREE.Group();
-    const w = type===2 ? 1.2 : 1.6, d = type===1 ? 1.1 : 1.55, h = 0.9 + ((i%5)*0.24);
-    // Varied colors for residential feel
-    const wallColors = [
-      [0xF2F1EE, 'wall'], [0xECEBE8, 'wall'], [0xE8D5A8, 'brick'],
-      [0xD8C8A0, 'brick'], [0xF0EFEC, 'stone'], [0xE8E0D5, 'brick'],
-      [0xD5D6D8, 'wall'], [0xC5C5C2, 'brick'], [0xD8D6D0, 'stone'],
-      [0xF0EDE5, 'wall'], [0xC8CED4, 'wall'], [0xE4E3E0, 'stone']
-    ];
-    const wc = wallColors[i % wallColors.length];
-    const roofColors = [P.ROOF_RIM, 0xDAD9D5, 0xC45A4A, 0x8A5A3A, 0xB0AFAA];
-    const rc = roofColors[i % roofColors.length];
-    const roofTex = i%3===0 ? 'rooftile' : i%3===1 ? 'metal' : 'pagoda_tile';
-    part(g,new THREE.BoxGeometry(w+0.35,0.12,d+0.35),{color:P.BUILDING_BASE,roughness:0.86,tex:'stone',rx:1,ry:1},[0,0.06,0]);
-    part(g,new THREE.BoxGeometry(w,h,d),{color:wc[0],roughness:0.32,tex:wc[1],rx:1,ry:1},[0,0.12+h/2,0]);
-    part(g,new THREE.BoxGeometry(w+0.12,0.08,d+0.12),{color:rc,roughness:0.6,tex:roofTex,rx:2,ry:2},[0,0.12+h+0.04,0]);
-    if(type===0) part(g,new THREE.ConeGeometry(Math.max(w,d)*0.55,0.48,4),{color:rc,roughness:0.5,tex:roofTex,rx:2,ry:1},[0,0.12+h+0.28,0]).rotation.y=Math.PI/4;
-    if(type===1) part(g,new THREE.CylinderGeometry(0.32,0.32,0.44,14),{color:0xF7F6F3,roughness:0.22,tex:'metal',rx:1,ry:1},[0,0.12+h+0.3,0]);
-    const windows = type===2 ? 4 : 2;
-    for(let n=0;n<windows;n++){
-      const wx=-w/2+0.35+(n%2)*0.7, wy=0.42+Math.floor(n/2)*0.42;
-      part(g,new THREE.BoxGeometry(0.22,0.16,0.03),{color:0xB8CCEA,emissive:0xA8C8F8,emissiveIntensity:getIsNight()?0.12:0.02,roughness:0.2},[wx,wy,d/2+0.02],false);
-    }
+    const { group:g, styleId, styleName } = createResidenceModel({x,z,index:i,lotType:type,isNight:getIsNight(),part});
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
     g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
-    g.traverse((object)=>{ if(object.isMesh) object.userData.residenceId=residenceId; });
+    g.traverse((object)=>{ if(object.isMesh) { object.userData.residenceId=residenceId; object.userData.residenceStyleId=styleId; } });
     scene.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
-    residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅`,group:g,labelEl:null});
+    residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅 · ${styleName}`,group:g,labelEl:null,styleId});
     // ── 建筑下面的小地块贴图（成片共享纹理）──
     const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
     const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];

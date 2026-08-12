@@ -53,6 +53,7 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   radish: '萝卜',
   music_box: '音乐盒',
   mandarin: '沃柑',
+  tirpitz_card: '皮尔皮茨号',
 });
 
 const validStringArray = (value: unknown): string[] => Array.isArray(value)

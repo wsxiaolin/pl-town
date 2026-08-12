@@ -101,6 +101,7 @@ export function createCloudProgressionController(options: Options) {
     if (event.welcomeItemsGranted) options.showToast('背包已解锁，获得城市导览册和居民纪念徽章');
     else if (event.type === 'achievement.unlocked' && event.reward) options.showToast(`成就奖励 +${event.reward} 物实币`);
     else if (event.type === 'shop.purchased') options.showToast('龙井茶已放入背包');
+    else if (event.type === 'reward.claimed' && event.rewardId === 'tirpitz_beach') options.showToast(event.claimed ? '皮尔皮茨号已放入背包' : '皮尔皮茨号已经领取过了');
     else if (event.type === 'reward.claimed') options.showToast(event.claimed ? '今日沃柑已放入背包' : '今天已经领取过沃柑了');
   }
 
@@ -114,7 +115,7 @@ export function createCloudProgressionController(options: Options) {
         row.dataset.itemId = entry.itemId;
         const icon = options.document.createElement('span');
         icon.className = 'inventory-item-icon';
-        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : '册';
+        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : entry.itemId === 'tirpitz_card' ? '舰' : '册';
         const name = options.document.createElement('span');
         name.className = 'sp-ul-name';
         name.textContent = entry.name;
@@ -240,7 +241,7 @@ export function createCloudProgressionController(options: Options) {
     });
   }
 
-  function claimDailyReward(rewardId: string): Promise<boolean> {
+  function claimReward(rewardId: string): Promise<boolean> {
     if (!online) { offlineNotice(); return Promise.resolve(false); }
     if (pendingRewards.has(rewardId)) return Promise.resolve(false);
     return new Promise((resolve) => {
@@ -266,7 +267,7 @@ export function createCloudProgressionController(options: Options) {
 
   return {
     setup, setConnection, applySnapshot, interactBuilding, unlockAchievement, syncAchievements,
-    buyProduct, consumeItem, claimDailyReward, openInventory, openShop, closePanel,
+    buyProduct, consumeItem, claimReward, openInventory, openShop, closePanel,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),
     isOnline: () => online, handleError,

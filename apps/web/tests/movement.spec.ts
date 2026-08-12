@@ -62,6 +62,26 @@ test('generated resident houses block manual movement', async ({ page }) => {
   expect(collision!.crossed).toBe(false);
 });
 
+test('city renders ten residence models and the modeled west beach', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const sceneContent = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    const styles = new Set<number>();
+    mini.scene.traverse((object: any) => {
+      if (typeof object.userData?.residenceStyleId === 'number') styles.add(object.userData.residenceStyleId);
+    });
+    return {
+      styles: [...styles].sort((a, b) => a - b),
+      beach: Boolean(mini.scene.getObjectByName('west-beach')),
+      seaGod: Boolean(mini.scene.getObjectByName('yihang-sea-god')),
+      ships: ['bismarck-model', 'hipper-model'].every((name) => Boolean(mini.scene.getObjectByName(name))),
+    };
+  });
+  expect(sceneContent.styles).toEqual([0,1,2,3,4,5,6,7,8,9]);
+  expect(sceneContent.beach && sceneContent.seaGod && sceneContent.ships).toBe(true);
+});
+
 test.describe('touch-capable tablet', () => {
   test.use({ hasTouch: true, viewport: { width: 1024, height: 768 } });
 
