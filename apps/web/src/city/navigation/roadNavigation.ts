@@ -14,6 +14,14 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const SATELLITE_CITY = options.satelliteCity;
   const ECHO_OBSERVATORY_AREA = options.echoObservatoryArea || { roadNodes: [], roadSegments: [] };
   const CITY_LIMIT = options.cityLimit;
+  const PLAYER_CLEARANCE = 0.38;
+  const allExtraNodes = [...SATELLITE_CITY.roadNodes, ...ECHO_OBSERVATORY_AREA.roadNodes];
+  const WORLD_BOUNDS = {
+    minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
+    maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
+    minZ: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([,z]) => z)) - 8,
+    maxZ: Math.max(CITY_LIMIT, ...allExtraNodes.map(([,z]) => z)) + 8,
+  };
   const buildings = options.getBuildings();
   const buildingBoxes = [];
   const obstacleGroups = [];
@@ -153,6 +161,27 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const t=len2<1e-9?0:clamp(((0-x1)*dx+(0-z1)*dz)/len2,0,1);
     const cx=x1+dx*t, cz=z1+dz*t;
     return cx*cx+cz*cz < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR;
+  }
+
+  function positionBlocked(x,z) {
+    if(x<WORLD_BOUNDS.minX||x>WORLD_BOUNDS.maxX||z<WORLD_BOUNDS.minZ||z>WORLD_BOUNDS.maxZ) return true;
+    if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
+    return pointInAnyBuilding(x,z);
+  }
+
+  function resolveMovement(from,target) {
+    const desired = new THREE.Vector3(
+      clamp(target.x,WORLD_BOUNDS.minX,WORLD_BOUNDS.maxX),
+      0,
+      clamp(target.z,WORLD_BOUNDS.minZ,WORLD_BOUNDS.maxZ),
+    );
+    if(positionBlocked(from.x,from.z)) return positionBlocked(desired.x,desired.z) ? from.clone() : desired;
+    if(!positionBlocked(desired.x,desired.z)&&!pathBlocked(from.x,from.z,desired.x,desired.z)) return desired;
+    const alongX=new THREE.Vector3(desired.x,0,from.z);
+    const alongZ=new THREE.Vector3(from.x,0,desired.z);
+    const candidates=[alongX,alongZ].filter(p=>!positionBlocked(p.x,p.z)&&!pathBlocked(from.x,from.z,p.x,p.z));
+    candidates.sort((a,b)=>a.distanceToSquared(desired)-b.distanceToSquared(desired));
+    return candidates[0] || from.clone();
   }
   
   function aStarRoad(sNode,eNode,graph) {
@@ -326,14 +355,14 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     buildings.forEach(bd=>{
       b.setFromObject(bd.group);
       buildingBoxes.push({
-        minX:b.min.x-0.15, maxX:b.max.x+0.15,
-        minZ:b.min.z-0.15, maxZ:b.max.z+0.15
+        minX:b.min.x-PLAYER_CLEARANCE, maxX:b.max.x+PLAYER_CLEARANCE,
+        minZ:b.min.z-PLAYER_CLEARANCE, maxZ:b.max.z+PLAYER_CLEARANCE
       });
     });
     obstacleGroups.forEach(group=>{
       b.setFromObject(group);
       if (!Number.isFinite(b.min.x)) return;
-      buildingBoxes.push({minX:b.min.x-0.12,maxX:b.max.x+0.12,minZ:b.min.z-0.12,maxZ:b.max.z+0.12});
+      buildingBoxes.push({minX:b.min.x-PLAYER_CLEARANCE,maxX:b.max.x+PLAYER_CLEARANCE,minZ:b.min.z-PLAYER_CLEARANCE,maxZ:b.max.z+PLAYER_CLEARANCE});
     });
   }
   
@@ -421,6 +450,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     pointInAnyBuilding,
     cacheBuildingBoxes,
     registerObstacleGroup,
+    resolveMovement,
     nearestRoadCoord,
     clamp,
   };
