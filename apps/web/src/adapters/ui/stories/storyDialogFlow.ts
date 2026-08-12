@@ -1,6 +1,6 @@
-import { StoryRuntime } from '../../gameplay/stories/StoryRuntime';
-import type { StoryConditionContext, StoryDefinition, StoryEffect, StoryEvent, StoryRepository } from '../../gameplay/stories/types';
-import type { CityDialogController } from './cityDialogController';
+import { StoryRuntime } from '../../../gameplay/stories/StoryRuntime';
+import type { StoryConditionContext, StoryDefinition, StoryEffect, StoryEvent, StoryRepository } from '../../../gameplay/stories/types';
+import type { CityDialogController } from '../cityDialogController';
 
 export function createStoryDialogFlow(
   definition: StoryDefinition,

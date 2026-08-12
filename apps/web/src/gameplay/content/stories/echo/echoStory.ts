@@ -1,8 +1,8 @@
-import type { StoryDefinition } from "../../stories/types";
-import mountainPromiseImage from "../../../assets/cg/echo/mountain-promise.png";
-import observatorySongImage from "../../../assets/cg/echo/observatory-song.png";
-import sharedMealImage from "../../../assets/cg/echo/shared-meal.png";
-import starlitCabinImage from "../../../assets/cg/echo/starlit-cabin.png";
+import type { StoryDefinition } from "../../../stories/types";
+import mountainPromiseImage from "../../../../assets/cg/echo/mountain-promise.png";
+import observatorySongImage from "../../../../assets/cg/echo/observatory-song.png";
+import sharedMealImage from "../../../../assets/cg/echo/shared-meal.png";
+import starlitCabinImage from "../../../../assets/cg/echo/starlit-cabin.png";
 
 export const ECHO_STORY: StoryDefinition = {
   schemaVersion: 1,

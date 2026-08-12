@@ -4,7 +4,9 @@
 
 MiniCity 下一阶段需要承载主线与知县剧情、支线、剧情道具、建筑功能、解谜、背包、城区扩张、城市成长、成就和分支对话。当前 `apps/web/src/city/MiniCityApp.ts` 同时负责渲染、场景创建、NPC、寻路、DOM、网络、存档、解锁和成就，并通过 `// @ts-nocheck` 绕过严格类型检查。继续向这个文件增加业务规则会让内容无法独立校验，也会让存档、UI 和 Three.js 相互锁死。
 
-本设计采用渐进迁移。`MiniCityApp.ts` 暂时保留为组合根，新功能先进入严格类型检查的纯领域模块，再逐步把旧逻辑迁出；不进行一次性重写。
+本设计采用渐进迁移。`MiniCityApp.ts` 保留为组合根，新功能先进入严格类型检查的领域或适配器模块；它的逻辑文件上限为 1,000 行。
+
+当前边界：Echo 是 `city/echo/echoStoryController.ts` 下的单个剧情适配器，通用剧情运行时和类型位于 `gameplay/stories/`，通用 DOM 对话流位于 `adapters/ui/stories/`，内容数据位于 `gameplay/content/stories/echo/`。地图、玩家/相机、进度、登录和统计面板均由专用模块组合。
 
 ## 目标依赖方向
 
@@ -110,4 +112,3 @@ interface GameState {
 - 修改浏览器交互或布局时再运行 Playwright；纯规则迁移优先执行 `npm run test:domain`、`npm run typecheck` 和 `npm run build`。
 - 每次迁移后记录旧存档兼容策略，不允许长期双写两个权威状态源。
 - 城区扩张前必须解决重复 building ID；服务端同步前必须明确本地与服务端的权威边界。
-

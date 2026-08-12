@@ -19,7 +19,7 @@ its existing responsibilities are migrated incrementally.
 
 ## Current runtime split
 
-- `city/MiniCityApp.ts`: transitional composition root; startup, teardown, frame scheduling, and compatibility wrappers only.
+- `city/MiniCityApp.ts`: composition root; startup, teardown, frame scheduling, and compatibility wrappers only. Echo orchestration lives in `city/echo/echoStoryController.ts`; map, camera/player, progression, login, and stats adapters live in their dedicated modules.
 - `city/navigation/` and `city/npcSystem.ts`: pure-ish navigation and NPC runtime services kept behind narrow adapters.
 - `city/progression/`: legacy `minicityStats` compatibility and time-tracking boundary.
 - `rendering/buildingMeshFactory.ts`: building shape catalog; `proceduralTextureLibrary.ts`: canvas textures; `worldDecorations.ts`: trees, lamps, houses, ponds, and street props.
@@ -28,7 +28,7 @@ its existing responsibilities are migrated incrementally.
 Configuration under `city/data/` and `gameplay/content/` is intentionally exempt
 from the logic-file size limit. Runtime logic is checked by
 `npm run check:source-size`: normal files must stay under 1,000 lines and the
-transitional `MiniCityApp.ts` must stay under 2,000 lines. The check runs as part
+`MiniCityApp.ts` must stay under 1,000 lines. The check runs as part
 of the root `typecheck` and `build` scripts.
 
 For domain-only changes, use `npm run test:domain`; use Playwright only when the

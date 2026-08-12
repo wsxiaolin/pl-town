@@ -1,6 +1,6 @@
 # 声明式剧情接入指南
 
-MiniCity 的长篇分支剧情使用独立的 StoryRuntime。普通线性任务继续使用 QuestRuntime；不要把长篇剧情塞进 `MiniCityApp.ts` 或 NPC 回调。
+MiniCity 的长篇分支剧情使用独立的 StoryRuntime。普通线性任务继续使用 QuestRuntime；不要把长篇剧情塞进 `MiniCityApp.ts` 或 NPC 回调。通用运行时在 `apps/web/src/gameplay/stories/`，通用 DOM 流程在 `apps/web/src/adapters/ui/stories/`；Echo 仅是 `apps/web/src/city/echo/` 下的剧情适配器，正文数据在 `apps/web/src/gameplay/content/stories/echo/`。
 
 ## 内容与进度边界
 

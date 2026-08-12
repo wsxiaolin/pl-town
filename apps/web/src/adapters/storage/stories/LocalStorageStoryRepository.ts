@@ -1,6 +1,6 @@
-import { createInitialStoryState } from '../../gameplay/stories/StoryRuntime';
-import type { StoryDefinition, StoryFlagValue, StoryGuide, StoryRepository, StoryState } from '../../gameplay/stories/types';
-import { townGameDay } from '../../gameplay/time/townClock';
+import { createInitialStoryState } from '../../../gameplay/stories/StoryRuntime';
+import type { StoryDefinition, StoryFlagValue, StoryGuide, StoryRepository, StoryState } from '../../../gameplay/stories/types';
+import { townGameDay } from '../../../gameplay/time/townClock';
 
 export class LocalStorageStoryRepository implements StoryRepository {
   constructor(
