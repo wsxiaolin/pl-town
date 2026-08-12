@@ -30,6 +30,7 @@ import { createSceneInterestPointController } from './sceneInterestPointControll
 import { createEchoStoryController } from './echo/echoStoryController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
+import { createMovementInputController } from './navigation/movementInputController';
 import { createCameraController } from './navigation/cameraController';
 import { createProgressionController } from './progression/progressionController';
 import { updateCityLabels } from './labelController';
@@ -56,7 +57,6 @@ const REDUCED = false;
 
 const P = PALETTE;
 
-// ── Procedural Textures ──────────────────────────────────────────────────────
 const proceduralTextures = createProceduralTextureLibrary(
   resources,
   () => renderer,
@@ -66,7 +66,6 @@ const TEX = proceduralTextures.backgrounds;
 const _tex = proceduralTextures.repeat;
 const addFacade = proceduralTextures.addFacade;
 
-// ── Globals ───────────────────────────────────────────────────────────────────
 let renderer, scene, camera;
 const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
 let cursorChar = null;
@@ -88,7 +87,7 @@ let echoStoryController;
 let mapController;
 let loginController;
 let statsPanelController;
-let playerController;
+let playerController, movementInputController;
 let cameraController;
 let progressionController;
 let buildingSceneController;
@@ -111,7 +110,6 @@ const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
 const CONFIG = CITY_CONFIG;
 
-// ── Building config ───────────────────────────────────────────────────────────
 const PLH = BUILDING_PLATFORM_HEIGHT;
 
 // Progression unlock tiers
@@ -149,7 +147,6 @@ const ACHIEVEMENTS = [
 function awardDirectAchievement(id, name) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 function init() {
   setupRenderer();
   cameraController = createCameraController({
@@ -219,7 +216,7 @@ function init() {
   cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
   addRealBuildingModels(scene, buildings)
-    .then(() => { mapController?.invalidateShot(); })
+    .then(() => { cacheBuildingBoxes(); mapController?.invalidateShot(); })
     .catch(error => console.error('3D model loading failed', error));
   buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isStoryLockedBuilding, interact: interactOrWalk });
   buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
@@ -279,6 +276,7 @@ function init() {
     openResidence: () => undefined,
   });
   mapController.setup(eventController.signal);
+  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];pendingBuilding=null;pendingSceneInterestPoint=null;}});
   playerController = createPlayerController({
     getCursor: () => cursorChar,
     getCamera: () => camera,
@@ -297,6 +295,8 @@ function init() {
     onIdle: handlePlayerIdle,
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
     addDistance: flushDistance,
+    getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
+    resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
   });
   loginController = createLoginController({
     getStats,
@@ -369,7 +369,6 @@ function init() {
   setupMultiplayerUI();
 }
 
-// ── Renderer / Camera / Scene / Lighting ──────────────────────────────────────
 function setupRenderer() {
   const canvas = document.getElementById('c');
   renderer = createRenderer(canvas);
@@ -387,6 +386,8 @@ function setupScene() {
   if (!scene.background) scene.background = new THREE.Color(isNight ? P.NIGHT_BG : P.DAY_BG);
   (window as any).__mini = () => ({
     scene, camera, renderer, cameraZoom, THREE, npcs: npcList, player: cursorChar,
+    navigation: roadNavigation,
+    getPlayerPath: () => playerPath.map(point => point.clone()),
     interactNpc: (npcId: string) => {
       const npc=npcList.find(item=>item.profile.id===npcId);
       if(!npc)return false;
@@ -411,7 +412,6 @@ function setupScene() {
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
 function addFountain() { addCityFountain({ scene, palette: P, part }); }
 
-// ── Building shapes ───────────────────────────────────────────────────────────
 const buildingMeshFactory = createBuildingMeshFactory({
   palette: P,
   platformHeight: PLH,
@@ -437,7 +437,6 @@ const PLOT_MAP = {
 };
 const SHAPE_FNS = buildingMeshFactory.builders;
 
-// ── Decorations ───────────────────────────────────────────────────────────────
 function addDecorations() { worldDecorations.addDecorations(); }
 function addTrees(positions) { worldDecorations.addTrees(positions); }
 function addLamps(positions) { worldDecorations.addLamps(positions); }
@@ -454,7 +453,6 @@ function resumeNpcs() { npcSystem.resumeNpcs(); }
 function nearestNpcTo(position, radius) { return npcSystem.nearestNpcTo(position, radius); }
 function npcForRaycast() { return npcSystem.npcForRaycast(); }
 
-// ── Events ────────────────────────────────────────────────────────────────────
 function setupEvents() {
   const canvas=document.getElementById('c');
   const signal=eventController.signal;
@@ -545,7 +543,6 @@ function onMouseMove(e) {
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
 }
 
-// ── Multiplayer ────────────────────────────────────────────────────────────────
 function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
 function setupMultiplayer(nickname, password) { multiplayerHousing.connect(nickname, password); }
 function showLoginEntry() { loginController?.showLoginEntry(); }
@@ -557,8 +554,12 @@ function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
 function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
 function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
 
-function onCanvasClick() {
+function onCanvasClick(event) {
   if (cityDialogs?.isOpen()) return;
+  mouse2D.x=(event.clientX/window.innerWidth)*2-1;
+  mouse2D.y=-(event.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse2D,camera);
+  raycaster.ray.intersectPlane(groundPlane,cursorWorld);
   raycaster.setFromCamera(mouse2D,camera);
   if(cursorChar&&cursorChar.visible){
     const phits=raycaster.intersectObject(cursorChar,true);
@@ -612,7 +613,6 @@ function interactOrWalk(b) {
   }
 }
 
-// ── Hover / Navigate ──────────────────────────────────────────────────────────
 function hover(b) {
   hoveredB=b;
   gsap.to(b.group.position,{y:0.22,duration:0.28,ease:'power2.out'});

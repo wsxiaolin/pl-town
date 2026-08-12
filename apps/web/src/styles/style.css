@@ -181,6 +181,47 @@ body.night { --text-mid: #666662; }
   height: 100%;
   display: block;
 }
+.movement-control {
+  display: none;
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  z-index: 165;
+  width: min(42vw, 260px);
+  height: min(44vh, 280px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.touch-movement-enabled .movement-control { display: block; }
+.movement-control-base {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border: 1px solid rgba(255,255,255,0.38);
+  border-radius: 50%;
+  background: rgba(18,27,38,0.32);
+  box-shadow: inset 0 0 24px rgba(255,255,255,0.08), 0 8px 28px rgba(0,0,0,0.18);
+  opacity: 0;
+  transform: scale(0.82);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+.movement-control.active .movement-control-base { opacity: 1; transform: scale(1); }
+.movement-control-stick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border: 1px solid rgba(255,255,255,0.58);
+  border-radius: 50%;
+  background: rgba(245,248,252,0.82);
+  box-shadow: 0 5px 18px rgba(0,0,0,0.24);
+  will-change: transform;
+}
 /* ===== RESIDENT PHONE (multiplayer) ===== */
 /* 悬浮手机按钮：在线状态/公聊/住宅全部折叠进这部“居民手机” */
 .phone-fab {
