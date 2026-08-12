@@ -200,7 +200,7 @@ export function createWorldDecorations(options) {
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
     g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
     g.traverse((object)=>{ if(object.isMesh) object.userData.residenceId=residenceId; });
-    scene.add(g); addRaycastGroup(g);
+    scene.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
     residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅`,group:g,labelEl:null});
     // ── 建筑下面的小地块贴图（成片共享纹理）──
     const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];

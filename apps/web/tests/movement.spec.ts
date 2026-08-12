@@ -37,6 +37,31 @@ test('canvas click keeps automatic movement and produces a collision-safe route'
   expect(result.safe).toBe(true);
 });
 
+test('generated resident houses block manual movement', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const collision = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    let residence: any = null;
+    mini.scene.traverse((object: any) => {
+      if (!residence && object.userData?.residenceId) residence = object.parent;
+    });
+    if (!residence) return null;
+    const box = new mini.THREE.Box3().setFromObject(residence);
+    const center = box.getCenter(new mini.THREE.Vector3());
+    const start = new mini.THREE.Vector3(box.min.x - 1, 0, center.z);
+    const target = new mini.THREE.Vector3(box.max.x + 1, 0, center.z);
+    const resolved = mini.navigation.resolveMovement(start, target);
+    return {
+      centerBlocked: mini.navigation.pointInAnyBuilding(center.x, center.z),
+      crossed: resolved.x > box.max.x,
+    };
+  });
+  expect(collision).not.toBeNull();
+  expect(collision!.centerBlocked).toBe(true);
+  expect(collision!.crossed).toBe(false);
+});
+
 test.describe('touch-capable tablet', () => {
   test.use({ hasTouch: true, viewport: { width: 1024, height: 768 } });
 
