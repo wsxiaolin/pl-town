@@ -2721,9 +2721,9 @@ body.night .modal-paper {
 
 .echo-story-nav {
   position: fixed;
-  z-index: 32;
+  z-index: 80;
   left: 18px;
-  top: 92px;
+  top: 52px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2746,7 +2746,7 @@ body.night .modal-paper {
 .echo-location-icon { color: #9a692a; }
 
 @media (max-width: 640px) {
-  .echo-story-nav { left: 10px; top: 74px; min-height: 42px; padding: 6px 9px; }
+  .echo-story-nav { left: 10px; top: 46px; min-height: 42px; padding: 6px 9px; }
   .echo-story-nav small { font-size: 9px; }
 }
 
