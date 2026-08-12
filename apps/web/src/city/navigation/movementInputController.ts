@@ -5,14 +5,26 @@ export type MovementInputControllerOptions = {
   window: Window;
   signal: AbortSignal;
   onManualStart: () => void;
+  getCameraForward?: () => MovementVector;
 };
 
 const ZERO: MovementVector = { x: 0, z: 0 };
 const JOYSTICK_RADIUS = 42;
 
-export function screenVectorToWorld(screenX: number, screenY: number): MovementVector {
-  const worldX = (screenX + screenY) * Math.SQRT1_2;
-  const worldZ = (screenY - screenX) * Math.SQRT1_2;
+const DEFAULT_CAMERA_FORWARD: MovementVector = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 };
+
+export function screenVectorToWorld(
+  screenX: number,
+  screenY: number,
+  cameraForward: MovementVector = DEFAULT_CAMERA_FORWARD,
+): MovementVector {
+  const forwardLength = Math.hypot(cameraForward.x, cameraForward.z);
+  const forwardX = forwardLength > 0.001 ? cameraForward.x / forwardLength : DEFAULT_CAMERA_FORWARD.x;
+  const forwardZ = forwardLength > 0.001 ? cameraForward.z / forwardLength : DEFAULT_CAMERA_FORWARD.z;
+  const rightX = -forwardZ;
+  const rightZ = forwardX;
+  const worldX = rightX * screenX - forwardX * screenY;
+  const worldZ = rightZ * screenX - forwardZ * screenY;
   const length = Math.hypot(worldX, worldZ);
   if (length <= 0.001) return ZERO;
   const scale = length > 1 ? 1 / length : 1;
@@ -29,7 +41,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   const zone = options.document.getElementById('movementControl');
   const base = options.document.getElementById('movementControlBase');
   const stick = options.document.getElementById('movementControlStick');
-  let joystick = ZERO;
+  let joystickScreen = ZERO;
   let pointerId: number | null = null;
   let centerX = 0;
   let centerY = 0;
@@ -53,13 +65,13 @@ export function createMovementInputController(options: MovementInputControllerOp
     const x = dx * scale;
     const y = dy * scale;
     stick?.style.setProperty('transform', `translate(${x}px, ${y}px)`);
-    joystick = screenVectorToWorld(x / JOYSTICK_RADIUS, y / JOYSTICK_RADIUS);
-    if (distance < 5) joystick = ZERO;
+    joystickScreen = { x: x / JOYSTICK_RADIUS, z: y / JOYSTICK_RADIUS };
+    if (distance < 5) joystickScreen = ZERO;
   };
 
   const finishPointer = () => {
     pointerId = null;
-    joystick = ZERO;
+    joystickScreen = ZERO;
     stick?.style.removeProperty('transform');
     zone?.classList.remove('active');
     active = keys.size > 0;
@@ -126,7 +138,9 @@ export function createMovementInputController(options: MovementInputControllerOp
     if (keys.has('KeyD') || keys.has('ArrowRight')) screenX += 1;
     if (keys.has('KeyW') || keys.has('ArrowUp')) screenY -= 1;
     if (keys.has('KeyS') || keys.has('ArrowDown')) screenY += 1;
-    const keyboard = screenVectorToWorld(screenX, screenY);
+    const cameraForward = options.getCameraForward?.() ?? DEFAULT_CAMERA_FORWARD;
+    const keyboard = screenVectorToWorld(screenX, screenY, cameraForward);
+    const joystick = screenVectorToWorld(joystickScreen.x, joystickScreen.z, cameraForward);
     const combined = { x: keyboard.x + joystick.x, z: keyboard.z + joystick.z };
     const length = Math.hypot(combined.x, combined.z);
     return length > 1 ? { x: combined.x / length, z: combined.z / length } : combined;

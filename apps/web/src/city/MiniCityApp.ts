@@ -51,10 +51,8 @@ let eventController = new AbortController();
 let raycastBuildingGroups = [];
 const buildingPlotTargets = [];
 const labelWorldPosition = new THREE.Vector3();
-
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
-
 const P = PALETTE;
 
 const proceduralTextures = createProceduralTextureLibrary(
@@ -100,6 +98,7 @@ let sceneInterestPoints;
 let sceneInterestPointController;
 let pendingSceneInterestPoint = null;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
+const cameraForward = new THREE.Vector3();
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const residences = [];
@@ -276,7 +275,10 @@ function init() {
     openResidence: () => undefined,
   });
   mapController.setup(eventController.signal);
-  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];pendingBuilding=null;pendingSceneInterestPoint=null;}});
+  movementInputController=createMovementInputController({ document,window,signal:eventController.signal,
+    onManualStart:()=>{playerPath=[];pendingBuilding=null;pendingSceneInterestPoint=null;},
+    getCameraForward:()=>{ camera?.getWorldDirection(cameraForward); return {x:cameraForward.x,z:cameraForward.z}; },
+  });
   playerController = createPlayerController({
     getCursor: () => cursorChar,
     getCamera: () => camera,

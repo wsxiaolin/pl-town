@@ -9,7 +9,6 @@ function navigationWithBuilding() {
   group.add(new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4)));
   const navigation = createRoadNavigationSystem({
     roadCoords: [-6, 0, 6, 12],
-    satelliteCity: { roadNodes: [], roadSegments: [] },
     echoObservatoryArea: { roadNodes: [], roadSegments: [] },
     cityLimit: 42,
     getBuildings: () => [{ group }],
