@@ -8,7 +8,7 @@ small npm workspace at the repository root.
 ```text
 apps/
   web/       Vite + Three.js frontend
-  server/    Node.js HTTP/WebSocket backend
+  server/    Node.js HTTP/WebSocket backend （with sqlite）
 package.json workspace commands only
 ```
 

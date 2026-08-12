@@ -7,14 +7,11 @@ export type CameraControllerOptions = {
   getTarget: () => THREE.Vector3;
   isEchoInterior: () => boolean;
   echoInterior: readonly [number, number];
-  echoCenter: readonly [number, number];
   cameraOffset: THREE.Vector3;
 };
 
 export function createCameraController(options: CameraControllerOptions) {
   const interiorAnchor = new THREE.Vector3(8.2, 15.5, -8.2);
-  const exteriorOffset = new THREE.Vector3(-20, 32, -20);
-  const blendedOffset = new THREE.Vector3();
 
   function updateProjection(zoom: number): void {
     const camera = options.getCamera();
@@ -37,10 +34,7 @@ export function createCameraController(options: CameraControllerOptions) {
         camera.lookAt(target.x, 0.75, target.z);
         return;
       }
-      const distance = Math.hypot(target.x - options.echoCenter[0], target.z - options.echoCenter[1]);
-      const blend = Math.max(0, Math.min(1, (30 - distance) / 12));
-      blendedOffset.copy(options.cameraOffset).lerp(exteriorOffset, blend);
-      camera.position.copy(target).add(blendedOffset);
+      camera.position.copy(target).add(options.cameraOffset);
       camera.lookAt(target);
     };
     if (instant) {

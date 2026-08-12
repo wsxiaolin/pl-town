@@ -60,4 +60,19 @@ test.describe('touch-capable tablet', () => {
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await expect(base).toHaveCSS('opacity', '0');
   });
+
+  test('camera keeps the city orientation while approaching Linche', async ({ page }) => {
+    await enterCity(page);
+    await page.evaluate(() => {
+      const mini = (window as any).__mini();
+      mini.player.position.set(50, 0, 0);
+    });
+    await page.waitForTimeout(200);
+    const cameraDirection = await page.evaluate(() => {
+      const mini = (window as any).__mini();
+      return mini.camera.getWorldDirection(new mini.THREE.Vector3()).toArray();
+    });
+    expect(cameraDirection[0]).toBeLessThan(0);
+    expect(cameraDirection[2]).toBeLessThan(0);
+  });
 });

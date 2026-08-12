@@ -51,10 +51,8 @@ let eventController = new AbortController();
 let raycastBuildingGroups = [];
 const buildingPlotTargets = [];
 const labelWorldPosition = new THREE.Vector3();
-
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
-
 const P = PALETTE;
 
 const proceduralTextures = createProceduralTextureLibrary(
@@ -155,7 +153,6 @@ function init() {
     getTarget: () => cameraTarget,
     isEchoInterior: () => Boolean(echoStoryController?.isInteriorView()),
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
-    echoCenter: ECHO_OBSERVATORY_AREA.center,
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
