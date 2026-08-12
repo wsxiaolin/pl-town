@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
+import { WEST_BEACH } from '../city/data/cityConfig';
 
 type BeachOptions = {
   scene: THREE.Scene;
@@ -75,14 +76,15 @@ export function createWestBeach(options: BeachOptions): {
   object.name = 'west-beach';
   object.userData.autoTrigger = true;
 
-  const sand = addMesh(object, options, new THREE.PlaneGeometry(7.5, 25), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 3, ry: 8 }, [-40.25, 0.047, 10]);
+  const sand = addMesh(object, options, new THREE.PlaneGeometry(9, 58), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [-39.4, 0.07, 10]);
   sand.rotation.x = -Math.PI / 2;
   sand.renderOrder = 4;
-  const water = addMesh(object, options, new THREE.PlaneGeometry(15, 27), { color: 0x4f9ac0, roughness: 0.18, metalness: 0.18, transparent: true, opacity: 0.92, tex: 'water', rx: 5, ry: 9 }, [-50.8, 0.052, 10]);
-  water.rotation.x = -Math.PI / 2;
-  water.renderOrder = 5;
+  const waterWidth = 60;
+  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, 90), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, 0.01, 10]);
+  water.castShadow = false;
+  water.renderOrder = 3;
   for (let index = 0; index < 4; index += 1) {
-    const foam = addMesh(object, options, new THREE.BoxGeometry(0.09, 0.018, 23), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72 }, [-43.35 - index * 0.8, 0.07, 10]);
+    const foam = addMesh(object, options, new THREE.BoxGeometry(0.1, 0.025, 54), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72, depthWrite: false }, [WEST_BEACH.coastlineX - index * 0.72, 0.09, 10]);
     foam.userData.foamIndex = index;
   }
   const palms = [-1, 1].map((side) => {
@@ -101,18 +103,18 @@ export function createWestBeach(options: BeachOptions): {
 
   const bismarck = createWarship(options, 0x5d666b, 1.05);
   bismarck.name = 'bismarck-model';
-  bismarck.position.set(-49, 0.18, 4);
+  bismarck.position.set(-61, 0.18, -4);
   bismarck.rotation.y = Math.PI / 2;
   object.add(bismarck);
   const hipper = createWarship(options, 0x788086, 0.78);
   hipper.name = 'hipper-model';
-  hipper.position.set(-47.3, 0.16, 16);
+  hipper.position.set(-55, 0.16, 25);
   hipper.rotation.y = Math.PI / 2;
   object.add(hipper);
 
   const seagulls = [0, 1, 2].map((index) => {
     const bird = createSeagull(options);
-    bird.position.set(-45 - index * 1.2, 3.1 + index * 0.4, 5 + index * 4.3);
+    bird.position.set(-49 - index * 2.2, 3.1 + index * 0.4, -2 + index * 10);
     object.add(bird);
     return bird;
   });
@@ -128,16 +130,16 @@ export function createWestBeach(options: BeachOptions): {
   return {
     entity: { id: 'west-beach', object, interactionPosition: WEST_BEACH_EVENT_POSITION.clone() },
     update(elapsedSeconds) {
-      bismarck.position.z = 4 + Math.sin(elapsedSeconds * 0.16) * 5.5;
-      hipper.position.z = 16 - Math.sin(elapsedSeconds * 0.13) * 4.2;
+      bismarck.position.z = -4 + Math.sin(elapsedSeconds * 0.16) * 12;
+      hipper.position.z = 25 - Math.sin(elapsedSeconds * 0.13) * 9;
       seagulls.forEach((bird, index) => {
-        bird.position.x = -45.5 + Math.sin(elapsedSeconds * 0.35 + index * 2.1) * 2.5;
-        bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 8;
+        bird.position.x = -53 + Math.sin(elapsedSeconds * 0.35 + index * 2.1) * 7;
+        bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       });
       object.traverse((child) => {
         if (typeof child.userData.foamIndex !== 'number') return;
-        child.position.x = -43.35 - child.userData.foamIndex * 0.8 + Math.sin(elapsedSeconds * 0.8 + child.userData.foamIndex) * 0.18;
+        child.position.x = WEST_BEACH.coastlineX - child.userData.foamIndex * 0.72 + Math.sin(elapsedSeconds * 0.8 + child.userData.foamIndex) * 0.14;
       });
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {

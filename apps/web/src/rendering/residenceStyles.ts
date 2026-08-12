@@ -101,5 +101,6 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
 
   group.userData.residenceStyleId = styleId;
   group.userData.residenceStyleName = STYLE_NAMES[styleId];
+  group.userData.navigationFootprint = { width: width + 0.12, depth: depth + 0.12 };
   return { group, styleId, styleName: STYLE_NAMES[styleId]! };
 }

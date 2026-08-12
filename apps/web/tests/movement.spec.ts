@@ -76,10 +76,33 @@ test('city renders ten residence models and the modeled west beach', async ({ pa
       beach: Boolean(mini.scene.getObjectByName('west-beach')),
       seaGod: Boolean(mini.scene.getObjectByName('yihang-sea-god')),
       ships: ['bismarck-model', 'hipper-model'].every((name) => Boolean(mini.scene.getObjectByName(name))),
+      waterSize: new mini.THREE.Box3().setFromObject(mini.scene.getObjectByName('west-beach')).getSize(new mini.THREE.Vector3()).toArray(),
     };
   });
   expect(sceneContent.styles).toEqual([0,1,2,3,4,5,6,7,8,9]);
   expect(sceneContent.beach && sceneContent.seaGod && sceneContent.ships).toBe(true);
+  expect(sceneContent.waterSize[0]).toBeGreaterThan(55);
+  expect(sceneContent.waterSize[2]).toBeGreaterThan(80);
+});
+
+test('repeated clicks keep an active automatic route', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const lengths = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    const canvas = document.querySelector('#c')!;
+    return [
+      new mini.THREE.Vector3(0, 0, -20),
+      new mini.THREE.Vector3(18, 0, 0),
+      new mini.THREE.Vector3(0, 0, 20),
+      new mini.THREE.Vector3(-18, 0, 0),
+    ].map((world) => {
+      const point = world.project(mini.camera);
+      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: (point.x + 1) * innerWidth / 2, clientY: (1 - point.y) * innerHeight / 2 }));
+      return mini.getPlayerPath().length;
+    });
+  });
+  expect(lengths.every((length) => length > 0)).toBe(true);
 });
 
 test.describe('touch-capable tablet', () => {

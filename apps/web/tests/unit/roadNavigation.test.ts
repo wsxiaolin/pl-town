@@ -11,6 +11,7 @@ function navigationWithBuilding() {
     roadCoords: [-6, 0, 6, 12],
     satelliteCity: { roadNodes: [], roadSegments: [] },
     echoObservatoryArea: { roadNodes: [], roadSegments: [] },
+    westBeach: { deepWaterX: -44.5, safeReturnX: -42.2, minZ: -34, maxZ: 54 },
     cityLimit: 42,
     getBuildings: () => [{ group }],
   });
@@ -32,4 +33,16 @@ test('click path keeps its waypoints outside building clearance', () => {
   const path = navigation.buildRoadPath(new THREE.Vector3(0, 0, -6), new THREE.Vector3(10, 0, -6));
   assert.ok(path.length > 0);
   assert.ok(path.every(point => !navigation.pointInAnyBuilding(point.x, point.z)));
+});
+
+test('deep water returns the player to the beach', () => {
+  const navigation = navigationWithBuilding();
+  const returned = navigation.resolveMovement(new THREE.Vector3(-44, 0, 10), new THREE.Vector3(-46, 0, 10));
+  assert.deepEqual(returned.toArray(), [-42.2, 0, 10]);
+});
+
+test('building clearance leaves nearby walking space available', () => {
+  const navigation = navigationWithBuilding();
+  assert.equal(navigation.pointInAnyBuilding(12.15, -6), true);
+  assert.equal(navigation.pointInAnyBuilding(12.25, -6), false);
 });

@@ -3,6 +3,10 @@ import * as THREE from 'three';
 type Cursor = THREE.Object3D & { visible: boolean; rotation: THREE.Euler };
 type Npc = { mesh: THREE.Object3D & { visible: boolean } };
 
+export function retainPathOnFailedReroute(current: THREE.Vector3[], candidate: THREE.Vector3[]): THREE.Vector3[] {
+  return candidate.length > 0 || current.length === 0 ? candidate : current;
+}
+
 export type PlayerControllerOptions = {
   getCursor: () => Cursor | null;
   getCamera: () => THREE.Camera | null;
@@ -42,7 +46,8 @@ export function createPlayerController(options: PlayerControllerOptions) {
       )]);
       return;
     }
-    options.setPlayerPath(options.buildRoadPath(cursor.position, target));
+    const candidate = options.buildRoadPath(cursor.position, target);
+    options.setPlayerPath(retainPathOnFailedReroute(options.getPlayerPath(), candidate));
   }
 
   function updateMovement(delta: number): void {

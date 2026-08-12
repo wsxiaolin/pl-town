@@ -5,6 +5,7 @@ export interface RoadNavigationOptions {
   roadCoords: readonly number[];
   satelliteCity: any;
   echoObservatoryArea?: any;
+  westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
 }
@@ -14,7 +15,8 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const SATELLITE_CITY = options.satelliteCity;
   const ECHO_OBSERVATORY_AREA = options.echoObservatoryArea || { roadNodes: [], roadSegments: [] };
   const CITY_LIMIT = options.cityLimit;
-  const PLAYER_CLEARANCE = 0.38;
+  const PLAYER_CLEARANCE = 0.2;
+  const WEST_BEACH = options.westBeach;
   const allExtraNodes = [...SATELLITE_CITY.roadNodes, ...ECHO_OBSERVATORY_AREA.roadNodes];
   const WORLD_BOUNDS = {
     minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
@@ -166,6 +168,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   function positionBlocked(x,z) {
     if(x<WORLD_BOUNDS.minX||x>WORLD_BOUNDS.maxX||z<WORLD_BOUNDS.minZ||z>WORLD_BOUNDS.maxZ) return true;
     if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
+    if(WEST_BEACH && x<WEST_BEACH.deepWaterX && z>=WEST_BEACH.minZ && z<=WEST_BEACH.maxZ) return true;
     return pointInAnyBuilding(x,z);
   }
 
@@ -175,6 +178,9 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       0,
       clamp(target.z,WORLD_BOUNDS.minZ,WORLD_BOUNDS.maxZ),
     );
+    if(WEST_BEACH && desired.x<WEST_BEACH.deepWaterX && desired.z>=WEST_BEACH.minZ && desired.z<=WEST_BEACH.maxZ) {
+      return new THREE.Vector3(WEST_BEACH.safeReturnX,0,clamp(desired.z,WEST_BEACH.minZ,WEST_BEACH.maxZ));
+    }
     if(positionBlocked(from.x,from.z)) return positionBlocked(desired.x,desired.z) ? from.clone() : desired;
     if(!positionBlocked(desired.x,desired.z)&&!pathBlocked(from.x,from.z,desired.x,desired.z)) return desired;
     const alongX=new THREE.Vector3(desired.x,0,from.z);
@@ -360,6 +366,15 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       });
     });
     obstacleGroups.forEach(group=>{
+      const footprint=group.userData.navigationFootprint;
+      if(footprint){
+        const center=group.getWorldPosition(new THREE.Vector3());
+        const quarterTurn=Math.abs(Math.sin(group.rotation.y))>0.5;
+        const width=quarterTurn?footprint.depth:footprint.width;
+        const depth=quarterTurn?footprint.width:footprint.depth;
+        buildingBoxes.push({minX:center.x-width/2-PLAYER_CLEARANCE,maxX:center.x+width/2+PLAYER_CLEARANCE,minZ:center.z-depth/2-PLAYER_CLEARANCE,maxZ:center.z+depth/2+PLAYER_CLEARANCE});
+        return;
+      }
       b.setFromObject(group);
       if (!Number.isFinite(b.min.x)) return;
       buildingBoxes.push({minX:b.min.x-PLAYER_CLEARANCE,maxX:b.max.x+PLAYER_CLEARANCE,minZ:b.min.z-PLAYER_CLEARANCE,maxZ:b.max.z+PLAYER_CLEARANCE});
