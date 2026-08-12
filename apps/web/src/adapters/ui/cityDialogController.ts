@@ -4,6 +4,7 @@ export interface LegacyDialogueOption {
   text: string;
   next: number | null;
   onPick?: () => void;
+  action?: string;
 }
 
 export interface LegacyDialogueNode {
@@ -27,6 +28,8 @@ export interface BuildingContentLike {
   name: string;
   slogan: string;
   dialog: readonly string[];
+  dialogTree?: readonly LegacyDialogueNode[];
+  dialogAvatar?: readonly [number, number];
 }
 
 export interface BuildingLike {
@@ -58,6 +61,7 @@ export interface CityDialogControllerOptions {
   getQuestAction: (npcId: string) => NpcQuestAction | null;
   performQuestAction: (action: NpcQuestAction, at: number) => QuestTransition;
   onNpcInteracted: (npcId: string) => void;
+  onDialogueAction?: (action: string, sourceId: string) => void;
   pauseNpcs: () => void;
   resumeNpcs: () => void;
   showToast: (message: string) => void;
@@ -119,9 +123,10 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const renderNode = (node: LegacyDialogueNode): void => {
     if (!activeNpc) return;
     renderLine(node.text);
-    const options = node.options.map((option) => ({
+    const dialogOptions = node.options.map((option) => ({
       text: option.text,
       onPick: () => {
+        if (option.action) options.onDialogueAction?.(option.action, activeNpc?.profile.id ?? '');
         option.onPick?.();
         if (!activeNpc) return;
         if (option.next === null) controller.closeNpc();
@@ -131,13 +136,13 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     if (node === activeNpc.profile.dialog[0]) {
       const action = optionsForQuest(activeNpc.profile.id);
       if (action) {
-        options.unshift({
+        dialogOptions.unshift({
           text: action.kind === 'offer' ? action.quest.offer.optionLabel : action.quest.completion.optionLabel,
           onPick: () => renderQuestAction(action),
         });
       }
     }
-    renderOptions(options);
+    renderOptions(dialogOptions);
   };
 
   const renderQuestAction = (action: NpcQuestAction): void => {
@@ -164,6 +169,28 @@ export function createCityDialogController(options: CityDialogControllerOptions)
 
   const optionsForQuest = (npcId: string): NpcQuestAction | null => options.getQuestAction(npcId);
 
+  const openDialogue = (npc: NpcEntityLike, recordInteraction: boolean, playerPosition?: { x: number; z: number }): void => {
+    options.pauseNpcs();
+    npcOpen = true;
+    activeNpc = npc;
+    activeStoryAdvance = undefined;
+    if (recordInteraction) options.onNpcInteracted(npc.profile.id);
+    if (playerPosition) {
+      npc.mesh.rotation.y = Math.atan2(playerPosition.x - npc.mesh.position.x, playerPosition.z - npc.mesh.position.z);
+    }
+    setIdentityField(document, 'npcName', npc.profile.name);
+    setIdentityField(document, 'npcRole', npc.profile.role);
+    getElement<HTMLElement>(document, 'npcAvatar').style.background = `linear-gradient(135deg,#${npc.profile.head.toString(16).padStart(6, '0')},#${npc.profile.body.toString(16).padStart(6, '0')})`;
+    const overlay = getElement<HTMLDivElement>(document, 'npcOverlay');
+    overlay.classList.remove('story-mode', 'cg-mode', 'blackout-mode');
+    overlay.style.removeProperty('--story-cg-image');
+    overlay.classList.add('open');
+    const npcLine = getElement<HTMLParagraphElement>(document, 'npcLine');
+    npcLine.onclick = null;
+    npcLine.style.cursor = '';
+    renderNode(firstNode(npc));
+  };
+
   const controller: CityDialogController = {
     setup() {
       getElement<HTMLButtonElement>(document, 'modalClose').addEventListener('click', controller.closeBuilding, { signal: options.signal });
@@ -187,6 +214,14 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         slogan: '这座小城的一角。',
         dialog: ['这里还没有完整的介绍。', '先进去看看吧。'],
       };
+      if (content.dialogTree?.length) {
+        const [head, bodyColor] = content.dialogAvatar ?? [0xe6c59c, 0x9b633b];
+        openDialogue({
+          profile: { id: `building:${building.id}`, name: content.name, role: content.slogan, head, body: bodyColor, dialog: content.dialogTree },
+          mesh: { rotation: { y: 0 }, position: { x: 0, z: 0 } },
+        }, false);
+        return;
+      }
       const visitor = options.document.defaultView?.localStorage.getItem('minicityUser') || '旅人';
       getElement<HTMLElement>(document, 'modalNum').textContent = building.num;
       getElement<HTMLElement>(document, 'modalTitle').textContent = content.name;
@@ -205,26 +240,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       getElement<HTMLDivElement>(document, 'modalOverlay').classList.remove('open');
     },
     openNpc(npc, playerPosition) {
-      options.pauseNpcs();
-      npcOpen = true;
-      activeNpc = npc;
-      activeStoryAdvance = undefined;
-      options.onNpcInteracted(npc.profile.id);
-      if (playerPosition) {
-        npc.mesh.rotation.y = Math.atan2(playerPosition.x - npc.mesh.position.x, playerPosition.z - npc.mesh.position.z);
-      }
-      setIdentityField(document, 'npcName', npc.profile.name);
-      setIdentityField(document, 'npcRole', npc.profile.role);
-      getElement<HTMLElement>(document, 'npcAvatar').style.background = `linear-gradient(135deg,#${npc.profile.head.toString(16).padStart(6, '0')},#${npc.profile.body.toString(16).padStart(6, '0')})`;
-      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('story-mode');
-      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('cg-mode');
-      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('blackout-mode');
-      getElement<HTMLDivElement>(document, 'npcOverlay').style.removeProperty('--story-cg-image');
-      getElement<HTMLDivElement>(document, 'npcOverlay').classList.add('open');
-      const npcLine = getElement<HTMLParagraphElement>(document, 'npcLine');
-      npcLine.onclick = null;
-      npcLine.style.cursor = '';
-      renderNode(firstNode(npc));
+      openDialogue(npc, true, playerPosition);
     },
     openStory(story) {
       options.pauseNpcs();

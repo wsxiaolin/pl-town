@@ -265,7 +265,7 @@ function init() {
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isStoryLocked: isStoryLockedBuilding,
-    getBuildingRoadEntry: (position) => nearestRoadCoord(position.x, position.z),
+    getBuildingRoadEntry: (position) => buildingRoadEntry(position),
     setCameraTarget,
     movePlayerTo,
     clearPlayerPath: () => { playerPath = []; },
@@ -321,6 +321,7 @@ function init() {
     getQuestAction: (npcId)=>questRuntime.getNpcAction(npcId,getQuestProgressView()),
     performQuestAction: (action,at)=>questRuntime.performNpcAction(action,at),
     onNpcInteracted: recordNpcInteraction,
+    onDialogueAction: (action)=>action.startsWith('teleport:')&&mapController?.teleportToBuilding(action.slice(9)),
     pauseNpcs,
     resumeNpcs,
     showToast: showUnlockToast,
@@ -397,6 +398,7 @@ function setupScene() {
       navigateTo(building);
       return true;
     },
+    openBuildingDialog: (buildingId: string) => { const building=buildings.find(item=>item.id===buildingId); if(!building)return false; openModal(building); return true; },
     interactInterestPoint: (id: SceneInterestPointId) => {
       const entity=sceneInterestPoints?.entities.get(id);
       if(!entity||!cursorChar)return false;

@@ -37,6 +37,41 @@ test('canvas click keeps automatic movement and produces a collision-safe route'
   expect(result.safe).toBe(true);
 });
 
+test('Wushi restaurant model, dialogue, and Shinian teleport are available', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const model = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    const parts: string[] = [];
+    const box = new mini.THREE.Box3();
+    mini.scene.traverse((object: any) => {
+      if (object.userData?.buildingId !== 'wushi_restaurant') return;
+      box.expandByObject(object);
+      if (object.userData.restaurantPart) parts.push(object.userData.restaurantPart);
+    });
+    const size = box.getSize(new mini.THREE.Vector3()).toArray();
+    return { parts, size };
+  });
+  expect(model.parts).toEqual(expect.arrayContaining(['glass-wall', '物实饭店招牌', 'advertisement', 'service-window']));
+  expect(model.size[0]).toBeGreaterThan(5);
+  expect(model.size[2]).toBeGreaterThan(3.5);
+
+  await page.evaluate(() => (window as any).__mini().interactNpc('shinian_mengyanyu'));
+  await expect(page.locator('#npcName')).toHaveText('时年梦烟雨');
+  await page.locator('.npc-opt').filter({ hasText: '关于物实饭店？' }).click();
+  await page.locator('.npc-opt').filter({ hasText: '我要去！' }).click();
+  const distance = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    return mini.player.position.distanceTo(new mini.THREE.Vector3(-22.5, 0, -21));
+  });
+  expect(distance).toBeLessThan(8);
+  await page.evaluate(() => (window as any).__mini().openBuildingDialog('wushi_restaurant'));
+  await expect(page.locator('#npcName')).toHaveText('物实饭店');
+  await expect(page.locator('#npcLine')).toContainText('为什么还会有饭店');
+  await page.locator('.npc-opt').filter({ hasText: '认真读小字' }).click();
+  await expect(page.locator('#npcLine')).toContainText('生命由您自行负责');
+});
+
 test.describe('touch-capable tablet', () => {
   test.use({ hasTouch: true, viewport: { width: 1024, height: 768 } });
 

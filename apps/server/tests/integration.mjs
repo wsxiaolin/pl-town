@@ -75,6 +75,7 @@ try {
 
   if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
+  if (alice.hello.catalog.buildingPrices.wushi_restaurant !== 0) throw new Error('The Wushi restaurant must be available in the city catalog');
   if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
 
   send(alice, { type: 'story.get', storyId: 'sample-story' });

@@ -214,6 +214,31 @@ export const NPC_PROFILES = [...COMMUNITY_NPCS,
     ],
   },
   {
+    id:'shinian_mengyanyu', name:'时年梦烟雨', role:'人物志记录者', core:false, spawnChance:1,
+    behavior:'field', workHours:[0,24], hiddenHours:[12,14],
+    head:0xE3B7A0, body:0x7B6AA8, home:[-21,-27], work:[-24,-27], patrolRadius:4,
+    dialog:[
+      { text:'「我欣喜于在我懵懂时，有一群人带我成长。我更欣喜于在我止步时，有一群人待我成长。」', options:[
+        { text:'关于物实饭店？', next:1 },
+        { text:'关于人物志？', next:2 },
+        { text:'关于你自己？', next:3 },
+      ]},
+      { text:'「这本身是一个聊天室啦……谁知道那个暑假聊出来了个这呢！也让我认识了很多朋友！我们的店长濑莱招客能力一流，不去看看吗？」', options:[
+        { text:'关于人物志？', next:2 },
+        { text:'关于你自己？', next:3 },
+        { text:'我要去！', next:null, action:'teleport:wushi_restaurant' },
+      ]},
+      { text:'「我很喜欢记录大家，尤其是写完一个人的人物志后，他变得与所记不同时，我更为之动容。没想到这个这么受大家欢迎，想要了解的话，去档案室看看吧！」', options:[
+        { text:'关于你自己？', next:3 },
+        { text:'看看人物志', next:null, action:'teleport:archive' },
+      ]},
+      { text:'「我自己吗……我叫时年梦烟雨，你可以叫我时年。我很喜欢记录这里的人，人们也乐得在历史中留下自己的印记，所以我的人物志会流传开啦（）。如果你想快点知道大家口中的一些“黑话”，那就快去档案馆看看吧！」', options:[
+        { text:'这就去！', next:null, action:'teleport:archive' },
+        { text:'先等等吧', next:null },
+      ]},
+    ],
+  },
+  {
     id:'bunala', name:'布拿拉工', role:'布拿拉宫主人', core:true, spawnChance:1,
     npcType:'story', type:'story',
     behavior:'field', workHours:[8,20],

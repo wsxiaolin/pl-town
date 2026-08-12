@@ -169,6 +169,13 @@ export function createMapController(options: MapControllerOptions) {
     options.setCameraTarget(entry.x, entry.z, true);
   }
 
+  function teleportToBuilding(buildingId: string): boolean {
+    const building = options.getBuildings().find((item) => item.id === buildingId && !options.isStoryLocked(item));
+    if (!building) return false;
+    teleport(building);
+    return true;
+  }
+
   function setup(signal: AbortSignal): void {
     options.document.getElementById('mapToggle')?.addEventListener('click', toggle, { signal });
     options.document.getElementById('mapClose')?.addEventListener('click', () => { if (open) toggle(); }, { signal });
@@ -210,6 +217,7 @@ export function createMapController(options: MapControllerOptions) {
     invalidateShot,
     openTip,
     closeTip,
+    teleportToBuilding,
     isOpen: () => open,
     areIconsBuilt: () => iconsBuilt,
     shotSpan: MAP_SHOT_SPAN,
