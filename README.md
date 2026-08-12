@@ -3,6 +3,8 @@
 MiniCity is split into independent web and server applications, managed from a
 small npm workspace at the repository root.
 
+test 
+
 ## Layout
 
 ```text
