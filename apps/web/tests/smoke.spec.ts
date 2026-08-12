@@ -126,18 +126,19 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
 
   await page.goto('/');
-  await expect(page.locator('[data-inventory-button]')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('[data-inventory-button] svg')).toBeVisible();
-  await page.locator('[data-inventory-button]').click();
-  await expect(page.locator('#inventoryPanel')).toHaveClass(/open/);
-  await expect(page.locator('#inventoryPanel [data-inventory-list]')).toContainText('龙井茶');
-  await expect(page.locator('#inventoryPanel [data-inventory-list]')).toContainText('× 2');
-  await page.locator('[data-inventory-close]').click();
+  await page.locator('#onlinePanelToggle').click({ force: true });
+  await page.locator('[data-online-tab="inventory"]').click();
+  await expect(page.locator('#onlinePanel')).toHaveClass(/open/);
+  await expect(page.locator('#onlineInventoryView')).toHaveClass(/active/);
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 2');
+  await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
+  await page.locator('#phoneClose').click();
   await page.evaluate(() => (window as any).__mini().interactBuilding('mall_south'));
-  await expect(page.locator('#inventoryPanel')).toHaveClass(/shop-mode/);
-  await expect(page.locator('#inventoryPanel [data-panel-title]')).toHaveText('物实商店');
-  await expect(page.locator('#inventoryPanel [data-inventory-section]')).toBeHidden();
-  await page.locator('[data-inventory-close]').click();
+  await expect(page.locator('#shopPanel')).toHaveClass(/open/);
+  await expect(page.locator('#shopPanel')).toContainText('物实商店');
+  await expect(page.locator('#onlinePanel')).not.toHaveClass(/open/);
+  await page.locator('[data-shop-close]').click();
 
   const worldAudit = await page.evaluate(async () => {
     const mini = (window as any).__mini();
