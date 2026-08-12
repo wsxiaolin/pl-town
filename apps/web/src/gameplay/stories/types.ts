@@ -16,6 +16,7 @@ export type StoryBuildingState = 'default' | 'hidden' | 'disabled' | 'damaged' |
 export interface StoryGuide {
   title: string;
   objective: string;
+  visibleWhen?: readonly StoryCondition[];
 }
 
 export interface StoryConditionContext {

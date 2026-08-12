@@ -98,7 +98,11 @@ export const ECHO_STORY: StoryDefinition = {
       id: "meeting",
       title: "林澈",
       role: "气象观测站守望人",
-      guide: { title: "回声 · 相遇", objective: "与气象观测站的林澈交谈" },
+      guide: {
+        title: "回声 · 相遇",
+        objective: "与气象观测站的林澈交谈",
+        visibleWhen: [{ type: "event.occurred", eventType: "story.actor.interacted.linche" }],
+      },
       text: "……好久没见到人了。\n\n你是来登山的吗？这条路很少有人走。",
       choices: [
         { id: "ask-alone", label: "你一个人住在这里？", next: "not-alone" },
