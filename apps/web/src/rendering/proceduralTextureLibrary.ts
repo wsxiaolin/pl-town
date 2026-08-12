@@ -420,10 +420,26 @@ export function createProceduralTextureLibrary(
         ctx.fillRect(x, y, 1.5, 1.5);
       }
       // white zebra stripes along the length
-      const stripeW = 14, stripeH = 32, gap = 10;
+      const stripeW = 14, stripeH = s * 0.84, gap = 10;
       for (let x = 0; x < s; x += stripeW + gap) {
         ctx.fillStyle = 'rgba(245,245,245,0.92)';
         ctx.fillRect(x, s/2 - stripeH/2, stripeW, stripeH);
+      }
+      _noise(ctx, s, 0.02);
+    });
+
+    // Rotated variant for roads running along the other world axis.
+    _canvas('crosswalkRotated', 256, (ctx, s) => {
+      ctx.fillStyle = '#3A3D44'; ctx.fillRect(0, 0, s, s);
+      for (let i = 0; i < 400; i++) {
+        const x = Math.random()*s, y = Math.random()*s;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(80,82,90,0.35)' : 'rgba(28,30,36,0.35)';
+        ctx.fillRect(x, y, 1.5, 1.5);
+      }
+      const stripeW = 14, stripeH = s * 0.84, gap = 10;
+      for (let y = 0; y < s; y += stripeW + gap) {
+        ctx.fillStyle = 'rgba(245,245,245,0.92)';
+        ctx.fillRect(s/2 - stripeH/2, y, stripeH, stripeW);
       }
       _noise(ctx, s, 0.02);
     });

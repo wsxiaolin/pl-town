@@ -41,27 +41,6 @@ export const WEST_BEACH = Object.freeze({
   minZ: -34,
   maxZ: 54,
 });
-export const SATELLITE_CITY = Object.freeze({
-  roadNodes: Object.freeze([
-    [0, 38], [0, 55], [-8, 68], [-28, 68], [28, 68], [20, 82],
-    [-24, 82], [-16, 97], [25, 97],
-  ]),
-  roadSegments: Object.freeze([
-    [0, 38, 0, 55], [0, 55, -8, 68], [-8, 68, 28, 68],
-    [28, 68, 20, 82], [20, 82, -24, 82], [-24, 82, -16, 97],
-    [-16, 97, 25, 97],
-  ]),
-  buildingPositions: Object.freeze([
-    [-18, 60], [-12, 60], [-6, 60], [0, 60], [6, 60], [12, 60],
-    [-18, 76], [-12, 76], [-6, 76], [0, 76], [6, 76], [12, 76],
-    [-18, 92], [-12, 92], [-6, 92], [0, 92], [6, 92], [12, 92],
-  ]),
-  connectorStartZ: 38,
-  centerZ: 78,
-  width: 66,
-  depth: 50,
-});
-
 export const ECHO_OBSERVATORY_AREA = Object.freeze({
   roadNodes: Object.freeze([
     [38, 0], [48, 0], [58, 0], [68, 0],

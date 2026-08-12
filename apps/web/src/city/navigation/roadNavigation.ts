@@ -3,7 +3,6 @@ import * as THREE from 'three';
 
 export interface RoadNavigationOptions {
   roadCoords: readonly number[];
-  satelliteCity: any;
   echoObservatoryArea?: any;
   westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
   cityLimit: number;
@@ -12,12 +11,11 @@ export interface RoadNavigationOptions {
 
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const ROAD_COORDS = [...options.roadCoords];
-  const SATELLITE_CITY = options.satelliteCity;
   const ECHO_OBSERVATORY_AREA = options.echoObservatoryArea || { roadNodes: [], roadSegments: [] };
   const CITY_LIMIT = options.cityLimit;
   const PLAYER_CLEARANCE = 0.2;
   const WEST_BEACH = options.westBeach;
-  const allExtraNodes = [...SATELLITE_CITY.roadNodes, ...ECHO_OBSERVATORY_AREA.roadNodes];
+  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes];
   const WORLD_BOUNDS = {
     minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
     maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
@@ -128,14 +126,6 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       if(a&&b) addEdge(a,b);
     });
   
-    SATELLITE_CITY.roadNodes.forEach(([x,z])=>addNode(x,z));
-    SATELLITE_CITY.roadSegments.forEach(([x1,z1,x2,z2])=>{
-      addEdge(nodes[nodeIdx.get(x1+','+z1)],nodes[nodeIdx.get(x2+','+z2)]);
-    });
-    const mainSouth=nodes[nodeIdx.get('0,38')];
-    const satelliteNorth=nodes[nodeIdx.get('0,55')];
-    if(mainSouth&&satelliteNorth) addEdge(mainSouth,satelliteNorth);
-
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
     ECHO_OBSERVATORY_AREA.roadSegments.forEach(([x1,z1,x2,z2])=>{
       addEdge(nodes[nodeIdx.get(x1+','+z1)],nodes[nodeIdx.get(x2+','+z2)]);
@@ -223,7 +213,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   }
   
   // Snap a road-line point to the nearest reachable intersection on the network
-  // (grid, central plaza ring, outer ring or satellite roads).
+  // (grid, central plaza ring, outer ring or dedicated area roads).
   function connectToGrid(p,graph) {
     const key=p.x+','+p.z;
     if(graph.nodeIdx.has(key)) {
@@ -245,13 +235,8 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       }
     }
     // Nearest reachable node anywhere on the network. This handles spawn in the
-    // fountain plaza, corner off-grid spots and satellite drives: the player is
+    // fountain plaza and corner off-grid spots: the player is
     // snapped to the CLOSEST clear node so it never gets pushed the wrong way.
-    const satelliteNode = SATELLITE_CITY.roadNodes
-      .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z)])
-      .filter(node=>node && node.adj.length)
-      .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
-    if(satelliteNode && p.z>=44 && !pathBlocked(p.x,p.z,satelliteNode.x,satelliteNode.z)) return satelliteNode;
     const echoNode = ECHO_OBSERVATORY_AREA.roadNodes
       .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z)])
       .filter(node=>node && node.adj.length)
@@ -326,10 +311,6 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
         new THREE.Vector3(owner.maxX + clearance, 0, z),
       );
     }
-    // Satellite-town buildings live off the main grid; snap to their road nodes.
-    if(p.z>=44){
-      SATELLITE_CITY.roadNodes.forEach(([x,z])=>candidates.push(new THREE.Vector3(x,0,z)));
-    }
     if(p.x>=44){
       ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>candidates.push(new THREE.Vector3(x,0,z)));
     }
@@ -403,11 +384,6 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const buildingEntry=buildingRoadEntry(p);
     if(buildingEntry) return buildingEntry;
     if(isRoadPoint(p)) return snapToRoadClear(p);
-    if(p.z>=44){
-      const nearest=SATELLITE_CITY.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
-      const q=new THREE.Vector3(nearest[0],0,nearest[1]);
-      return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
-    }
     if(p.x>=44 && ECHO_OBSERVATORY_AREA.roadNodes.length){
       const nearest=ECHO_OBSERVATORY_AREA.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
       const q=new THREE.Vector3(nearest[0],0,nearest[1]);
@@ -432,7 +408,6 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     ROAD_COORDS.forEach(x=>{ tryPoint(x,p.z); tryPoint(x,nearestRoadCoord(p.z)); });
     ROAD_COORDS.forEach(z=>{ tryPoint(p.x,z); tryPoint(nearestRoadCoord(p.x),z); });
     PLAZA_POINTS.forEach(([x,z])=>tryPoint(x,z));
-    SATELLITE_CITY.roadNodes.forEach(([x,z])=>tryPoint(x,z));
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
     if(bestD<Infinity) return best;
     return nearestRoadPoint(p);

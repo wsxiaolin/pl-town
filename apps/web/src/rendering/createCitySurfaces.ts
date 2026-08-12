@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { ECHO_OBSERVATORY_AREA, SATELLITE_CITY } from '../city/data/cityConfig';
+import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 
 type MaterialOptions = THREE.MeshStandardMaterialParameters & {
   tex?: string;
@@ -90,14 +90,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       scene.add(grass);
     }
 
-    const satelliteMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 10, ry: 9 });
-    const satellite = new THREE.Mesh(new THREE.PlaneGeometry(SATELLITE_CITY.width, SATELLITE_CITY.depth), satelliteMat);
-    satellite.rotation.x = -Math.PI / 2;
-    satellite.position.set(0, SURFACE_Y.district, SATELLITE_CITY.centerZ);
-    satellite.receiveShadow = true;
-    satellite.renderOrder = RENDER_ORDER.district;
-    scene.add(satellite);
-
     const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 8, ry: 6 });
     const echoGround = new THREE.Mesh(new THREE.PlaneGeometry(ECHO_OBSERVATORY_AREA.width, ECHO_OBSERVATORY_AREA.depth), echoGroundMat);
     echoGround.rotation.x = -Math.PI / 2;
@@ -111,7 +103,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
-      { mat: satelliteMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
     );
   }
@@ -142,27 +133,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     addRoadSegment(38.8, 2.4, 23.6, 0, true, 'asphalt');
     addRoadSegment(2.4, 2.0, 0, -39.0, true, 'asphalt');
     addRoadSegment(2.4, 2.0, 0, 39.0, true, 'asphalt');
-
-    SATELLITE_CITY.roadSegments.forEach((segment, index) => {
-      const [x1, z1, x2, z2] = segment as [number, number, number, number];
-      const width = index === 0 ? 2.4 : 1.45;
-      const dx = x2 - x1;
-      const dz = z2 - z1;
-      const length = Math.hypot(dx, dz);
-      const road = new THREE.Mesh(new THREE.BoxGeometry(width, 0.04, length), createLayerMaterial({
-        color: index === 0 ? colors.asphalt : pathColor,
-        roughness: 1,
-        tex: index === 0 ? 'asphalt' : 'pavement',
-        rx: Math.max(1, width / 3),
-        ry: Math.max(1, length / 3),
-      }));
-      road.position.set((x1 + x2) / 2, SURFACE_Y.road, (z1 + z2) / 2);
-      road.rotation.y = -Math.atan2(dx, dz);
-      road.renderOrder = RENDER_ORDER.road;
-      road.receiveShadow = true;
-      road.userData.district = index === 0 ? 'satellite-connector' : 'satellite-road';
-      scene.add(road);
-    });
 
     ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
@@ -214,11 +184,21 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       addMarking(new THREE.BoxGeometry(1.15, 0.008, 0.07), lineMat, position, 0);
     }
 
-    for (const x of roadCoords) for (const z of roadCoords) {
-      if ((x !== 0 && z !== 0) || (x === 0 && z === 0)) continue;
+    // Keep crosswalks at half of the grid intersections while retaining a
+    // deterministic spread along the main roads.
+    const nonZeroRoadCoords = roadCoords.filter((position) => position !== 0);
+    const crosswalkRoadCoords = nonZeroRoadCoords
+      .filter((_, index) => index % 2 === 0)
+      .slice(0, Math.ceil(nonZeroRoadCoords.length / 2));
+    for (const x of crosswalkRoadCoords) {
+      const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalkRotated', rx: 1, ry: 1 });
+      pathMaterials.push(material);
+      addMarking(new THREE.BoxGeometry(roadWidth(x), 0.005, 2.4), material, x, 0);
+    }
+    for (const z of crosswalkRoadCoords) {
       const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
       pathMaterials.push(material);
-      addMarking(new THREE.BoxGeometry(x === 0 ? 2 : 0.5, 0.005, x === 0 ? 0.5 : 2), material, x, z);
+      addMarking(new THREE.BoxGeometry(2.4, 0.005, roadWidth(z)), material, 0, z);
     }
 
     const ringMat = createLayerMaterial({ color: colors.asphalt, roughness: 0.95 });

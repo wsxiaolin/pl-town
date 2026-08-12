@@ -282,51 +282,6 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   expect(lockedAudit).toEqual({ storyLocked: true, emissiveIntensity: 0 });
 });
 
-test('satellite city loads its buildings and roads', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
-  });
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript(() => {
-    const NativeWebSocket = window.WebSocket;
-    class OfflineGameWebSocket extends EventTarget {
-      readyState: number = NativeWebSocket.CONNECTING;
-      send() {}
-      close() { this.readyState = NativeWebSocket.CLOSED; }
-    }
-    const RoutedWebSocket = new Proxy(NativeWebSocket, {
-      construct(Target, args) {
-        if (String(args[0]).includes(':8787')) return new OfflineGameWebSocket();
-        return Reflect.construct(Target, args);
-      },
-    });
-    Object.defineProperty(window, 'WebSocket', { configurable: true, value: RoutedWebSocket });
-    localStorage.setItem('minicityCGSeenV3', 'true');
-    localStorage.setItem('minicityUser', 'tester');
-    localStorage.setItem('minicityRenderSettings', JSON.stringify({
-      resolution: 1,
-      antialias: false,
-      anisotropy: 1,
-      shadows: false,
-      exposure: 1.18,
-    }));
-  });
-
-  await page.goto('/');
-  await expect.poll(async () => page.evaluate(() => {
-    const mini = (window as any).__mini?.();
-    if (!mini) return 0;
-    const buildings = mini.scene.children.filter((object: any) => object.userData.assetPack === 'buildings');
-    const designed = mini.scene.children.filter((object: any) => object.userData.assetPack === 'main-city-design');
-    const satelliteRoads = mini.scene.children.filter((object: any) => object.userData.district === 'satellite-road');
-    const connectors = mini.scene.children.filter((object: any) => object.userData.district === 'satellite-connector');
-    const positioned = [...buildings, ...designed].every((object: any) => Math.abs(object.position.x) <= 30 && object.position.z >= 57 && object.position.z <= 107);
-    return { buildings: buildings.length, designed: designed.length, roads: satelliteRoads.length, connectors: connectors.length, positioned };
-  }), { timeout: 30_000 }).toEqual({ buildings: 13, designed: 5, roads: 6, connectors: 1, positioned: true });
-  expect(errors).toEqual([]);
-});
-
 test('NPC side quest flows from offer to building objective to delivery', async ({ page }) => {
   test.setTimeout(120_000);
   await page.addInitScript(() => {
