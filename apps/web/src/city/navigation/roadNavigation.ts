@@ -13,7 +13,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const ECHO_OBSERVATORY_AREA = options.echoObservatoryArea || { roadNodes: [], roadSegments: [] };
   const CITY_LIMIT = options.cityLimit;
   const PLAYER_CLEARANCE = 0.38;
-  const allExtraNodes = [...SATELLITE_CITY.roadNodes, ...ECHO_OBSERVATORY_AREA.roadNodes];
+  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes];
   const WORLD_BOUNDS = {
     minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
     maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
