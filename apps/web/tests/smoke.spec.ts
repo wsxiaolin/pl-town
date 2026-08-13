@@ -90,7 +90,12 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
         const catalog = {
           initialCurrency: 1200, buildingPrices: { mall_south: 0 },
           achievementRewards: { citizen: 20, cat_cafe_note: 30, minicity_origin: 50, dragonwell_assimilation: 80 },
-          products: { dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 } },
+          products: {
+            dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
+            beef: { itemId: 'beef', name: '牛肉', unitPrice: 45 },
+            radish: { itemId: 'radish', name: '萝卜', unitPrice: 20 },
+            music_box: { itemId: 'music_box', name: '音乐盒', unitPrice: 120 },
+          },
         };
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
@@ -137,6 +142,18 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await expect(page.locator('#inventoryPanel')).toHaveClass(/shop-mode/);
   await expect(page.locator('#inventoryPanel [data-panel-title]')).toHaveText('物实商店');
   await expect(page.locator('#inventoryPanel [data-inventory-section]')).toBeHidden();
+  const expectedProducts = [
+    ['dragonwell_tea', '茶', '龙井茶', '西湖龙井 · 可用于石井剧情'],
+    ['beef', '肉', '牛肉', '新鲜牛肉 · 林澈遗愿所需食材'],
+    ['radish', '萝', '萝卜', '新鲜萝卜 · 林澈遗愿所需食材'],
+    ['music_box', '音', '音乐盒', '经典旋律音乐盒 · 林澈遗愿所需物品'],
+  ] as const;
+  for (const [productId, icon, name, detail] of expectedProducts) {
+    const product = page.locator(`[data-product-id="${productId}"]`);
+    await expect(product.locator('.shop-product-icon')).toHaveText(icon);
+    await expect(product.locator('.sp-ul-name')).toHaveText(name);
+    await expect(product.locator('small')).toHaveText(detail);
+  }
   await page.locator('[data-inventory-close]').click();
 
   const worldAudit = await page.evaluate(async () => {

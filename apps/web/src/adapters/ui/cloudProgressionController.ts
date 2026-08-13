@@ -26,6 +26,13 @@ type Options = {
   send: (command: ProgressionCommand) => boolean;
 };
 
+const PRODUCT_PRESENTATIONS: Readonly<Record<string, { icon: string; detail: string }>> = Object.freeze({
+  dragonwell_tea: { icon: '茶', detail: '西湖龙井 · 可用于石井剧情' },
+  beef: { icon: '肉', detail: '新鲜牛肉 · 林澈遗愿所需食材' },
+  radish: { icon: '萝', detail: '新鲜萝卜 · 林澈遗愿所需食材' },
+  music_box: { icon: '音', detail: '经典旋律音乐盒 · 林澈遗愿所需物品' },
+});
+
 export type CloudProgressionController = ReturnType<typeof createCloudProgressionController>;
 
 export function createCloudProgressionController(options: Options) {
@@ -100,7 +107,10 @@ export function createCloudProgressionController(options: Options) {
     if (!event) return;
     if (event.welcomeItemsGranted) options.showToast('背包已解锁，获得城市导览册和居民纪念徽章');
     else if (event.type === 'achievement.unlocked' && event.reward) options.showToast(`成就奖励 +${event.reward} 物实币`);
-    else if (event.type === 'shop.purchased') options.showToast('龙井茶已放入背包');
+    else if (event.type === 'shop.purchased') {
+      const productName = event.productId ? catalog.products[event.productId]?.name : undefined;
+      options.showToast(`${productName ?? '商品'}已放入背包`);
+    }
     else if (event.type === 'reward.claimed') options.showToast(event.claimed ? '今日沃柑已放入背包' : '今天已经领取过沃柑了');
   }
 
@@ -136,18 +146,20 @@ export function createCloudProgressionController(options: Options) {
     const list = shopArea?.querySelector<HTMLElement>('[data-shop-list]');
     if (!list) return;
     list.replaceChildren(...Object.entries(catalog.products).map(([productId, product]) => {
+      const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: '物', detail: `${product.name} · 商场在售商品` };
       const row = options.document.createElement('div');
       row.className = 'shop-product';
+      row.dataset.productId = productId;
       const icon = options.document.createElement('span');
       icon.className = 'shop-product-icon';
-      icon.textContent = '茶';
+      icon.textContent = presentation.icon;
       const copy = options.document.createElement('span');
       copy.className = 'shop-product-copy';
       const name = options.document.createElement('span');
       name.className = 'sp-ul-name';
       name.textContent = product.name;
       const detail = options.document.createElement('small');
-      detail.textContent = '西湖龙井 · 可用于石井剧情';
+      detail.textContent = presentation.detail;
       copy.append(name, detail);
       const buy = options.document.createElement('button');
       buy.type = 'button';
