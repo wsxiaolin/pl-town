@@ -50,6 +50,10 @@ export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 export const ADMIN_SESSION_TTL_MINUTES = integer('ADMIN_SESSION_TTL_MINUTES', 480, 15, 1_440);
 export const ADMIN_ENABLED = Boolean(ADMIN_USERNAME && ADMIN_PASSWORD);
 
+// Anti-abuse: cap how many new resident accounts a single IP may create.
+export const MAX_REGISTRATIONS_PER_IP = integer('MAX_REGISTRATIONS_PER_IP', 5, 1, 1_000);
+export const REGISTRATION_WINDOW_MINUTES = integer('REGISTRATION_WINDOW_MINUTES', 60, 1, 10_080);
+
 export const AUTO_BACKUP_ENABLED = boolean('AUTO_BACKUP_ENABLED', true);
 export const BACKUP_ON_START = boolean('BACKUP_ON_START', true);
 export const BACKUP_INTERVAL_MINUTES = integer('BACKUP_INTERVAL_MINUTES', 1_440, 1, 43_200);

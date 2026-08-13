@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
-import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, PORT } from './config.js';
+import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
@@ -114,7 +114,8 @@ async function handle(client: Client, raw: string) {
     authAttempts.set(address, attempt);
     let result: Awaited<ReturnType<typeof authenticate>>;
     try {
-      result = await authenticate({ token: message.token, nickname: message.nickname, password: message.password });
+      const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
+      result = await authenticate({ token: message.token, nickname: message.nickname, password: message.password, ip: address, registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP } });
     } catch (error) {
       const reason = error instanceof Error ? error.message : '登录失败';
       logger.warn('Login failed', { ip: address, reason });
@@ -143,7 +144,7 @@ async function handle(client: Client, raw: string) {
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim(); if (text) broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); return;
+      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
@@ -285,6 +286,7 @@ const http = createServer(async (request, response) => {
   if (await handleAdminRequest(request, response, {
     online: () => clients.size,
     disconnectUser: (userId) => clients.get(userId)?.socket.close(4003, 'Account status changed'),
+    disconnectAll: () => { for (const client of clients.values()) client.socket.close(4003, 'Database restored'); },
     startedAt,
   })) return;
   const headers = jsonSecurityHeaders;

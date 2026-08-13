@@ -116,3 +116,13 @@ dialog p { color: #5f6b65; font-size: 13px; line-height: 1.6; }
   .search { width: 100%; }
   .login-panel { padding: 28px 22px; }
 }
+
+.edit-form { display: flex; flex-direction: column; gap: 14px; min-width: 340px; }
+.edit-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.edit-form input, .edit-form select { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; }
+dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.catalog-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.catalog-list li { display: flex; flex-direction: column; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.catalog-list small { color: var(--muted); }
+.node-list { max-width: 360px; color: var(--muted); }
