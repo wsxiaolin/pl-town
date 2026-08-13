@@ -702,6 +702,19 @@ export function moveUserToHouse(userId: string, buildingId: string | null): { ok
     if (!house) return { ok: false, reason: '住房不存在' };
   }
   const transaction = db.transaction(() => {
+    // If this resident owns any house, releasing their membership would leave
+    // that house with an owner who is no longer a member. Hand each such house
+    // to another current member, or (if it has none) drop the house, so the
+    // owner-is-a-member invariant that claimHouse/setHouseRoster rely on holds.
+    const owned = db.prepare('SELECT building_id FROM houses WHERE owner_id = ?').all(userId) as Array<{ building_id: string }>;
+    for (const { building_id } of owned) {
+      const next = db.prepare('SELECT user_id FROM house_members WHERE building_id = ? AND user_id <> ? ORDER BY joined_at LIMIT 1').get(building_id, userId) as { user_id: string } | undefined;
+      if (next) {
+        db.prepare('UPDATE houses SET owner_id = ?, updated_at = ? WHERE building_id = ?').run(next.user_id, now(), building_id);
+      } else {
+        db.prepare('DELETE FROM houses WHERE building_id = ?').run(building_id);
+      }
+    }
     db.prepare('DELETE FROM house_members WHERE user_id = ?').run(userId);
     if (buildingId) {
       const members = (db.prepare('SELECT COUNT(*) AS count FROM house_members WHERE building_id = ?').get(buildingId) as { count: number }).count;
@@ -782,41 +795,47 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
   const liveTables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name);
   const backupTables = new Set((probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name));
   let rowsCopied = 0;
-  // The copy and verification both run inside one transaction so a failed
-  // integrity / foreign-key check rolls the database back instead of leaving
-  // a partially restored state behind.
-  db.transaction(() => {
-    db.pragma('foreign_keys = OFF');
-    for (const table of backupTables) {
-      if (!liveTables.includes(table)) continue;
-      const sourceColumns = (probe.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
-      if (!sourceColumns.length) continue;
-      const columns = (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
-      const shared = columns.filter((column) => sourceColumns.includes(column));
-      if (!shared.length) continue;
-      const columnList = shared.map((column) => `"${column}"`).join(', ');
-      const placeholders = shared.map(() => '?').join(', ');
-      db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
-      const insert = db.prepare(`INSERT INTO ${quoteIdent(table)} (${columnList}) VALUES (${placeholders})`);
-      const rows = probe.prepare(`SELECT ${columnList} FROM ${quoteIdent(table)}`).all() as Record<string, unknown>[];
-      for (const row of rows) insert.run(...shared.map((column) => row[column]));
-      rowsCopied += rows.length;
-    }
-    // Backups created before these tables existed won't contain them; clear any
-    // live rows they still hold so they cannot reference restored/removed users.
-    for (const table of liveTables) {
-      if (!backupTables.has(table)) db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
-    }
-    // Re-enable enforcement and verify before commit so violations roll back.
+  // PRAGMA foreign_keys is a no-op inside an active transaction, so disable it
+  // here (before BEGIN) so child tables can be cleared before parent rows are
+  // deleted without tripping a FOREIGN KEY constraint. Enforcement is restored
+  // in a finally; the foreign_key_check pragma reports violations regardless
+  // of the enforcement flag, so verification still runs inside the transaction.
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      for (const table of backupTables) {
+        if (!liveTables.includes(table)) continue;
+        const sourceColumns = (probe.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
+        if (!sourceColumns.length) continue;
+        const columns = (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
+        const shared = columns.filter((column) => sourceColumns.includes(column));
+        if (!shared.length) continue;
+        const columnList = shared.map((column) => `"${column}"`).join(', ');
+        const placeholders = shared.map(() => '?').join(', ');
+        db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
+        const insert = db.prepare(`INSERT INTO ${quoteIdent(table)} (${columnList}) VALUES (${placeholders})`);
+        const rows = probe.prepare(`SELECT ${columnList} FROM ${quoteIdent(table)}`).all() as Record<string, unknown>[];
+        for (const row of rows) insert.run(...shared.map((column) => row[column]));
+        rowsCopied += rows.length;
+      }
+      // Backups created before these tables existed won't contain them; clear any
+      // live rows they still hold so they cannot reference restored/removed users.
+      for (const table of liveTables) {
+        if (!backupTables.has(table)) db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
+      }
+      // foreign_key_check reports violations even with enforcement off, so we
+      // can verify before commit and throw to roll the restore back.
+      const integrity = String(db.pragma('integrity_check', { simple: true }));
+      const foreignKeyErrors = db.pragma('foreign_key_check') as unknown[];
+      if (integrity !== 'ok' || foreignKeyErrors.length) {
+        throw new Error(`Restore verification failed (${integrity}, ${foreignKeyErrors.length} foreign key errors)`);
+      }
+      // Revoke every resident session so restored credentials are not reused.
+      db.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(now());
+    })();
+  } finally {
     db.pragma('foreign_keys = ON');
-    const integrity = String(db.pragma('integrity_check', { simple: true }));
-    const foreignKeyErrors = db.pragma('foreign_key_check') as unknown[];
-    if (integrity !== 'ok' || foreignKeyErrors.length) {
-      throw new Error(`Restore verification failed (${integrity}, ${foreignKeyErrors.length} foreign key errors)`);
-    }
-    // Revoke every resident session so restored credentials are not reused.
-    db.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(now());
-  })();
+  }
   probe.close();
   return { rowsCopied };
 }
