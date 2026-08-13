@@ -27,6 +27,8 @@
         <button class="nav-item active" data-view="overview" type="button">概览</button>
         <button class="nav-item" data-view="users" type="button">居民</button>
         <button class="nav-item" data-view="houses" type="button">住房</button>
+        <button class="nav-item" data-view="story" type="button">剧情</button>
+        <button class="nav-item" data-view="chat" type="button">聊天审核</button>
         <button class="nav-item" data-view="backups" type="button">备份</button>
         <button class="nav-item" data-view="audit" type="button">审计日志</button>
       </nav>
@@ -51,12 +53,24 @@
       </section>
 
       <section class="view" data-page="houses" hidden>
-        <div class="toolbar"><p>住房归属和成员关系只读视图</p><span id="houseCount"></span></div>
-        <div class="table-wrap"><table><thead><tr><th>住房</th><th>房主</th><th>名称</th><th>成员</th></tr></thead><tbody id="houseRows"></tbody></table></div>
+        <div class="toolbar"><p>住房归属和成员关系，可编辑名称与人数。</p><span id="houseCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>住房</th><th>房主</th><th>名称</th><th>成员</th><th class="align-right">操作</th></tr></thead><tbody id="houseRows"></tbody></table></div>
+      </section>
+
+      <section class="view" data-page="story" hidden>
+        <div class="toolbar"><form class="search" id="storySearch"><input id="storyQuery" maxlength="100" placeholder="搜索昵称、用户 ID 或任务 ID" aria-label="搜索剧情存档" /><button class="secondary" type="submit">搜索</button></form><span id="storyProgressCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>居民</th><th>任务</th><th>当前剧情节点</th><th>最近更新</th><th>节点编码</th></tr></thead><tbody id="storyRows"></tbody></table></div>
+        <section class="panel"><header><div><p class="eyebrow">CATALOG</p><h2>任务节点目录</h2></div></header><ul class="catalog-list" id="storyCatalog"></ul></section>
+      </section>
+
+      <section class="view" data-page="chat" hidden>
+        <div class="toolbar"><form class="search" id="chatSearch"><input id="chatQuery" maxlength="100" placeholder="搜索昵称或聊天内容" aria-label="搜索聊天记录" /><button class="secondary" type="submit">搜索</button></form><select id="chatFilter" aria-label="聊天筛选"><option value="visible">仅显示可见</option><option value="flagged">已标记</option><option value="hidden">已隐藏</option><option value="all">全部</option></select><span id="chatCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>居民</th><th>内容</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="chatRows"></tbody></table></div>
+        <section class="panel"><header><div><p class="eyebrow">BY ACCOUNT</p><h2>按账号分组</h2></div></header><div class="table-wrap"><table><thead><tr><th>居民</th><th>消息数</th><th>已标记</th><th>已隐藏</th><th>最近发言</th></tr></thead><tbody id="chatAuthorRows"></tbody></table></div></section>
       </section>
 
       <section class="view" data-page="backups" hidden>
-        <div class="toolbar"><p>SQLite 在线一致性备份，可直接下载到异地存储。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
+        <div class="toolbar"><p>SQLite 在线一致性备份，可直接下载到异地存储，或从控制台恢复。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
         <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>创建时间</th><th>校验</th><th>大小</th><th class="align-right">操作</th></tr></thead><tbody id="backupRows"></tbody></table></div>
       </section>
 
@@ -68,6 +82,28 @@
   </div>
 
   <dialog id="confirmDialog"><form method="dialog"><h2 id="confirmTitle">确认操作</h2><p id="confirmCopy"></p><div class="dialog-actions"><button class="secondary" value="cancel">取消</button><button class="danger" id="confirmAction" value="confirm">确认</button></div></form></dialog>
+
+  <dialog id="userDialog">
+    <form method="dialog" class="edit-form" onsubmit="return false">
+      <h2 id="userDialogTitle">编辑居民</h2>
+      <label>昵称<input id="userDialogNickname" maxlength="40" autocomplete="off" /></label>
+      <label>住房<select id="userDialogHouse"></select></label>
+      <input id="userDialogId" type="hidden" />
+      <div class="dialog-actions"><button class="secondary" value="cancel">取消</button><button class="primary" id="userDialogSubmit" type="button" value="save">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="houseDialog">
+    <form method="dialog" class="edit-form" onsubmit="return false">
+      <h2>编辑住房</h2>
+      <label>住房名称<input id="houseDialogName" maxlength="80" autocomplete="off" /></label>
+      <label>成员（用户 ID，逗号分隔）<input id="houseDialogMembers" autocomplete="off" /></label>
+      <small id="houseDialogMemberHint"></small>
+      <input id="houseDialogId" type="hidden" />
+      <div class="dialog-actions"><button class="secondary" value="cancel">取消</button><button class="primary" id="houseDialogSubmit" type="button" value="save">保存</button></div>
+    </form>
+  </dialog>
+
   <script type="module" src="/admin/app.js"></script>
 </body>
 </html>

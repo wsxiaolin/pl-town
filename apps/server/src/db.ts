@@ -147,6 +147,26 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit(created_at DESC);
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    nickname TEXT NOT NULL,
+    text TEXT NOT NULL,
+    flagged_at TEXT,
+    hidden_at TEXT,
+    hidden_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS chat_messages_created_idx ON chat_messages(created_at DESC);
+  CREATE INDEX IF NOT EXISTS chat_messages_user_idx ON chat_messages(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS chat_messages_hidden_idx ON chat_messages(hidden_at);
+  CREATE TABLE IF NOT EXISTS account_registrations (
+    ip TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (ip, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS account_registrations_ip_idx ON account_registrations(ip, created_at DESC);
 `);
 {
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
@@ -458,6 +478,9 @@ export type AdminSummary = {
   housingRequests: number;
   inventoryRows: number;
   storyRows: number;
+  storyParticipants: number;
+  chatMessages: number;
+  hiddenChatMessages: number;
   databaseBytes: number;
 };
 
@@ -484,9 +507,12 @@ export type AdminAuditEntry = {
 export function getAdminSummary(databaseBytes = 0): AdminSummary {
   const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
   const disabledUsers = (db.prepare('SELECT COUNT(*) AS count FROM users WHERE disabled_at IS NOT NULL').get() as { count: number }).count;
+  const storyParticipants = (db.prepare('SELECT COUNT(DISTINCT user_id) AS count FROM story_progress').get() as { count: number }).count;
+  const hiddenChatMessages = (db.prepare('SELECT COUNT(*) AS count FROM chat_messages WHERE hidden_at IS NOT NULL').get() as { count: number }).count;
   return {
     users: count('users'), disabledUsers, houses: count('houses'), housingRequests: count('housing_requests'),
-    inventoryRows: count('player_inventory'), storyRows: count('story_progress'), databaseBytes,
+    inventoryRows: count('player_inventory'), storyRows: count('story_progress'), storyParticipants, chatMessages: count('chat_messages'),
+    hiddenChatMessages, databaseBytes,
   };
 }
 
@@ -562,6 +588,208 @@ export function databaseStatus(): { ready: boolean; applicationId: number; schem
 export function checkpointDatabase(): void {
   db.pragma('wal_checkpoint(PASSIVE)');
 }
+
+// ── Chat moderation ────────────────────────────────────────────────
+export type ChatMessage = {
+  id: number;
+  userId: string;
+  nickname: string;
+  text: string;
+  flaggedAt: string | null;
+  hiddenAt: string | null;
+  hiddenBy: string | null;
+  createdAt: string;
+};
+
+export function recordChatMessage(userId: string, nickname: string, text: string): void {
+  db.prepare('INSERT INTO chat_messages (user_id, nickname, text, created_at) VALUES (?, ?, ?, ?)').run(userId, nickname, text, now());
+}
+
+export type ChatListFilter = { query?: string; includeHidden?: boolean; onlyHidden?: boolean; onlyFlagged?: boolean; userId?: string; limit: number; offset: number };
+
+export function listChatMessages(input: ChatListFilter): { items: ChatMessage[]; total: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  const query = input.query?.trim() ?? '';
+  if (query) { conditions.push("(nickname LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')"); params.push(`%${query.replace(/[\\%_]/g, '\\$&')}%`, `%${query.replace(/[\\%_]/g, '\\$&')}%`); }
+  if (input.userId) { conditions.push('user_id = ?'); params.push(input.userId); }
+  if (input.onlyFlagged) conditions.push('flagged_at IS NOT NULL');
+  if (input.onlyHidden) conditions.push('hidden_at IS NOT NULL');
+  else if (!input.includeHidden) conditions.push('hidden_at IS NULL');
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const total = (db.prepare(`SELECT COUNT(*) AS count FROM chat_messages ${where}`).get(...params) as { count: number }).count;
+  const rows = db.prepare(`SELECT id, user_id, nickname, text, flagged_at, hidden_at, hidden_by, created_at FROM chat_messages ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
+  return { total, items: rows.map((row) => ({
+    id: row.id, userId: row.user_id, nickname: row.nickname, text: row.text,
+    flaggedAt: row.flagged_at ?? null, hiddenAt: row.hidden_at ?? null, hiddenBy: row.hidden_by ?? null, createdAt: row.created_at,
+  })) };
+}
+
+export type ChatAuthorSummary = { userId: string; nickname: string; messages: number; hidden: number; flagged: number; lastAt: string };
+
+export function listChatAuthors(limit: number): ChatAuthorSummary[] {
+  const rows = db.prepare(`
+    SELECT user_id, nickname, COUNT(*) AS messages,
+           SUM(CASE WHEN hidden_at IS NOT NULL THEN 1 ELSE 0 END) AS hidden,
+           SUM(CASE WHEN flagged_at IS NOT NULL THEN 1 ELSE 0 END) AS flagged,
+           MAX(created_at) AS last_at
+    FROM chat_messages GROUP BY user_id ORDER BY last_at DESC LIMIT ?
+  `).all(limit) as any[];
+  return rows.map((row) => ({
+    userId: row.user_id, nickname: row.nickname, messages: row.messages,
+    hidden: row.hidden ?? 0, flagged: row.flagged ?? 0, lastAt: row.last_at,
+  }));
+}
+
+export function setChatMessageHidden(id: number, hidden: boolean, actor: string): boolean {
+  const timestamp = now();
+  const result = hidden
+    ? db.prepare('UPDATE chat_messages SET hidden_at = ?, hidden_by = ? WHERE id = ? AND hidden_at IS NULL').run(timestamp, actor, id)
+    : db.prepare('UPDATE chat_messages SET hidden_at = NULL, hidden_by = NULL WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
+export function flagChatMessage(id: number): boolean {
+  const result = db.prepare('UPDATE chat_messages SET flagged_at = ? WHERE id = ? AND flagged_at IS NULL').run(now(), id);
+  return result.changes > 0;
+}
+
+// ── Anti-abuse: registration tracking ──────────────────────────────
+export function countRegistrationsForIp(ip: string, sinceIso: string): number {
+  return (db.prepare('SELECT COUNT(*) AS count FROM account_registrations WHERE ip = ? AND created_at >= ?').get(ip, sinceIso) as { count: number }).count;
+}
+
+export function recordRegistration(ip: string, userId: string): void {
+  db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
+}
+
+// ── Admin user & housing mutations ─────────────────────────────────
+export function updateAdminUserNickname(userId: string, nickname: string): { ok: boolean; reason?: string } {
+  const trimmed = nickname.trim();
+  if (!trimmed) return { ok: false, reason: '昵称不能为空' };
+  const clash = db.prepare('SELECT id FROM users WHERE nickname = ? COLLATE NOCASE AND id <> ?').get(trimmed, userId);
+  if (clash) return { ok: false, reason: '昵称已被占用' };
+  const result = db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?').run(trimmed, now(), userId);
+  return { ok: result.changes > 0 };
+}
+
+export function moveUserToHouse(userId: string, buildingId: string | null): { ok: boolean; reason?: string } {
+  if (buildingId !== null) {
+    const house = db.prepare('SELECT building_id FROM houses WHERE building_id = ?').get(buildingId);
+    if (!house) return { ok: false, reason: '住房不存在' };
+  }
+  const transaction = db.transaction(() => {
+    db.prepare('DELETE FROM house_members WHERE user_id = ?').run(userId);
+    if (buildingId) {
+      const members = (db.prepare('SELECT COUNT(*) AS count FROM house_members WHERE building_id = ?').get(buildingId) as { count: number }).count;
+      if (members >= 10) throw new Error('该住房已满员');
+      db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, userId, now());
+    }
+  });
+  try { transaction(); return { ok: true }; }
+  catch (error) { return { ok: false, reason: error instanceof Error ? error.message : '操作失败' }; }
+}
+
+export function setHouseRoster(buildingId: string, memberIds: string[]): { ok: boolean; reason?: string } {
+  const house = db.prepare('SELECT owner_id FROM houses WHERE building_id = ?').get(buildingId) as { owner_id: string } | undefined;
+  if (!house) return { ok: false, reason: '住房不存在' };
+  const unique = [...new Set(memberIds)].filter((id) => db.prepare('SELECT 1 FROM users WHERE id = ?').get(id));
+  if (!unique.includes(house.owner_id)) unique.unshift(house.owner_id);
+  if (unique.length > 10) return { ok: false, reason: '成员数不能超过 10 人' };
+  const transaction = db.transaction(() => {
+    db.prepare('DELETE FROM house_members WHERE building_id = ?').run(buildingId);
+    for (const id of unique) {
+      db.prepare('DELETE FROM house_members WHERE user_id = ? AND building_id <> ?').run(id, buildingId);
+      db.prepare('INSERT OR IGNORE INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, id, now());
+    }
+  });
+  try { transaction(); return { ok: true }; }
+  catch (error) { return { ok: false, reason: error instanceof Error ? error.message : '操作失败' }; }
+}
+
+export type AdminHouse = House & { memberCount: number };
+
+export function listAdminHouses(): AdminHouse[] {
+  return listHouses().map((house) => ({ ...house, memberCount: house.members.length }));
+}
+
+// ── Story progress admin views ─────────────────────────────────────
+export type StoryProgressRow = {
+  userId: string;
+  nickname: string;
+  storyId: string;
+  definitionVersion: number;
+  nodeId: string;
+  ending: string | null;
+  visitCount: number;
+  flags: Record<string, StoryFlagValue>;
+  updatedAt: string;
+};
+
+export function listStoryProgress(input: { query?: string; storyId?: string; limit: number; offset: number }): { items: StoryProgressRow[]; total: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  const query = input.query?.trim() ?? '';
+  if (query) {
+    conditions.push("(u.nickname LIKE ? ESCAPE '\\' OR sp.user_id LIKE ? ESCAPE '\\' OR sp.story_id LIKE ? ESCAPE '\\')");
+    const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+    params.push(pattern, pattern, pattern);
+  }
+  if (input.storyId) { conditions.push('sp.story_id = ?'); params.push(input.storyId); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const total = (db.prepare(`SELECT COUNT(*) AS count FROM story_progress sp LEFT JOIN users u ON u.id = sp.user_id ${where}`).get(...params) as { count: number }).count;
+  const rows = db.prepare(`
+    SELECT sp.user_id, u.nickname, sp.story_id, sp.definition_version, sp.node_id, sp.ending, sp.visit_count, sp.flags_json, sp.updated_at
+    FROM story_progress sp LEFT JOIN users u ON u.id = sp.user_id
+    ${where} ORDER BY sp.updated_at DESC LIMIT ? OFFSET ?
+  `).all(...params, input.limit, input.offset) as any[];
+  return { total, items: rows.map((row) => ({
+    userId: row.user_id, nickname: row.nickname ?? '（已删除）', storyId: row.story_id, definitionVersion: row.definition_version,
+    nodeId: row.node_id, ending: row.ending ?? null, visitCount: row.visit_count, flags: parseStoryFlags(row.flags_json), updatedAt: row.updated_at,
+  })) };
+}
+
+// ── In-process backup restore ──────────────────────────────────────
+export function restoreFromBackupFile(backupPath: string): { rowsCopied: number } {
+  db.pragma('wal_checkpoint(TRUNCATE)');
+  // Copy rows in-process from the (read-only) backup into the live database.
+  // We avoid ATTACH because the just-written backup may hold a lock that
+  // blocks a second writer, and ATTACH cannot open WAL files read-only.
+  const probe = new Database(backupPath, { readonly: true, fileMustExist: true });
+  const liveTables = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name));
+  const backupTables = (probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name);
+  let rowsCopied = 0;
+  db.pragma('foreign_keys = OFF');
+  db.transaction(() => {
+    for (const table of backupTables) {
+      if (!liveTables.has(table)) continue;
+      const sourceColumns = (probe.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
+      if (!sourceColumns.length) continue;
+      const columns = (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
+      const shared = columns.filter((column) => sourceColumns.includes(column));
+      if (!shared.length) continue;
+      const columnList = shared.map((column) => `"${column}"`).join(', ');
+      const placeholders = shared.map(() => '?').join(', ');
+      db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
+      const insert = db.prepare(`INSERT INTO ${quoteIdent(table)} (${columnList}) VALUES (${placeholders})`);
+      const rows = probe.prepare(`SELECT ${columnList} FROM ${quoteIdent(table)}`).all() as Record<string, unknown>[];
+      for (const row of rows) insert.run(...shared.map((column) => row[column]));
+      rowsCopied += rows.length;
+    }
+  })();
+  probe.close();
+  db.pragma('foreign_keys = ON');
+  const integrity = String(db.pragma('integrity_check', { simple: true }));
+  const foreignKeyErrors = (db.pragma('foreign_key_check') as unknown[]).length;
+  if (integrity !== 'ok' || foreignKeyErrors) {
+    throw new Error(`Restore verification failed (${integrity}, ${foreignKeyErrors} foreign key errors)`);
+  }
+  // Revoke every resident session so restored credentials are not reused.
+  db.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(now());
+  return { rowsCopied };
+}
+
+const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 export function closeDatabase(): void {
   if (db.open) db.close();
