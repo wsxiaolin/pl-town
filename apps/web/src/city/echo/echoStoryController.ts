@@ -18,6 +18,7 @@ const ECHO_CABIN_NODES = new Set([
   'diary-page-1',
   'fifth-act-complete',
 ]);
+const ECHO_CABIN_DOOR_ID = 'echo-cabin-door';
 
 const ECHO_STORY_ACHIEVEMENTS: Readonly<Record<string, { id: string; name: string }>> = {
   'echo.achievement.unnoticed': { id: 'echo_unnoticed', name: '无人问津' },
@@ -61,11 +62,18 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   let echoExteriorCameraZoom = 7;
   let echoInteriorView = false;
 
-  const story = createStoryDialogFlow(ECHO_STORY, new LocalStorageStoryRepository(ECHO_STORY), {
+  let story: ReturnType<typeof createStoryDialogFlow>;
+  story = createStoryDialogFlow(ECHO_STORY, new LocalStorageStoryRepository(ECHO_STORY), {
     getContext: options.getQuestContext,
     onEvent: handleStoryEvent,
     onEffects: (effects) => effects.forEach(applyEffect),
-    onWorldInteractionsChanged: options.setStoryPoints,
+    onWorldInteractionsChanged: (ids) => {
+      if (!isCabinNode() || ids.includes(ECHO_CABIN_DOOR_ID)) {
+        options.setStoryPoints(ids);
+        return;
+      }
+      options.setStoryPoints([...ids, ECHO_CABIN_DOOR_ID]);
+    },
     onActiveActorsChanged: (ids) => {
       options.setActiveActors(ids);
       options.updateNpcSchedules();
@@ -117,6 +125,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     const spawn = navigation?.clampToWalkable(cursor.position);
     if (spawn) cursor.position.copy(spawn);
     options.setCameraTarget(cursor.position.x, cursor.position.z, true);
+    options.sendLocalPosition(cursor);
   }
 
   function teleportFromCabin(): void {
@@ -168,6 +177,15 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     return story.interact(actorId, dialogs);
   }
 
+  function interactInterestPoint(interestPointId: string, dialogs: CityDialogController): boolean {
+    const handled = story.interactInterestPoint(interestPointId, dialogs);
+    if (handled || interestPointId !== ECHO_CABIN_DOOR_ID || !isCabinNode()) return handled;
+    // Investigation sub-nodes do not declare an exit transition. Keep the
+    // current clue state intact while still allowing the physical door to work.
+    teleportFromCabin();
+    return true;
+  }
+
   function isCabinNode(): boolean { return ECHO_CABIN_NODES.has(story.state().nodeId); }
   function announceGuide(): void { story.announceGuide(); }
   function syncWorldInteractions(): void { story.syncWorldInteractions(); }
@@ -195,7 +213,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     navigation: () => navigation,
     interact: story.interact,
     interactBuilding: story.interactBuilding,
-    interactInterestPoint: story.interactInterestPoint,
+    interactInterestPoint,
     interactNpc,
     announceGuide,
     syncWorldInteractions,
