@@ -35,6 +35,7 @@ import { createCameraController } from './navigation/cameraController';
 import { createProgressionController } from './progression/progressionController';
 import { updateCityLabels } from './labelController';
 import { createBuildingSceneController } from './buildingSceneController';
+import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { addCityFountain, addCityLighting } from './scenePresentationController';
 import { bindCityUiEvents } from '../adapters/ui/cityEventBindings';
 import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
@@ -533,8 +534,7 @@ function onMouseMove(e) {
   raycaster.setFromCamera(mouse2D,camera);
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
-    const id=raycastUserData(hits[0].object,'buildingId');
-    const b=buildings.find(x=>x.id===id && !isStoryLockedBuilding(x));
+    const b=findRaycastBuilding(hits);
     if(b&&b!==hoveredB){if(hoveredB)unhover(hoveredB);hover(b);}
     if(!b&&hoveredB){unhover(hoveredB);hoveredB=null;}
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
@@ -550,6 +550,7 @@ function openResidence(residenceId) { multiplayerHousing.openResidence(residence
 function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
 function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
 function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
+function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isStoryLockedBuilding }); }
 
 function onCanvasClick(event) {
   if (cityDialogs?.isOpen()) return;
@@ -577,7 +578,7 @@ function onCanvasClick(event) {
   if(hits.length){
     const residenceId=raycastUserData(hits[0].object,'residenceId');
     if(residenceId){ openResidence(residenceId); return; }
-    const b=buildings.find(x=>x.id===raycastUserData(hits[0].object,'buildingId') && !isStoryLockedBuilding(x));
+    const b=findRaycastBuilding(hits);
     if(b){ interactOrWalk(b); return; }
   }
   const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);
