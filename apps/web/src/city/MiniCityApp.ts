@@ -558,6 +558,8 @@ function onCanvasClick(event) {
   raycaster.setFromCamera(mouse2D,camera);
   raycaster.ray.intersectPlane(groundPlane,cursorWorld);
   raycaster.setFromCamera(mouse2D,camera);
+  const cabinDoor=sceneInterestPoints?.entities.get('echo-cabin-door');
+  if(cabinDoor&&echoStoryController?.tryExitCabinFromClick(raycaster,cabinDoor.object)){pendingSceneInterestPoint=null;return;}
   if(cursorChar&&cursorChar.visible){
     const phits=raycaster.intersectObject(cursorChar,true);
     if(phits.length){ onYouClick(); return; }
