@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize MiniCity backups off-site every six hours
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=6h
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

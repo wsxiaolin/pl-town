@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
-import { DATABASE_PATH } from './config.js';
+import { DATA_DIR, DATABASE_PATH } from './config.js';
+import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
 import { INITIAL_CURRENCY } from './progression.js';
+import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
 import type { PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
 
 export type House = {
@@ -25,9 +27,18 @@ export type HousingRequest = {
   createdAt: string;
 };
 
+acquireRuntimeLock(DATA_DIR, 'server');
 const db = new Database(DATABASE_PATH);
+const existingApplicationId = Number(db.pragma('application_id', { simple: true })) || 0;
+const existingSchemaVersion = Number(db.pragma('user_version', { simple: true })) || 0;
+if (existingApplicationId !== 0 && existingApplicationId !== MINICITY_APPLICATION_ID) throw new Error('Database does not belong to MiniCity');
+if (existingSchemaVersion > MINICITY_SCHEMA_VERSION) throw new Error(`Database schema ${existingSchemaVersion} is newer than this server supports`);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma('busy_timeout = 5000');
+db.pragma('synchronous = NORMAL');
+db.exec('BEGIN IMMEDIATE');
+try {
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -35,6 +46,8 @@ db.exec(`
     email TEXT,
     password_hash TEXT,
     token_hash TEXT NOT NULL UNIQUE,
+    session_expires_at TEXT,
+    disabled_at TEXT,
     position_x REAL NOT NULL DEFAULT 0,
     position_y REAL NOT NULL DEFAULT 0,
     position_z REAL NOT NULL DEFAULT 0,
@@ -87,6 +100,13 @@ db.exec(`
     unlocked_at TEXT NOT NULL,
     PRIMARY KEY (user_id, achievement_id)
   );
+  CREATE TABLE IF NOT EXISTS player_achievement_rewards (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    achievement_id TEXT NOT NULL,
+    currency INTEGER NOT NULL CHECK (currency >= 0),
+    granted_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, achievement_id)
+  );
   CREATE TABLE IF NOT EXISTS player_building_unlocks (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     building_id TEXT NOT NULL,
@@ -118,15 +138,32 @@ db.exec(`
     updated_at TEXT NOT NULL,
     PRIMARY KEY (user_id, story_id)
   );
+  CREATE TABLE IF NOT EXISTS admin_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit(created_at DESC);
 `);
 {
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'password_hash')) db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+  if (!columns.some((column) => column.name === 'session_expires_at')) db.exec('ALTER TABLE users ADD COLUMN session_expires_at TEXT');
+  if (!columns.some((column) => column.name === 'disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
 }
 {
   const columns = db.prepare('PRAGMA table_info(story_progress)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'definition_version')) db.exec('ALTER TABLE story_progress ADD COLUMN definition_version INTEGER NOT NULL DEFAULT 1');
 }
+// Existing achievements may already have paid their legacy reward. Recording
+// them prevents an upgrade from paying those rewards a second time.
+db.prepare(`
+  INSERT OR IGNORE INTO player_achievement_rewards (user_id, achievement_id, currency, granted_at)
+  SELECT user_id, achievement_id, 0, unlocked_at FROM player_achievements
+`).run();
 {
   const existing = db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'users_nickname_unique'`).get() as { count: number };
   if (!existing.count) {
@@ -138,25 +175,32 @@ db.exec(`
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_unique ON users (nickname COLLATE NOCASE)');
   }
 }
+db.pragma(`application_id = ${MINICITY_APPLICATION_ID}`);
+db.pragma(`user_version = ${MINICITY_SCHEMA_VERSION}`);
+db.exec('COMMIT');
+} catch (error) {
+  if (db.inTransaction) db.exec('ROLLBACK');
+  throw error;
+}
 
 const now = () => new Date().toISOString();
 const rowUser = (row: any): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
-export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string): User {
+export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string): User {
   const timestamp = now();
-  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, timestamp, timestamp);
+  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, session_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, sessionExpiresAt, timestamp, timestamp);
   return getUser(id)!;
 }
 export function getUserByToken(tokenHash: string): User | null {
-  const row = db.prepare('SELECT * FROM users WHERE token_hash = ?').get(tokenHash);
+  const row = db.prepare("SELECT * FROM users WHERE token_hash = ? AND disabled_at IS NULL AND session_expires_at > ?").get(tokenHash, now());
   return row ? rowUser(row) : null;
 }
-export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null } | null {
-  const row = db.prepare('SELECT id, nickname, password_hash FROM users WHERE nickname = ? COLLATE NOCASE').get(nickname) as { id: string; nickname: string; password_hash: string | null } | undefined;
-  return row ? { id: row.id, nickname: row.nickname, passwordHash: row.password_hash } : null;
+export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null; disabled: boolean } | null {
+  const row = db.prepare('SELECT id, nickname, password_hash, disabled_at FROM users WHERE nickname = ? COLLATE NOCASE').get(nickname) as { id: string; nickname: string; password_hash: string | null; disabled_at: string | null } | undefined;
+  return row ? { id: row.id, nickname: row.nickname, passwordHash: row.password_hash, disabled: Boolean(row.disabled_at) } : null;
 }
-export function updateUserToken(id: string, tokenHash: string): void {
-  db.prepare('UPDATE users SET token_hash = ?, updated_at = ? WHERE id = ?').run(tokenHash, now(), id);
+export function updateUserToken(id: string, tokenHash: string, sessionExpiresAt: string): void {
+  db.prepare('UPDATE users SET token_hash = ?, session_expires_at = ?, updated_at = ? WHERE id = ?').run(tokenHash, sessionExpiresAt, now(), id);
 }
 export function getUser(id: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -209,16 +253,20 @@ export function recordBuildingVisit(userId: string, buildingId: string): { progr
   return { progress: getPlayerProgress(userId), welcomeItemsGranted };
 }
 
-export function unlockAchievement(userId: string, achievementId: string, currencyReward: number): { progress: PlayerProgress; unlocked: boolean } {
+export function unlockAchievement(userId: string, achievementId: string, currencyReward: number): { progress: PlayerProgress; unlocked: boolean; rewardGranted: number } {
   let unlocked = false;
+  let rewardGranted = 0;
   db.transaction(() => {
     ensureProgress(userId);
     const result = db.prepare('INSERT OR IGNORE INTO player_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)').run(userId, achievementId, now());
-    if (!result.changes) return;
+    unlocked = result.changes > 0;
+    if (currencyReward <= 0) return;
+    const reward = db.prepare('INSERT OR IGNORE INTO player_achievement_rewards (user_id, achievement_id, currency, granted_at) VALUES (?, ?, ?, ?)').run(userId, achievementId, currencyReward, now());
+    if (!reward.changes) return;
     db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(currencyReward, now(), userId);
-    unlocked = true;
+    rewardGranted = currencyReward;
   })();
-  return { progress: getPlayerProgress(userId), unlocked };
+  return { progress: getPlayerProgress(userId), unlocked, rewardGranted };
 }
 
 export function purchaseBuilding(userId: string, buildingId: string, price: number): { progress: PlayerProgress; unlocked: boolean } {
@@ -291,6 +339,9 @@ const rowStoryProgress = (row: any): StoryProgress => ({
 });
 
 function ensureStoryProgress(userId: string, storyId: string): void {
+  if (db.prepare('SELECT 1 FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId)) return;
+  const count = (db.prepare('SELECT COUNT(*) AS count FROM story_progress WHERE user_id = ?').get(userId) as { count: number }).count;
+  if (count >= 64) throw new Error('Story storage limit reached');
   const timestamp = now();
   db.prepare('INSERT OR IGNORE INTO story_progress (user_id, story_id, definition_version, node_id, flags_json, ending, visit_count, created_at, updated_at) VALUES (?, ?, 1, ?, ?, NULL, 0, ?, ?)')
     .run(userId, storyId, STORY_DEFAULT_NODE, '{}', timestamp, timestamp);
@@ -318,6 +369,7 @@ export function updateStoryProgress(userId: string, storyId: string, patch: Stor
     const current = db.prepare('SELECT definition_version, node_id, flags_json, ending, visit_count FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as any;
     const definitionVersion = patch.definitionVersion ?? current.definition_version;
     const flags = { ...parseStoryFlags(current.flags_json), ...(patch.flags ?? {}) };
+    if (Object.keys(flags).length > 128 || Buffer.byteLength(JSON.stringify(flags), 'utf8') > 16_384) throw new Error('Story flags exceed the storage limit');
     const nodeId = patch.nodeId ?? current.node_id;
     const ending = patch.ending === undefined ? current.ending : patch.ending;
     const visitCount = current.visit_count + (patch.visit ? 1 : 0);
@@ -329,7 +381,18 @@ export function updateStoryProgress(userId: string, storyId: string, patch: Stor
 
 export function listHouses(): House[] {
   const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as any[];
-  return rows.map((row) => ({ buildingId: row.building_id, name: row.name, ownerId: row.owner_id, ownerNickname: row.owner_nickname, members: (db.prepare('SELECT hm.user_id, u.nickname FROM house_members hm JOIN users u ON u.id = hm.user_id WHERE hm.building_id = ? ORDER BY hm.joined_at').all(row.building_id) as any[]).map((m) => ({ userId: m.user_id, nickname: m.nickname })) }));
+  const memberRows = db.prepare(`
+    SELECT hm.building_id, hm.user_id, u.nickname
+    FROM house_members hm JOIN users u ON u.id = hm.user_id
+    ORDER BY hm.building_id, hm.joined_at
+  `).all() as Array<{ building_id: string; user_id: string; nickname: string }>;
+  const members = new Map<string, Array<{ userId: string; nickname: string }>>();
+  for (const member of memberRows) {
+    const list = members.get(member.building_id) ?? [];
+    list.push({ userId: member.user_id, nickname: member.nickname });
+    members.set(member.building_id, list);
+  }
+  return rows.map((row) => ({ buildingId: row.building_id, name: row.name, ownerId: row.owner_id, ownerNickname: row.owner_nickname, members: members.get(row.building_id) ?? [] }));
 }
 export function getHouse(buildingId: string): House | null { return listHouses().find((house) => house.buildingId === buildingId) ?? null; }
 export function claimHouse(buildingId: string, ownerId: string, name?: string): void {
@@ -386,4 +449,121 @@ export function createHousingRequest(buildingId: string, requesterId: string, ta
 export function deleteHousingRequest(id: number): void { db.prepare('DELETE FROM housing_requests WHERE id = ?').run(id); }
 export function deleteHousingRequestsForUser(userId: string): void {
   db.prepare('DELETE FROM housing_requests WHERE requester_id = ? OR target_id = ?').run(userId, userId);
+}
+
+export type AdminSummary = {
+  users: number;
+  disabledUsers: number;
+  houses: number;
+  housingRequests: number;
+  inventoryRows: number;
+  storyRows: number;
+  databaseBytes: number;
+};
+
+export type AdminUser = {
+  id: string;
+  nickname: string;
+  email: string | null;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  sessionExpiresAt: string | null;
+  houseId: string | null;
+};
+
+export type AdminAuditEntry = {
+  id: number;
+  actor: string;
+  action: string;
+  target: string | null;
+  details: Record<string, unknown>;
+  createdAt: string;
+};
+
+export function getAdminSummary(databaseBytes = 0): AdminSummary {
+  const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
+  const disabledUsers = (db.prepare('SELECT COUNT(*) AS count FROM users WHERE disabled_at IS NOT NULL').get() as { count: number }).count;
+  return {
+    users: count('users'), disabledUsers, houses: count('houses'), housingRequests: count('housing_requests'),
+    inventoryRows: count('player_inventory'), storyRows: count('story_progress'), databaseBytes,
+  };
+}
+
+export function listAdminUsers(input: { query?: string; limit: number; offset: number }): { items: AdminUser[]; total: number } {
+  const query = input.query?.trim() ?? '';
+  const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+  const where = query ? "WHERE u.nickname LIKE ? ESCAPE '\\' OR u.id LIKE ? ESCAPE '\\'" : '';
+  const params = query ? [pattern, pattern] : [];
+  const total = (db.prepare(`SELECT COUNT(*) AS count FROM users u ${where}`).get(...params) as { count: number }).count;
+  const rows = db.prepare(`
+    SELECT u.id, u.nickname, u.email, u.disabled_at, u.created_at, u.updated_at, u.session_expires_at,
+           hm.building_id AS house_id
+    FROM users u LEFT JOIN house_members hm ON hm.user_id = u.id
+    ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?
+  `).all(...params, input.limit, input.offset) as any[];
+  return { total, items: rows.map((row) => ({
+    id: row.id, nickname: row.nickname, email: row.email, disabled: Boolean(row.disabled_at),
+    createdAt: row.created_at, updatedAt: row.updated_at, sessionExpiresAt: row.session_expires_at,
+    houseId: row.house_id ?? null,
+  })) };
+}
+
+export function setUserDisabled(userId: string, disabled: boolean): boolean {
+  const timestamp = now();
+  const result = disabled
+    ? db.prepare('UPDATE users SET disabled_at = ?, session_expires_at = NULL, updated_at = ? WHERE id = ?').run(timestamp, timestamp, userId)
+    : db.prepare('UPDATE users SET disabled_at = NULL, updated_at = ? WHERE id = ?').run(timestamp, userId);
+  return result.changes > 0;
+}
+
+export function revokeUserSession(userId: string): boolean {
+  const result = db.prepare('UPDATE users SET session_expires_at = NULL, updated_at = ? WHERE id = ?').run(now(), userId);
+  return result.changes > 0;
+}
+
+export function recordAdminAudit(actor: string, action: string, target?: string, details: Record<string, unknown> = {}): void {
+  db.transaction(() => {
+    db.prepare('INSERT INTO admin_audit (actor, action, target, details_json, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(actor, action, target ?? null, JSON.stringify(details), now());
+    db.prepare('DELETE FROM admin_audit WHERE id NOT IN (SELECT id FROM admin_audit ORDER BY id DESC LIMIT 10000)').run();
+  })();
+}
+
+export function listAdminAudit(limit: number): AdminAuditEntry[] {
+  const rows = db.prepare('SELECT id, actor, action, target, details_json, created_at FROM admin_audit ORDER BY id DESC LIMIT ?').all(limit) as any[];
+  return rows.map((row) => {
+    let details: Record<string, unknown> = {};
+    try { details = JSON.parse(row.details_json) as Record<string, unknown>; } catch { /* retain an empty object */ }
+    return { id: row.id, actor: row.actor, action: row.action, target: row.target, details, createdAt: row.created_at };
+  });
+}
+
+export async function backupDatabase(destinationPath: string): Promise<void> {
+  await db.backup(destinationPath);
+}
+
+export function verifyDatabase(): { ok: boolean; message: string } {
+  const row = db.pragma('quick_check', { simple: true });
+  const message = String(row);
+  return { ok: message === 'ok', message };
+}
+
+export function databaseStatus(): { ready: boolean; applicationId: number; schemaVersion: number; sqliteVersion: string } {
+  const row = db.prepare('SELECT sqlite_version() AS version').get() as { version: string };
+  return {
+    ready: Boolean(db.prepare('SELECT 1 AS ready').get()),
+    applicationId: Number(db.pragma('application_id', { simple: true })),
+    schemaVersion: Number(db.pragma('user_version', { simple: true })),
+    sqliteVersion: row.version,
+  };
+}
+
+export function checkpointDatabase(): void {
+  db.pragma('wal_checkpoint(PASSIVE)');
+}
+
+export function closeDatabase(): void {
+  if (db.open) db.close();
+  releaseRuntimeLock();
 }

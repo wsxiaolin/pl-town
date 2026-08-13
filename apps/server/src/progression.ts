@@ -76,6 +76,15 @@ export function getProgressionCatalog(): ProgressionCatalog {
   };
 }
 
+export function verifiedAchievementReward(progress: PlayerProgress, achievementId: string): number {
+  const eligible = achievementId === 'citizen'
+    || (achievementId === 'first_building' && progress.visitedBuildings.length >= 1)
+    || (achievementId === 'explorer_5' && progress.visitedBuildings.length >= 5)
+    || (achievementId === 'explorer_10' && progress.visitedBuildings.length >= 10)
+    || (achievementId === 'unlock_3' && progress.unlockedBuildings.length >= 3);
+  return eligible ? ACHIEVEMENT_REWARDS[achievementId] ?? 0 : 0;
+}
+
 export function shanghaiDayKey(at = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',

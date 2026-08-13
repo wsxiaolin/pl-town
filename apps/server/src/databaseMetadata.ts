@@ -1,0 +1,2 @@
+export const MINICITY_APPLICATION_ID = 0x4d434954;
+export const MINICITY_SCHEMA_VERSION = 2;

@@ -6,6 +6,10 @@
 - `config.ts`: environment-backed server configuration.
 - `logger.ts`: console + file logging with daily rotation and level filtering.
 - `types.ts`: messages and shared server-side data contracts.
+- `adminAuth.ts` / `adminRouter.ts`: cookie/CSRF administration boundary and routes.
+- `backup.ts` / `backupVerifier.ts`: online backups, manifest, retention, and worker verification.
+- `restoreBackup.ts` / `runtimeLock.ts`: offline restore and exclusive data-directory ownership.
+- `requestSecurity.ts` / `httpBody.ts` / `rateLimit.ts`: transport security helpers.
 
 Keep transport concerns in `index.ts`; persistence and authentication should
 remain independently testable modules.

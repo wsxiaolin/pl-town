@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiniCity 管理后台</title>
+  <link rel="stylesheet" href="/admin/styles.css" />
+</head>
+<body>
+  <main class="login-shell" id="loginView">
+    <form class="login-panel" id="loginForm">
+      <div class="brand-mark" aria-hidden="true">MC</div>
+      <p class="eyebrow">MINICITY OPERATIONS</p>
+      <h1>管理后台</h1>
+      <p class="login-copy">使用服务端配置的管理员凭据登录。</p>
+      <label><span>管理员名称</span><input id="loginUsername" autocomplete="username" maxlength="128" required /></label>
+      <label><span>密码</span><input id="loginPassword" type="password" autocomplete="current-password" maxlength="256" required /></label>
+      <p class="form-error" id="loginError" role="alert" hidden></p>
+      <button class="primary full" type="submit" id="loginButton">登录</button>
+    </form>
+  </main>
+
+  <div class="app-shell" id="appView" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">MC</span><div><strong>MiniCity</strong><small>运营控制台</small></div></div>
+      <nav id="navigation" aria-label="后台导航">
+        <button class="nav-item active" data-view="overview" type="button">概览</button>
+        <button class="nav-item" data-view="users" type="button">居民</button>
+        <button class="nav-item" data-view="houses" type="button">住房</button>
+        <button class="nav-item" data-view="backups" type="button">备份</button>
+        <button class="nav-item" data-view="audit" type="button">审计日志</button>
+      </nav>
+      <div class="sidebar-foot"><span id="actorName">管理员</span><button class="quiet" id="logoutButton" type="button">退出</button></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar"><div><p class="eyebrow">OPERATIONS</p><h1 id="viewTitle">运行概览</h1></div><div class="topbar-actions"><span class="health-dot"></span><span>服务在线</span><button class="secondary" id="refreshButton" type="button">刷新</button></div></header>
+      <div class="notice" id="notice" role="status" hidden></div>
+
+      <section class="view active" data-page="overview">
+        <div class="metric-grid" id="metrics"></div>
+        <div class="two-column">
+          <section class="panel"><header><div><p class="eyebrow">DATABASE</p><h2>数据健康</h2></div><span class="status" id="integrityStatus">检查中</span></header><dl class="detail-list" id="databaseDetails"></dl><button class="secondary" id="checkpointButton" type="button">执行 WAL 检查点</button></section>
+          <section class="panel"><header><div><p class="eyebrow">BACKUP POLICY</p><h2>备份策略</h2></div></header><dl class="detail-list" id="backupPolicy"></dl><button class="primary" id="overviewBackupButton" type="button">立即备份</button></section>
+        </div>
+      </section>
+
+      <section class="view" data-page="users" hidden>
+        <div class="toolbar"><form class="search" id="userSearch"><input id="userQuery" maxlength="100" placeholder="搜索昵称或用户 ID" aria-label="搜索居民" /><button class="secondary" type="submit">搜索</button></form><span id="userCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>居民</th><th>状态</th><th>住房</th><th>最近更新</th><th class="align-right">操作</th></tr></thead><tbody id="userRows"></tbody></table></div>
+      </section>
+
+      <section class="view" data-page="houses" hidden>
+        <div class="toolbar"><p>住房归属和成员关系只读视图</p><span id="houseCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>住房</th><th>房主</th><th>名称</th><th>成员</th></tr></thead><tbody id="houseRows"></tbody></table></div>
+      </section>
+
+      <section class="view" data-page="backups" hidden>
+        <div class="toolbar"><p>SQLite 在线一致性备份，可直接下载到异地存储。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
+        <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>创建时间</th><th>校验</th><th>大小</th><th class="align-right">操作</th></tr></thead><tbody id="backupRows"></tbody></table></div>
+      </section>
+
+      <section class="view" data-page="audit" hidden>
+        <div class="toolbar"><p>记录后台登录和所有管理写操作。</p><span>最近 100 条</span></div>
+        <div class="table-wrap"><table><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>对象</th></tr></thead><tbody id="auditRows"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="confirmDialog"><form method="dialog"><h2 id="confirmTitle">确认操作</h2><p id="confirmCopy"></p><div class="dialog-actions"><button class="secondary" value="cancel">取消</button><button class="danger" id="confirmAction" value="confirm">确认</button></div></form></dialog>
+  <script type="module" src="/admin/app.js"></script>
+</body>
+</html>

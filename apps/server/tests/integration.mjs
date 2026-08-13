@@ -1,18 +1,30 @@
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
 
 const port = 8791;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
+const productionConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ALLOWED_ORIGINS: '' },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (productionConfigCheck.status === 0 || !`${productionConfigCheck.stdout}${productionConfigCheck.stderr}`.includes('Production requires')) {
+  throw new Error('Production configuration must fail closed when administrator credentials and origins are missing');
+}
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
-  env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+  env: {
+    ...process.env, PORT: String(port), DATA_DIR: dataDir,
+    ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'integration-admin-password',
+    AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
+  },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 
-const connect = (nickname, password = 'secret') => new Promise((resolve, reject) => {
+const connect = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages = [];
   socket.on('message', (raw) => {
@@ -24,7 +36,7 @@ const connect = (nickname, password = 'secret') => new Promise((resolve, reject)
   socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password })));
 });
 
-const connectExpectingError = (nickname, password = 'secret') => new Promise((resolve, reject) => {
+const connectExpectingError = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
@@ -36,6 +48,22 @@ const connectExpectingError = (nickname, password = 'secret') => new Promise((re
     socket.send(JSON.stringify({ type: 'hello', nickname, password }));
     setTimeout(() => { clearTimeout(timeout); if (socket.readyState === socket.OPEN) socket.close(); }, 1_000);
   });
+});
+
+const rejectedWebSocketOrigin = () => new Promise((resolve, reject) => {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error('Timed out waiting for rejected WebSocket origin')); }, 3_000);
+  socket.once('unexpected-response', (_request, response) => {
+    clearTimeout(timeout); response.resume(); resolve(response.statusCode);
+  });
+  socket.once('open', () => { clearTimeout(timeout); socket.close(); reject(new Error('Untrusted WebSocket origin was accepted')); });
+  socket.once('error', () => { /* unexpected-response is authoritative */ });
+});
+
+const waitForClose = (client) => new Promise((resolve, reject) => {
+  if (client.socket.readyState === client.socket.CLOSED) return resolve();
+  const timeout = setTimeout(() => reject(new Error('Timed out waiting for socket close')), 3_000);
+  client.socket.once('close', () => { clearTimeout(timeout); resolve(); });
 });
 
 const waitFor = (client, type, predicate = () => true) => new Promise((resolve, reject) => {
@@ -67,11 +95,56 @@ let bob;
 let charlie;
 try {
   await waitForServer();
+
+  if (await rejectedWebSocketOrigin() !== 401) throw new Error('Untrusted WebSocket origins must be rejected during the handshake');
+
+  const adminOrigin = `http://127.0.0.1:${port}`;
+  const adminBase = `${adminOrigin}/admin/api`;
+  const unauthenticated = await fetch(`${adminBase}/overview`);
+  if (unauthenticated.status !== 401 || unauthenticated.headers.get('cache-control') !== 'no-store') throw new Error('Admin API must reject unauthenticated requests without caching');
+  const rejectedOrigin = await fetch(`${adminBase}/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+    body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
+  });
+  if (rejectedOrigin.status !== 403) throw new Error('Admin sign-in must reject untrusted origins');
+  const login = await fetch(`${adminBase}/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
+  });
+  const loginPayload = await login.json();
+  const cookie = login.headers.get('set-cookie')?.split(';', 1)[0];
+  if (!login.ok || !cookie || !loginPayload.csrf || !login.headers.get('set-cookie')?.includes('HttpOnly')) throw new Error('Admin sign-in must issue an HttpOnly session and CSRF token');
+  const missingCsrf = await fetch(`${adminBase}/backups`, { method: 'POST', headers: { cookie, origin: adminOrigin } });
+  if (missingCsrf.status !== 403) throw new Error('Admin mutations must require CSRF verification');
+  const invalidJsonRequest = await fetch(`${adminOrigin}/town-api/works/query`, {
+    method: 'POST', headers: { origin: adminOrigin }, body: '{}',
+  });
+  if (invalidJsonRequest.status !== 415) throw new Error('JSON proxy endpoints must enforce Content-Type');
+
   alice = await connect('Alice');
   bob = await connect('Bob');
   await waitFor(alice, 'player.joined', (message) => message.player.id === bob.hello.user.id);
   charlie = await connect('Charlie');
   await waitFor(alice, 'player.joined', (message) => message.player.id === charlie.hello.user.id);
+
+  const overview = await fetch(`${adminBase}/overview`, { headers: { cookie } });
+  const overviewPayload = await overview.json();
+  if (!overview.ok || overviewPayload.summary.users !== 3 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');
+  const backupResponse = await fetch(`${adminBase}/backups`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+  });
+  const backupPayload = await backupResponse.json();
+  if (backupResponse.status !== 201 || !backupPayload.backup?.name || backupPayload.backup.bytes <= 0) throw new Error('Admin API must create a verified online database backup');
+  const sidecarPath = join(dataDir, 'backups', `${backupPayload.backup.name}.manifest.json`);
+  const sidecar = existsSync(sidecarPath) ? JSON.parse(readFileSync(sidecarPath, 'utf8')) : null;
+  if (!sidecar || sidecar.name !== backupPayload.backup.name || sidecar.sha256 !== backupPayload.backup.sha256) throw new Error('Verified backups must include an immutable checksum sidecar');
+  const backupDownload = await fetch(`${adminBase}/backups/${backupPayload.backup.name}`, { headers: { cookie } });
+  if (!backupDownload.ok || !backupDownload.headers.get('content-type')?.includes('sqlite') || (await backupDownload.arrayBuffer()).byteLength <= 0) throw new Error('Admin API must download a database backup');
+  const backupVerify = await fetch(`${adminBase}/backups/${backupPayload.backup.name}/verify`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+  });
+  const backupVerifyPayload = await backupVerify.json();
+  if (!backupVerify.ok || !backupVerifyPayload.backup?.verified || backupVerifyPayload.backup.sha256 !== backupPayload.backup.sha256) throw new Error('Admin API must re-verify backup integrity and checksum');
 
   if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
@@ -116,6 +189,9 @@ try {
   send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
   const duplicateAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building' && message.event.reward === 0);
   if (duplicateAchievement.progress.currency !== 1160) throw new Error('Achievement rewards must be idempotent');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'walker_500' });
+  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'walker_500');
+  if (unverifiedAchievement.event.reward !== 0 || unverifiedAchievement.progress.currency !== 1160) throw new Error('Client-only achievement claims must not mint currency');
   send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
   const consumed = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed');
   if (consumed.progress.inventory.dragonwell_tea !== 1) throw new Error('Consuming an item must persist the remaining quantity');
@@ -148,6 +224,10 @@ try {
   const buildingId = 'residence:3.00:4.00';
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
+  send(alice, { type: 'housing.kick', buildingId, userId: {} });
+  await waitFor(alice, 'error', (message) => message.message === 'Invalid member');
+  const healthAfterMaliciousMessage = await fetch(`${adminOrigin}/healthz`);
+  if (!healthAfterMaliciousMessage.ok) throw new Error('Malformed housing messages must not terminate the server');
   send(bob, { type: 'housing.apply', buildingId });
   const application = await waitFor(alice, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'application' && request.requesterId === bob.hello.user.id));
   send(alice, { type: 'housing.accept', requestId: application.requests.find((request) => request.kind === 'application').id });
@@ -177,7 +257,16 @@ try {
   if (restoredStory.story.definitionVersion !== 3 || restoredStory.story.nodeId !== 'first-signal' || restoredStory.story.ending !== 'reconciled' || restoredStory.story.visitCount !== 1 || restoredStory.story.flags.heardWhisper !== false || restoredStory.story.flags.signalCount !== 1) throw new Error('Story progress must survive reconnecting');
   aliceAgain.socket.close();
 
-  console.log('Integration passed: identity, cloud and story progression, position, chat, housing applications, invite decline/accept, and lifecycle');
+  const disableCharlie = await fetch(`${adminBase}/users/${charlie.hello.user.id}/status`, {
+    method: 'PATCH', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ disabled: true }),
+  });
+  if (!disableCharlie.ok) throw new Error('Administrator must be able to disable a resident');
+  await waitForClose(charlie);
+  const disabledLogin = await connectExpectingError('Charlie');
+  if (!disabledLogin) throw new Error('Disabled residents must not be able to sign in');
+
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, and lifecycle');
 } finally {
   alice?.socket.close();
   bob?.socket.close();

@@ -1,0 +1,20 @@
+[Unit]
+Description=Copy MiniCity verified backups to off-site storage
+After=network-online.target minicity.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=minicity
+Group=minicity
+Environment=RCLONE_CONFIG=/etc/minicity/rclone.conf
+EnvironmentFile=/etc/minicity/backup-sync.env
+ExecStart=/usr/bin/rclone copy /var/backups/minicity ${MINICITY_BACKUP_REMOTE} "--filter=+ *.sqlite" "--filter=+ *.sqlite.manifest.json" "--filter=- *" --checksum --immutable --transfers 2 --checkers 4
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/var/backups/minicity
