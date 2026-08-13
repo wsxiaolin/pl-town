@@ -222,7 +222,7 @@ function init() {
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
+    mapShotSpan: 96, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
     getLegacyAchievements: () => getStats().achievements || [],
   });
   progressionController = createProgressionController({

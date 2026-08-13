@@ -1007,7 +1007,7 @@ body.night .time-display::before { background: #8FB4E8; }
   .map-title { margin-bottom: 5px; font-size: 10px; }
   .map-close { top: 5px; right: 5px; width: 24px; height: 24px; }
   .map-compass { top: 5px; right: 6px; width: 40px; height: 40px; }
-  .map-compass .mc-n { top: 3px; font-size: 11px; }
+  .map-compass .mc-n { bottom: 2px; left: 3px; font-size: 11px; }
   .map-compass .mc-e,
   .map-compass .mc-s,
   .map-compass .mc-w { font-size: 9px; }
@@ -1033,36 +1033,32 @@ body.night .time-display::before { background: #8FB4E8; }
 }
 .map-compass .mc-n {
   position: absolute;
-  top: 4px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 3px;
+  left: 5px;
   font-size: 13px;
   font-weight: 800;
   color: #C0392B;
 }
 .map-compass .mc-e {
   position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 3px;
+  right: 5px;
   font-size: 10px;
   font-weight: 700;
   color: #6B5230;
 }
 .map-compass .mc-s {
   position: absolute;
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 3px;
+  right: 5px;
   font-size: 10px;
   font-weight: 700;
   color: #6B5230;
 }
 .map-compass .mc-w {
   position: absolute;
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 3px;
+  left: 5px;
   font-size: 10px;
   font-weight: 700;
   color: #6B5230;

@@ -29,8 +29,25 @@ export type MapControllerOptions = {
 };
 
 const MAP_SHOT = 1024;
-const MAP_SHOT_SPAN = 48;
+// World x/z live in [-48, 48]; under the isometric projection below
+// (u = x - z, v = x + z) they span [-96, 96], so the shot half-span doubles.
+const MAP_SHOT_SPAN = 96;
 const MAP_SHOT_CENTER_X = 0;
+
+function mapCoordPercent(value: number, span: number): number {
+  return ((value + 2 * span) / (4 * span)) * 100;
+}
+
+function mapPosition(x: number, z: number): { left: number; top: number } {
+  // The main camera looks at the city from a tilted (isometric) 45° angle:
+  // screen right is south-east (x - z grows) and screen down is north-east
+  // (x + z grows). Project the same way on the map so the map aligns with
+  // what the player actually sees.
+  return {
+    left: mapCoordPercent(x - z, MAP_SHOT_SPAN),
+    top: mapCoordPercent(x + z, MAP_SHOT_SPAN),
+  };
+}
 
 export function createMapController(options: MapControllerOptions) {
   let open = false;
@@ -66,7 +83,9 @@ export function createMapController(options: MapControllerOptions) {
         130,
       );
       shotCamera.position.set(MAP_SHOT_CENTER_X, 90, 0);
-      shotCamera.up.set(0, 0, 1);
+      // Tilt the ortho shot 45° so its axes match the isometric main view:
+      // screen up = south-west (-x, -z), screen right = south-east (+x, -z).
+      shotCamera.up.set(-1, 0, -1);
       shotCamera.lookAt(MAP_SHOT_CENTER_X, 0, 0);
       shotCamera.updateProjectionMatrix();
     }
@@ -91,21 +110,7 @@ export function createMapController(options: MapControllerOptions) {
     });
     shotRenderer.render(scene, shotCamera);
     hidden.forEach((object) => { object.visible = true; });
-    // The ortho shot looks straight down from +Y, so world +Z (north) ends up at
-    // the top but +X (east) lands on the left edge, i.e. the image is mirrored
-    // along X. Flip it horizontally at the source so the map reads
-    // north-up / east-right, matching the DOM marker mapping (left = +X, top = +Z)
-    // and the real world orientation.
-    const flipped = options.document.createElement('canvas');
-    flipped.width = MAP_SHOT;
-    flipped.height = MAP_SHOT;
-    const ctx = flipped.getContext('2d');
-    if (ctx) {
-      ctx.translate(MAP_SHOT, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(shotRenderer.domElement, 0, 0);
-    }
-    shotData = (ctx ? flipped : shotRenderer.domElement).toDataURL('image/png');
+    shotData = shotRenderer.domElement.toDataURL('image/png');
     shotRenderer.dispose();
     shotRenderer.forceContextLoss();
     shotRenderer = null;
@@ -124,8 +129,7 @@ export function createMapController(options: MapControllerOptions) {
     const marker = options.document.getElementById('mapMarker') as HTMLElement | null;
     const cursor = options.getCursor();
     if (!marker || !cursor) return;
-    const left = ((cursor.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
-    const top = ((MAP_SHOT_SPAN - cursor.position.z) / (2 * MAP_SHOT_SPAN)) * 100;
+    const { left, top } = mapPosition(cursor.position.x, cursor.position.z);
     marker.style.left = `${clamp(left, 0, 100)}%`;
     marker.style.top = `${clamp(top, 0, 100)}%`;
   }
@@ -141,8 +145,8 @@ export function createMapController(options: MapControllerOptions) {
       icon.dataset.buildingId = building.id;
       icon.title = building.label ?? building.id;
       icon.innerHTML = building.icon ?? '';
-      icon.style.left = `${((building.group.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;
-      icon.style.top = `${((MAP_SHOT_SPAN - building.group.position.z) / (2 * MAP_SHOT_SPAN)) * 100}%`;
+      icon.style.left = `${mapPosition(building.group.position.x, building.group.position.z).left}%`;
+      icon.style.top = `${mapPosition(building.group.position.x, building.group.position.z).top}%`;
       icon.addEventListener('click', () => openTip(building));
       wrap.appendChild(icon);
     });
