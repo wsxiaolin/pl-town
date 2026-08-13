@@ -138,6 +138,12 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     options.sendLocalPosition(cursor);
   }
 
+  function tryExitCabinFromClick(raycaster: THREE.Raycaster, cabinDoor: THREE.Object3D): boolean {
+    if (!echoInteriorView || raycaster.intersectObject(cabinDoor, true).length === 0) return false;
+    teleportFromCabin();
+    return true;
+  }
+
   function setInteriorView(active: boolean): void {
     const changed = active !== echoInteriorView;
     if (active && changed) echoExteriorCameraZoom = options.getCameraZoom() || 7;
@@ -210,6 +216,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     setInteriorView,
     teleportToCabin,
     teleportFromCabin,
+    tryExitCabinFromClick,
     navigation: () => navigation,
     interact: story.interact,
     interactBuilding: story.interactBuilding,
