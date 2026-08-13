@@ -654,9 +654,32 @@ export function flagChatMessage(id: number): boolean {
   return result.changes > 0;
 }
 
-// ── Anti-abuse: registration tracking ──────────────────────────────
+// ── Anti-abuse: registration tracking ──────────────────────────────────
+// The count check and the insertion of the registration record must happen in
+// the same synchronous transaction; otherwise concurrent signups from one IP
+// can each pass the cap check before any of them records, letting the IP
+// exceed MAX_REGISTRATIONS_PER_IP. registerUserAtomic bundles user creation
+// and registration recording so there is no awaitable gap between them.
 export function countRegistrationsForIp(ip: string, sinceIso: string): number {
   return (db.prepare('SELECT COUNT(*) AS count FROM account_registrations WHERE ip = ? AND created_at >= ?').get(ip, sinceIso) as { count: number }).count;
+}
+
+export function registerUserAtomic(
+  userId: string,
+  tokenHash: string,
+  nickname: string,
+  passwordHash: string,
+  expiresAt: string,
+  ip: string,
+  sinceIso: string,
+  max: number,
+): { allowed: boolean } {
+  return db.transaction(() => {
+    if (countRegistrationsForIp(ip, sinceIso) >= max) return { allowed: false };
+    createUser(userId, tokenHash, nickname, passwordHash, expiresAt);
+    db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
+    return { allowed: true };
+  })();
 }
 
 export function recordRegistration(ip: string, userId: string): void {
@@ -756,13 +779,16 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
   // We avoid ATTACH because the just-written backup may hold a lock that
   // blocks a second writer, and ATTACH cannot open WAL files read-only.
   const probe = new Database(backupPath, { readonly: true, fileMustExist: true });
-  const liveTables = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name));
-  const backupTables = (probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name);
+  const liveTables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name);
+  const backupTables = new Set((probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name));
   let rowsCopied = 0;
-  db.pragma('foreign_keys = OFF');
+  // The copy and verification both run inside one transaction so a failed
+  // integrity / foreign-key check rolls the database back instead of leaving
+  // a partially restored state behind.
   db.transaction(() => {
+    db.pragma('foreign_keys = OFF');
     for (const table of backupTables) {
-      if (!liveTables.has(table)) continue;
+      if (!liveTables.includes(table)) continue;
       const sourceColumns = (probe.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
       if (!sourceColumns.length) continue;
       const columns = (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name);
@@ -776,16 +802,22 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
       for (const row of rows) insert.run(...shared.map((column) => row[column]));
       rowsCopied += rows.length;
     }
+    // Backups created before these tables existed won't contain them; clear any
+    // live rows they still hold so they cannot reference restored/removed users.
+    for (const table of liveTables) {
+      if (!backupTables.has(table)) db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
+    }
+    // Re-enable enforcement and verify before commit so violations roll back.
+    db.pragma('foreign_keys = ON');
+    const integrity = String(db.pragma('integrity_check', { simple: true }));
+    const foreignKeyErrors = db.pragma('foreign_key_check') as unknown[];
+    if (integrity !== 'ok' || foreignKeyErrors.length) {
+      throw new Error(`Restore verification failed (${integrity}, ${foreignKeyErrors.length} foreign key errors)`);
+    }
+    // Revoke every resident session so restored credentials are not reused.
+    db.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(now());
   })();
   probe.close();
-  db.pragma('foreign_keys = ON');
-  const integrity = String(db.pragma('integrity_check', { simple: true }));
-  const foreignKeyErrors = (db.pragma('foreign_key_check') as unknown[]).length;
-  if (integrity !== 'ok' || foreignKeyErrors) {
-    throw new Error(`Restore verification failed (${integrity}, ${foreignKeyErrors} foreign key errors)`);
-  }
-  // Revoke every resident session so restored credentials are not reused.
-  db.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(now());
   return { rowsCopied };
 }
 

@@ -114,10 +114,8 @@ async function handle(client: Client, raw: string) {
     authAttempts.set(address, attempt);
     let result: Awaited<ReturnType<typeof authenticate>>;
     try {
-      result = await authenticate({ token: message.token, nickname: message.nickname, password: message.password, ip: address, registrationAllowed: () => {
-        const since = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
-        return db.countRegistrationsForIp(address, since) < MAX_REGISTRATIONS_PER_IP;
-      } });
+      const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
+      result = await authenticate({ token: message.token, nickname: message.nickname, password: message.password, ip: address, registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP } });
     } catch (error) {
       const reason = error instanceof Error ? error.message : '登录失败';
       logger.warn('Login failed', { ip: address, reason });

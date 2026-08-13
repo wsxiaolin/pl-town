@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { AsyncGate } from './asyncGate.js';
 import { SESSION_TTL_DAYS } from './config.js';
-import { createUser, getUserByNickname, getUserByToken, recordRegistration, updateUserToken } from './db.js';
+import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
 import type { User } from './types.js';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -30,7 +30,7 @@ export function validateNickname(nickname: string): string | null {
   return null;
 }
 
-export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationAllowed?: () => boolean }): Promise<{ user: User; token: string; registered: boolean }> {
+export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number } }): Promise<{ user: User; token: string; registered: boolean }> {
   if (input.token) {
     if (input.token.length > 128) throw new Error('Session is invalid');
     const user = getUserByToken(hash(input.token));
@@ -55,10 +55,18 @@ export async function authenticate(input: { token?: string; nickname?: string; p
     return { user: getUserByToken(hash(newToken))!, token: newToken, registered: false };
   }
   if (password.length < 10) throw new Error('New passwords must contain at least 10 characters');
-  if (input.registrationAllowed && !input.registrationAllowed()) throw new Error('该 IP 的注册数量已达上限，请稍后再试');
 
   const newToken = randomBytes(32).toString('base64url');
-  const user = createUser(randomUUID(), hash(newToken), nickname, await hashPassword(password), sessionExpiry());
-  if (input.ip) recordRegistration(input.ip, user.id);
-  return { user, token: newToken, registered: true };
+  const tokenHash = hash(newToken);
+  const passwordHash = await hashPassword(password);
+  const expiresAt = sessionExpiry();
+  const userId = randomUUID();
+  if (input.ip && input.registrationLimit) {
+    const { sinceIso, max } = input.registrationLimit;
+    const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max);
+    if (!result.allowed) throw new Error('该 IP 的注册数量已达上限，请稍后再试');
+  } else {
+    createUser(userId, tokenHash, nickname, passwordHash, expiresAt);
+  }
+  return { user: getUserByToken(tokenHash)!, token: newToken, registered: true };
 }
