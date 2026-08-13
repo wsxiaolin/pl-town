@@ -130,6 +130,10 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 涉及领域规则或模块边界时，至少运行 `npm run check:source-size`、`npm run typecheck`、`npm run test:domain` 和 `npm run build`。只有修改浏览器交互、布局、WebGL 或端到端流程时才运行 `npm run test:web`；如果环境无法启动 Chromium，应在交付说明中明确记录。
 
+## Web 端渲染验证的环境限制
+
+本项目的 3D/WebGL 前端在部分执行环境中无法渲染：可能缺少 Chromium、系统图形库（如 libglib、GPU/软件渲染支持）或 Playwright 浏览器，导致 dev server 能启动但截图、Playwright 视觉断言失败。需要视觉验证时先尝试一次（启动 dev server 并用 Playwright 截图）；若环境不支持渲染或截图反复失败，不要持续安装浏览器依赖或反复折腾，改用 `typecheck`、`build`、`test:domain` 等静态验证，并在交付说明中记录"环境无法渲染，未做视觉核对"。地图方向、坐标映射等逻辑应优先通过代码阅读与单元断言核对，而非依赖截图。
+
 ## 3D 渲染：远镜头下的 z-fighting
 
 所有 agent 在改动画布内容或场景几何时，必须严肃考虑**远镜头（拉远视角 / 全图视野）下的 z-fighting（深度冲突、深度闪烁）**问题：

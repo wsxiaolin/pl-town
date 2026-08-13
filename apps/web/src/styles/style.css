@@ -1006,14 +1006,66 @@ body.night .time-display::before { background: #8FB4E8; }
   }
   .map-title { margin-bottom: 5px; font-size: 10px; }
   .map-close { top: 5px; right: 5px; width: 24px; height: 24px; }
+  .map-compass { top: 5px; right: 6px; width: 40px; height: 40px; }
+  .map-compass .mc-n { top: 3px; font-size: 11px; }
+  .map-compass .mc-e,
+  .map-compass .mc-s,
+  .map-compass .mc-w { font-size: 9px; }
 }
 .map-image-wrap img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  /* Looking down from +Y mirrors world X; match the DOM map markers. */
-  transform: scaleX(-1);
+}
+.map-compass {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255,253,245,0.9);
+  border: 1px solid rgba(107,82,48,0.5);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  pointer-events: none;
+}
+.map-compass .mc-n {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 800;
+  color: #C0392B;
+}
+.map-compass .mc-e {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B5230;
+}
+.map-compass .mc-s {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B5230;
+}
+.map-compass .mc-w {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B5230;
 }
 .map-marker {
   position: absolute;

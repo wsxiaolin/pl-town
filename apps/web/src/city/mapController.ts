@@ -91,7 +91,21 @@ export function createMapController(options: MapControllerOptions) {
     });
     shotRenderer.render(scene, shotCamera);
     hidden.forEach((object) => { object.visible = true; });
-    shotData = shotRenderer.domElement.toDataURL('image/png');
+    // The ortho shot looks straight down from +Y, so world +Z (north) ends up at
+    // the top but +X (east) lands on the left edge, i.e. the image is mirrored
+    // along X. Flip it horizontally at the source so the map reads
+    // north-up / east-right, matching the DOM marker mapping (left = +X, top = +Z)
+    // and the real world orientation.
+    const flipped = options.document.createElement('canvas');
+    flipped.width = MAP_SHOT;
+    flipped.height = MAP_SHOT;
+    const ctx = flipped.getContext('2d');
+    if (ctx) {
+      ctx.translate(MAP_SHOT, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(shotRenderer.domElement, 0, 0);
+    }
+    shotData = (ctx ? flipped : shotRenderer.domElement).toDataURL('image/png');
     shotRenderer.dispose();
     shotRenderer.forceContextLoss();
     shotRenderer = null;
