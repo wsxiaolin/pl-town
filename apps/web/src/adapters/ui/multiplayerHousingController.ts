@@ -549,7 +549,8 @@ export function createMultiplayerHousingController(options) {
       const tag = document.createElement('button');
       tag.type = 'button'; tag.className = 'map-house-tag'; tag.textContent = name;
       tag.style.left = ((residence.group.position.x + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
-      tag.style.top = ((mapShotSpan - residence.group.position.z) / (2 * mapShotSpan) * 100) + '%';
+      // North (-z) at top, East (+x) at right — matches the captured map image.
+      tag.style.top = ((residence.group.position.z + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
       tag.addEventListener('click', () => { if (getMapMode()) toggleMapMode(); openResidence(house.buildingId); });
       wrap.appendChild(tag);
     });
