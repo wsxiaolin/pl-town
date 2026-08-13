@@ -548,9 +548,13 @@ export function createMultiplayerHousingController(options) {
       if (!residence) return;
       const tag = document.createElement('button');
       tag.type = 'button'; tag.className = 'map-house-tag'; tag.textContent = name;
-      // Match the isometric 45° map projection (same as mapController).
-      tag.style.left = (((residence.group.position.x - residence.group.position.z) + 2 * mapShotSpan) / (4 * mapShotSpan) * 100) + '%';
-      tag.style.top = (((residence.group.position.x + residence.group.position.z) + 2 * mapShotSpan) / (4 * mapShotSpan) * 100) + '%';
+      const mapX = residence.group.position.x;
+      const mapZ = residence.group.position.z;
+      // Match the isometric 45° map projection (same as mapController) and
+      // drop houses whose isometric center is outside the framed map shot.
+      if (Math.abs(mapX - mapZ) > mapShotSpan || Math.abs(mapX + mapZ) > mapShotSpan) return;
+      tag.style.left = (((mapX - mapZ) + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
+      tag.style.top = (((mapX + mapZ) + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
       tag.addEventListener('click', () => { if (getMapMode()) toggleMapMode(); openResidence(house.buildingId); });
       wrap.appendChild(tag);
     });

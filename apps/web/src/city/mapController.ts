@@ -29,13 +29,18 @@ export type MapControllerOptions = {
 };
 
 const MAP_SHOT = 1024;
-// World x/z live in [-48, 48]; under the isometric projection below
-// (u = x - z, v = x + z) they span [-96, 96], so the shot half-span doubles.
-const MAP_SHOT_SPAN = 96;
+// Framing rule: show the main city. The ring road (radius 39, see
+// createCitySurfaces addRing(37, 39)) is the visual city boundary; under the
+// isometric projection below a world circle of radius r appears with radius
+// √2·r on the map. Half-span √2·39 ≈ 55.2 would make the ring road exactly
+// tangent to the map edges; we keep 62 so the landmarks sitting just outside
+// the ring road (qipai hall and the banana palace, ~42 from center) stay fully
+// on the map while the ring road still fills ~89% of the map width.
+export const MAP_SHOT_SPAN = 62;
 const MAP_SHOT_CENTER_X = 0;
 
 function mapCoordPercent(value: number, span: number): number {
-  return ((value + 2 * span) / (4 * span)) * 100;
+  return ((value + span) / (2 * span)) * 100;
 }
 
 function mapPosition(x: number, z: number): { left: number; top: number } {
@@ -47,6 +52,12 @@ function mapPosition(x: number, z: number): { left: number; top: number } {
     left: mapCoordPercent(x - z, MAP_SHOT_SPAN),
     top: mapCoordPercent(x + z, MAP_SHOT_SPAN),
   };
+}
+
+// A building whose isometric center falls outside the framing half-span is
+// clipped out of the map shot, so its icon must not be rendered either.
+export function isOnMap(x: number, z: number): boolean {
+  return Math.abs(x - z) <= MAP_SHOT_SPAN && Math.abs(x + z) <= MAP_SHOT_SPAN;
 }
 
 export function createMapController(options: MapControllerOptions) {
@@ -139,14 +150,17 @@ export function createMapController(options: MapControllerOptions) {
     if (!wrap || iconsBuilt) return;
     iconsBuilt = true;
     options.getBuildings().filter((building) => !options.isStoryLocked(building)).forEach((building) => {
+      const { x, z } = building.group.position;
+      if (!isOnMap(x, z)) return;
       const icon = options.document.createElement('button');
       icon.type = 'button';
       icon.className = 'map-icon';
       icon.dataset.buildingId = building.id;
       icon.title = building.label ?? building.id;
       icon.innerHTML = building.icon ?? '';
-      icon.style.left = `${mapPosition(building.group.position.x, building.group.position.z).left}%`;
-      icon.style.top = `${mapPosition(building.group.position.x, building.group.position.z).top}%`;
+      const pos = mapPosition(x, z);
+      icon.style.left = `${pos.left}%`;
+      icon.style.top = `${pos.top}%`;
       icon.addEventListener('click', () => openTip(building));
       wrap.appendChild(icon);
     });

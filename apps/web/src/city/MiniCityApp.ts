@@ -28,7 +28,7 @@ import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import { createEchoStoryController } from './echo/echoStoryController';
-import { createMapController } from './mapController';
+import { createMapController, MAP_SHOT_SPAN } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
 import { createCameraController } from './navigation/cameraController';
@@ -222,7 +222,7 @@ function init() {
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 96, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
+    mapShotSpan: MAP_SHOT_SPAN, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
     getLegacyAchievements: () => getStats().achievements || [],
   });
   progressionController = createProgressionController({
