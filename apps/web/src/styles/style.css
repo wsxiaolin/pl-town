@@ -1117,6 +1117,13 @@ body.night .time-display::before { background: #8FB4E8; }
   }
   .landscape-required strong { font-size: 22px; font-weight: 600; }
   .landscape-required span { color: #afc8f1; font-size: 13px; }
+  .landscape-required .landscape-fullscreen {
+    margin-top: 6px;
+    color: #afc8f1;
+    font-size: 12px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
 }
 
 .welcome-block {
