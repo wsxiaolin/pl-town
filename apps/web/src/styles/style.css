@@ -1127,10 +1127,7 @@ body.night .time-display::before { background: #8FB4E8; }
 }
 
 .welcome-block {
-  position: fixed;
-  top: 78px; left: 28px;
-  z-index: 100;
-  pointer-events: none;
+  display: none;
 }
 .welcome-block.hidden { opacity: 0; }
 
@@ -1768,8 +1765,8 @@ body.night .render-reset { border-color: rgba(255,255,255,0.14); }
 .sp-ul-dot {
   font-size: 11px;
   color: var(--text-light);
-  width: 14px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 .sp-ul-item.done .sp-ul-dot { color: var(--blue); }
 .sp-ul-name {
@@ -2316,6 +2313,7 @@ body.night .unlock-toast { background: rgba(220,219,216,0.95); }
 
 .modal-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 14px;
   margin-bottom: 6px;
@@ -2341,12 +2339,14 @@ body.night .unlock-toast { background: rgba(220,219,216,0.95); }
 }
 
 .modal-slogan {
+  flex-basis: 100%;
   font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
   font-size: 14px;
   color: #6B4B2D;
   font-style: italic;
   letter-spacing: 0.04em;
-  margin-bottom: 0;
+  margin: 0;
+  margin-top: 2px;
   position: relative;
   z-index: 1;
 }
@@ -2439,6 +2439,17 @@ body.night .modal-paper {
   }
   .modal-title { font-size: 22px; }
   .modal-line { font-size: 14px; line-height: 1.85; }
+}
+
+/* Landscape phone: tight height, so flatten the header and drop the close button */
+@media (orientation: landscape) and (max-height: 500px) {
+  .modal-slogan {
+    flex-basis: auto;
+    font-size: 13px;
+  }
+  .modal-footer {
+    display: none;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
