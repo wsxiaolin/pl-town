@@ -371,7 +371,7 @@ export function createWorldDecorations(options) {
   function addPond(cx, cz, r) {
     const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
     const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
-    // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.036) so
+    // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.04) so
     // the surrounding ground never z-fights through the pond.
     pond.renderOrder = RENDER_ORDER.water;
     pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);

@@ -2,6 +2,9 @@
 // 5 acts: 星尘 → 蓝图 → 生长 → 烟火 → 题名
 // Canvas2D particle/procedural engine + CSS typography, sequenced by GSAP.
 import { gsap } from 'gsap';
+import { preloadLikelyCGResources } from './cgResourcePreloader';
+
+declare const __CF_PAGES__: boolean;
 
 type CGOptions = {
   onFinish: () => void;
@@ -33,7 +36,8 @@ export function destroyCG(): void {
 }
 
 export function shouldShowCG(): boolean {
-  return !localStorage.getItem(SEEN_KEY);
+  const isCloudflarePages = window.location.hostname.toLowerCase().endsWith('.pages.dev');
+  return !__CF_PAGES__ && !isCloudflarePages && !localStorage.getItem(SEEN_KEY);
 }
 
 // ─── deterministic randomness ────────────────────────────────────────────────
@@ -137,6 +141,7 @@ export function startCG(): void {
   requestAnimationFrame(() => overlay.classList.add('active'));
   cgScene5Shown = false;
   renderProgress();
+  preloadLikelyCGResources();
 
   if (options.reduced) { endCG(); return; }
 

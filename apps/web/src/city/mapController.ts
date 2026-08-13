@@ -29,8 +29,8 @@ export type MapControllerOptions = {
 };
 
 const MAP_SHOT = 1024;
-const MAP_SHOT_SPAN = 64;
-const MAP_SHOT_CENTER_X = 16;
+const MAP_SHOT_SPAN = 48;
+const MAP_SHOT_CENTER_X = 0;
 
 export function createMapController(options: MapControllerOptions) {
   let open = false;

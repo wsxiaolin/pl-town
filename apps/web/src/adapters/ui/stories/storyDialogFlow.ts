@@ -25,10 +25,11 @@ export function createStoryDialogFlow(
     const node = runtime.node();
     const guide = runtime.state().activeGuide;
     const available = runtime.isNodeAvailable(options.getContext?.());
-    const guideState = `${node.id}:${available ? 'available' : 'waiting'}`;
+    const guideVisible = runtime.isGuideVisible(options.getContext?.());
+    const guideState = `${node.id}:${available ? 'available' : 'waiting'}:${guideVisible ? 'visible' : 'hidden'}`;
     if (announcedGuideState === guideState) return;
     announcedGuideState = guideState;
-    if (!guide || !available) {
+    if (!guide || !available || !guideVisible) {
       runtime.publish('story.guide.cleared', { nodeId: node.id });
       return;
     }
@@ -107,6 +108,7 @@ export function createStoryDialogFlow(
     if (definition.entryActorId !== actorId) return false;
     const nodeChoices = runtime.node().choices ?? [];
     if (nodeChoices.length > 0 && runtime.choices(context).length === 0) return false;
+    runtime.publish(`story.actor.interacted.${actorId}`);
     open(dialogs);
     return true;
   };

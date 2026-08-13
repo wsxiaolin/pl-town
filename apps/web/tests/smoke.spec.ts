@@ -131,17 +131,16 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
 
   await page.goto('/');
-  await expect(page.locator('[data-inventory-button]')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('[data-inventory-button] svg')).toBeVisible();
-  await page.locator('[data-inventory-button]').click();
-  await expect(page.locator('#inventoryPanel')).toHaveClass(/open/);
-  await expect(page.locator('#inventoryPanel [data-inventory-list]')).toContainText('龙井茶');
-  await expect(page.locator('#inventoryPanel [data-inventory-list]')).toContainText('× 2');
-  await page.locator('[data-inventory-close]').click();
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
+  const phoneToggle = page.locator('#onlinePanelToggle');
+  await expect(phoneToggle).toHaveClass(/connected/, { timeout: 30_000 });
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 2');
+  await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
   await page.evaluate(() => (window as any).__mini().interactBuilding('mall_south'));
-  await expect(page.locator('#inventoryPanel')).toHaveClass(/shop-mode/);
-  await expect(page.locator('#inventoryPanel [data-panel-title]')).toHaveText('物实商店');
-  await expect(page.locator('#inventoryPanel [data-inventory-section]')).toBeHidden();
+  await expect(page.locator('#shopPanel')).toHaveClass(/open/);
+  await expect(page.locator('#shopPanel')).toContainText('物实商店');
+  await expect(page.locator('#onlinePanel')).not.toHaveClass(/open/);
   const expectedProducts = [
     ['dragonwell_tea', '茶', '龙井茶', '西湖龙井 · 可用于石井剧情'],
     ['beef', '肉', '牛肉', '新鲜牛肉 · 林澈遗愿所需食材'],
@@ -154,7 +153,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     await expect(product.locator('.sp-ul-name')).toHaveText(name);
     await expect(product.locator('small')).toHaveText(detail);
   }
-  await page.locator('[data-inventory-close]').click();
+  await page.locator('[data-shop-close]').click();
 
   const worldAudit = await page.evaluate(async () => {
     const mini = (window as any).__mini();
@@ -282,6 +281,7 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   await page.locator('#mapToggle').click({ force: true });
   await expect(page.locator('.map-icon[data-building-id="litreview"]')).toHaveCount(0);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1);
+  await expect(page.locator('.map-icon[data-building-id="echo-observatory"]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__mini().interactBuilding('litreview'))).toBe(false);
 
   const lockedAudit = await page.evaluate(() => {
