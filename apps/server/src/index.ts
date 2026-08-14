@@ -13,6 +13,7 @@ import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount }
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
+import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
 const clients = new Map<string, Client>();
@@ -144,7 +145,7 @@ async function handle(client: Client, raw: string) {
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
+      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); bumpMetric('chatMessages'); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
@@ -279,7 +280,9 @@ const http = createServer(async (request, response) => {
   const requestIp = clientIp(request);
   response.on('finish', () => {
     const detail = { method: request.method ?? '', url: request.url ?? '', status: response.statusCode, ms: Date.now() - requestStartedAt, ip: requestIp };
+    if (response.statusCode >= 500) recordServerError(`${detail.method} ${detail.url} → ${detail.status}`, `${detail.ms}ms`);
     if (request.url === '/healthz') return logger.debug('HTTP', detail);
+    bumpMetric('httpRequests');
     logger.info('HTTP', detail);
   });
   try {
@@ -308,6 +311,7 @@ const http = createServer(async (request, response) => {
       response.writeHead(403, headers); response.end(JSON.stringify({ error: 'Request origin is not allowed' })); return;
     }
   }
+  if (await handleTelemetryCollection(request, response)) return;
   const match = request.url?.match(/^\/town-api\/works\?scope=(knowledge|senate|all|discussion|featured)$/);
   if (request.method === 'GET' && match) {
     try { response.writeHead(200, headers); response.end(JSON.stringify(await getPublicWorks(match[1] as 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured'))); }
@@ -426,6 +430,7 @@ wss.on('connection', (socket, request) => {
   const ip = clientIp(request);
   const client: Client = { socket, user: null as unknown as User, ready: false, ip, authInProgress: false, alive: true };
   sockets.add(socket); connectionsByIp.set(ip, (connectionsByIp.get(ip) ?? 0) + 1);
+  bumpMetric('wsConnects');
   const authTimeout = setTimeout(() => { if (!client.ready) socket.close(4008, 'Authentication timeout'); }, 10_000);
   const heartbeat = setInterval(() => {
     if (!client.alive) { socket.terminate(); return; }
@@ -435,8 +440,10 @@ wss.on('connection', (socket, request) => {
   heartbeat.unref();
   logger.info('WebSocket connected', { ip });
   socket.on('message', (data) => {
+    bumpMetric('wsMessages');
     void handle(client, data.toString()).catch((error) => {
       logger.error('WebSocket message handler failed', { ip: client.ip, error: error instanceof Error ? error.message : String(error) });
+      recordServerError('WebSocket message handler failed', client.ip);
       fail(socket, 'Request could not be processed');
       socket.close(1011, 'Message processing failed');
     });
