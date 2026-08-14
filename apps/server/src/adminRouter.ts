@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -17,11 +18,28 @@ import { STORY_CATALOG, getStorySummary } from './storyCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 
 type Context = { online: () => number; disconnectUser: (userId: string) => void; disconnectAll: () => void; startedAt: number };
-const assets = new Map([
-  ['/admin/', { type: 'text/html; charset=utf-8', body: readFileSync(fileURLToPath(new URL('../admin/index.html', import.meta.url))) }],
-  ['/admin/app.js', { type: 'text/javascript; charset=utf-8', body: readFileSync(fileURLToPath(new URL('../admin/app.js', import.meta.url))) }],
-  ['/admin/styles.css', { type: 'text/css; charset=utf-8', body: readFileSync(fileURLToPath(new URL('../admin/styles.css', import.meta.url))) }],
-]);
+
+type AdminAsset = { type: string; body: Buffer };
+
+// Admin assets are hand-rolled (not processed by Vite), so they have no
+// automatic content hash in their filename. We fingerprint them here by
+// hashing each static asset at startup and rewriting the HTML references to
+// `?v=<hash>`. The HTML shell is served with `no-store`, so a new deploy is
+// picked up immediately; the versioned assets can then be cached immutably
+// for a long time without serving stale JS/CSS after an update.
+const fingerprint = (body: Buffer): string => createHash('sha256').update(body).digest('hex').slice(0, 16);
+const readAsset = (relative: string) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)));
+const staticAssets: ReadonlyArray<[string, AdminAsset]> = [
+  ['/admin/styles.css', { type: 'text/css; charset=utf-8', body: readAsset('../admin/styles.css') }],
+  ['/admin/app.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/app.js') }],
+];
+const assetVersions = new Map(staticAssets.map(([path, asset]) => [path, fingerprint(asset.body)]));
+const assets = new Map<string, AdminAsset>(staticAssets);
+const adminHtml = readAsset('../admin/index.html')
+  .toString('utf8')
+  .replace('/admin/styles.css', `/admin/styles.css?v=${assetVersions.get('/admin/styles.css')}`)
+  .replace('/admin/app.js', `/admin/app.js?v=${assetVersions.get('/admin/app.js')}`);
+assets.set('/admin/', { type: 'text/html; charset=utf-8', body: Buffer.from(adminHtml, 'utf8') });
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 const respond = (response: ServerResponse, status: number, payload: unknown, extra: Record<string, string> = {}) => {
@@ -60,7 +78,12 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   const asset = assets.get(assetPath);
   if (request.method === 'GET' && asset) {
     response.writeHead(200, {
-      'content-type': asset.type, 'cache-control': assetPath === '/admin/' ? 'no-store' : 'public, max-age=3600',
+      'content-type': asset.type,
+      // The HTML shell is never cached, so it always references the latest
+      // fingerprinted asset URLs. Versioned assets are immutable for a year:
+      // their content changes only when the fingerprint (and thus the URL)
+      // changes, so long-lived caching is safe and never serves stale code.
+      'cache-control': assetPath === '/admin/' ? 'no-store' : 'public, max-age=31536000, immutable',
       'content-security-policy': csp, 'cross-origin-opener-policy': 'same-origin', 'cross-origin-resource-policy': 'same-origin',
       'permissions-policy': 'camera=(), microphone=(), geolocation=()', 'referrer-policy': 'no-referrer',
       'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'x-robots-tag': 'noindex, nofollow',
