@@ -102,6 +102,24 @@ try {
   const adminBase = `${adminOrigin}/admin/api`;
   const unauthenticated = await fetch(`${adminBase}/overview`);
   if (unauthenticated.status !== 401 || unauthenticated.headers.get('cache-control') !== 'no-store') throw new Error('Admin API must reject unauthenticated requests without caching');
+
+  // The admin HTML shell must never be cached, and it must reference the
+  // fingerprinted asset URLs so that updated JS/CSS is served immediately
+  // after a deploy rather than from a stale long-lived cache.
+  const adminHtmlResponse = await fetch(`${adminOrigin}/admin/`);
+  if (!adminHtmlResponse.ok || adminHtmlResponse.headers.get('cache-control') !== 'no-store') throw new Error('Admin HTML shell must never be cached');
+  const adminHtml = await adminHtmlResponse.text();
+  const versionedRefs = [...adminHtml.matchAll(/\/admin\/(app\.js|styles\.css)\?v=([0-9a-f]{16})/g)];
+  if (versionedRefs.length !== 2) throw new Error('Admin HTML must fingerprint app.js and styles.css with a ?v= hash');
+  const cssVersion = versionedRefs.find((match) => match[1] === 'styles.css')[2];
+  const jsVersion = versionedRefs.find((match) => match[1] === 'app.js')[2];
+  for (const [path, version] of [['/admin/styles.css', cssVersion], ['/admin/app.js', jsVersion]]) {
+    const assetResponse = await fetch(`${adminOrigin}${path}?v=${version}`);
+    if (!assetResponse.ok) throw new Error(`Admin asset ${path} must be served with a ?v= fingerprint`);
+    const cacheControl = assetResponse.headers.get('cache-control') ?? '';
+    if (!cacheControl.includes('immutable') || !cacheControl.includes('max-age=31536000')) throw new Error(`Admin asset ${path} must be cached immutably; got "${cacheControl}"`);
+  }
+
   const rejectedOrigin = await fetch(`${adminBase}/login`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
     body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
