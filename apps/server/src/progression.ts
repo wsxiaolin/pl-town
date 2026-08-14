@@ -9,7 +9,7 @@ const BUILDING_IDS = [
   'teahouse', 'mall_south', 'school_east', 'mall_west', 'school_north', 'kingice', 'knowledgebaseD',
   'community_outer', 'commons_outer', 'lab_outer', 'teahouse_outer', 'writingclub_outer',
   'archive', 'tradingpost', 'records', 'guildhall', 'musichall', 'conservatory', 'arena',
-  'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall',
+  'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall', 'wushi_restaurant',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(

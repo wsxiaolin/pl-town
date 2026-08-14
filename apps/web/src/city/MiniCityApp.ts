@@ -44,12 +44,9 @@ import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameHour } from '../gameplay/time/townClock';
 const resources = new ResourcePool();
-let animationFrame = 0;
-let clockInterval = 0;
-let trackingInterval = 0;
+let animationFrame = 0, clockInterval = 0, trackingInterval = 0;
 let started = false;
-let eventController = new AbortController();
-let raycastBuildingGroups = [];
+let eventController = new AbortController(), raycastBuildingGroups = [];
 const buildingPlotTargets = [];
 const labelWorldPosition = new THREE.Vector3();
 const MOBILE  = () => window.innerWidth <= 680;
@@ -321,6 +318,7 @@ function init() {
     getQuestAction: (npcId)=>questRuntime.getNpcAction(npcId,getQuestProgressView()),
     performQuestAction: (action,at)=>questRuntime.performNpcAction(action,at),
     onNpcInteracted: recordNpcInteraction,
+    onDialogueAction: (action)=>action.startsWith('teleport:')&&mapController?.teleportToBuilding(action.slice(9)),
     pauseNpcs,
     resumeNpcs,
     showToast: showUnlockToast,
@@ -398,6 +396,7 @@ function setupScene() {
       navigateTo(building);
       return true;
     },
+    openBuildingDialog: (buildingId: string) => { const building=buildings.find(item=>item.id===buildingId); if(!building)return false; openModal(building); return true; },
     interactInterestPoint: (id: SceneInterestPointId) => {
       const entity=sceneInterestPoints?.entities.get(id);
       if(!entity||!cursorChar)return false;

@@ -7,7 +7,7 @@ export default defineConfig({
   root: webRoot,
   base: process.env.BASE_PATH || '/', // GitHub Pages 部署在子路径时注入（如 /pl-town/）
   define: {
-    __CF_PAGES__: process.env.CF_PAGES === '1',
+    __CF_PAGES__: JSON.stringify(process.env.CF_PAGES === '1'),
   },
   server: {
     host: true,

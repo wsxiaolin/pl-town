@@ -4,6 +4,18 @@ import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { getNpcType } from './data/npcTypes';
 
+export function hoursInRange(h, wh) {
+  if(!wh) return false;
+  const [s,e]=wh;
+  if(s===e) return true;
+  if(s<e) return h>=s && h<e;
+  return h>=s || h<e;
+}
+
+export function isNpcHiddenAtHour(profile, hour) {
+  return hoursInRange(hour, profile.hiddenHours);
+}
+
 export function createNpcSystem(options) {
   const {
     scene, profiles: NPC_PROFILES, npcList, actors, raycaster, roadCoords: ROAD_COORDS,
@@ -67,6 +79,7 @@ export function createNpcSystem(options) {
       const npc={profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0};
       npcList.push(npc);
       if(profile.behavior==='rare') g.visible=false;
+      if(isNpcHiddenAtHour(profile, getGameClock())) g.visible=false;
       if(profile.storyOnly) g.visible=false;
       if (!MOBILE()) npcRoutine(npc);
     });
@@ -84,14 +97,6 @@ export function createNpcSystem(options) {
     const angle=Math.random()*Math.PI*2;
     const distance=Math.sqrt(Math.random())*radius;
     return new THREE.Vector3(x+Math.cos(angle)*distance,0,z+Math.sin(angle)*distance);
-  }
-  
-  function hoursInRange(h, wh) {
-    if(!wh) return false;
-    const [s,e]=wh;
-    if(s===e) return true;
-    if(s<e) return h>=s && h<e;
-    return h>=s || h<e;
   }
   
   function npcDesiredTarget(npc) {
@@ -170,6 +175,11 @@ export function createNpcSystem(options) {
         return;
       }
       const behavior=npc.profile.behavior||'field';
+      if (isNpcHiddenAtHour(npc.profile, getGameClock())) {
+        npc.mesh.visible=false;
+        if(npc.tween){ npc.tween.kill(); npc.tween=null; }
+        return;
+      }
       if (npc.profile.storyOnly && !getActiveStoryActorIds().has(npc.profile.id)) {
         npc.mesh.visible=false;
         if(npc.tween){ npc.tween.kill(); npc.tween=null; }

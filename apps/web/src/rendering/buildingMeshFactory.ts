@@ -2,6 +2,7 @@
 // This module has no scene, DOM, storage, or gameplay responsibilities.
 // @ts-nocheck
 import * as THREE from 'three';
+import { buildWushiRestaurant } from './wushiRestaurant';
 
 export function createBuildingMeshFactory(options) {
   const {
@@ -765,6 +766,7 @@ export function createBuildingMeshFactory(options) {
     clocktower: buildClockTower, temple: buildTemple, factory: buildFactory,
     mall: buildMall, school: buildSchool, crown: buildCrown,
     banana: buildBanana, qipai: buildQipai,
+    restaurant: cfg => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };
