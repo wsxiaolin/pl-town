@@ -133,3 +133,7 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .sparkline-bars { display: flex; align-items: flex-end; gap: 2px; height: 64px; }
 .sparkline-bar { flex: 1 1 0; min-width: 3px; border-radius: 2px 2px 0 0; }
 .log-view { margin: 18px 0; max-height: 320px; overflow: auto; padding: 14px; background: #0f1714; color: #d6e4dc; border: 1px solid #cdd6d2; border-radius: 7px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.panel--logs { display: flex; flex-direction: column; height: 100%; }
+.panel--logs header { flex: 0 0 auto; }
+.panel--logs .log-view { flex: 1 1 auto; max-height: none; margin-bottom: 14px; }
+.panel--logs #refreshLogsButton { flex: 0 0 auto; align-self: flex-start; }
