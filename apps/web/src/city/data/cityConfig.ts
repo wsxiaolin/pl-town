@@ -34,6 +34,13 @@ export const PALETTE = Object.freeze({
 export const ROAD_COORDS = Object.freeze([-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36]);
 export const CITY_LIMIT = 42;
 export const BUILDING_PLATFORM_HEIGHT = 0.3;
+export const WEST_BEACH = Object.freeze({
+  coastlineX: -43.2,
+  deepWaterX: -44.5,
+  safeReturnX: -42.2,
+  minZ: -50,
+  maxZ: 50,
+});
 export const ECHO_OBSERVATORY_AREA = Object.freeze({
   roadNodes: Object.freeze([
     [38, 0], [48, 0], [58, 0], [68, 0],

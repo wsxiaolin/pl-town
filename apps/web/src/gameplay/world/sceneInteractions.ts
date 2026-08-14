@@ -1,10 +1,11 @@
-export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'origin-orange-tree', 'longjing-well', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
+export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'origin-orange-tree', 'longjing-well', 'west-beach', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
 
 export type SceneInterestPointId = (typeof SCENE_INTEREST_POINT_IDS)[number];
 
 export const WORLD_ITEM_IDS = {
   orange: 'mandarin',
   longjingTea: 'dragonwell_tea',
+  tirpitz: 'tirpitz_card',
 } as const;
 
 export type WorldItemId = (typeof WORLD_ITEM_IDS)[keyof typeof WORLD_ITEM_IDS];
@@ -13,6 +14,7 @@ export const WORLD_ACHIEVEMENTS = {
   catCafeNote: { id: 'cat_cafe_note', name: '猫咖拾遗' },
   cityOrigin: { id: 'minicity_origin', name: '物实城缘起' },
   longjingAssimilation: { id: 'dragonwell_assimilation', name: '被龙井同化' },
+  westBeachEncounter: { id: 'west_beach_encounter', name: '海神的考验' },
 } as const;
 
 export const ORANGE_TREE_COPY = '城中的守望者，它或许不是最高的，但它见证了最多的风雨';
@@ -28,7 +30,8 @@ export interface InventoryPort {
   hasItem(itemId: WorldItemId, count?: number): boolean | Promise<boolean>;
   consumeItem(itemId: WorldItemId, count: number): boolean | Promise<boolean>;
   /** Resolves true only after the authoritative server confirms a new claim. */
-  claimDailyReward(rewardId: 'mandarin_daily'): boolean | Promise<boolean>;
+  claimReward(rewardId: 'mandarin_daily' | 'tirpitz_beach'): boolean | Promise<boolean>;
+  hasAchievement(achievementId: string): boolean;
 }
 
 export interface DailyOrangeOutcome {

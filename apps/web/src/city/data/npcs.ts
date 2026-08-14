@@ -3,6 +3,30 @@ import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
 export const NPC_PROFILES = [...COMMUNITY_NPCS,
   {
+    id:'yihang', name:'亦航', role:'普通居民 · 公园散步者', core:false, spawnChance:1,
+    behavior:'rare', workHours:[10,22], guaranteedSpawn:true,
+    head:0xD7B49A, body:0x5D7FA3, home:[15,30], work:[15,30], patrolRadius:3.2,
+    spawnArea:[15,30,2.4],
+    dialog:[
+      { text:'「嗨，你好。」', options:[
+        { text:'请问你在干什么', next:1 },
+        { text:'为什么你神出鬼没的', next:2 },
+        { text:'再见', next:null },
+      ]},
+      { text:'「这还不简单吗，在散步啊，难得不抽象的时间当然出来走走透透气。」', options:[
+        { text:'好的，再见', next:null },
+        { text:'那你不散步的时候在干什么', next:3 },
+      ]},
+      { text:'「因为我是棍母（笑）」', options:[
+        { text:'你是什么？怎么说一半突然没声了？', next:null },
+      ]},
+      { text:'「呃……在家和朋友们聊天？打游戏？狗是新的剧情？应该就这些了吧。」', options:[
+        { text:'那还挺酷', next:null },
+        { text:'来日再会', next:null },
+      ]},
+    ],
+  },
+  {
     id:'linche', name:'林澈', role:'气象观测站守望人', core:false, spawnChance:1,
     npcType:'story', type:'story', behavior:'field', workHours:[0,24],
     head:0xD6B2A0, body:0x526D88,
