@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
+import { createWestBeach } from './westBeach';
 
 export interface SceneInterestPointEntity {
   id: SceneInterestPointId;
@@ -23,6 +24,7 @@ export interface SceneInterestPoints {
   raycastTargets: readonly THREE.Object3D[];
   update(elapsedSeconds: number): void;
   setWellPhase(phase: 'idle' | 'focus' | 'engulf' | 'recede'): void;
+  setBeachEncounterPhase(phase: 'hidden' | 'revealed' | 'reward'): void;
   setActiveStoryPoints(ids: readonly SceneInterestPointId[]): void;
   dispose(): void;
 }
@@ -367,13 +369,14 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       return material;
     },
   };
-  const list = [createCatCafeNote(options), createOrangeTree(options), createLongjingWell(options), createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options)];
+  const westBeach = createWestBeach(options);
+  const list = [createCatCafeNote(options), createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options)];
   const entities = new Map(list.map((entity) => [entity.id, entity]));
   const storyEntities = ECHO_STORY_POINT_IDS
     .map((id) => entities.get(id))
     .filter((entity): entity is SceneInterestPointEntity => Boolean(entity));
   const baseRaycastTargets = list
-    .filter((entity) => !ECHO_STORY_POINT_IDS.includes(entity.id as (typeof ECHO_STORY_POINT_IDS)[number]))
+    .filter((entity) => !entity.object.userData.autoTrigger && !ECHO_STORY_POINT_IDS.includes(entity.id as (typeof ECHO_STORY_POINT_IDS)[number]))
     .map((entity) => entity.object);
   const storyRaycastTargets = storyEntities.map((entity) => {
     const targets: THREE.Object3D[] = [];
@@ -396,6 +399,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
     entities,
     raycastTargets,
     update(elapsedSeconds) {
+      westBeach.update(elapsedSeconds);
       orangeTree?.traverse((object) => {
         if (!(object instanceof THREE.Mesh) || typeof object.userData.orangeFruitIndex !== 'number') return;
         const index = object.userData.orangeFruitIndex as number;
@@ -420,6 +424,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       });
     },
     setWellPhase(phase) { wellPhase = phase; wellPhaseStarted = performance.now() / 1000; },
+    setBeachEncounterPhase(phase) { westBeach.setPhase(phase); },
     setActiveStoryPoints(ids) {
       const active = new Set(ids);
       storyEntities.forEach((entity) => {

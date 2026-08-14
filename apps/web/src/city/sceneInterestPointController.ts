@@ -15,6 +15,7 @@ interface SceneInterestPointControllerOptions {
   awardAchievement: (achievementId: string, achievementName: string) => void | Promise<void>;
   showToast: (message: string) => void;
   setWellPhase?: (phase: 'idle' | 'focus' | 'engulf' | 'recede') => void;
+  setBeachEncounterPhase?: (phase: 'hidden' | 'revealed' | 'reward') => void;
   interactWithStory?: (id: SceneInterestPointId) => boolean;
 }
 
@@ -75,6 +76,84 @@ export function createSceneInterestPointController(
     };
     options.dialogs.openStory(story);
   };
+  let beachSequenceStarted = false;
+  let beachSequenceCompleted = false;
+
+  const openBeachEncounter = async (): Promise<void> => {
+    if (beachSequenceStarted || beachSequenceCompleted) return;
+    if (options.inventory.hasAchievement(WORLD_ACHIEVEMENTS.westBeachEncounter.id)) {
+      beachSequenceCompleted = true;
+      options.setBeachEncounterPhase?.('reward');
+      return;
+    }
+    if (!options.inventory.isOnline()) return;
+    beachSequenceStarted = true;
+    const interrupted = () => {
+      if (beachSequenceCompleted) return;
+      beachSequenceStarted = false;
+      options.setBeachEncounterPhase?.('hidden');
+    };
+    const openStep = (step: number): void => {
+      if (step === 0) {
+        options.dialogs.openStory({
+          title: '海边', role: '城市西侧', text: '*你来到了海边',
+          options: [{ text: '继续', onPick: () => openStep(1) }], onClose: interrupted,
+        });
+        return;
+      }
+      if (step === 1) {
+        options.dialogs.openStory({
+          title: '海边', role: '海风轻轻吹过',
+          text: '*看着远处的轮船慢慢经过，海鸥从远处飘过，海景是如此的美丽，你不禁感到一阵前所未有的放松。',
+          options: [{ text: '继续', onPick: () => openStep(2) }], onClose: interrupted,
+        });
+        return;
+      }
+      if (step === 2) {
+        options.setBeachEncounterPhase?.('revealed');
+        options.dialogs.openStory({
+          title: '亦航（海神）', role: '从沙滩里钻出来的蓝色人类',
+          text: '哦，请问你掉的是这个俾斯麦号，还是这个希佩尔号啊？',
+          options: [{ text: '……', onPick: () => openStep(3) }], onClose: interrupted,
+        });
+        return;
+      }
+      if (step === 3) {
+        options.dialogs.openStory({
+          title: '你', role: '仍在理解眼前发生的事情', text: '*你默不作声，还没从这反应过来。',
+          options: [{ text: '继续沉默', onPick: () => openStep(4) }], onClose: interrupted,
+        });
+        return;
+      }
+      options.dialogs.openStory({
+        title: '亦航（海神）', role: '海神的考验',
+        text: '很好，你通过了我的考验，因为你压根就没有海军牌。作为你真诚的回报，这个送给你。',
+        options: [{
+          text: '收下皮尔皮茨号',
+          onPick: async () => {
+            const alreadyOwned = await options.inventory.hasItem(WORLD_ITEM_IDS.tirpitz, 1);
+            const granted = alreadyOwned || await options.inventory.claimReward('tirpitz_beach');
+            if (!granted) {
+              options.dialogs.openStory({
+                title: '海边', role: '奖励尚未送达', text: '海浪短暂地切断了连接。重新连上服务器后，再靠近这里试一次。',
+                onClose: interrupted,
+              });
+              return;
+            }
+            beachSequenceCompleted = true;
+            options.setBeachEncounterPhase?.('reward');
+            await options.awardAchievement(WORLD_ACHIEVEMENTS.westBeachEncounter.id, WORLD_ACHIEVEMENTS.westBeachEncounter.name);
+            options.dialogs.openStory({
+              title: '获得物品', role: '皮尔皮茨号 ×1',
+              text: '（内心）皮尔皮茨号：“只是一张某个二战游戏中强度不错的海军卡牌，也许可以作为纪念？”',
+            });
+          },
+        }],
+        onClose: interrupted,
+      });
+    };
+    openStep(0);
+  };
 
   return {
     async interact(id) {
@@ -87,7 +166,7 @@ export function createSceneInterestPointController(
       }
 
       if (id === 'origin-orange-tree') {
-        const dispatched = await options.inventory.claimDailyReward('mandarin_daily');
+        const dispatched = await options.inventory.claimReward('mandarin_daily');
         const rewardMessage = dispatched
           ? '获得沃柑 ×1'
           : options.inventory.isOnline()
@@ -105,6 +184,7 @@ export function createSceneInterestPointController(
       }
 
       if (id === 'longjing-well') await openWellStory();
+      if (id === 'west-beach') await openBeachEncounter();
     },
   };
 }
