@@ -354,27 +354,27 @@ export const BUILDING_DEFS = [
     ),
   },
   {
-    id: "community",
+    id: "community_outer",
     num: "32",
-    label: "社区中心",
+    label: "社区中心（外环）",
     x: 33,
     z: -33,
     shape: "clocktower",
     icon: I(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>`),
   },
   {
-    id: "commons",
+    id: "commons_outer",
     num: "33",
-    label: "众议院",
+    label: "众议院（外环）",
     x: -33,
     z: -9,
     shape: "temple",
     icon: I(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/>`),
   },
   {
-    id: "lab",
+    id: "lab_outer",
     num: "34",
-    label: "实验楼",
+    label: "实验楼（外环）",
     x: 33,
     z: 9,
     shape: "greenhouse",
@@ -383,9 +383,10 @@ export const BUILDING_DEFS = [
     ),
   },
   {
-    id: "teahouse",
+    id: "teahouse_outer",
+    num: "35",
     disabled: true,
-    label: "茶馆",
+    label: "茶馆（外环）",
     x: 33,
     z: 33,
     shape: "pagoda",
@@ -394,9 +395,9 @@ export const BUILDING_DEFS = [
     ),
   },
   {
-    id: "writingclub",
+    id: "writingclub_outer",
     num: "36",
-    label: "文训社",
+    label: "文训社（外环）",
     x: -33,
     z: 33,
     shape: "factory",
@@ -535,7 +536,7 @@ export const BUILDING_DEFS = [
     num: "49",
     label: "物实饭店",
     x: -22.5,
-    z: -21,
+    z: -15,
     shape: "restaurant",
     icon: I(`<path d="M4 20V7h16v13"/><path d="M7 20v-7h4v7"/><path d="M14 11h3"/><path d="M6 4h12v3H6z"/>`),
   },
@@ -1013,8 +1014,24 @@ export const BUILDING_CONTENT = {
       "「一座城不是建出来的，是搭出来的。」",
     ],
   },
+  community_outer: {
+    name: "社区中心（外环）",
+    slogan: "居民在这里互相确认彼此存在。",
+    dialog: [
+      "大厅里挂着很多便签，有求助，有招募。",
+      "「一座城不是建出来的，是搭出来的。」",
+    ],
+  },
   commons: {
     name: "众议院",
+    slogan: "议事的厅堂，也是争论的起点。",
+    dialog: [
+      "圆形大厅里摆着弧形的座位。",
+      "「多数不代表正确，但沉默一定不代表同意。」",
+    ],
+  },
+  commons_outer: {
+    name: "众议院（外环）",
     slogan: "议事的厅堂，也是争论的起点。",
     dialog: [
       "圆形大厅里摆着弧形的座位。",
@@ -1029,8 +1046,24 @@ export const BUILDING_CONTENT = {
       "「不要把异常丢掉。异常有时候是入口。」",
     ],
   },
+  lab_outer: {
+    name: "实验楼（外环）",
+    slogan: "试错是这座城的燃料。",
+    dialog: [
+      "玻璃门后是整齐的仪器和不太整齐的便签。",
+      "「不要把异常丢掉。异常有时候是入口。」",
+    ],
+  },
   teahouse: {
     name: "茶馆",
+    slogan: "暂时坐下，也是一种前进。",
+    dialog: [
+      "茶香从窗缝里慢慢散出来。",
+      "「有些答案不会在奔跑时出现。坐一会儿。」",
+    ],
+  },
+  teahouse_outer: {
+    name: "茶馆（外环）",
     slogan: "暂时坐下，也是一种前进。",
     dialog: [
       "茶香从窗缝里慢慢散出来。",
@@ -1166,5 +1199,10 @@ export const BUILDING_CONTENT = {
         options: [{ text: "离开", next: null }],
       },
     ],
+  },
+  writingclub_outer: {
+    name: "文训社（外环）",
+    slogan: "字是城的声音，写下来才不散。",
+    dialog: ["木桌木椅，墨迹未干。", "「别怕写不好。先写下来，再改。」"],
   },
 };

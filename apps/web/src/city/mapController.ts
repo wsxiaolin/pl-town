@@ -28,9 +28,17 @@ export type MapControllerOptions = {
   openResidence: (buildingId: string) => void;
 };
 
+// Map compass convention: the on-screen isometric view is captured by a camera
+// at CAMERA_OFFSET=(+x,+y,+z) looking at the origin, which makes screen-up
+// (North) point toward world (-x,-z) and screen-right (East) point toward
+// world (+x,-z). The full-screen top-down map is therefore rendered with the
+// world -z axis pointing UP and +x pointing RIGHT, so North/South/East/West on
+// the map line up with the on-screen compass as closely as the 45° isometric
+// tilt allows.
 const MAP_SHOT = 1024;
-const MAP_SHOT_SPAN = 64;
-const MAP_SHOT_CENTER_X = 16;
+const MAP_SHOT_SPAN = 48;
+const MAP_SHOT_CENTER_X = 0;
+const MAP_SHOT_CENTER_Z = 0;
 
 export function createMapController(options: MapControllerOptions) {
   let open = false;
@@ -57,6 +65,8 @@ export function createMapController(options: MapControllerOptions) {
     const scene = options.getScene();
     if (!scene) return;
     if (!shotCamera) {
+      // Top-down with world +x to the right and world -z pointing up, matching
+      // the on-screen isometric compass (North = -z, East = +x).
       shotCamera = new THREE.OrthographicCamera(
         -MAP_SHOT_SPAN,
         MAP_SHOT_SPAN,
@@ -65,9 +75,9 @@ export function createMapController(options: MapControllerOptions) {
         0.1,
         130,
       );
-      shotCamera.position.set(MAP_SHOT_CENTER_X, 90, 0);
-      shotCamera.up.set(0, 0, 1);
-      shotCamera.lookAt(MAP_SHOT_CENTER_X, 0, 0);
+      shotCamera.position.set(MAP_SHOT_CENTER_X, 90, MAP_SHOT_CENTER_Z);
+      shotCamera.up.set(0, 0, -1);
+      shotCamera.lookAt(MAP_SHOT_CENTER_X, 0, MAP_SHOT_CENTER_Z);
       shotCamera.updateProjectionMatrix();
     }
     const canvas = options.document.createElement('canvas');
@@ -110,8 +120,9 @@ export function createMapController(options: MapControllerOptions) {
     const marker = options.document.getElementById('mapMarker') as HTMLElement | null;
     const cursor = options.getCursor();
     if (!marker || !cursor) return;
+    // North (-z) at top, East (+x) at right — matches the captured map image.
     const left = ((cursor.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
-    const top = ((MAP_SHOT_SPAN - cursor.position.z) / (2 * MAP_SHOT_SPAN)) * 100;
+    const top = ((cursor.position.z - MAP_SHOT_CENTER_Z + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
     marker.style.left = `${clamp(left, 0, 100)}%`;
     marker.style.top = `${clamp(top, 0, 100)}%`;
   }
@@ -128,7 +139,7 @@ export function createMapController(options: MapControllerOptions) {
       icon.title = building.label ?? building.id;
       icon.innerHTML = building.icon ?? '';
       icon.style.left = `${((building.group.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;
-      icon.style.top = `${((MAP_SHOT_SPAN - building.group.position.z) / (2 * MAP_SHOT_SPAN)) * 100}%`;
+      icon.style.top = `${((building.group.position.z - MAP_SHOT_CENTER_Z + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;
       icon.addEventListener('click', () => openTip(building));
       wrap.appendChild(icon);
     });
@@ -160,7 +171,7 @@ export function createMapController(options: MapControllerOptions) {
     const cursor = options.getCursor();
     if (!cursor) return;
     const entry = options.getBuildingRoadEntry(building.group.position);
-    if (!entry) {
+    if (!entry || !Number.isFinite(entry.x) || !Number.isFinite(entry.z)) {
       options.movePlayerTo(building.group.position);
       return;
     }

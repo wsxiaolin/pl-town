@@ -1,41 +1,66 @@
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
+import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate } from './auth.js';
-import { HOST, PORT } from './config.js';
+import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
+import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import * as db from './db.js';
-import { logger } from './logger.js';
+import { HttpBodyError, readJson } from './httpBody.js';
+import { closeLogger, logger } from './logger.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { FixedWindowRateLimiter } from './rateLimit.js';
+import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
+import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
 
-type Client = { socket: WebSocket; user: User; ready: boolean };
+type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
 const clients = new Map<string, Client>();
+const sockets = new Set<WebSocket>();
+const connectionsByIp = new Map<string, number>();
 const pendingPositions = new Map<string, Position>();
 const authAttempts = new Map<string, { count: number; startedAt: number }>();
 const physicsLoginAttempts = new Map<string, { count: number; startedAt: number }>();
 const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
+const chatWindows = new Map<string, { startedAt: number; count: number }>();
 const physicsSessions = new Map<string, { token: string; authCode: string; user: User; expiresAt: number }>();
 const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGES_PER_SECOND = 60;
+const MAX_CHAT_MESSAGES_PER_TEN_SECONDS = 5;
 const MAX_PHYSICS_LOGINS_PER_MINUTE = 10;
+const publicApiRate = new FixedWindowRateLimiter(120, 60_000);
+const publicMutationRate = new FixedWindowRateLimiter(30, 60_000);
+const globalPublicApiRate = new FixedWindowRateLimiter(1_000, 60_000, 1);
+const globalPublicMutationRate = new FixedWindowRateLimiter(200, 60_000, 1);
+const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
+const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
+const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
-const remoteAddress = (socket: WebSocket) => (socket as WebSocket & { _socket?: { remoteAddress?: string } })._socket?.remoteAddress ?? 'unknown';
+let housingBroadcastTimer: NodeJS.Timeout | undefined;
 function broadcastHousingState() {
-  const houses = db.listHouses();
-  clients.forEach((client) => {
-    send(client.socket, { type: 'housing.updated', houses });
-    send(client.socket, { type: 'housing.requests', requests: db.listHousingRequestsForUser(client.user.id) });
-  });
+  if (housingBroadcastTimer) return;
+  housingBroadcastTimer = setTimeout(() => {
+    housingBroadcastTimer = undefined;
+    const houses = db.listHouses();
+    clients.forEach((client) => {
+      send(client.socket, { type: 'housing.updated', houses });
+      send(client.socket, { type: 'housing.requests', requests: db.listHousingRequestsForUser(client.user.id) });
+    });
+  }, 50);
+  housingBroadcastTimer.unref();
 }
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;
-  return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z) && (value.rotation === undefined || Number.isFinite(value.rotation));
+  return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z)
+    && Math.abs(Number(value.x)) <= 80 && Math.abs(Number(value.y)) <= 10 && Math.abs(Number(value.z)) <= 80
+    && (value.rotation === undefined || (Number.isFinite(value.rotation) && Math.abs(Number(value.rotation)) <= Math.PI * 4));
 };
 const validId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 100;
+const validUserId = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const validStoryId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(value);
 const validStoryNodeId = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(value);
 const validStoryFlags = (value: unknown): value is Record<string, boolean | number | string | null> => {
@@ -63,45 +88,65 @@ setInterval(() => {
   for (const [ip, attempt] of physicsLoginAttempts) if (attempt.startedAt < cutoff) physicsLoginAttempts.delete(ip);
   const now = Date.now();
   for (const [id, session] of physicsSessions) if (session.expiresAt <= now) physicsSessions.delete(id);
+  for (const [id, window] of chatWindows) if (window.startedAt < now - 10_000) chatWindows.delete(id);
 }, 60_000).unref();
 
 function requireReady(client: Client, action: () => void) { if (!client.ready) fail(client.socket, 'Send hello before other messages'); else action(); }
-function handle(client: Client, raw: string) {
-  if (raw.length > 16_384) { logger.warn('Oversized WebSocket message rejected', { bytes: raw.length, ip: remoteAddress(client.socket) }); return fail(client.socket, 'Message too large'); }
+async function handle(client: Client, raw: string) {
+  if (raw.length > 16_384) { logger.warn('Oversized WebSocket message rejected', { bytes: raw.length, ip: client.ip }); return fail(client.socket, 'Message too large'); }
   const now = Date.now();
   const window = messageWindows.get(client.socket) ?? { startedAt: now, count: 0 };
   if (now - window.startedAt >= 1_000) { window.startedAt = now; window.count = 0; }
-  if (++window.count > MAX_MESSAGES_PER_SECOND) { logger.warn('Message rate limit exceeded', { ip: remoteAddress(client.socket) }); return fail(client.socket, 'Too many messages'); }
+  if (++window.count > MAX_MESSAGES_PER_SECOND) { logger.warn('Message rate limit exceeded', { ip: client.ip }); client.socket.close(4008, 'Message rate limit exceeded'); return; }
   messageWindows.set(client.socket, window);
   let message: ClientMessage;
   try { message = JSON.parse(raw) as ClientMessage; } catch { fail(client.socket, 'Invalid JSON'); return; }
-  if (!message || typeof message !== 'object' || typeof message.type !== 'string') { fail(client.socket, 'Invalid message'); return; }
+  if (!message || typeof message !== 'object' || Array.isArray(message) || typeof message.type !== 'string') { fail(client.socket, 'Invalid message'); return; }
   if (message.type === 'hello') {
-    const address = remoteAddress(client.socket);
+    if (client.ready || client.authInProgress) { fail(client.socket, 'Already authenticating'); return; }
+    if ((message.token !== undefined && typeof message.token !== 'string')
+      || (message.nickname !== undefined && typeof message.nickname !== 'string')
+      || (message.password !== undefined && typeof message.password !== 'string')) return fail(client.socket, 'Invalid authentication message');
+    client.authInProgress = true;
+    const address = client.ip;
     const attempt = authAttempts.get(address) ?? { count: 0, startedAt: now };
     if (now - attempt.startedAt >= 60_000) { attempt.startedAt = now; attempt.count = 0; }
-    if (++attempt.count > 20) { logger.warn('Authentication rate limit exceeded', { ip: address, count: attempt.count }); return fail(client.socket, 'Too many authentication attempts'); }
+    if (++attempt.count > 20 || !globalAuthenticationRate.consume('global').allowed) { client.authInProgress = false; logger.warn('Authentication rate limit exceeded', { ip: address, count: attempt.count }); return fail(client.socket, 'Too many authentication attempts'); }
     authAttempts.set(address, attempt);
-    let result: ReturnType<typeof authenticate>;
+    let result: Awaited<ReturnType<typeof authenticate>>;
     try {
-      result = authenticate({ token: message.token, nickname: message.nickname, password: message.password });
-      authAttempts.delete(address);
+      const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
+      result = await authenticate({ token: message.token, nickname: message.nickname, password: message.password, ip: address, registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP } });
     } catch (error) {
       const reason = error instanceof Error ? error.message : '登录失败';
-      const nickname = typeof message.nickname === 'string' ? message.nickname : '';
-      logger.warn('Login failed', { nickname, ip: address, reason });
+      logger.warn('Login failed', { ip: address, reason });
       fail(client.socket, reason);
+      client.authInProgress = false;
       return;
     }
+    if (client.socket.readyState !== WebSocket.OPEN) { client.authInProgress = false; return; }
+    const previous = clients.get(result.user.id);
+    if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
     send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), ...progressState(client.user.id) });
-    broadcast({ type: 'player.joined', player: client.user }, client.user.id); return;
+    broadcast({ type: 'player.joined', player: client.user }, client.user.id); client.authInProgress = false; return;
   }
   requireReady(client, () => {
     const userId = client.user.id;
+    if (message.type.startsWith('housing.') && message.type !== 'housing.list') {
+      const rate = housingMutationRate.consume(userId);
+      if (!rate.allowed) return fail(client.socket, 'Housing rate limit exceeded');
+    }
     if (message.type === 'position') { if (!validPosition(message.position)) return fail(client.socket, 'Invalid position'); pendingPositions.set(userId, message.position); client.user.position = message.position; broadcast({ type: 'player.moved', playerId: userId, position: message.position }, userId); return; }
-    if (message.type === 'chat') { if (typeof message.text !== 'string') return fail(client.socket, 'Invalid chat message'); const text = message.text.trim().slice(0, 500); if (text) broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); return; }
+    if (message.type === 'chat') {
+      if (typeof message.text !== 'string' || message.text.length > 500) return fail(client.socket, 'Invalid chat message');
+      const window = chatWindows.get(userId) ?? { startedAt: now, count: 0 };
+      if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
+      if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
+      chatWindows.set(userId, window);
+      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); bumpMetric('chatMessages'); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
+    }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
@@ -123,8 +168,9 @@ function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.achievement.unlock') {
       if (!validId(message.achievementId) || !(message.achievementId in ACHIEVEMENT_REWARDS)) return fail(client.socket, 'Achievement is not available');
-      const result = db.unlockAchievement(userId, message.achievementId, ACHIEVEMENT_REWARDS[message.achievementId]!);
-      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'achievement.unlocked', achievementId: message.achievementId, reward: result.unlocked ? ACHIEVEMENT_REWARDS[message.achievementId] : 0 } });
+      const reward = verifiedAchievementReward(db.getPlayerProgress(userId), message.achievementId);
+      const result = db.unlockAchievement(userId, message.achievementId, reward);
+      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'achievement.unlocked', achievementId: message.achievementId, reward: result.rewardGranted } });
       return;
     }
     if (message.type === 'progress.shop.buy') {
@@ -166,13 +212,15 @@ function handle(client: Client, raw: string) {
       if (message.flags !== undefined && !validStoryFlags(message.flags)) return fail(client.socket, 'Invalid story flags');
       if (message.ending !== undefined && message.ending !== null && !validStoryNodeId(message.ending)) return fail(client.socket, 'Invalid story ending');
       if (message.visit !== undefined && typeof message.visit !== 'boolean') return fail(client.socket, 'Invalid story visit');
-      const story = db.updateStoryProgress(userId, message.storyId, { definitionVersion: message.definitionVersion, nodeId: message.nodeId, flags: message.flags, ending: message.ending, visit: message.visit });
-      send(client.socket, { type: 'story.updated', story, event: { type: 'story.updated', storyId: message.storyId } });
+      try {
+        const story = db.updateStoryProgress(userId, message.storyId, { definitionVersion: message.definitionVersion, nodeId: message.nodeId, flags: message.flags, ending: message.ending, visit: message.visit });
+        send(client.socket, { type: 'story.updated', story, event: { type: 'story.updated', storyId: message.storyId } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Story could not be updated'); }
       return;
     }
     if (message.type === 'housing.list') { send(client.socket, { type: 'housing.list', houses: db.listHouses() }); send(client.socket, { type: 'housing.requests', requests: db.listHousingRequestsForUser(userId) }); return; }
     if (message.type === 'housing.accept' || message.type === 'housing.decline') {
-      if (!Number.isInteger(message.requestId)) return fail(client.socket, 'Invalid housing request');
+      if (!Number.isSafeInteger(message.requestId) || message.requestId <= 0) return fail(client.socket, 'Invalid housing request');
       const request = db.getHousingRequest(message.requestId);
       if (!request || request.targetId !== userId) return fail(client.socket, 'Housing request is no longer available');
       if (message.type === 'housing.accept') {
@@ -196,7 +244,7 @@ function handle(client: Client, raw: string) {
     if (message.type === 'housing.rename') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can rename'); if (typeof message.name !== 'string' || !message.name.trim()) return fail(client.socket, 'Invalid house name'); db.renameHouse(message.buildingId, message.name.trim().slice(0, 80)); }
     else if (message.type === 'housing.invite') {
       if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can invite');
-      if (!validId(message.userId) || message.userId === userId) return fail(client.socket, 'Invalid invite target');
+      if (!validUserId(message.userId) || message.userId === userId) return fail(client.socket, 'Invalid invite target');
       if (!db.getUser(message.userId)) return fail(client.socket, 'User not found');
       if (house.members.length >= 10) return fail(client.socket, 'House is full');
       if (house.members.some((member) => member.userId === message.userId)) return fail(client.socket, 'User is already a member');
@@ -210,31 +258,60 @@ function handle(client: Client, raw: string) {
       if (db.listHouses().some((item) => item.members.some((member) => member.userId === userId))) return fail(client.socket, 'You already live in a house');
       try { db.createHousingRequest(message.buildingId, userId, house.ownerId, 'application'); } catch { return fail(client.socket, 'Application is already pending'); }
     }
-    else if (message.type === 'housing.kick') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can kick'); if (message.userId === house.ownerId) return fail(client.socket, 'Owner cannot be kicked'); db.removeMember(message.buildingId, message.userId); }
+    else if (message.type === 'housing.kick') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can kick'); if (!validUserId(message.userId) || message.userId === house.ownerId) return fail(client.socket, 'Invalid member'); if (!house.members.some((member) => member.userId === message.userId)) return fail(client.socket, 'Member not found'); db.removeMember(message.buildingId, message.userId); }
     else if (message.type === 'housing.leave') { if (!house.members.some((member) => member.userId === userId)) return fail(client.socket, 'You do not live here'); if (house.ownerId === userId) return fail(client.socket, 'Transfer or release the house first'); db.removeMember(message.buildingId, userId); }
-    else if (message.type === 'housing.transfer') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can transfer'); if (!house.members.some((member) => member.userId === message.userId)) return fail(client.socket, 'New owner must be a member'); db.transferHouse(message.buildingId, message.userId); }
+    else if (message.type === 'housing.transfer') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can transfer'); if (!validUserId(message.userId) || !house.members.some((member) => member.userId === message.userId)) return fail(client.socket, 'New owner must be a member'); db.transferHouse(message.buildingId, message.userId); }
     else if (message.type === 'housing.release') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can release'); db.deleteHouse(message.buildingId); }
     else return;
     broadcastHousingState();
   });
 }
 
-async function readJson(request: import('node:http').IncomingMessage) {
-  let raw = ''; for await (const chunk of request) { raw += chunk.toString(); if (raw.length > 64_000) throw new Error('Request too large'); }
-  return raw ? JSON.parse(raw) : {};
-}
 const logApiError = (request: import('node:http').IncomingMessage, error: unknown) => logger.warn('API request failed', { url: request.url, error: error instanceof Error ? error.message : String(error) });
+const respondHttpBodyError = (response: import('node:http').ServerResponse, error: unknown): boolean => {
+  if (!(error instanceof HttpBodyError)) return false;
+  response.writeHead(error.statusCode, jsonSecurityHeaders);
+  response.end(JSON.stringify({ error: error.message }));
+  return true;
+};
+const startedAt = Date.now();
 const http = createServer(async (request, response) => {
-  const startedAt = Date.now();
-  const clientIp = request.socket.remoteAddress ?? '';
+  const requestStartedAt = Date.now();
+  const requestIp = clientIp(request);
   response.on('finish', () => {
-    const detail = { method: request.method ?? '', url: request.url ?? '', status: response.statusCode, ms: Date.now() - startedAt, ip: clientIp };
-    if (request.url === '/healthz') return logger.debug('HTTP', detail);
+    const detail = { method: request.method ?? '', url: request.url ?? '', status: response.statusCode, ms: Date.now() - requestStartedAt, ip: requestIp };
+    if (response.statusCode >= 500) recordServerError(`${detail.method} ${detail.url} → ${detail.status}`, `${detail.ms}ms`);
+    if ((request.url === '/healthz' || request.url === '/readyz') && response.statusCode < 400) return logger.debug('HTTP', detail);
+    bumpMetric('httpRequests');
     logger.info('HTTP', detail);
   });
   try {
-  const headers = { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'cache-control': 'public, max-age=60' };
-  if (request.url === '/healthz') { response.writeHead(200, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ ok: true, online: clients.size })); return; }
+  if (await handleAdminRequest(request, response, {
+    online: () => clients.size,
+    disconnectUser: (userId) => clients.get(userId)?.socket.close(4003, 'Account status changed'),
+    disconnectAll: () => { for (const client of clients.values()) client.socket.close(4003, 'Database restored'); },
+    startedAt,
+  })) return;
+  const headers = jsonSecurityHeaders;
+  if (request.url === '/healthz') { response.writeHead(200, headers); response.end(JSON.stringify({ ok: true })); return; }
+  if (request.url === '/readyz') {
+    const database = db.databaseStatus();
+    response.writeHead(database.ready ? 200 : 503, headers); response.end(JSON.stringify({ ok: database.ready, database, online: clients.size })); return;
+  }
+  if (request.url?.startsWith('/town-api/')) {
+    const limiter = ['GET', 'HEAD'].includes(request.method ?? '') ? publicApiRate : publicMutationRate;
+    const globalLimiter = ['GET', 'HEAD'].includes(request.method ?? '') ? globalPublicApiRate : globalPublicMutationRate;
+    const result = limiter.consume(requestIp);
+    const globalResult = globalLimiter.consume('global');
+    if (!result.allowed || !globalResult.allowed) {
+      response.writeHead(429, { ...headers, 'retry-after': String(result.retryAfterSeconds) });
+      response.end(JSON.stringify({ error: 'Too many requests' })); return;
+    }
+    if (!['GET', 'HEAD'].includes(request.method ?? '') && !requestOriginAllowed(request, process.env.NODE_ENV !== 'production')) {
+      response.writeHead(403, headers); response.end(JSON.stringify({ error: 'Request origin is not allowed' })); return;
+    }
+  }
+  if (await handleTelemetryCollection(request, response)) return;
   const match = request.url?.match(/^\/town-api\/works\?scope=(knowledge|senate|all|discussion|featured)$/);
   if (request.method === 'GET' && match) {
     try { response.writeHead(200, headers); response.end(JSON.stringify(await getPublicWorks(match[1] as 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured'))); }
@@ -243,27 +320,28 @@ const http = createServer(async (request, response) => {
   }
   if (request.method === 'POST' && request.url === '/town-api/works/query') {
     try { const body=await readJson(request); response.writeHead(200,headers); response.end(JSON.stringify(await queryPublicWorks(body.query))); }
-    catch(error){ logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
+    catch(error){ if (respondHttpBodyError(response, error)) return; logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/pl/login') {
     try {
-      const attempt = physicsLoginAttempts.get(clientIp) ?? { count: 0, startedAt: Date.now() };
+      const attempt = physicsLoginAttempts.get(requestIp) ?? { count: 0, startedAt: Date.now() };
       if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
-      if (++attempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE) {
-        logger.warn('Physics Lab login rate limit exceeded', { ip: clientIp });
+      if (++attempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE || !globalPhysicsLoginRate.consume('global').allowed) {
+        logger.warn('Physics Lab login rate limit exceeded', { ip: requestIp });
         response.writeHead(429, { ...headers, 'cache-control': 'no-store', 'retry-after': '60' });
         response.end(JSON.stringify({ error: 'Too many login attempts' }));
         return;
       }
-      physicsLoginAttempts.set(clientIp, attempt);
+      physicsLoginAttempts.set(requestIp, attempt);
       const body = await readJson(request); const login = typeof body.login === 'string' ? body.login.trim() : ''; const password = typeof body.password === 'string' ? body.password : '';
       if (!login || !password || login.length > 160 || password.length > 256) throw new Error('Login details are invalid');
-      const result = await authenticateAccount(login, password); physicsLoginAttempts.delete(clientIp); const id = randomUUID();
+      const result = await authenticateAccount(login, password); const id = randomUUID();
       const user = { id: String(result.user?.ID || id), nickname: String(result.user?.Nickname || login), email: null, position: { x: 0, y: 0, z: -6 } };
       physicsSessions.set(id, { token: result.token, authCode: result.authCode, user, expiresAt: Date.now() + PHYSICS_SESSION_TTL_MS });
+      while (physicsSessions.size > 10_000) physicsSessions.delete(physicsSessions.keys().next().value as string);
       response.writeHead(200, headers); response.end(JSON.stringify({ session: id, user }));
-    } catch (error) { logApiError(request, error); response.writeHead(401, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' })); }
+    } catch (error) { if (respondHttpBodyError(response, error)) return; logApiError(request, error); response.writeHead(401, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' })); }
     return;
   }
   const accountMatch = request.url?.match(/^\/town-api\/pl\/(messages|notifications)(?:\?(.*))?$/);
@@ -311,7 +389,7 @@ const http = createServer(async (request, response) => {
       if(action==='supporters'){path='/Contents/GetSupporters';body={ContentID:id,Category:category,Skip:0,Take:20};}
       if(action==='derivatives'){path='/Contents/GetDerivatives';body={ContentID:id,Category:category,WithSummary:true,Language:'Chinese'};}
       const data=await requestAccount(account,path,body); response.writeHead(200,headers); response.end(JSON.stringify({data:data.Data}));
-    } catch(error){logApiError(request, error);response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Work request failed'}));}
+    } catch(error){if(respondHttpBodyError(response,error))return;logApiError(request, error);response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Work request failed'}));}
     return;
   }
   const libraryMatch=request.url?.match(/^\/town-api\/pl\/library\?kind=(experiments|discussions)$/);
@@ -327,18 +405,87 @@ const http = createServer(async (request, response) => {
     const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
     if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
     try{const input=await readJson(request);const targetId=typeof input.targetId==='string'?input.targetId:'';if(!/^[A-Za-z0-9]{12,40}$/.test(targetId))throw new Error('Invalid user');const data=await requestAccount(account,'/Users/Follow',{TargetID:targetId,Action:input.action===0?0:1});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}
-    catch(error){logApiError(request, error);response.writeHead(400,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Follow request failed'}));}return;
+    catch(error){if(respondHttpBodyError(response,error))return;logApiError(request, error);response.writeHead(400,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Follow request failed'}));}return;
   }
   response.writeHead(404, { 'x-content-type-options': 'nosniff' }); response.end();
   } catch (error) {
+    if (request.url?.startsWith('/admin')) { handleAdminError(response, error); return; }
+    if (error instanceof HttpBodyError) { response.writeHead(error.statusCode, jsonSecurityHeaders); response.end(JSON.stringify({ error: error.message })); return; }
     logger.error('Unhandled request error', { url: request.url, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     if (!response.headersSent) response.writeHead(500, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     response.end(JSON.stringify({ error: 'Internal server error' }));
   }
 });
-const wss = new WebSocketServer({ server: http, maxPayload: 16 * 1024 });
-wss.on('connection', (socket) => { const client = { socket, user: null as unknown as User, ready: false }; const address = remoteAddress(socket); logger.info('WebSocket connected', { ip: address }); socket.on('message', (data) => handle(client, data.toString())); socket.on('close', () => { if (client.ready && clients.get(client.user.id)?.socket === socket) { flushPosition(client.user.id); clients.delete(client.user.id); logger.info('Resident left', { id: client.user.id, nickname: client.user.nickname, online: clients.size }); broadcast({ type: 'player.left', playerId: client.user.id }); } }); });
+const wss = new WebSocketServer({
+  server: http,
+  maxPayload: 16 * 1024,
+  verifyClient: ({ req }: { req: IncomingMessage }) => {
+    const ip = clientIp(req);
+    return requestOriginAllowed(req, ALLOW_ORIGINLESS_WEBSOCKET)
+      && sockets.size < MAX_CONNECTIONS
+      && (connectionsByIp.get(ip) ?? 0) < MAX_CONNECTIONS_PER_IP;
+  },
+});
+wss.on('connection', (socket, request) => {
+  const ip = clientIp(request);
+  const client: Client = { socket, user: null as unknown as User, ready: false, ip, authInProgress: false, alive: true };
+  sockets.add(socket); connectionsByIp.set(ip, (connectionsByIp.get(ip) ?? 0) + 1);
+  bumpMetric('wsConnects');
+  const authTimeout = setTimeout(() => { if (!client.ready) socket.close(4008, 'Authentication timeout'); }, 10_000);
+  const heartbeat = setInterval(() => {
+    if (!client.alive) { socket.terminate(); return; }
+    client.alive = false;
+    if (socket.readyState === WebSocket.OPEN) socket.ping();
+  }, 30_000);
+  heartbeat.unref();
+  logger.info('WebSocket connected', { ip });
+  socket.on('message', (data) => {
+    bumpMetric('wsMessages');
+    void handle(client, data.toString()).catch((error) => {
+      logger.error('WebSocket message handler failed', { ip: client.ip, error: error instanceof Error ? error.message : String(error) });
+      recordServerError('WebSocket message handler failed', client.ip);
+      fail(socket, 'Request could not be processed');
+      socket.close(1011, 'Message processing failed');
+    });
+  });
+  socket.on('pong', () => { client.alive = true; });
+  socket.on('close', () => {
+    clearTimeout(authTimeout); clearInterval(heartbeat); sockets.delete(socket);
+    const count = (connectionsByIp.get(ip) ?? 1) - 1; if (count > 0) connectionsByIp.set(ip, count); else connectionsByIp.delete(ip);
+    if (client.ready && clients.get(client.user.id)?.socket === socket) {
+      flushPosition(client.user.id); clients.delete(client.user.id); chatWindows.delete(client.user.id);
+      logger.info('Resident left', { id: client.user.id, nickname: client.user.nickname, online: clients.size });
+      broadcast({ type: 'player.left', playerId: client.user.id });
+    }
+  });
+});
 http.requestTimeout = 15_000;
 http.headersTimeout = 20_000;
 http.keepAliveTimeout = 5_000;
-http.listen(PORT, HOST, () => logger.info(`MiniCity server listening on http://${HOST}:${PORT}`));
+http.maxHeadersCount = 100;
+http.listen(PORT, HOST, () => {
+  startAutomaticBackups();
+  logger.info(`MiniCity server listening on http://${HOST}:${PORT}`);
+});
+
+let stopping = false;
+const shutdown = async (signal: string) => {
+  if (stopping) return;
+  stopping = true;
+  logger.info('Graceful shutdown started', { signal, clients: clients.size });
+  stopAutomaticBackups();
+  if (housingBroadcastTimer) clearTimeout(housingBroadcastTimer);
+  pendingPositions.forEach((_position, userId) => flushPosition(userId));
+  for (const socket of sockets) socket.close(1001, 'Server shutting down');
+  wss.close();
+  try { await waitForBackup(); } catch (error) { logger.error('Backup did not finish during shutdown', { error: String(error) }); }
+  http.close(async () => {
+    db.closeDatabase();
+    logger.info('Graceful shutdown complete');
+    await closeLogger();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+};
+process.once('SIGINT', () => void shutdown('SIGINT'));
+process.once('SIGTERM', () => void shutdown('SIGTERM'));

@@ -7,6 +7,7 @@ const BUILDING_IDS = [
   'academy', 'news', 'mutualaid', 'screen', 'elevator', 'residentid', 'stats', 'knowledgebaseE',
   'newsstand', 'community', 'research', 'commons', 'senate', 'writingclub', 'lab', 'culturehall',
   'teahouse', 'mall_south', 'school_east', 'mall_west', 'school_north', 'kingice', 'knowledgebaseD',
+  'community_outer', 'commons_outer', 'lab_outer', 'teahouse_outer', 'writingclub_outer',
   'archive', 'tradingpost', 'records', 'guildhall', 'musichall', 'conservatory', 'arena',
   'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall', 'wushi_restaurant',
 ] as const;
@@ -74,6 +75,15 @@ export function getProgressionCatalog(): ProgressionCatalog {
     achievementRewards: { ...ACHIEVEMENT_REWARDS },
     products: { ...SHOP_PRODUCTS },
   };
+}
+
+export function verifiedAchievementReward(progress: PlayerProgress, achievementId: string): number {
+  const eligible = achievementId === 'citizen'
+    || (achievementId === 'first_building' && progress.visitedBuildings.length >= 1)
+    || (achievementId === 'explorer_5' && progress.visitedBuildings.length >= 5)
+    || (achievementId === 'explorer_10' && progress.visitedBuildings.length >= 10)
+    || (achievementId === 'unlock_3' && progress.unlockedBuildings.length >= 3);
+  return eligible ? ACHIEVEMENT_REWARDS[achievementId] ?? 0 : 0;
 }
 
 export function shanghaiDayKey(at = new Date()): string {

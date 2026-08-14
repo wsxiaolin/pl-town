@@ -24,7 +24,15 @@ type Options = {
   signal: AbortSignal;
   showToast: (message: string) => void;
   send: (command: ProgressionCommand) => boolean;
+  openPhoneView: (view: 'inventory') => void;
 };
+
+const PRODUCT_PRESENTATIONS: Readonly<Record<string, { icon: string; detail: string }>> = Object.freeze({
+  dragonwell_tea: { icon: '茶', detail: '西湖龙井 · 可用于石井剧情' },
+  beef: { icon: '肉', detail: '新鲜牛肉 · 林澈遗愿所需食材' },
+  radish: { icon: '萝', detail: '新鲜萝卜 · 林澈遗愿所需食材' },
+  music_box: { icon: '音', detail: '经典旋律音乐盒 · 林澈遗愿所需物品' },
+});
 
 export type CloudProgressionController = ReturnType<typeof createCloudProgressionController>;
 
@@ -34,35 +42,36 @@ export function createCloudProgressionController(options: Options) {
   let online = false;
   let pendingBuilding: { id: string; phase: 'unlock' | 'visit'; continueInteraction: () => void } | null = null;
   let panel: HTMLElement | null = null;
+  let shopPanel: HTMLElement | null = null;
   let inventoryList: HTMLElement | null = null;
   let currencyValue: HTMLElement | null = null;
+  let shopCurrencyValue: HTMLElement | null = null;
   let shopArea: HTMLElement | null = null;
-  let panelTitle: HTMLElement | null = null;
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
   const pendingRewards = new Map<string, (claimed: boolean) => void>();
 
   function setup(): void {
-    panel = options.document.createElement('aside');
-    panel.id = 'inventoryPanel';
-    panel.className = 'stats-panel inventory-panel';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', '背包');
-    panel.innerHTML = `
+    panel = options.document.getElementById('onlineInventoryView');
+    if (!panel) return;
+    shopPanel = options.document.createElement('aside');
+    shopPanel.id = 'shopPanel';
+    shopPanel.className = 'stats-panel shop-panel';
+    shopPanel.setAttribute('role', 'dialog');
+    shopPanel.setAttribute('aria-label', '物实商店');
+    shopPanel.innerHTML = `
       <div class="sp-head">
-        <span class="sp-title" data-panel-title>背包</span>
-        <button class="sp-close" type="button" data-inventory-close aria-label="关闭背包">X</button>
+        <span class="sp-title shop-title">物实商店 <small><strong data-shop-currency>0</strong> 物实币</small></span>
+        <button class="sp-close" type="button" data-shop-close aria-label="关闭物实商店">X</button>
       </div>
       <div class="sp-body">
-        <div class="inventory-balance"><span>物实币</span><strong data-currency>0</strong></div>
-        <div class="sp-unlocks" data-inventory-section><div class="sp-ul-title">已有物品</div><div data-inventory-list></div></div>
-        <div class="sp-unlocks" data-shop-area hidden><div class="sp-ul-title">商城</div><div data-shop-list></div></div>
+        <div class="sp-unlocks" data-shop-area><div data-shop-list></div></div>
       </div>`;
-    options.document.body.appendChild(panel);
+    options.document.body.appendChild(shopPanel);
     inventoryList = panel.querySelector('[data-inventory-list]');
     currencyValue = panel.querySelector('[data-currency]');
-    shopArea = panel.querySelector('[data-shop-area]');
-    panelTitle = panel.querySelector('[data-panel-title]');
-    panel.querySelector('[data-inventory-close]')?.addEventListener('click', closePanel, { signal: options.signal });
+    shopArea = shopPanel.querySelector('[data-shop-area]');
+    shopCurrencyValue = shopPanel.querySelector('[data-shop-currency]');
+    shopPanel.querySelector('[data-shop-close]')?.addEventListener('click', closeShop, { signal: options.signal });
     render();
   }
 
@@ -100,12 +109,16 @@ export function createCloudProgressionController(options: Options) {
     if (!event) return;
     if (event.welcomeItemsGranted) options.showToast('背包已解锁，获得城市导览册和居民纪念徽章');
     else if (event.type === 'achievement.unlocked' && event.reward) options.showToast(`成就奖励 +${event.reward} 物实币`);
-    else if (event.type === 'shop.purchased') options.showToast('龙井茶已放入背包');
+    else if (event.type === 'shop.purchased') {
+      const productName = event.productId ? catalog.products[event.productId]?.name : undefined;
+      options.showToast(`${productName ?? '商品'}已放入背包`);
+    }
     else if (event.type === 'reward.claimed') options.showToast(event.claimed ? '今日沃柑已放入背包' : '今天已经领取过沃柑了');
   }
 
   function render(): void {
     if (currencyValue) currencyValue.textContent = String(progress.currency);
+    if (shopCurrencyValue) shopCurrencyValue.textContent = String(progress.currency);
     if (inventoryList) {
       const entries = inventoryEntries(progress);
       inventoryList.replaceChildren(...(entries.length ? entries.map((entry) => {
@@ -136,18 +149,20 @@ export function createCloudProgressionController(options: Options) {
     const list = shopArea?.querySelector<HTMLElement>('[data-shop-list]');
     if (!list) return;
     list.replaceChildren(...Object.entries(catalog.products).map(([productId, product]) => {
+      const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: '物', detail: `${product.name} · 商场在售商品` };
       const row = options.document.createElement('div');
       row.className = 'shop-product';
+      row.dataset.productId = productId;
       const icon = options.document.createElement('span');
       icon.className = 'shop-product-icon';
-      icon.textContent = '茶';
+      icon.textContent = presentation.icon;
       const copy = options.document.createElement('span');
       copy.className = 'shop-product-copy';
       const name = options.document.createElement('span');
       name.className = 'sp-ul-name';
       name.textContent = product.name;
       const detail = options.document.createElement('small');
-      detail.textContent = '西湖龙井 · 可用于石井剧情';
+      detail.textContent = presentation.detail;
       copy.append(name, detail);
       const buy = options.document.createElement('button');
       buy.type = 'button';
@@ -169,23 +184,15 @@ export function createCloudProgressionController(options: Options) {
 
   function openInventory(): void {
     if (!panel) return;
-    if (shopArea) shopArea.hidden = true;
-    panel.querySelector<HTMLElement>('[data-inventory-section]')?.removeAttribute('hidden');
-    panelTitle && (panelTitle.textContent = '背包');
-    panel.classList.remove('shop-mode');
-    panel.classList.add('open');
+    options.openPhoneView('inventory');
   }
 
   function openShop(): void {
     if (!online) return offlineNotice();
-    openInventory();
-    panel?.querySelector<HTMLElement>('[data-inventory-section]')?.setAttribute('hidden', '');
-    if (panelTitle) panelTitle.textContent = '物实商店';
-    panel?.classList.add('shop-mode');
-    if (shopArea) shopArea.hidden = false;
+    shopPanel?.classList.add('open');
   }
 
-  function closePanel(): void { panel?.classList.remove('open'); }
+  function closeShop(): void { shopPanel?.classList.remove('open'); }
 
   function interactBuilding(buildingId: string, continueInteraction: () => void): boolean {
     if (!online) { offlineNotice(); return false; }
@@ -262,11 +269,11 @@ export function createCloudProgressionController(options: Options) {
     pendingRewards.clear();
   }
 
-  function destroy(): void { handleError(); panel?.remove(); panel = null; }
+  function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
     setup, setConnection, applySnapshot, interactBuilding, unlockAchievement, syncAchievements,
-    buyProduct, consumeItem, claimDailyReward, openInventory, openShop, closePanel,
+    buyProduct, consumeItem, claimDailyReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),
     isOnline: () => online, handleError,

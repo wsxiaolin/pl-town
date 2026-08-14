@@ -27,6 +27,10 @@ export function bindCityUiEvents(options: {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen();
   }, { signal });
+  document.getElementById('landscapeFullscreen')?.addEventListener('click', () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen();
+  }, { signal });
   document.getElementById('spClose')?.addEventListener('click', options.closeStats, { signal });
   document.getElementById('spModeClean')?.addEventListener('click', () => options.setStatsMode('clean'), { signal });
   document.getElementById('spModeRaw')?.addEventListener('click', () => options.setStatsMode('raw'), { signal });

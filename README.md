@@ -12,7 +12,8 @@ apps/
 package.json workspace commands only
 ```
 
-Runtime data is stored in `apps/server/data/` and is ignored by Git.
+Runtime data uses `DATA_DIR` (the default is `data/` relative to the server
+working directory) and is ignored by Git.
 
 ## Start everything
 
@@ -37,5 +38,9 @@ npm run test:server
 Run one application directly with `npm run dev -w @minicity/web` or
 `npm run dev -w @minicity/server`.
 
-Set `VITE_SERVER_URL` for a non-default WebSocket endpoint. Server environment
-variables are `HOST`, `PORT`, and `DATA_DIR`.
+Set `VITE_SERVER_URL` for a non-default WebSocket endpoint. The server includes
+a light administration UI at `/admin/`, verified automatic SQLite backups, and
+an offline restore command. See [server documentation](apps/server/README.md),
+[security notes](docs/security.md), and the
+[beginner Linux cloud deployment guide](docs/deployment.md). Render is only
+documented as a temporary, non-persistent test environment.

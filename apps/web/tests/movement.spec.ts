@@ -8,6 +8,7 @@ async function enterCity(page: import('@playwright/test').Page) {
   });
   await page.goto('/');
   await page.waitForFunction(() => Boolean((window as any).__mini?.().player));
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
 }
 
 test('desktop keyboard moves the player while the touch wheel stays hidden', async ({ page }) => {
@@ -62,7 +63,7 @@ test('Wushi restaurant model, dialogue, and Shinian teleport are available', asy
   await page.locator('.npc-opt').filter({ hasText: '我要去！' }).click();
   const distance = await page.evaluate(() => {
     const mini = (window as any).__mini();
-    return mini.player.position.distanceTo(new mini.THREE.Vector3(-22.5, 0, -21));
+    return mini.player.position.distanceTo(new mini.THREE.Vector3(-22.5, 0, -15));
   });
   expect(distance).toBeLessThan(8);
   await page.evaluate(() => (window as any).__mini().openBuildingDialog('wushi_restaurant'));

@@ -31,6 +31,10 @@ export function createMultiplayerHousingController(options) {
     signal,
     showToast: showUnlockToast,
     send: (command) => multiplayer?.send(command) ?? false,
+    openPhoneView: (view) => {
+      setPhoneOpen(true);
+      activatePhoneTab(view);
+    },
   });
   const HOUSE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/><path d="M10.2 20v-5h3.6v5"/></svg>';
 
@@ -65,14 +69,8 @@ export function createMultiplayerHousingController(options) {
     }, { signal: signal });
     document.querySelectorAll('[data-online-tab]').forEach((tab) => tab.addEventListener('click', () => {
       const target = tab.dataset.onlineTab;
-      document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item === tab));
-      if (target === 'inventory') {
-        setPhoneOpen(false);
-        progression.openInventory();
-        return;
-      }
-      const views={chat:'onlineChatView',houses:'onlineHousesView',archive:'onlineArchiveView',social:'onlineSocialView'};
-      document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === views[target]));
+      activatePhoneTab(target);
+      if (target === 'inventory') progression.openInventory();
       if (target === 'chat') clearUnreadChats();
     }, { signal: signal }));
     document.getElementById('phoneKnowledge')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('knowledgebase');},{signal:signal});
@@ -351,6 +349,12 @@ export function createMultiplayerHousingController(options) {
     };
     return button;
   }
+
+  function activatePhoneTab(target) {
+    const views={chat:'onlineChatView',houses:'onlineHousesView',inventory:'onlineInventoryView',archive:'onlineArchiveView',social:'onlineSocialView'};
+    document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item.dataset.onlineTab === target));
+    document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === views[target]));
+  }
   
   // Raycasts often hit a facade/decoration child that was added after the
   // building was tagged. Walk up the hierarchy so every visible part remains
@@ -545,7 +549,8 @@ export function createMultiplayerHousingController(options) {
       const tag = document.createElement('button');
       tag.type = 'button'; tag.className = 'map-house-tag'; tag.textContent = name;
       tag.style.left = ((residence.group.position.x + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
-      tag.style.top = ((mapShotSpan - residence.group.position.z) / (2 * mapShotSpan) * 100) + '%';
+      // North (-z) at top, East (+x) at right — matches the captured map image.
+      tag.style.top = ((residence.group.position.z + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
       tag.addEventListener('click', () => { if (getMapMode()) toggleMapMode(); openResidence(house.buildingId); });
       wrap.appendChild(tag);
     });

@@ -10,6 +10,10 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   assert.equal(restaurant.shape, 'restaurant');
   assert.equal(BUILDING_DEFS.filter((building) => building.x === restaurant.x && building.z === restaurant.z).length, 1);
 
+  const southwestPond = { x: -24, z: -24, radius: 3 };
+  const distanceToPond = Math.hypot(restaurant.x - southwestPond.x, restaurant.z - southwestPond.z);
+  assert.ok(distanceToPond > southwestPond.radius + 3, 'restaurant footprint stays clear of the southwest pond');
+
   const tree = BUILDING_CONTENT.wushi_restaurant.dialogTree;
   assert.equal(tree.length, 17);
   tree.forEach((node, nodeIndex) => node.options.forEach((option) => {
