@@ -14,6 +14,7 @@ import { HttpBodyError, readJson } from './httpBody.js';
 import { logger } from './logger.js';
 import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './requestSecurity.js';
 import { STORY_CATALOG, getStorySummary } from './storyCatalog.js';
+import { handleTelemetryAdmin } from './telemetry.js';
 
 type Context = { online: () => number; disconnectUser: (userId: string) => void; disconnectAll: () => void; startedAt: number };
 const assets = new Map([
@@ -256,6 +257,9 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     }
     return true;
   }
+
+  // Telemetry: user events, client error reports, server metrics and logs.
+  if (await handleTelemetryAdmin(request, response, context, principal.actor)) return true;
 
   error(response, 404, 'NOT_FOUND', 'Admin endpoint was not found');
   return true;

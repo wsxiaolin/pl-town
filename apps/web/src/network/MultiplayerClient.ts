@@ -1,3 +1,5 @@
+import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
+
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
 export type NetUser = { id: string; nickname: string; email: string | null; position: NetPosition };
 export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string }> };
@@ -82,7 +84,7 @@ export class MultiplayerClient {
   private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(this.credentials.nickname, this.credentials.password), 2500); }
   private handle(raw: string) {
     let message: any; try { message = JSON.parse(raw); } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.user = message.user; this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress, message.catalog); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.user = message.user; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress, message.catalog); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
@@ -103,7 +105,7 @@ export class MultiplayerClient {
       } else this.callbacks.error?.(errorMessage);
     }
   }
-  send(message: object): boolean { if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(JSON.stringify(message)); return true; }
+  send(message: object): boolean { trackClientMessage(message as Record<string, unknown>); if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(JSON.stringify(message)); return true; }
   position(position: NetPosition) { this.send({ type: 'position', position }); }
   chat(text: string) { this.send({ type: 'chat', text }); }
   housing(type: string, payload: Record<string, unknown> = {}) { this.send({ type: `housing.${type}`, ...payload }); }

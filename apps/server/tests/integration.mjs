@@ -266,7 +266,41 @@ try {
   const disabledLogin = await connectExpectingError('Charlie');
   if (!disabledLogin) throw new Error('Disabled residents must not be able to sign in');
 
-  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, and lifecycle');
+  // Telemetry: public collection + admin visibility.
+  const eventPost = await fetch(`${adminOrigin}/town-api/telemetry/event`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ event: 'integration.test', sessionId: 'sess-1', properties: { ok: true } }),
+  });
+  if (eventPost.status !== 202) throw new Error('Telemetry event collection must accept valid payloads');
+  const badEvent = await fetch(`${adminOrigin}/town-api/telemetry/event`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ event: 'bad name!', sessionId: 'sess-1' }),
+  });
+  if (badEvent.status !== 400) throw new Error('Telemetry collection must reject malformed event names');
+  const errorPost = await fetch(`${adminOrigin}/town-api/telemetry/error`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ kind: 'runtime', message: 'integration failure', sessionId: 'sess-1' }),
+  });
+  if (errorPost.status !== 202) throw new Error('Telemetry error collection must accept valid payloads');
+  const telemetryOverview = await fetch(`${adminBase}/telemetry/overview`, { headers: { cookie } });
+  const telemetryOverviewPayload = await telemetryOverview.json();
+  if (!telemetryOverview.ok || telemetryOverviewPayload.events.total < 1 || telemetryOverviewPayload.errors.total < 1) throw new Error('Admin telemetry overview must surface collected events and errors');
+  const eventList = await fetch(`${adminBase}/telemetry/events?limit=10`, { headers: { cookie } });
+  const eventListPayload = await eventList.json();
+  if (!eventList.ok || !eventListPayload.items.some((item) => item.event === 'integration.test')) throw new Error('Admin telemetry events list must include the recorded event');
+  const errorList = await fetch(`${adminBase}/telemetry/errors?limit=10`, { headers: { cookie } });
+  const errorListPayload = await errorList.json();
+  if (!errorList.ok || !errorListPayload.items.some((item) => item.message === 'integration failure')) throw new Error('Admin telemetry errors list must include the recorded error');
+  const health = await fetch(`${adminBase}/telemetry/health`, { headers: { cookie } });
+  const healthPayload = await health.json();
+  if (!health.ok || healthPayload.counters.httpRequests < 1) throw new Error('Admin telemetry health must report server metrics');
+  const logs = await fetch(`${adminBase}/telemetry/logs?lines=50`, { headers: { cookie } });
+  const logsPayload = await logs.json();
+  if (!logs.ok || !Array.isArray(logsPayload.lines)) throw new Error('Admin telemetry logs must return a line array');
+  const clearTelemetry = await fetch(`${adminBase}/telemetry/clear`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf } });
+  if (!clearTelemetry.ok) throw new Error('Admin telemetry clear must require CSRF and succeed');
+
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, and telemetry');
 } finally {
   alice?.socket.close();
   bob?.socket.close();

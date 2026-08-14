@@ -216,8 +216,55 @@ async function loadStoryProgress() {
   const storyList = $('#storyCatalog'); storyList.replaceChildren(...catalog.items.map((story) => { const li = node('li'); li.append(node('strong', story.title), node('small', `${story.id} · 定义版本 ${story.definitionVersion} · ${story.nodes.length} 个节点`)); return li; }));
 }
 
-const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress };
-const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务' };
+const sparkline = (container, data, color) => {
+  container.replaceChildren();
+  if (!data.length) { container.append(node('small', '暂无数据')); return; }
+  const max = Math.max(1, ...data);
+  const bar = node('div', undefined, 'sparkline-bars');
+  for (const value of data) {
+    const column = node('span', undefined, 'sparkline-bar');
+    column.style.height = `${Math.max(2, Math.round((value / max) * 100))}%`;
+    column.style.background = color;
+    bar.append(column);
+  }
+  container.append(bar);
+};
+const shortId = (value) => (value ? `${String(value).slice(0, 8)}…` : '匿名');
+
+async function loadTelemetry() {
+  const [overview, health, logs, events, errors] = await Promise.all([
+    api('/telemetry/overview'), api('/telemetry/health'), api('/telemetry/logs?lines=200'), api('/telemetry/events?limit=50'), api('/telemetry/errors?limit=50'),
+  ]);
+  $('#telemetryMetrics').replaceChildren(
+    metric('事件总数', formatNumber(overview.events.total), `近 24 小时 ${formatNumber(overview.events.last24h)}`),
+    metric('错误总数', formatNumber(overview.errors.total), `近 24 小时 ${formatNumber(overview.errors.last24h)}`),
+    metric('当前在线', formatNumber(health.online), `运行 ${formatDuration(health.uptimeSeconds)}`),
+    metric('HTTP 请求', formatNumber(health.counters.httpRequests), `WS 消息 ${formatNumber(health.counters.wsMessages)}`),
+  );
+  sparkline($('#eventSparkline'), overview.timeline.map((point) => point.events), '#176b4a');
+  sparkline($('#errorSparkline'), overview.timeline.map((point) => point.errors), '#a63737');
+  $('#topEvents').replaceChildren(...(overview.events.top.length ? overview.events.top.map((entry) => { const li = node('li'); li.append(node('strong', entry.event), node('small', `${formatNumber(entry.count)} 次`)); return li; }) : [node('li', '暂无事件', 'empty')]));
+  $('#topErrors').replaceChildren(...(overview.errors.top.length ? overview.errors.top.map((entry) => { const li = node('li'); li.append(node('strong', `${entry.kind} · ${entry.message}`), node('small', `${formatNumber(entry.count)} 次`)); return li; }) : [node('li', '暂无错误', 'empty')]));
+  const healthStatus = $('#serverHealthStatus');
+  const ok = health.recentErrors.length === 0;
+  healthStatus.textContent = ok ? '正常' : '有近期错误'; healthStatus.className = `status${ok ? '' : ' bad'}`;
+  const mb = (bytes) => formatBytes(bytes);
+  detailRows($('#serverHealth'), [
+    ['启动时间', formatDate(health.startedAt)], ['运行时长', formatDuration(health.uptimeSeconds)], ['在线会话', formatNumber(health.online)],
+    ['WebSocket 连接', formatNumber(health.counters.wsConnects)], ['WebSocket 消息', formatNumber(health.counters.wsMessages)], ['聊天消息', formatNumber(health.counters.chatMessages)],
+    ['HTTP 请求', formatNumber(health.counters.httpRequests)], ['HTTP 错误', formatNumber(health.counters.httpErrors)], ['前端错误上报', formatNumber(health.counters.clientErrors)],
+    ['RSS 内存', mb(health.memory.rss)], ['堆使用', mb(health.memory.heapUsed)], ['堆总量', mb(health.memory.heapTotal)],
+    ['近期错误', health.recentErrors.length ? `${health.recentErrors.length} 条` : '无'],
+  ]);
+  const recentBox = $('#serverLogs'); recentBox.textContent = logs.lines.length ? logs.lines.join('\n') : `日志文件 ${logs.file} 暂无内容`; recentBox.scrollTop = recentBox.scrollHeight;
+  const eventRows = events.items.map((entry) => { const row = node('tr'); row.append(node('td', formatDate(entry.createdAt)), node('td', entry.event), node('td', shortId(entry.sessionId)), node('td', entry.ip || '—')); return row; });
+  $('#eventRows').replaceChildren(...(eventRows.length ? eventRows : [emptyRow(4, '暂无事件')]));
+  const errorRows = errors.items.map((entry) => { const row = node('tr'); const message = node('td'); message.append(node('div', entry.message), node('small', entry.url || '—')); row.append(node('td', formatDate(entry.createdAt)), node('td', entry.kind), message, node('td', shortId(entry.sessionId))); return row; });
+  $('#errorRows').replaceChildren(...(errorRows.length ? errorRows : [emptyRow(4, '暂无错误')]));
+}
+
+const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress, telemetry: loadTelemetry };
+const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务', telemetry: '运行监控' };
 async function switchView(view) {
   state.view = view; $$('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.view === view));
   $$('.view').forEach((page) => { const active = page.dataset.page === view; page.hidden = !active; page.classList.toggle('active', active); });
@@ -247,5 +294,7 @@ $('#chatFilter').addEventListener('change', (event) => { state.chatFilter = even
 $('#storySearch').addEventListener('submit', (event) => { event.preventDefault(); void loadStoryProgress(); });
 $('#userDialogSubmit').addEventListener('click', () => void submitUserEditor());
 $('#houseDialogSubmit').addEventListener('click', () => void submitHouseEditor());
+$('#refreshLogsButton').addEventListener('click', () => void loadTelemetry());
+$('#clearTelemetryButton').addEventListener('click', () => confirmAction('清空监控数据', '将删除全部用户事件与错误报告记录，不可恢复。', async () => { await api('/telemetry/clear', { method: 'POST' }); showNotice('监控数据已清空', true); await loadTelemetry(); }));
 
 try { const session = await api('/session'); session.authenticated ? showApp(session) : showLogin(); } catch { showLogin(); }

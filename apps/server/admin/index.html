@@ -29,6 +29,7 @@
         <button class="nav-item" data-view="houses" type="button">住房</button>
         <button class="nav-item" data-view="story" type="button">剧情</button>
         <button class="nav-item" data-view="chat" type="button">聊天审核</button>
+        <button class="nav-item" data-view="telemetry" type="button">监控</button>
         <button class="nav-item" data-view="backups" type="button">备份</button>
         <button class="nav-item" data-view="audit" type="button">审计日志</button>
       </nav>
@@ -67,6 +68,23 @@
         <div class="toolbar"><form class="search" id="chatSearch"><input id="chatQuery" maxlength="100" placeholder="搜索昵称或聊天内容" aria-label="搜索聊天记录" /><button class="secondary" type="submit">搜索</button></form><select id="chatFilter" aria-label="聊天筛选"><option value="visible">仅显示可见</option><option value="flagged">已标记</option><option value="hidden">已隐藏</option><option value="all">全部</option></select><span id="chatCount"></span></div>
         <div class="table-wrap"><table><thead><tr><th>居民</th><th>内容</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="chatRows"></tbody></table></div>
         <section class="panel"><header><div><p class="eyebrow">BY ACCOUNT</p><h2>按账号分组</h2></div></header><div class="table-wrap"><table><thead><tr><th>居民</th><th>消息数</th><th>已标记</th><th>已隐藏</th><th>最近发言</th></tr></thead><tbody id="chatAuthorRows"></tbody></table></div></section>
+      </section>
+
+      <section class="view" data-page="telemetry" hidden>
+        <div class="metric-grid" id="telemetryMetrics"></div>
+        <div class="two-column">
+          <section class="panel"><header><div><p class="eyebrow">EVENTS</p><h2>事件趋势</h2></div></header><div class="sparkline" id="eventSparkline"></div><ul class="catalog-list" id="topEvents"></ul></section>
+          <section class="panel"><header><div><p class="eyebrow">ERRORS</p><h2>错误汇总</h2></div></header><div class="sparkline" id="errorSparkline"></div><ul class="catalog-list" id="topErrors"></ul></section>
+        </div>
+        <div class="two-column">
+          <section class="panel"><header><div><p class="eyebrow">SERVER</p><h2>运行状态</h2></div><span class="status" id="serverHealthStatus">正常</span></header><dl class="detail-list" id="serverHealth"></dl></section>
+          <section class="panel"><header><div><p class="eyebrow">LOGS</p><h2>服务器日志</h2></header><pre class="log-view" id="serverLogs"></pre><button class="secondary" id="refreshLogsButton" type="button">刷新日志</button></section>
+        </div>
+        <div class="two-column">
+          <section class="panel"><header><div><p class="eyebrow">USER EVENTS</p><h2>事件明细</h2></div></header><div class="table-wrap"><table><thead><tr><th>时间</th><th>事件</th><th>会话</th><th>来源</th></tr></thead><tbody id="eventRows"></tbody></table></div></section>
+          <section class="panel"><header><div><p class="eyebrow">ERROR REPORTS</p><h2>错误明细</h2></div></header><div class="table-wrap"><table><thead><tr><th>时间</th><th>类型</th><th>消息</th><th>会话</th></tr></thead><tbody id="errorRows"></tbody></table></div></section>
+        </div>
+        <div class="toolbar"><p>清空将删除全部用户事件与错误报告记录，不可恢复。</p><button class="danger" id="clearTelemetryButton" type="button">清空监控数据</button></div>
       </section>
 
       <section class="view" data-page="backups" hidden>

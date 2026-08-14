@@ -125,4 +125,10 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .catalog-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .catalog-list li { display: flex; flex-direction: column; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
 .catalog-list small { color: var(--muted); }
+.catalog-list .empty { border: 0; color: #7c8781; padding: 6px 2px; }
 .node-list { max-width: 360px; color: var(--muted); }
+.sparkline { margin: 18px 0; min-height: 64px; }
+.sparkline small { color: #7c8781; }
+.sparkline-bars { display: flex; align-items: flex-end; gap: 2px; height: 64px; }
+.sparkline-bar { flex: 1 1 0; min-width: 3px; border-radius: 2px 2px 0 0; }
+.log-view { margin: 18px 0; max-height: 320px; overflow: auto; padding: 14px; background: #0f1714; color: #d6e4dc; border: 1px solid #cdd6d2; border-radius: 7px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
