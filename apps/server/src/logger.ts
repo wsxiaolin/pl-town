@@ -9,6 +9,7 @@ const LOG_RETENTION_DAYS = 30;
 
 let currentDay = '';
 let fileStream: ReturnType<typeof createWriteStream> | null = null;
+let fileLoggingDisabled = false;
 
 const pruneOldLogs = () => {
   const cutoff = Date.now() - LOG_RETENTION_DAYS * 86_400_000;
@@ -21,9 +22,16 @@ const pruneOldLogs = () => {
 };
 
 const rotate = () => {
+  if (fileLoggingDisabled) return;
   if (fileStream) fileStream.end();
   currentDay = new Date().toISOString().slice(0, 10);
-  fileStream = createWriteStream(join(LOG_DIR, `server-${currentDay}.log`), { flags: 'a' });
+  const stream = createWriteStream(join(LOG_DIR, `server-${currentDay}.log`), { flags: 'a', mode: 0o600 });
+  fileStream = stream;
+  stream.on('error', (error) => {
+    if (fileStream === stream) fileStream = null;
+    fileLoggingDisabled = true;
+    process.stderr.write(`[${new Date().toISOString()}] [ERROR] File logging disabled: ${error.message}\n`);
+  });
   pruneOldLogs();
 };
 
@@ -43,7 +51,7 @@ const write = (level: LogLevel, message: string, details?: unknown) => {
   } else {
     process.stdout.write(line);
   }
-  if (!fileStream) rotate();
+  if (!fileStream && !fileLoggingDisabled) rotate();
   fileStream?.write(line);
 };
 
@@ -53,3 +61,10 @@ export const logger = {
   warn: (message: string, details?: unknown) => write('warn', message, details),
   error: (message: string, details?: unknown) => write('error', message, details),
 };
+
+export function closeLogger(): Promise<void> {
+  const stream = fileStream;
+  fileStream = null;
+  if (!stream || stream.closed) return Promise.resolve();
+  return new Promise((resolve) => stream.end(resolve));
+}

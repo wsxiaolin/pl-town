@@ -128,6 +128,16 @@ export function createPlayerController(options: PlayerControllerOptions) {
     const cursor = options.getCursor();
     if (!cursor || options.isMapOpen()) return;
     const echo = options.getEcho();
+    // Reaching the physical cabin doorway always exits immediately. Keep this
+    // ahead of every story, legacy-coordinate and interior-boundary check so
+    // no stale node, dialog state or pathfinding result can suppress it.
+    const atCabinExit = echo?.isInteriorView()
+      && Math.abs(cursor.position.x - options.echoInterior[0]) <= 2.4
+      && cursor.position.z <= options.echoInterior[1] - 8.75;
+    if (atCabinExit) {
+      echo.teleportFromCabin();
+      return;
+    }
     const legacyCabin = Math.abs(cursor.position.x - 110) <= 15 && Math.abs(cursor.position.z) <= 11;
     if (legacyCabin && (echo?.isInteriorView() || echo?.isCabinNode())) {
       if (echo.story.state().nodeId === 'confrontation-active') echo.teleportFromCabin();

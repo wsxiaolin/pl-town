@@ -1,5 +1,8 @@
 import './styles/index.css';
 import { destroyMiniCity, startMiniCity } from './city/MiniCityApp';
+import { initTelemetry } from './core/telemetryClient';
+
+void initTelemetry();
 
 async function requestLandscape(): Promise<void> {
   if (window.innerHeight <= window.innerWidth) return;

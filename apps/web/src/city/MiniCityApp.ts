@@ -35,6 +35,7 @@ import { createCameraController } from './navigation/cameraController';
 import { createProgressionController } from './progression/progressionController';
 import { updateCityLabels } from './labelController';
 import { createBuildingSceneController } from './buildingSceneController';
+import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { addCityFountain, addCityLighting } from './scenePresentationController';
 import { bindCityUiEvents } from '../adapters/ui/cityEventBindings';
 import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
@@ -144,7 +145,6 @@ const ACHIEVEMENTS = [
 
 function awardDirectAchievement(id, name) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
-
 function init() {
   setupRenderer();
   cameraController = createCameraController({
@@ -222,7 +222,7 @@ function init() {
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 64, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
+    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
     getLegacyAchievements: () => getStats().achievements || [],
   });
   progressionController = createProgressionController({
@@ -265,7 +265,7 @@ function init() {
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isStoryLocked: isStoryLockedBuilding,
-    getBuildingRoadEntry: (position) => nearestRoadCoord(position.x, position.z),
+    getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget,
     movePlayerTo,
     clearPlayerPath: () => { playerPath = []; },
@@ -534,8 +534,7 @@ function onMouseMove(e) {
   raycaster.setFromCamera(mouse2D,camera);
   const hits=raycaster.intersectObjects(raycastBuildingGroups,true);
   if(hits.length){
-    const id=raycastUserData(hits[0].object,'buildingId');
-    const b=buildings.find(x=>x.id===id && !isStoryLockedBuilding(x));
+    const b=findRaycastBuilding(hits);
     if(b&&b!==hoveredB){if(hoveredB)unhover(hoveredB);hover(b);}
     if(!b&&hoveredB){unhover(hoveredB);hoveredB=null;}
   } else{if(hoveredB)unhover(hoveredB);hoveredB=null;}
@@ -551,7 +550,7 @@ function openResidence(residenceId) { multiplayerHousing.openResidence(residence
 function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
 function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
 function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
-
+function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isStoryLockedBuilding }); }
 function onCanvasClick(event) {
   if (cityDialogs?.isOpen()) return;
   mouse2D.x=(event.clientX/window.innerWidth)*2-1;
@@ -559,6 +558,8 @@ function onCanvasClick(event) {
   raycaster.setFromCamera(mouse2D,camera);
   raycaster.ray.intersectPlane(groundPlane,cursorWorld);
   raycaster.setFromCamera(mouse2D,camera);
+  const cabinDoor=sceneInterestPoints?.entities.get('echo-cabin-door');
+  if(cabinDoor&&echoStoryController?.tryExitCabinFromClick(raycaster,cabinDoor.object)){pendingSceneInterestPoint=null;return;}
   if(cursorChar&&cursorChar.visible){
     const phits=raycaster.intersectObject(cursorChar,true);
     if(phits.length){ onYouClick(); return; }
@@ -576,7 +577,7 @@ function onCanvasClick(event) {
   if(hits.length){
     const residenceId=raycastUserData(hits[0].object,'residenceId');
     if(residenceId){ openResidence(residenceId); return; }
-    const b=buildings.find(x=>x.id===raycastUserData(hits[0].object,'buildingId') && !isStoryLockedBuilding(x));
+    const b=findRaycastBuilding(hits);
     if(b){ interactOrWalk(b); return; }
   }
   const near=nearestNpcTo(cursorWorld,CONFIG.npcTalkRadius);

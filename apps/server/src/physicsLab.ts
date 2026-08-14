@@ -16,9 +16,34 @@ type PublicWork = {
 
 let session: ApiSession | null = null;
 const cache = new Map<string, { expiresAt: number; works: PublicWork[] }>();
+const MAX_CACHE_ENTRIES = 200;
+const MAX_QUERY_LIST_ITEMS = 32;
+const MAX_UPSTREAM_CONCURRENCY = 8;
+let activeUpstreamRequests = 0;
+const fetchUpstream = async (input: string, init: RequestInit): Promise<Response> => {
+  if (activeUpstreamRequests >= MAX_UPSTREAM_CONCURRENCY) throw new Error('Physics Lab is busy; try again shortly');
+  activeUpstreamRequests += 1;
+  try { return await fetch(input, init); }
+  finally { activeUpstreamRequests -= 1; }
+};
+const safeString = (value: unknown, maximum: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized.length <= maximum ? normalized : null;
+};
+const safeStringList = (value: unknown): string[] | null => {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.length > MAX_QUERY_LIST_ITEMS) return null;
+  const result = value.map((item) => safeString(item, 80));
+  return result.every((item): item is string => item !== null) ? [...new Set(result)].sort() : null;
+};
+const cacheWorks = (key: string, works: PublicWork[]) => {
+  if (cache.size >= MAX_CACHE_ENTRIES && !cache.has(key)) cache.delete(cache.keys().next().value as string);
+  cache.set(key, { expiresAt: Date.now() + CACHE_TTL, works });
+};
 
 export async function authenticateAccount(login: string, password: string) {
-  const response = await fetch(`${API_BASE}/Users/Authenticate`, {
+  const response = await fetchUpstream(`${API_BASE}/Users/Authenticate`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ Login: login, Password: password, Version: ACCOUNT_LOGIN_VERSION, Device: { Identifier: '7db01528cf13e2199e141c402d79190e', Language: 'Chinese' } }),
     signal: AbortSignal.timeout(15_000),
@@ -35,7 +60,7 @@ export async function authenticateAccount(login: string, password: string) {
 }
 
 export async function requestAccount(session: ApiSession, path: string, body: unknown) {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchUpstream(`${API_BASE}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-API-Token': session.token, 'x-API-AuthCode': session.authCode, 'x-API-Version': String(API_VERSION) },
     body: JSON.stringify(body), signal: AbortSignal.timeout(15_000),
   });
@@ -50,7 +75,7 @@ function imageUrl(id: string, image = 0) {
 
 async function authenticate() {
   if (session && session.expiresAt > Date.now()) return session;
-  const response = await fetch(`${API_BASE}/Users/Authenticate`, {
+  const response = await fetchUpstream(`${API_BASE}/Users/Authenticate`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       Login: null, Password: null, Version: API_VERSION,
@@ -69,7 +94,7 @@ export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'di
   const cached = cache.get(scope);
   if (cached && cached.expiresAt > Date.now()) return { source: 'live' as const, cached: true, works: cached.works };
   const credentials = await authenticate();
-  const response = await fetch(`${API_BASE}/Contents/QueryExperiments`, {
+  const response = await fetchUpstream(`${API_BASE}/Contents/QueryExperiments`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -99,7 +124,7 @@ export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'di
       imageUrl: imageUrl(String(item.ID), Number(item.Image) || 0), createdAt: Number(item.CreationDate) || 0,
       visits: Number(item.Visits) || 0, stars: Number(item.Stars) || 0, comments: Number(item.Comments) || 0, remixes: Number(item.Remixes) || 0,
     }));
-  cache.set(scope, { expiresAt: Date.now() + CACHE_TTL, works });
+  cacheWorks(scope, works);
   return { source: 'live' as const, cached: false, works };
 }
 
@@ -109,17 +134,20 @@ export async function queryPublicWorks(input: unknown) {
   const query: Record<string, unknown> = {};
   for (const key of QUERY_KEYS) if (key in raw) query[key] = raw[key];
   query.Category = query.Category === 'Discussion' ? 'Discussion' : 'Experiment';
+  for (const key of ['Languages', 'ExcludeLanguages', 'Tags', 'ExcludeTags', 'ModelTags']) query[key] = safeStringList(query[key]);
+  for (const key of ['ModelID', 'ParentID', 'UserID', 'Special', 'From']) query[key] = safeString(query[key], 100);
   query.Skip = Number.isInteger(query.Skip) ? Math.max(0, Math.min(1000, query.Skip as number)) : 0;
   query.Take = Number.isInteger(query.Take) ? Math.max(1, Math.min(24, query.Take as number)) : 24;
   query.Days = Number.isInteger(query.Days) ? Math.max(0, Math.min(3650, query.Days as number)) : 0;
   query.Sort = query.Sort === 1 ? 1 : 0;
+  query.ShowAnnouncement = query.ShowAnnouncement === true;
   const cacheKey = `query:${JSON.stringify(query)}`; const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return { source:'live' as const, cached:true, works:cached.works };
   const credentials = await authenticate();
-  const response = await fetch(`${API_BASE}/Contents/QueryExperiments`, { method:'POST', headers:{'content-type':'application/json','x-API-Token':credentials.token,'x-API-AuthCode':credentials.authCode,'x-API-Version':String(API_VERSION)}, body:JSON.stringify({Query:query}), signal:AbortSignal.timeout(15_000) });
+  const response = await fetchUpstream(`${API_BASE}/Contents/QueryExperiments`, { method:'POST', headers:{'content-type':'application/json','x-API-Token':credentials.token,'x-API-AuthCode':credentials.authCode,'x-API-Version':String(API_VERSION)}, body:JSON.stringify({Query:query}), signal:AbortSignal.timeout(15_000) });
   const payload = await response.json() as Record<string, any>;
   if (!response.ok || payload.Status !== 200) throw new Error(payload.Message || `Physics Lab works request failed (${response.status})`);
   const values = Array.isArray(payload.Data?.$values) ? payload.Data.$values : [];
   const works = values.map((item:any):PublicWork=>({ id:String(item.ID), title:String(item.Subject||'Untitled work'), category:String(item.Category||query.Category), author:String(item.User?.Nickname||'Anonymous'), authorId:String(item.User?.ID||''), verification:item.User?.Verification||null, tags:Array.isArray(item.Tags)?item.Tags.filter((tag:unknown)=>typeof tag==='string'&&!String(tag).startsWith('Type-')).slice(0,5):[], imageUrl:imageUrl(String(item.ID),Number(item.Image)||0), createdAt:Number(item.CreationDate)||0, visits:Number(item.Visits)||0, stars:Number(item.Stars)||0, comments:Number(item.Comments)||0, remixes:Number(item.Remixes)||0 }));
-  cache.set(cacheKey,{expiresAt:Date.now()+CACHE_TTL,works}); return {source:'live' as const,cached:false,works};
+  cacheWorks(cacheKey,works); return {source:'live' as const,cached:false,works};
 }

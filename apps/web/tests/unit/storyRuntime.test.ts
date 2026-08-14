@@ -58,6 +58,41 @@ assert(transition.events[0]?.type === 'grid.power-restored', 'choice should publ
 assert(getStoryEventCount(transition.state, 'grid.power-restored') === 1, 'published event count should be persisted');
 assert(getStoryBuildingState(transition.state, 'observatory') === 'restored', 'building state effect should be persisted');
 assert(runtime.canTrigger(), 'published event should satisfy story trigger conditions');
+
+const conditionalGuideDefinition: StoryDefinition = {
+  schemaVersion: 1,
+  definitionVersion: 1,
+  id: 'guide.after-interaction',
+  title: 'Conditional guide',
+  startNode: 'meeting',
+  nodes: {
+    meeting: {
+      id: 'meeting',
+      text: 'Hello.',
+      guide: {
+        title: 'Continue the story',
+        objective: 'Talk to Lin',
+        visibleWhen: [{ type: 'event.occurred', eventType: 'story.actor.interacted.linche' }],
+      },
+    },
+  },
+};
+let conditionalGuideState: StoryState | null = createInitialStoryState(conditionalGuideDefinition, 1);
+const conditionalGuideRuntime = new StoryRuntime(conditionalGuideDefinition, {
+  get: () => conditionalGuideState,
+  update: (_storyId, patch) => {
+    conditionalGuideState = {
+      ...conditionalGuideState!,
+      ...patch,
+      activeGuide: patch.activeGuide === null ? undefined : patch.activeGuide ?? conditionalGuideState!.activeGuide,
+      updatedAt: 2,
+    };
+    return conditionalGuideState;
+  },
+});
+assert(!conditionalGuideRuntime.isGuideVisible(), 'guide should stay hidden before its visibility condition');
+conditionalGuideRuntime.publish('story.actor.interacted.linche', undefined, 2);
+assert(conditionalGuideRuntime.isGuideVisible(), 'guide should appear after its visibility condition');
 assert(observed[0] === 'story.choice', 'subscribers should receive choice transitions');
 
 runtime.publish('grid.power-restored', { district: 'south' }, 11);

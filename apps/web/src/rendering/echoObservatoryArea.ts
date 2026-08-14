@@ -442,6 +442,7 @@ function createObservatory(materials: EchoMaterials): THREE.Group {
   const observatory = new THREE.Group();
   observatory.name = 'echo-observatory';
   observatory.position.set(ECHO_OBSERVATORY_AREA.observatory[0], 0, ECHO_OBSERVATORY_AREA.observatory[1]);
+  observatory.scale.setScalar(ECHO_OBSERVATORY_AREA.observatoryScale);
   addCylinder(observatory, dark, 3.72, 3.84, 0.18, 24, [0, 0.09, 0]);
   addCylinder(observatory, timber, 3.5, 3.56, 0.14, 24, [0, 0.27, 0]);
   addCylinder(observatory, wallLight, 3.2, 3.45, 2.7, 20, [0, 1.35, 0]);
@@ -479,8 +480,9 @@ function createExteriorHome(materials: EchoMaterials): THREE.Group {
   const home = new THREE.Group();
   home.name = 'linche-home';
   home.position.set(ECHO_OBSERVATORY_AREA.home[0], 0, ECHO_OBSERVATORY_AREA.home[1]);
-  // Face the road so the porch and entrance read as the front of the house.
-  home.rotation.y = Math.PI;
+  home.scale.setScalar(ECHO_OBSERVATORY_AREA.homeScale);
+  // Keep the projecting porch away from the road-side NPC interaction area.
+  home.rotation.y = 0;
 
   const width = 8.8;
   const depth = 6.8;
@@ -543,6 +545,7 @@ function createExteriorHome(materials: EchoMaterials): THREE.Group {
   home.userData.echoHomeBounds = { width: width + 1.1, depth: depth + 1.1, door: { x: 0, z: frontZ + 2.25 } };
   home.userData.echoExteriorHome = true;
   home.userData.echoWalkableEntrance = new THREE.Vector3(0, 0, frontZ + 2.25)
+    .multiply(home.scale)
     .applyEuler(home.rotation)
     .add(home.position);
   return home;
@@ -586,7 +589,8 @@ function createInteriorHome(materials: EchoMaterials): THREE.Group {
   const trim = new THREE.Group();
   trim.name = 'echo-interior-trim';
   addBox(trim, timberDark, [width, 0.18, 0.22], [0, 0.52, backZ - 0.18]);
-  addBox(trim, timberDark, [width, 0.18, 0.22], [0, 0.52, frontZ + 0.18]);
+  addBox(trim, timberDark, [sideSegment, 0.18, 0.22], [-(doorWidth + sideSegment) / 2, 0.52, frontZ + 0.18]);
+  addBox(trim, timberDark, [sideSegment, 0.18, 0.22], [(doorWidth + sideSegment) / 2, 0.52, frontZ + 0.18]);
   addBox(trim, timberDark, [0.22, 0.18, depth], [-width / 2 + 0.18, 0.52, 0]);
   addBox(trim, timberDark, [0.22, 0.18, depth], [width / 2 - 0.18, 0.52, 0]);
   [-width / 2 + 0.18, width / 2 - 0.18].forEach((x) => addBox(trim, timber, [0.24, wallHeight + 0.08, 0.24], [x, wallBottom + wallHeight / 2, frontZ + 0.16]));

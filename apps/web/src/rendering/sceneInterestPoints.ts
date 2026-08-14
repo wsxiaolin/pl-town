@@ -206,11 +206,14 @@ function createEchoStonePile(options: SceneInterestPointOptions): SceneInterestP
     { color: 0xb4b5ad, roughness: 0.96 },
     { color: 0x737a78, roughness: 1 },
   ];
-  const layerCounts = [20, 16, 12, 8, 5];
+  // Five times the original 61 rocks, spread primarily along X while keeping
+  // enough Z depth and height variation to read as a pile rather than a row.
+  const layerCounts = [100, 80, 60, 40, 25];
+  const rockGeometry = new THREE.DodecahedronGeometry(0.5, 1);
   let rockIndex = 0;
   layerCounts.forEach((count, layer) => {
-    const ringRadiusX = 1.45 - layer * 0.22;
-    const ringRadiusZ = 0.92 - layer * 0.14;
+    const ringRadiusX = 4.5 - layer * 0.55;
+    const ringRadiusZ = 2.0 - layer * 0.25;
     for (let index = 0; index < count; index += 1) {
       const angle = (index / count) * Math.PI * 2 + layer * 0.37;
       const jitter = 0.88 + ((index * 11 + layer * 7) % 7) * 0.035;
@@ -218,7 +221,7 @@ function createEchoStonePile(options: SceneInterestPointOptions): SceneInterestP
       const z = Math.sin(angle) * ringRadiusZ * jitter;
       const y = 0.13 + layer * 0.22 + ((index * 5 + layer) % 4) * 0.035;
       const radius = 0.24 - layer * 0.018 + ((index * 3) % 5) * 0.018;
-      const rock = addMesh(object, options, new THREE.DodecahedronGeometry(0.5, 1), rockMaterials[rockIndex % rockMaterials.length]!, [x, y, z]);
+      const rock = addMesh(object, options, rockGeometry, rockMaterials[rockIndex % rockMaterials.length]!, [x, y, z]);
       rock.scale.set(radius * (1.15 + (index % 3) * 0.12), radius * (0.82 + (index % 4) * 0.1), radius * (0.92 + (index % 2) * 0.18));
       rock.rotation.set(index * 0.47, index * 0.83, layer * 0.29 + index * 0.17);
       rock.userData.stoneIndex = rockIndex;
@@ -234,11 +237,11 @@ function createEchoStonePile(options: SceneInterestPointOptions): SceneInterestP
     patch.scale.set(1.5, 0.18 + (index % 2) * 0.08, 0.9);
     patch.rotation.y = index * 0.8;
   });
-  addStoryHitbox(object, options, [3.5, 1.85, 2.7], [0, 0.85, 0]);
+  addStoryHitbox(object, options, [9.8, 2.2, 4.7], [0, 1.0, 0]);
   addInvestigationMarker(object, options, [0, 2.05, 0]);
   object.position.set(ECHO_OBSERVATORY_AREA.stonePile[0], 0, ECHO_OBSERVATORY_AREA.stonePile[1]);
   options.scene.add(object);
-  return { id: 'echo-stone-pile', object, interactionPosition: object.position.clone().add(new THREE.Vector3(1.75, 0, 1.1)) };
+  return { id: 'echo-stone-pile', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0, 0, -2.65)) };
 }
 
 function createEchoTable(options: SceneInterestPointOptions): SceneInterestPointEntity {
@@ -289,19 +292,22 @@ function createEchoTable(options: SceneInterestPointOptions): SceneInterestPoint
   addStoryHitbox(object, options, [3.1, 1.55, 2.05], [0, 0.78, 0]);
   addInvestigationMarker(object, options, [0, 1.9, 0]);
   object.position.set(ECHO_OBSERVATORY_AREA.table[0], 0, ECHO_OBSERVATORY_AREA.table[1]);
+  object.rotation.y = -Math.PI / 2;
   options.scene.add(object);
-  return { id: 'echo-table', object, interactionPosition: object.position.clone().add(new THREE.Vector3(-1.65, 0, 1.25)) };
+  const interactionPosition = new THREE.Vector3(-1.65, 0, 1.25)
+    .applyEuler(object.rotation)
+    .add(object.position);
+  return { id: 'echo-table', object, interactionPosition };
 }
 
 function createEchoCabin(options: SceneInterestPointOptions): SceneInterestPointEntity {
   const object = new THREE.Group();
-  // The exterior home is rotated toward the south-facing road. Keep this
-  // marker at the end of the porch so the story interaction never resolves
-  // against the rear wall or inside the cabin footprint.
+  // Keep this marker at the scaled porch entrance so story navigation resolves
+  // outside the cabin footprint.
   const entrance = new THREE.Vector3(
     ECHO_OBSERVATORY_AREA.home[0],
     0,
-    ECHO_OBSERVATORY_AREA.home[1] - 5.65,
+    ECHO_OBSERVATORY_AREA.home[1] + 5.65 * ECHO_OBSERVATORY_AREA.homeScale,
   );
   const ring = addMesh(object, options, new THREE.TorusGeometry(0.28, 0.055, 8, 20), { color: 0xf2c94c, emissive: 0x8a6500, emissiveIntensity: 0.5, roughness: 0.55 }, [0, 1.55, 0]);
   ring.rotation.x = Math.PI / 2;
@@ -312,7 +318,11 @@ function createEchoCabin(options: SceneInterestPointOptions): SceneInterestPoint
   addStoryHitbox(object, options, [1.2, 2.2, 1.2], [0, 1.1, 0]);
   object.position.copy(entrance);
   options.scene.add(object);
-  return { id: 'echo-cabin', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0, 0, 0.45)) };
+  return {
+    id: 'echo-cabin',
+    object,
+    interactionPosition: new THREE.Vector3(ECHO_OBSERVATORY_AREA.home[0], 0, -0.8),
+  };
 }
 
 function createEchoDiary(options: SceneInterestPointOptions): SceneInterestPointEntity {
@@ -337,11 +347,13 @@ function createEchoPhotoWall(options: SceneInterestPointOptions): SceneInterestP
 
 function createEchoCabinDoor(options: SceneInterestPointOptions): SceneInterestPointEntity {
   const object = new THREE.Group();
-  addStoryHitbox(object, options, [3.8, 3.6, 0.45], [0, 1.8, 0]);
+  // This generous volume is also queried by the cabin's priority exit path.
+  // Center it on the visible door plane and extend it into the room.
+  addStoryHitbox(object, options, [4.8, 4.2, 1.6], [0, 2.0, 0]);
   addInvestigationMarker(object, options, [0, 4.0, 0]);
-  object.position.set(ECHO_OBSERVATORY_AREA.interior[0], 0, ECHO_OBSERVATORY_AREA.interior[1] - 10.6);
+  object.position.set(ECHO_OBSERVATORY_AREA.interior[0], 0, ECHO_OBSERVATORY_AREA.interior[1] - 10.0);
   options.scene.add(object);
-  return { id: 'echo-cabin-door', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0, 0, 1.5)) };
+  return { id: 'echo-cabin-door', object, interactionPosition: object.position.clone().add(new THREE.Vector3(0, 0, 0.9)) };
 }
 
 export function createSceneInterestPoints(input: SceneInterestPointOptionsInput): SceneInterestPoints {

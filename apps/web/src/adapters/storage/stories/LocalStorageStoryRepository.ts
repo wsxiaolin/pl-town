@@ -62,7 +62,11 @@ export class LocalStorageStoryRepository implements StoryRepository {
     if (!value || typeof value !== 'object') return undefined;
     const guide = value as Partial<StoryGuide>;
     return typeof guide.title === 'string' && typeof guide.objective === 'string'
-      ? { title: guide.title, objective: guide.objective }
+      ? {
+          title: guide.title,
+          objective: guide.objective,
+          visibleWhen: Array.isArray(guide.visibleWhen) ? guide.visibleWhen as StoryGuide['visibleWhen'] : undefined,
+        }
       : undefined;
   }
 }

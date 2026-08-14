@@ -116,6 +116,11 @@ export class StoryRuntime {
     return context.gameDay >= state.nodeEnteredGameDay + delay;
   }
 
+  isGuideVisible(context: StoryConditionContext = {}): boolean {
+    const guide = this.state().activeGuide;
+    return Boolean(guide) && conditionsMatch(guide?.visibleWhen, this.state(), context);
+  }
+
   choose(choiceId: string, now = Date.now(), context: StoryConditionContext = {}): StoryTransition | null {
     const state = this.state();
     const node = this.definition.nodes[state.nodeId];
