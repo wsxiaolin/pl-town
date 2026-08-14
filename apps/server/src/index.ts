@@ -281,7 +281,7 @@ const http = createServer(async (request, response) => {
   response.on('finish', () => {
     const detail = { method: request.method ?? '', url: request.url ?? '', status: response.statusCode, ms: Date.now() - requestStartedAt, ip: requestIp };
     if (response.statusCode >= 500) recordServerError(`${detail.method} ${detail.url} → ${detail.status}`, `${detail.ms}ms`);
-    if (request.url === '/healthz') return logger.debug('HTTP', detail);
+    if ((request.url === '/healthz' || request.url === '/readyz') && response.statusCode < 400) return logger.debug('HTTP', detail);
     bumpMetric('httpRequests');
     logger.info('HTTP', detail);
   });
