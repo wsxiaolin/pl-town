@@ -38,8 +38,8 @@ export const WEST_BEACH = Object.freeze({
   coastlineX: -43.2,
   deepWaterX: -44.5,
   safeReturnX: -42.2,
-  minZ: -34,
-  maxZ: 54,
+  minZ: -50,
+  maxZ: 50,
 });
 export const ECHO_OBSERVATORY_AREA = Object.freeze({
   roadNodes: Object.freeze([

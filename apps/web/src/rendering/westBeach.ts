@@ -79,12 +79,16 @@ export function createWestBeach(options: BeachOptions): {
   const sand = addMesh(object, options, new THREE.PlaneGeometry(9, 58), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [-39.4, 0.07, 10]);
   sand.rotation.x = -Math.PI / 2;
   sand.renderOrder = 4;
-  const waterWidth = 60;
-  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, 90), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, 0.01, 10]);
+  const waterWidth = 66;
+  const waterLength = 140;
+  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, waterLength), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, 0.01, 10]);
   water.castShadow = false;
   water.renderOrder = 3;
+  const coastLine = addMesh(object, options, new THREE.BoxGeometry(0.12, 0.02, waterLength), { color: 0xf3e9d4, roughness: 0.55, transparent: true, opacity: 0.9, depthWrite: false }, [WEST_BEACH.coastlineX + 0.03, 0.095, 10]);
+  coastLine.castShadow = false;
+  coastLine.renderOrder = 5;
   for (let index = 0; index < 4; index += 1) {
-    const foam = addMesh(object, options, new THREE.BoxGeometry(0.1, 0.025, 54), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72, depthWrite: false }, [WEST_BEACH.coastlineX - index * 0.72, 0.09, 10]);
+    const foam = addMesh(object, options, new THREE.BoxGeometry(0.1, 0.025, waterLength), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72, depthWrite: false }, [WEST_BEACH.coastlineX - 0.55 - index * 0.72, 0.09, 10]);
     foam.userData.foamIndex = index;
   }
   const palms = [-1, 1].map((side) => {
@@ -139,7 +143,7 @@ export function createWestBeach(options: BeachOptions): {
       });
       object.traverse((child) => {
         if (typeof child.userData.foamIndex !== 'number') return;
-        child.position.x = WEST_BEACH.coastlineX - child.userData.foamIndex * 0.72 + Math.sin(elapsedSeconds * 0.8 + child.userData.foamIndex) * 0.14;
+        child.position.x = WEST_BEACH.coastlineX - 0.55 - child.userData.foamIndex * 0.72 + Math.sin(elapsedSeconds * 0.8 + child.userData.foamIndex) * 0.14;
       });
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
