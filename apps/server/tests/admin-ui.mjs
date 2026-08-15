@@ -94,6 +94,9 @@ try {
   await page.locator('#backupRows').waitFor();
   await page.locator('[data-view="users"]').click();
   await page.locator('#userRows').waitFor();
+  await page.locator('[data-view="telemetry"]').click();
+  await page.locator('#telemetryMetrics .metric').first().waitFor();
+  await page.locator('#serverLogs').waitFor();
   await page.locator('[data-view="overview"]').click();
   await page.locator('#metrics .metric').first().waitFor();
 

@@ -102,6 +102,24 @@ try {
   const adminBase = `${adminOrigin}/admin/api`;
   const unauthenticated = await fetch(`${adminBase}/overview`);
   if (unauthenticated.status !== 401 || unauthenticated.headers.get('cache-control') !== 'no-store') throw new Error('Admin API must reject unauthenticated requests without caching');
+
+  // The admin HTML shell must never be cached, and it must reference the
+  // fingerprinted asset URLs so that updated JS/CSS is served immediately
+  // after a deploy rather than from a stale long-lived cache.
+  const adminHtmlResponse = await fetch(`${adminOrigin}/admin/`);
+  if (!adminHtmlResponse.ok || adminHtmlResponse.headers.get('cache-control') !== 'no-store') throw new Error('Admin HTML shell must never be cached');
+  const adminHtml = await adminHtmlResponse.text();
+  const versionedRefs = [...adminHtml.matchAll(/\/admin\/(app\.js|styles\.css)\?v=([0-9a-f]{16})/g)];
+  if (versionedRefs.length !== 2) throw new Error('Admin HTML must fingerprint app.js and styles.css with a ?v= hash');
+  const cssVersion = versionedRefs.find((match) => match[1] === 'styles.css')[2];
+  const jsVersion = versionedRefs.find((match) => match[1] === 'app.js')[2];
+  for (const [path, version] of [['/admin/styles.css', cssVersion], ['/admin/app.js', jsVersion]]) {
+    const assetResponse = await fetch(`${adminOrigin}${path}?v=${version}`);
+    if (!assetResponse.ok) throw new Error(`Admin asset ${path} must be served with a ?v= fingerprint`);
+    const cacheControl = assetResponse.headers.get('cache-control') ?? '';
+    if (!cacheControl.includes('immutable') || !cacheControl.includes('max-age=31536000')) throw new Error(`Admin asset ${path} must be cached immutably; got "${cacheControl}"`);
+  }
+
   const rejectedOrigin = await fetch(`${adminBase}/login`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
     body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
@@ -148,6 +166,7 @@ try {
 
   if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
+  if (alice.hello.catalog.buildingPrices.wushi_restaurant !== 0) throw new Error('The Wushi restaurant must be available in the city catalog');
   if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
 
   send(alice, { type: 'story.get', storyId: 'sample-story' });
@@ -204,6 +223,12 @@ try {
   send(alice, { type: 'progress.reward.claim', rewardId: 'mandarin_daily' });
   const repeatedDaily = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'reward.claimed' && message.event.claimed === false);
   if (repeatedDaily.progress.inventory.mandarin !== 1) throw new Error('Daily reward must only be granted once per Shanghai day');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'tirpitz_beach' });
+  const beachReward = await waitFor(alice, 'progress.updated', (message) => message.event?.rewardId === 'tirpitz_beach' && message.event.claimed === true);
+  if (beachReward.progress.inventory.tirpitz_card !== 1) throw new Error('Beach reward must grant the Tirpitz card');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'tirpitz_beach' });
+  const repeatedBeachReward = await waitFor(alice, 'progress.updated', (message) => message.event?.rewardId === 'tirpitz_beach' && message.event.claimed === false);
+  if (repeatedBeachReward.progress.inventory.tirpitz_card !== 1) throw new Error('Beach reward must only be granted once');
 
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
@@ -266,7 +291,41 @@ try {
   const disabledLogin = await connectExpectingError('Charlie');
   if (!disabledLogin) throw new Error('Disabled residents must not be able to sign in');
 
-  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, and lifecycle');
+  // Telemetry: public collection + admin visibility.
+  const eventPost = await fetch(`${adminOrigin}/town-api/telemetry/event`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ event: 'integration.test', sessionId: 'sess-1', properties: { ok: true } }),
+  });
+  if (eventPost.status !== 202) throw new Error('Telemetry event collection must accept valid payloads');
+  const badEvent = await fetch(`${adminOrigin}/town-api/telemetry/event`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ event: 'bad name!', sessionId: 'sess-1' }),
+  });
+  if (badEvent.status !== 400) throw new Error('Telemetry collection must reject malformed event names');
+  const errorPost = await fetch(`${adminOrigin}/town-api/telemetry/error`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ kind: 'runtime', message: 'integration failure', sessionId: 'sess-1' }),
+  });
+  if (errorPost.status !== 202) throw new Error('Telemetry error collection must accept valid payloads');
+  const telemetryOverview = await fetch(`${adminBase}/telemetry/overview`, { headers: { cookie } });
+  const telemetryOverviewPayload = await telemetryOverview.json();
+  if (!telemetryOverview.ok || telemetryOverviewPayload.events.total < 1 || telemetryOverviewPayload.errors.total < 1) throw new Error('Admin telemetry overview must surface collected events and errors');
+  const eventList = await fetch(`${adminBase}/telemetry/events?limit=10`, { headers: { cookie } });
+  const eventListPayload = await eventList.json();
+  if (!eventList.ok || !eventListPayload.items.some((item) => item.event === 'integration.test')) throw new Error('Admin telemetry events list must include the recorded event');
+  const errorList = await fetch(`${adminBase}/telemetry/errors?limit=10`, { headers: { cookie } });
+  const errorListPayload = await errorList.json();
+  if (!errorList.ok || !errorListPayload.items.some((item) => item.message === 'integration failure')) throw new Error('Admin telemetry errors list must include the recorded error');
+  const health = await fetch(`${adminBase}/telemetry/health`, { headers: { cookie } });
+  const healthPayload = await health.json();
+  if (!health.ok || healthPayload.counters.httpRequests < 1) throw new Error('Admin telemetry health must report server metrics');
+  const logs = await fetch(`${adminBase}/telemetry/logs?lines=50`, { headers: { cookie } });
+  const logsPayload = await logs.json();
+  if (!logs.ok || !Array.isArray(logsPayload.lines)) throw new Error('Admin telemetry logs must return a line array');
+  const clearTelemetry = await fetch(`${adminBase}/telemetry/clear`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf } });
+  if (!clearTelemetry.ok) throw new Error('Admin telemetry clear must require CSRF and succeed');
+
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, and telemetry');
 } finally {
   alice?.socket.close();
   bob?.socket.close();
