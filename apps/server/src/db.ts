@@ -446,7 +446,9 @@ export function renameHouse(buildingId: string, name: string): void { db.prepare
 export function addMember(buildingId: string, userId: string): void { db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, userId, now()); }
 export function removeMember(buildingId: string, userId: string): void { db.prepare('DELETE FROM house_members WHERE building_id = ? AND user_id = ?').run(buildingId, userId); }
 export function transferHouse(buildingId: string, userId: string): void { db.prepare('UPDATE houses SET owner_id = ?, updated_at = ? WHERE building_id = ?').run(userId, now(), buildingId); }
-export function deleteHouse(buildingId: string): void { db.prepare('DELETE FROM houses WHERE building_id = ?').run(buildingId); }
+export function deleteHouse(buildingId: string): boolean {
+  return db.prepare('DELETE FROM houses WHERE building_id = ?').run(buildingId).changes > 0;
+}
 
 const requestQuery = `
   SELECT r.id, r.building_id, r.requester_id, r.target_id, r.kind, r.created_at,
@@ -642,19 +644,21 @@ export function listChatMessages(input: ChatListFilter): { items: ChatMessage[];
   })) };
 }
 
-export type ChatAuthorSummary = { userId: string; nickname: string; messages: number; hidden: number; flagged: number; lastAt: string };
+export type ChatAuthorSummary = { userId: string; nickname: string; messages: number; hidden: number; flagged: number; lastAt: string; disabled: boolean };
 
 export function listChatAuthors(limit: number): ChatAuthorSummary[] {
   const rows = db.prepare(`
-    SELECT user_id, nickname, COUNT(*) AS messages,
-           SUM(CASE WHEN hidden_at IS NOT NULL THEN 1 ELSE 0 END) AS hidden,
-           SUM(CASE WHEN flagged_at IS NOT NULL THEN 1 ELSE 0 END) AS flagged,
-           MAX(created_at) AS last_at
-    FROM chat_messages GROUP BY user_id ORDER BY last_at DESC LIMIT ?
+    SELECT cm.user_id, COALESCE(MAX(u.nickname), MAX(cm.nickname)) AS nickname, COUNT(*) AS messages,
+           SUM(CASE WHEN cm.hidden_at IS NOT NULL THEN 1 ELSE 0 END) AS hidden,
+           SUM(CASE WHEN cm.flagged_at IS NOT NULL THEN 1 ELSE 0 END) AS flagged,
+           MAX(cm.created_at) AS last_at,
+           MAX(CASE WHEN u.disabled_at IS NOT NULL THEN 1 ELSE 0 END) AS disabled
+    FROM chat_messages cm LEFT JOIN users u ON u.id = cm.user_id
+    GROUP BY cm.user_id ORDER BY last_at DESC LIMIT ?
   `).all(limit) as any[];
   return rows.map((row) => ({
     userId: row.user_id, nickname: row.nickname, messages: row.messages,
-    hidden: row.hidden ?? 0, flagged: row.flagged ?? 0, lastAt: row.last_at,
+    hidden: row.hidden ?? 0, flagged: row.flagged ?? 0, lastAt: row.last_at, disabled: Boolean(row.disabled),
   }));
 }
 

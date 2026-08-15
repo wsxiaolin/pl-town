@@ -11,7 +11,7 @@ npm install
 npm run dev -w @minicity/server
 ```
 
-默认监听 `http://0.0.0.0:8787`。`GET /healthz` 是存活检查，`GET /readyz` 会查询 SQLite。首次本地运行不要求管理员凭据；配置 `ADMIN_USERNAME` 和至少 16 字符的 `ADMIN_PASSWORD` 后，访问 `http://localhost:8787/admin/`。
+默认监听 `http://0.0.0.0:8787`。`GET /healthz` 是存活检查，`GET /readyz` 会查询 SQLite。首次本地运行不要求管理员凭据；配置 `ADMIN_USERNAME` 和至少 16 字符的 `ADMIN_PASSWORD` 后，访问 `http://localhost:8787/admin/`。需要多个管理员账号时，可另设 `ADMIN_ACCOUNTS_JSON='{"operator2":"至少 16 字符的密码"}'`；它会与原单账号配置合并。
 
 ## 构建与测试
 
@@ -30,7 +30,7 @@ npm run start -w @minicity/server
 
 - 监听与存储：`HOST`、`PORT`、`DATA_DIR`、`LOG_DIR`、`BACKUP_DIR`。
 - 浏览器边界：`ALLOWED_ORIGINS`、`TRUST_PROXY_HOPS`、`ALLOW_ORIGINLESS_WEBSOCKET`。
-- 管理员：`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_SESSION_TTL_MINUTES`。
+- 管理员：`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_ACCOUNTS_JSON`（用户名到密码的 JSON 对象）、`ADMIN_SESSION_TTL_MINUTES`。
 - 会话/连接：`SESSION_TTL_DAYS`、`MAX_CONNECTIONS`、`MAX_CONNECTIONS_PER_IP`。
 - 备份：`AUTO_BACKUP_ENABLED`、`BACKUP_ON_START`、`BACKUP_INTERVAL_MINUTES`、`BACKUP_RETENTION_DAYS`、`BACKUP_MAX_FILES`。
 
@@ -38,7 +38,7 @@ npm run start -w @minicity/server
 
 ## 管理与备份
 
-后台提供：运行/数据库概览、用户搜索、停用/启用、会话撤销、住房只读视图、审计日志、WAL 检查点、创建/下载/重新验证备份。所有写操作要求管理员 Cookie、精确 Origin 和 CSRF Token；没有任意 SQL 接口。
+后台提供：运行/数据库概览、居民搜索与封禁、住房名称和成员管理、住房删除、剧情节点查看、聊天审核、审计日志、WAL 检查点、创建/下载/重新验证备份。所有写操作要求管理员 Cookie、精确 Origin 和 CSRF Token；没有任意 SQL 接口。
 
 备份通过 SQLite Online Backup API 生成 `.partial`，在 worker 中执行完整性检查、外键检查和流式 SHA-256，通过后原子重命名并写入 `manifest.json`。默认每天备份，保留 30 天且最多 30 个文件。
 
