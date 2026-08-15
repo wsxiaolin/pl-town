@@ -1,0 +1,21 @@
+{
+  "name": "minicity-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "engines": { "node": "22.x" },
+  "workspaces": ["apps/web", "apps/server"],
+  "scripts": {
+    "dev": "concurrently -k -n WEB,SERVER -c cyan,green \"npm run dev -w @minicity/web\" \"npm run dev -w @minicity/server\"",
+    "start": "npm run dev",
+    "build": "npm run check:source-size && tsc -p apps/web/tsconfig.json --noEmit && vite build --config apps/web/vite.config.ts && npm run build -w @minicity/server",
+    "typecheck": "npm run check:source-size && tsc -p apps/web/tsconfig.json --noEmit && npm run typecheck -w @minicity/server",
+    "check:source-size": "node apps/web/check-source-size.mjs",
+    "test": "npm run test:domain && playwright test --config apps/web/playwright.config.ts && npm run test:integration -w @minicity/server",
+    "test:domain": "npm run test:unit -w @minicity/web",
+    "test:web": "playwright test --config apps/web/playwright.config.ts",
+    "test:server": "npm run test:integration -w @minicity/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

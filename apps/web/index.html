@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2378a8ff'/%3E%3Cpath d='M8 24V13h5v11h6V8h5v16z' fill='white'/%3E%3C/svg%3E" />
+  <title>物实小城 — MiniCity</title>
+  <style id="bootCritical">
+    *,*::before,*::after{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#111722;font-family:-apple-system,'Inter','Helvetica Neue',Arial,sans-serif}.boot-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;overflow:hidden;color:#f8faff;background:#111722}.boot-grid{position:absolute;inset:-10%;opacity:.32;background-image:linear-gradient(rgba(152,181,226,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(152,181,226,.12) 1px,transparent 1px);background-size:54px 54px;transform:perspective(650px) rotateX(62deg) translateY(30%);transform-origin:center bottom;mask-image:linear-gradient(to top,#000 12%,transparent 78%)}.boot-orbit{position:absolute;width:min(72vw,720px);aspect-ratio:1;border:1px solid rgba(140,184,244,.12);border-radius:50%;transform:rotate(-18deg) scaleY(.28);box-shadow:0 0 80px rgba(78,126,221,.08)}.boot-orbit::after{content:'';position:absolute;top:-3px;left:22%;width:5px;height:5px;border-radius:50%;background:#78a8ff;box-shadow:0 0 14px 3px rgba(120,168,255,.42)}.boot-orbit-a{transform:rotate(-18deg) scaleY(.28) translateY(-36px)}.boot-orbit-b{width:min(48vw,470px);transform:rotate(22deg) scaleY(.3) translateY(20px);opacity:.65}.boot-orbit-b::after{left:68%;background:#f2a36f;box-shadow:0 0 14px 3px rgba(242,163,111,.32)}.boot-content{position:relative;width:min(420px,calc(100vw - 48px));padding:28px 0 24px}.boot-brand{display:flex;align-items:center;gap:10px;color:#afc8f1;font-size:10px;font-weight:700;letter-spacing:.24em}.boot-brand-mark{display:inline-flex;align-items:end;gap:3px;height:16px}.boot-brand-mark i{display:block;width:4px;border-radius:1px 1px 0 0;background:#78a8ff}.boot-brand-mark i:nth-child(1){height:8px;opacity:.65}.boot-brand-mark i:nth-child(2){height:13px}.boot-brand-mark i:nth-child(3){height:10px;background:#f2a36f}.boot-title-row{display:flex;align-items:center;gap:14px;margin-top:52px}.boot-title-row h1{margin:0;color:#f7f9fe;font-size:clamp(26px,4vw,40px);font-weight:500;letter-spacing:.02em;line-height:1.2}.boot-live{display:inline-flex;align-items:center;gap:6px;color:#9db7de;font-size:9px;font-weight:700;letter-spacing:.16em;white-space:nowrap}.boot-live i{width:6px;height:6px;border-radius:50%;background:#f2a36f;box-shadow:0 0 0 4px rgba(242,163,111,.12);animation:boot-pulse 1.6s ease-in-out infinite}.boot-subtitle{margin:13px 0 0;color:#879ab9;font-size:12px;letter-spacing:.06em}.boot-progress{position:relative;height:2px;margin-top:38px;overflow:hidden;background:rgba(155,182,226,.16)}.boot-progress span{position:absolute;inset:0 auto 0 -35%;width:35%;background:#78a8ff;box-shadow:0 0 16px rgba(120,168,255,.72);animation:boot-progress 1.55s ease-in-out infinite}.boot-meta{display:flex;justify-content:space-between;margin-top:12px;color:#61728e;font-size:9px;font-weight:700;letter-spacing:.16em}@keyframes boot-progress{to{transform:translateX(385%)}}@keyframes boot-pulse{0%,100%{opacity:.5;transform:scale(.88)}50%{opacity:1;transform:scale(1.1)}}@media(max-width:680px){.boot-content{padding-bottom:18px}.boot-title-row{display:block;margin-top:42px}.boot-live{margin-top:14px}.boot-subtitle{font-size:11px;line-height:1.7}}@media(prefers-reduced-motion:reduce){.boot-live i,.boot-progress span{animation:none}}
+  </style>
+</head>
+<body class="day">
+
+  <div class="landscape-required" id="landscapeRequired" role="alert" aria-live="assertive">
+    <strong>请横屏使用</strong>
+    <span>旋转设备后即可进入小城</span>
+    <a class="landscape-fullscreen" id="landscapeFullscreen" href="javascript:void(0)">全屏访问效果更加（点击）</a>
+  </div>
+
+  <!-- First-paint shell shown while the WebGL city is being prepared. -->
+  <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
+    <div class="boot-grid" aria-hidden="true"></div>
+    <div class="boot-orbit boot-orbit-a" aria-hidden="true"></div>
+    <div class="boot-orbit boot-orbit-b" aria-hidden="true"></div>
+    <div class="boot-content">
+      <div class="boot-brand">
+        <span class="boot-brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="boot-brand-name">MINI CITY</span>
+      </div>
+      <div class="boot-title-row">
+        <h1>正在唤醒这座城</h1>
+        <span class="boot-live"><i></i> LIVE</span>
+      </div>
+      <p class="boot-subtitle">准备街道、建筑与居民，马上见面。</p>
+      <div class="boot-progress" aria-hidden="true"><span></span></div>
+      <div class="boot-meta"><span>INITIALIZING CITY</span><span>v1.0</span></div>
+    </div>
+  </div>
+
+  <canvas id="c"></canvas>
+  <div class="movement-control" id="movementControl" aria-label="移动方向盘">
+    <div class="movement-control-base" id="movementControlBase" aria-hidden="true">
+      <span class="movement-control-stick" id="movementControlStick"></span>
+    </div>
+  </div>
+  <div class="labels-wrap" id="labelsWrap"></div>
+
+  <!-- UI Chrome -->
+  <header class="ui-header">
+    <div class="logo">
+      <span class="logo-dot"></span>
+      <span class="logo-name">物实小城</span>
+      <button class="logo-user login-required" id="logoUser" type="button" aria-label="登录">登录</button>
+    </div>
+    <nav class="ui-nav">
+       <button class="map-toggle fs-toggle" id="fsToggle" type="button">全屏</button>
+       <button class="map-toggle" id="mapToggle" type="button">地图</button>
+       <button class="settings-toggle" id="renderSettingsToggle" type="button" aria-label="画面设置" aria-expanded="false">
+         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.2 13.4 1.2.9-1.8 3.1-1.4-.6a7.7 7.7 0 0 1-1.7 1l-.2 1.5h-3.6l-.2-1.5a7.7 7.7 0 0 1-1.7-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.8l-1.2-.9 1.8-3.1 1.4.6a7.7 7.7 0 0 1 1.7-1l.2-1.5h3.6l.2 1.5a7.7 7.7 0 0 1 1.7 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.8Z"/></svg>
+       </button>
+       <div class="time-display" id="communityTime" title="社区时间（现实 1 分钟 = 游戏 1 小时）">09:00</div>
+     </nav>
+   </header>
+
+  <div class="welcome-block">
+    <p class="welcome-main">welcome.<br>explore the city.</p>
+    <p class="welcome-sub">click on a building to explore.</p>
+    <div class="welcome-accent"></div>
+  </div>
+
+  <div class="you-block">
+    <div class="you-person">
+      <div class="yp-head"></div>
+      <div class="yp-body"></div>
+    </div>
+    <div class="you-text">
+      <span class="you-label">YOU ARE HERE</span>
+      <span class="you-sub">click a road to walk</span>
+    </div>
+  </div>
+
+  <!-- Resident phone: folds online status / chat / housing into one floating handset -->
+  <button class="phone-fab" id="onlinePanelToggle" type="button" aria-label="打开居民手机" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.6"/><line x1="10.4" y1="5" x2="13.6" y2="5"/><circle cx="12" cy="18.6" r="0.9"/></svg>
+    <i class="phone-fab-state" id="phoneFabState"></i>
+    <span class="phone-fab-badge" id="phoneBadge" hidden>0</span>
+  </button>
+  <aside class="phone" id="onlinePanel" aria-label="居民手机">
+    <div class="phone-notch" aria-hidden="true"><span class="phone-speaker"></span><span class="phone-camera"></span></div>
+    <header class="phone-statusbar">
+      <span class="phone-net"><i id="onlineStateDot"></i><b id="onlineCount">离线</b></span>
+      <span class="phone-owner" id="phoneOwner">居民手机</span>
+      <button class="phone-close" id="phoneClose" type="button" aria-label="收起手机">✕</button>
+    </header>
+    <nav class="online-tabs phone-tabs">
+      <button class="online-tab active" data-online-tab="chat" type="button">公聊</button>
+      <button class="online-tab" data-online-tab="houses" type="button">住宅</button>
+      <button class="online-tab" data-online-tab="inventory" type="button">背包</button>
+      <!-- 社交板块暂时注释，待后续恢复：
+      <button class="online-tab" data-online-tab="social" type="button">社交</button>
+      -->
+    </nav>
+    <div class="phone-screen">
+      <section class="online-view active" id="onlineChatView">
+        <div class="chat-log" id="chatLog"></div>
+        <form class="chat-form" id="chatForm"><input id="chatInput" maxlength="500" autocomplete="off" placeholder="发送公聊消息…" /><button type="submit" aria-label="发送">发送</button></form>
+      </section>
+      <section class="online-view" id="onlineHousesView">
+        <div class="house-list" id="houseList"></div>
+        <p class="house-help">住宅状态保存在服务器，全镇居民共享。</p>
+      </section>
+      <section class="online-view inventory-panel" id="onlineInventoryView" aria-label="背包">
+        <div class="inventory-balance"><span>物实币</span><strong data-currency>0</strong></div>
+        <div class="sp-unlocks" data-inventory-section><div class="sp-ul-title">已有物品</div><div data-inventory-list></div></div>
+      </section>
+      <!-- 通知板块暂时停用，保留结构以便后续恢复。
+      <section class="online-view" id="onlineNotificationsView"><div class="phone-feed" id="phoneNotifications"><div class="phone-bind-prompt" id="phoneNotificationBind"><form id="phoneBindForm"><label><span>账号</span><input id="phoneBindEmail" type="text" placeholder="邮箱或手机号" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label><span>密码</span><input id="phoneBindPassword" type="password" placeholder="密码" autocomplete="current-password"></label><button type="submit">绑定</button><small id="phoneBindError" role="alert"></small></form></div></div></section>
+      -->
+      <!-- 社交板块暂时注释，待后续恢复：
+      <section class="online-view" id="onlineSocialView"><div class="phone-social"><div class="phone-social-hero"><span>PHYSICS LAB</span><strong>社区终端</strong><p>账号资料、作品和居民关系。</p></div><div class="phone-bind-prompt" id="phoneSocialBind"><strong>先绑定 Physics Lab</strong><p>绑定后可查看个人资料、收藏、关注和志愿者列表。</p><button type="button" id="phoneBindFromSocial">绑定账号</button><form id="phoneBindForm" hidden><input id="phoneBindEmail" type="email" placeholder="Physics Lab 邮箱" autocomplete="username"><input id="phoneBindPassword" type="password" placeholder="密码" autocomplete="current-password"><button type="submit">确认绑定</button><small id="phoneBindError"></small></form></div><div class="phone-social-grid" id="phoneSocialTools"><button data-pl-social="profile" type="button">我的资料</button><button data-pl-social="mine" type="button">我的作品</button><button data-pl-social="favorites" type="button">我的收藏</button><button data-pl-social="following" type="button">我的关注</button><button data-pl-social="followers" type="button">我的粉丝</button><button data-pl-social="volunteers" type="button">志愿者</button></div><div class="phone-social-results" id="phoneSocialResults"><p>选择一项社区服务。</p></div><button class="phone-social-wide" id="phoneOpenWorks" type="button">打开全城作品动态 <b>›</b></button></div></section>
+      -->
+    </div>
+    <div class="phone-homebar" aria-hidden="true"></div>
+  </aside>
+
+  <section class="residence-claim" id="residenceClaim" role="dialog" aria-modal="true" aria-labelledby="residenceClaimTitle" hidden>
+    <div class="residence-claim-card">
+      <button class="residence-claim-close" id="residenceClaimClose" type="button" aria-label="关闭住宅面板">✕</button>
+      <span class="residence-claim-kicker">RESIDENTIAL LOT</span>
+      <h2 id="residenceClaimTitle">住宅</h2>
+      <p class="residence-claim-address" id="residenceClaimAddress"></p>
+      <p class="residence-claim-status" id="residenceClaimStatus"></p>
+      <label class="residence-name-field" id="residenceNameField">
+        <span>住宅名称</span>
+        <input id="residenceNameInput" maxlength="24" autocomplete="off" placeholder="例如：晴风小屋" />
+      </label>
+      <div class="residence-claim-actions">
+        <button class="residence-action secondary" id="residenceClaimCancel" type="button">取消</button>
+        <button class="residence-action primary" id="residenceClaimSubmit" type="button">认领住宅</button>
+        <button class="residence-action secondary" id="residenceApply" type="button" hidden>申请入住</button>
+        <button class="residence-action primary" id="residenceNavigate" type="button" hidden>导航过去</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- City map paper -->
+  <div class="map-overlay" id="mapOverlay" role="dialog" aria-label="全景地图">
+    <div class="map-paper">
+      <button class="map-close" id="mapClose" type="button" aria-label="关闭地图">✕</button>
+      <h2 class="map-title">物实小城 · 全景地图</h2>
+      <div class="map-image-wrap" id="mapImageWrap">
+        <img id="mapImage" alt="物实小城全景地图" />
+        <div class="map-icons" id="mapIcons"></div>
+        <span class="map-marker" id="mapMarker" aria-label="当前位置"></span>
+        <span class="map-compass map-compass-n" aria-hidden="true">北 N</span>
+        <span class="map-compass map-compass-e" aria-hidden="true">东 E</span>
+        <span class="map-compass map-compass-s" aria-hidden="true">南 S</span>
+        <span class="map-compass map-compass-w" aria-hidden="true">西 W</span>
+        <div class="map-tip" id="mapTip">
+          <button class="mt-close" id="mapTipClose" type="button" aria-label="关闭介绍">✕</button>
+          <h3 class="mt-title" id="mapTipTitle"></h3>
+          <p class="mt-slogan" id="mapTipSlogan"></p>
+          <div class="mt-actions">
+            <button class="mt-tele" id="mapTipTele" type="button">传送</button>
+            <span class="mt-lock" id="mapTipLock">步行 100 米解锁传送</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Population filter -->
+  <div class="pop-filter" id="popFilter">
+    <span class="pf-label">CITIZENS</span>
+    <button class="pf-btn" data-filter="bots">Bots</button>
+    <button class="pf-btn" data-filter="friends">Friends</button>
+    <button class="pf-btn active" data-filter="all">All</button>
+  </div>
+
+  <!-- Unlock toast -->
+  <div class="unlock-toast" id="unlockToast" aria-live="polite">
+    <span class="ut-dot"></span>
+    <span class="ut-text" id="utText">area unlocked</span>
+  </div>
+
+  <!-- Stats panel (right drawer) -->
+  <div class="stats-panel" id="statsPanel" role="dialog" aria-label="City Stats">
+    <div class="sp-head">
+      <span class="sp-title">CITY STATS</span>
+      <div class="sp-modes">
+        <button class="sp-mode active" id="spModeClean">Overview</button>
+        <button class="sp-mode" id="spModeRaw">Raw</button>
+      </div>
+      <button class="sp-close" id="spClose" aria-label="Close stats panel">✕</button>
+    </div>
+    <div class="sp-body" id="spBody"></div>
+  </div>
+
+  <!-- Public works archive: opened by civic buildings -->
+  <aside class="works-panel" id="worksPanel" role="dialog" aria-modal="false" aria-labelledby="worksTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker" id="worksKicker">CITY ARCHIVE</span>
+        <h2 id="worksTitle">Public works</h2>
+      </div>
+      <button class="works-close" id="worksClose" type="button" aria-label="Close">&times;</button>
+    </header>
+    <div class="works-list" id="worksList"></div>
+  </aside>
+  <!-- 作品详细内容板块暂时注释，待后续恢复：
+  <aside class="work-detail-panel" id="workDetailPanel" role="dialog" aria-labelledby="workDetailTitle">
+    <button class="works-close" id="workDetailClose" type="button" aria-label="Close">&times;</button>
+    <div class="work-detail-kicker">PHYSICS LAB WORK</div><h2 id="workDetailTitle">作品详情</h2><p id="workDetailByline"></p>
+    <div class="work-detail-stats" id="workDetailStats"></div><p class="work-detail-summary" id="workDetailSummary"></p>
+    <div class="work-detail-actions"><button id="workStar" type="button">☆ 收藏/点赞</button><button id="workSupport" type="button">支持作品</button><button id="workCommentsTab" type="button">评论</button><button id="workDerivatives" type="button">衍生</button><button id="workSupporters" type="button">支持者</button></div>
+    <div class="work-comments" id="workComments"></div>
+    <form class="work-comment-form" id="workCommentForm"><input id="workCommentInput" maxlength="1200" placeholder="写下评论…" autocomplete="off"><button type="submit">发送</button></form>
+  </aside>
+  -->
+
+  <div class="stats-panel render-settings-panel" id="renderSettings" role="dialog" aria-label="画面设置">
+     <div class="sp-head render-settings-head">
+       <div class="render-settings-heading">
+         <span class="sp-title">RENDER SETTINGS</span>
+         <p class="render-settings-subtitle">按设备能力自由组合画面质量</p>
+       </div>
+       <button class="sp-close" id="renderSettingsClose" type="button" aria-label="关闭画面设置">✕</button>
+     </div>
+     <div class="sp-body render-settings-body">
+       <section class="render-capability" aria-labelledby="renderDeviceTitle">
+         <div class="render-capability-copy">
+           <span class="render-capability-dot" aria-hidden="true"></span>
+           <div><h2 id="renderDeviceTitle">设备能力</h2><p id="renderDeviceHint">正在读取图形能力...</p></div>
+         </div>
+         <div class="render-capability-metrics" aria-label="设备图形能力">
+           <span>屏幕 <strong id="renderDeviceDpr">1x</strong></span>
+           <span>纹理 <strong id="renderDeviceTexture">--</strong></span>
+           <span>过滤 <strong id="renderDeviceAnisotropy">--</strong></span>
+         </div>
+       </section>
+       <section class="render-presets" aria-labelledby="renderPresetTitle">
+         <div class="render-presets-head"><h2 id="renderPresetTitle">快速选择</h2><span id="renderPresetStatus">自定义</span></div>
+         <div class="render-preset-options">
+           <button type="button" data-render-preset="saving">节能</button>
+           <button type="button" data-render-preset="balanced">均衡</button>
+           <button type="button" data-render-preset="high">高清</button>
+           <button type="button" data-render-preset="ultra">极致</button>
+         </div>
+       </section>
+       <div class="render-settings-grid">
+         <section class="render-settings-section render-settings-section-wide">
+           <div class="render-settings-section-head"><h2>分辨率倍率</h2><output id="renderResolutionValue">1.5x</output></div>
+           <p>提高渲染缓冲区尺寸，改善轮廓和细节清晰度。</p>
+           <input class="render-range" id="renderResolution" type="range" min="0.5" max="4" step="0.25" value="1.5" />
+           <div class="render-range-labels"><span>0.5x 省电</span><span id="renderResolutionMaxLabel">4x 设备上限</span></div>
+         </section>
+         <section class="render-settings-section render-settings-toggle-section">
+           <div class="render-settings-section-head"><h2>边缘平滑</h2><label class="render-switch"><input id="renderAntialias" type="checkbox" /><span></span></label></div>
+           <p>平滑模型边缘，会增加显存占用。</p>
+         </section>
+         <section class="render-settings-section render-settings-toggle-section">
+           <div class="render-settings-section-head"><h2>实时阴影</h2><label class="render-switch"><input id="renderShadows" type="checkbox" /><span></span></label></div>
+           <p>增强建筑层次，性能开销较高。</p>
+         </section>
+         <section class="render-settings-section">
+           <div class="render-settings-section-head"><h2>纹理过滤</h2><output id="renderAnisotropyValue">16x</output></div>
+           <p>提升斜角道路和建筑贴图的远处清晰度。</p>
+           <select class="render-select" id="renderAnisotropy">
+             <option value="1">1x · 省电</option><option value="4">4x · 标准</option><option value="8">8x · 清晰</option><option value="16">16x · 极致</option>
+           </select>
+         </section>
+         <section class="render-settings-section">
+           <div class="render-settings-section-head"><h2>曝光</h2><output id="renderExposureValue">1.18</output></div>
+           <p>调整整体亮度，不改变渲染负载。</p>
+           <input class="render-range" id="renderExposure" type="range" min="0.8" max="1.5" step="0.01" value="1.18" />
+         </section>
+       </div>
+       <div class="render-settings-actions">
+         <button class="render-reset" id="renderSettingsReset" type="button">恢复默认设置</button>
+         <button class="render-apply" id="renderSettingsApply" type="button">应用设置</button>
+       </div>
+     </div>
+   </div>
+
+  <!-- Login overlay -->
+  <div class="login-overlay hidden" id="loginOverlay" role="dialog" aria-label="Welcome to MiniCity" style="display:none">
+    <div class="login-box">
+      <p class="login-title">边界已经开启。</p>
+      <p class="login-sub">留下昵称和密码，成为这座城唯一身份的居民。</p>
+      <input class="login-input" id="loginInput" type="text" placeholder="昵称（至少两个字，中文/英文/数字）"
+             maxlength="40" autocomplete="off" spellcheck="false" />
+      <input class="login-input" id="loginPassword" type="password" placeholder="密码"
+             maxlength="128" autocomplete="off" spellcheck="false" />
+      <p class="login-error" id="loginError" role="alert" hidden></p>
+      <button class="login-btn" id="loginBtn">签下名字，进入小城</button>
+    </div>
+  </div>
+
+  <!-- CG Animation overlay -->
+  <div class="cg-overlay" id="cgOverlay" style="display:none">
+    <div class="cg-scene-wrap" id="cgSceneWrap"></div>
+    <div class="cg-scanlines" aria-hidden="true"></div>
+    <div class="cg-grain" aria-hidden="true"></div>
+    <div class="cg-letterbox cg-letterbox-top" aria-hidden="true"></div>
+    <div class="cg-letterbox cg-letterbox-bottom" aria-hidden="true"></div>
+    <div class="cg-progress" id="cgProgress" aria-hidden="true"></div>
+  </div>
+
+  <!-- Building Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-paper" id="modalPaper">
+      <div class="modal-header">
+        <span class="modal-num" id="modalNum"></span>
+        <h2 class="modal-title" id="modalTitle"></h2>
+        <p class="modal-slogan" id="modalSlogan"></p>
+      </div>
+      <div class="modal-divider"></div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="modal-close" id="modalClose">合上</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NPC Dialog -->
+  <div class="npc-overlay" id="npcOverlay">
+    <div class="npc-panel">
+      <div class="npc-head">
+        <span class="npc-avatar" id="npcAvatar"></span>
+        <div class="npc-id">
+          <h3 class="npc-name" id="npcName"></h3>
+          <span class="npc-role" id="npcRole"></span>
+        </div>
+        <button class="npc-close" id="npcClose" aria-label="结束对话">✕</button>
+      </div>
+      <div class="npc-body">
+        <p class="npc-line" id="npcLine"></p>
+      </div>
+      <div class="npc-options" id="npcOptions"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

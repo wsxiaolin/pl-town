@@ -1,0 +1,13 @@
+.DS_Store
+.claude/
+.opencode/
+.env
+node_modules/
+dist/
+test-results/
+playwright-report/
+apps/server/data/
+/data/
+logs/
+apps/server/logs/
+todo.txt

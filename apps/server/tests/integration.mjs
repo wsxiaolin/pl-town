@@ -1,0 +1,285 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import WebSocket from 'ws';
+
+const port = 8791;
+const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
+const productionConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ALLOWED_ORIGINS: '' },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (productionConfigCheck.status === 0 || !`${productionConfigCheck.stdout}${productionConfigCheck.stderr}`.includes('Production requires')) {
+  throw new Error('Production configuration must fail closed when administrator credentials and origins are missing');
+}
+const server = spawn(process.execPath, ['dist/index.js'], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, PORT: String(port), DATA_DIR: dataDir,
+    ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'integration-admin-password',
+    AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
+  },
+  stdio: ['ignore', 'pipe', 'inherit'],
+});
+
+const connect = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  const messages = [];
+  socket.on('message', (raw) => {
+    const message = JSON.parse(raw);
+    messages.push(message);
+    if (message.type === 'hello') resolve({ socket, hello: message, messages });
+  });
+  socket.on('error', reject);
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password })));
+});
+
+const connectExpectingError = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  socket.on('message', (raw) => {
+    const message = JSON.parse(raw);
+    if (message.type === 'error') { socket.close(); resolve(message.message); }
+  });
+  socket.on('error', reject);
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for auth error for ${nickname}`)), 3_000);
+  socket.on('open', () => {
+    socket.send(JSON.stringify({ type: 'hello', nickname, password }));
+    setTimeout(() => { clearTimeout(timeout); if (socket.readyState === socket.OPEN) socket.close(); }, 1_000);
+  });
+});
+
+const rejectedWebSocketOrigin = () => new Promise((resolve, reject) => {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error('Timed out waiting for rejected WebSocket origin')); }, 3_000);
+  socket.once('unexpected-response', (_request, response) => {
+    clearTimeout(timeout); response.resume(); resolve(response.statusCode);
+  });
+  socket.once('open', () => { clearTimeout(timeout); socket.close(); reject(new Error('Untrusted WebSocket origin was accepted')); });
+  socket.once('error', () => { /* unexpected-response is authoritative */ });
+});
+
+const waitForClose = (client) => new Promise((resolve, reject) => {
+  if (client.socket.readyState === client.socket.CLOSED) return resolve();
+  const timeout = setTimeout(() => reject(new Error('Timed out waiting for socket close')), 3_000);
+  client.socket.once('close', () => { clearTimeout(timeout); resolve(); });
+});
+
+const waitFor = (client, type, predicate = () => true) => new Promise((resolve, reject) => {
+  const existing = client.messages.find((message) => message.type === type && predicate(message));
+  if (existing) return resolve(existing);
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${type}`)), 3_000);
+  const listener = (raw) => {
+    const message = JSON.parse(raw);
+    if (message.type !== type || !predicate(message)) return;
+    clearTimeout(timeout);
+    client.socket.off('message', listener);
+    resolve(message);
+  };
+  client.socket.on('message', listener);
+});
+
+const send = (client, message) => client.socket.send(JSON.stringify(message));
+const waitForServer = () => new Promise((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error('Server did not start')), 5_000);
+  server.stdout.on('data', (chunk) => {
+    if (!chunk.toString().includes('listening')) return;
+    clearTimeout(timeout);
+    resolve();
+  });
+});
+
+let alice;
+let bob;
+let charlie;
+try {
+  await waitForServer();
+
+  if (await rejectedWebSocketOrigin() !== 401) throw new Error('Untrusted WebSocket origins must be rejected during the handshake');
+
+  const adminOrigin = `http://127.0.0.1:${port}`;
+  const adminBase = `${adminOrigin}/admin/api`;
+  const unauthenticated = await fetch(`${adminBase}/overview`);
+  if (unauthenticated.status !== 401 || unauthenticated.headers.get('cache-control') !== 'no-store') throw new Error('Admin API must reject unauthenticated requests without caching');
+  const rejectedOrigin = await fetch(`${adminBase}/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+    body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
+  });
+  if (rejectedOrigin.status !== 403) throw new Error('Admin sign-in must reject untrusted origins');
+  const login = await fetch(`${adminBase}/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
+  });
+  const loginPayload = await login.json();
+  const cookie = login.headers.get('set-cookie')?.split(';', 1)[0];
+  if (!login.ok || !cookie || !loginPayload.csrf || !login.headers.get('set-cookie')?.includes('HttpOnly')) throw new Error('Admin sign-in must issue an HttpOnly session and CSRF token');
+  const missingCsrf = await fetch(`${adminBase}/backups`, { method: 'POST', headers: { cookie, origin: adminOrigin } });
+  if (missingCsrf.status !== 403) throw new Error('Admin mutations must require CSRF verification');
+  const invalidJsonRequest = await fetch(`${adminOrigin}/town-api/works/query`, {
+    method: 'POST', headers: { origin: adminOrigin }, body: '{}',
+  });
+  if (invalidJsonRequest.status !== 415) throw new Error('JSON proxy endpoints must enforce Content-Type');
+
+  alice = await connect('Alice');
+  bob = await connect('Bob');
+  await waitFor(alice, 'player.joined', (message) => message.player.id === bob.hello.user.id);
+  charlie = await connect('Charlie');
+  await waitFor(alice, 'player.joined', (message) => message.player.id === charlie.hello.user.id);
+
+  const overview = await fetch(`${adminBase}/overview`, { headers: { cookie } });
+  const overviewPayload = await overview.json();
+  if (!overview.ok || overviewPayload.summary.users !== 3 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');
+  const backupResponse = await fetch(`${adminBase}/backups`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+  });
+  const backupPayload = await backupResponse.json();
+  if (backupResponse.status !== 201 || !backupPayload.backup?.name || backupPayload.backup.bytes <= 0) throw new Error('Admin API must create a verified online database backup');
+  const sidecarPath = join(dataDir, 'backups', `${backupPayload.backup.name}.manifest.json`);
+  const sidecar = existsSync(sidecarPath) ? JSON.parse(readFileSync(sidecarPath, 'utf8')) : null;
+  if (!sidecar || sidecar.name !== backupPayload.backup.name || sidecar.sha256 !== backupPayload.backup.sha256) throw new Error('Verified backups must include an immutable checksum sidecar');
+  const backupDownload = await fetch(`${adminBase}/backups/${backupPayload.backup.name}`, { headers: { cookie } });
+  if (!backupDownload.ok || !backupDownload.headers.get('content-type')?.includes('sqlite') || (await backupDownload.arrayBuffer()).byteLength <= 0) throw new Error('Admin API must download a database backup');
+  const backupVerify = await fetch(`${adminBase}/backups/${backupPayload.backup.name}/verify`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+  });
+  const backupVerifyPayload = await backupVerify.json();
+  if (!backupVerify.ok || !backupVerifyPayload.backup?.verified || backupVerifyPayload.backup.sha256 !== backupPayload.backup.sha256) throw new Error('Admin API must re-verify backup integrity and checksum');
+
+  if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
+  if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
+  if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
+
+  send(alice, { type: 'story.get', storyId: 'sample-story' });
+  const freshStory = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
+  if (freshStory.story.nodeId !== 'start' || freshStory.story.visitCount !== 0 || Object.keys(freshStory.story.flags).length !== 0) throw new Error('New story progress must start from a clean server state');
+  send(alice, { type: 'story.update', storyId: 'sample-story', definitionVersion: 3, nodeId: 'first-signal', flags: { heardWhisper: true, signalCount: 1 }, visit: true });
+  const storyStep = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.updated' && message.story?.nodeId === 'first-signal');
+  if (storyStep.story.definitionVersion !== 3 || !storyStep.story.flags.heardWhisper || storyStep.story.flags.signalCount !== 1 || storyStep.story.visitCount !== 1) throw new Error('Story decisions must persist definition version, node, flags, and visit count');
+  send(alice, { type: 'story.update', storyId: 'sample-story', ending: 'reconciled', flags: { heardWhisper: false } });
+  const storyEnding = await waitFor(alice, 'story.updated', (message) => message.story?.ending === 'reconciled');
+  if (storyEnding.story.flags.heardWhisper !== false || storyEnding.story.visitCount !== 1) throw new Error('Story updates must merge flags without resetting other state');
+
+  send(alice, { type: 'progress.building.unlock', buildingId: 'litreview' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
+  send(alice, { type: 'progress.building.visit', buildingId: 'litreview' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
+
+  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is locked');
+  send(alice, { type: 'progress.building.unlock', buildingId: 'activity' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'activity' && message.progress.currency === 1200);
+  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.progress.visitedBuildings.includes('activity'));
+  send(alice, { type: 'progress.building.unlock', buildingId: 'bulletin' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'bulletin');
+  send(alice, { type: 'progress.building.visit', buildingId: 'bulletin' });
+  const secondVisit = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'bulletin');
+  if (!secondVisit.event.welcomeItemsGranted || secondVisit.progress.inventory.city_guide !== 1 || secondVisit.progress.inventory.city_badge !== 1) throw new Error('Second unique building visit must grant the starter inventory once');
+  send(alice, { type: 'progress.building.visit', buildingId: 'bulletin' });
+  const duplicateVisit = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'bulletin' && message.event.welcomeItemsGranted === false);
+  if (duplicateVisit.event.welcomeItemsGranted || duplicateVisit.progress.inventory.city_guide !== 1) throw new Error('Repeated building visits must not duplicate starter items');
+
+  send(alice, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 2 });
+  const purchase = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'shop.purchased');
+  if (purchase.progress.inventory.dragonwell_tea !== 2 || purchase.progress.currency !== 1140) throw new Error('Shop purchase must atomically merge inventory and deduct currency');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
+  const achievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building');
+  if (achievement.event.reward !== 20 || achievement.progress.currency !== 1160) throw new Error('Achievement must grant its configured currency reward');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
+  const duplicateAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building' && message.event.reward === 0);
+  if (duplicateAchievement.progress.currency !== 1160) throw new Error('Achievement rewards must be idempotent');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'walker_500' });
+  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'walker_500');
+  if (unverifiedAchievement.event.reward !== 0 || unverifiedAchievement.progress.currency !== 1160) throw new Error('Client-only achievement claims must not mint currency');
+  send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
+  const consumed = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed');
+  if (consumed.progress.inventory.dragonwell_tea !== 1) throw new Error('Consuming an item must persist the remaining quantity');
+  send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
+  const consumedLast = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed' && message.progress.inventory.dragonwell_tea === undefined);
+  if ('dragonwell_tea' in consumedLast.progress.inventory) throw new Error('Consuming the last item must remove its inventory row');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'mandarin_daily' });
+  const daily = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'reward.claimed' && message.event.claimed === true);
+  if (daily.progress.inventory.mandarin !== 1) throw new Error('Daily reward must grant one item');
+  send(alice, { type: 'progress.reward.claim', rewardId: 'mandarin_daily' });
+  const repeatedDaily = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'reward.claimed' && message.event.claimed === false);
+  if (repeatedDaily.progress.inventory.mandarin !== 1) throw new Error('Daily reward must only be granted once per Shanghai day');
+
+  send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
+  await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
+
+  send(alice, { type: 'chat', text: 'integration-chat' });
+  await waitFor(bob, 'chat', (message) => message.text === 'integration-chat');
+
+    // ── 身份与昵称校验 ─────────────────────────────────────────────
+  const oneChar = await connectExpectingError('A');
+  if (!oneChar) throw new Error('One-character nickname should be rejected');
+  const specialChars = await connectExpectingError('小明!');
+  if (!specialChars) throw new Error('Special characters should be rejected');
+  const noPassword = await connectExpectingError('小王', '');
+  if (!noPassword) throw new Error('Missing password should be rejected');
+  const wrongPassword = await connectExpectingError('Alice', 'wrong-pass');
+  if (!wrongPassword) throw new Error('Wrong password should be rejected');
+
+  const buildingId = 'residence:3.00:4.00';
+  send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
+  await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
+  send(alice, { type: 'housing.kick', buildingId, userId: {} });
+  await waitFor(alice, 'error', (message) => message.message === 'Invalid member');
+  const healthAfterMaliciousMessage = await fetch(`${adminOrigin}/healthz`);
+  if (!healthAfterMaliciousMessage.ok) throw new Error('Malformed housing messages must not terminate the server');
+  send(bob, { type: 'housing.apply', buildingId });
+  const application = await waitFor(alice, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'application' && request.requesterId === bob.hello.user.id));
+  send(alice, { type: 'housing.accept', requestId: application.requests.find((request) => request.kind === 'application').id });
+  await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.members.length === 2));
+
+  send(alice, { type: 'housing.invite', buildingId, userId: charlie.hello.user.id });
+  const invitation = await waitFor(charlie, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'invite' && request.requesterId === alice.hello.user.id));
+  send(charlie, { type: 'housing.decline', requestId: invitation.requests.find((request) => request.kind === 'invite').id });
+  charlie.messages.length = 0;
+  await waitFor(charlie, 'housing.requests', (message) => !message.requests.some((request) => request.kind === 'invite'));
+  send(alice, { type: 'housing.invite', buildingId, userId: charlie.hello.user.id });
+  const secondInvitation = await waitFor(charlie, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'invite' && request.requesterId === alice.hello.user.id));
+  send(charlie, { type: 'housing.accept', requestId: secondInvitation.requests.find((request) => request.kind === 'invite').id });
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.members.length === 3));
+  send(alice, { type: 'housing.transfer', buildingId, userId: bob.hello.user.id });
+  await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.ownerId === bob.hello.user.id));
+  send(bob, { type: 'housing.release', buildingId });
+  await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => house.buildingId === buildingId));
+
+  // 相同昵称+正确密码登录返回同一个全局唯一 ID
+  const aliceAgain = await connect('Alice');
+  if (aliceAgain.hello.user.id !== alice.hello.user.id) throw new Error('Logging in again with the same nickname must restore the same user ID');
+  if (aliceAgain.hello.user.id === bob.hello.user.id) throw new Error('Different residents must not share an ID');
+  if ('dragonwell_tea' in aliceAgain.hello.progress.inventory || !aliceAgain.hello.progress.achievements.includes('first_building') || !aliceAgain.hello.progress.unlockedBuildings.includes('activity')) throw new Error('Cloud progression must survive reconnecting');
+  send(aliceAgain, { type: 'story.get', storyId: 'sample-story' });
+  const restoredStory = await waitFor(aliceAgain, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
+  if (restoredStory.story.definitionVersion !== 3 || restoredStory.story.nodeId !== 'first-signal' || restoredStory.story.ending !== 'reconciled' || restoredStory.story.visitCount !== 1 || restoredStory.story.flags.heardWhisper !== false || restoredStory.story.flags.signalCount !== 1) throw new Error('Story progress must survive reconnecting');
+  aliceAgain.socket.close();
+
+  const disableCharlie = await fetch(`${adminBase}/users/${charlie.hello.user.id}/status`, {
+    method: 'PATCH', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ disabled: true }),
+  });
+  if (!disableCharlie.ok) throw new Error('Administrator must be able to disable a resident');
+  await waitForClose(charlie);
+  const disabledLogin = await connectExpectingError('Charlie');
+  if (!disabledLogin) throw new Error('Disabled residents must not be able to sign in');
+
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, and lifecycle');
+} finally {
+  alice?.socket.close();
+  bob?.socket.close();
+  charlie?.socket.close();
+  server.kill();
+  await new Promise((resolve) => server.once('exit', resolve));
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      rmSync(dataDir, { recursive: true, force: true });
+      break;
+    } catch (error) {
+      if (attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}

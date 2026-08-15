@@ -1,0 +1,26 @@
+{
+  "name": "@minicity/web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.test-run.json && node ../../node_modules/.cache/minicity-tests/tests/unit/questEngine.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/legacyStats.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/playerProgress.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/sceneInteractions.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/storyRuntime.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/movementInput.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/roadNavigation.test.js && node ../../node_modules/.cache/minicity-tests/tests/unit/buildingRaycast.test.js",
+    "test:e2e": "playwright test",
+    "preview": "vite preview"
+  },
+  "dependencies": { "gsap": "^3.15.0", "three": "^0.160.1" },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.160.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.21"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.62.4"
+  }
+}

@@ -1,0 +1,771 @@
+// Building meshes are intentionally kept together as a visual catalog.
+// This module has no scene, DOM, storage, or gameplay responsibilities.
+// @ts-nocheck
+import * as THREE from 'three';
+
+export function createBuildingMeshFactory(options) {
+  const {
+    palette: P,
+    platformHeight: PLH,
+    makeMaterial: stdMat,
+    makeMesh: mk,
+    addPart: part,
+  } = options;
+
+  function tagMeshes(g, id) {
+    g.traverse(c => { if (c.isMesh) c.userData.buildingId = id; });
+  }
+  function mkBodyMat(texKey, rx, ry) {
+    const m = stdMat({color:P.BUILDING_WHITE,roughness:0.08, tex:texKey, rx:rx, ry:ry});
+    m.emissive = new THREE.Color(P.BLUE); m.emissiveIntensity = 0;
+    return m;
+  }
+  
+  // 01 ACTIVITY — treasury / bank with columns and gold dome
+  function buildBank(cfg) {
+    const g = new THREE.Group();
+    const bw=2.2, bh=1.8;
+    part(g, new THREE.BoxGeometry(2.8,PLH,2.4), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
+    const bodyMat = mkBodyMat('stone', 1, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    // Leave a tiny physical separation from the dark foundation edge.
+    body.position.y = PLH+bh/2+0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = PLH+bh;
+    // Pediment
+    part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:2,ry:2}, [0,top+0.05,0]);
+    // Columns at front
+    [-0.7,-0.23,0.23,0.7].forEach(cx =>
+      part(g, new THREE.CylinderGeometry(0.07,0.08,bh*0.85,10), {color:0xF8F7F5,roughness:0.3}, [cx,PLH+bh*0.425,bw/2+0.12]));
+    // Gold dome
+    part(g, new THREE.SphereGeometry(0.42,16,8,0,Math.PI*2,0,Math.PI/2), {color:0xF0EFEC,roughness:0.12,tex:'metal',rx:2,ry:1}, [0,top+0.1,0]);
+    part(g, new THREE.SphereGeometry(0.07,10,10), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.35}, [0,top+0.1+0.42+0.07,0], false);
+    // Keep the entry marker clear of the platform top (0.3), whose coplanar
+    // depth value otherwise flickers during camera movement.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.1+0.42+0.5};
+  }
+  
+  // 02 BULLETIN — board with two posts and small roof
+  function buildBoard(cfg) {
+    const g = new THREE.Group();
+    part(g, new THREE.BoxGeometry(2.0,0.15,0.7), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.075,0]);
+    const boardMat = stdMat({color:P.PARCHMENT,roughness:0.85,tex:'wood',rx:1,ry:1});
+    boardMat.emissive = new THREE.Color(P.BLUE); boardMat.emissiveIntensity = 0;
+    [-0.6,0.6].forEach(cx =>
+      part(g, new THREE.BoxGeometry(0.1,1.6,0.1), {color:0xC4A86D,roughness:0.7,tex:'wood',rx:1,ry:2}, [cx,0.15+0.8,0]));
+    const board = mk(new THREE.BoxGeometry(1.5,1.0,0.08), boardMat);
+    board.position.y = 0.15+1.1; board.castShadow = true; g.add(board);
+    // Roof slats
+    part(g, new THREE.BoxGeometry(1.75,0.06,0.55), {color:0xB8956B,roughness:0.6,tex:'wood',rx:2,ry:1}, [0,0.15+1.64,0]);
+    part(g, new THREE.BoxGeometry(1.75,0.04,0.1), {color:0xA8855B,roughness:0.6}, [0,0.15+1.67,0.22]);
+    // Posted papers
+    part(g, new THREE.BoxGeometry(0.4,0.3,0.02), {color:0xF8F4E8,roughness:0.9}, [-0.3,0.15+1.15,0.05]);
+    part(g, new THREE.BoxGeometry(0.35,0.25,0.02), {color:0xF5F0E0,roughness:0.9}, [0.25,0.15+1.05,0.05]);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.15+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body:board, bodyMat:boardMat, labelEl:null, labelY:0.15+1.64+0.5};
+  }
+  
+  // 03 TECHHALF — tall elegant tower (reuse existing tower design)
+  function buildTower(cfg) {
+    const g = new THREE.Group();
+    const bw=1.85, bh=4.6;
+    part(g, new THREE.BoxGeometry(2.55,PLH,2.55), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
+    const bodyMat = mkBodyMat('wall', 1, 3);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    // Separate the dark wall from its foundation edge to prevent a flickering seam.
+    body.position.y = PLH+bh/2+0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = PLH+bh;
+    part(g, new THREE.BoxGeometry(bw+0.2,0.12,bw+0.2), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:2,ry:2}, [0,top+0.06,0]);
+    part(g, new THREE.BoxGeometry(1.1,0.72,1.1), {color:0xF9F8F6,roughness:0.06,tex:'glass',rx:1,ry:1}, [0,top+0.12+0.36,0]);
+    // Roof slab raised so its bottom clears the glass box top (top+0.12+0.72) —
+    // coplanar faces there caused the lighthouse-edge flicker.
+    part(g, new THREE.BoxGeometry(1.22,0.08,1.22), {color:P.ROOF_RIM,roughness:0.4,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.12,0]);
+    part(g, new THREE.CylinderGeometry(0.022,0.022,0.7,8), {color:0xD0CFCC,roughness:0.5,tex:'metal',rx:1,ry:1}, [0,top+0.12+0.72+0.16+0.35,0]);
+    const tipY = top+0.12+0.72+0.16+0.35+0.35+0.07;
+    part(g, new THREE.SphereGeometry(0.07,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.4}, [0,tipY,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:tipY+0.5};
+  }
+  
+  // 04 BLACKHOLE — dark tower with swirling aura
+  function buildDarkTower(cfg) {
+    const g = new THREE.Group();
+    const bw=1.7, bh=4.0;
+    part(g, new THREE.BoxGeometry(2.4,PLH,2.4), {color:0x3A3A3E,roughness:0.8,tex:'darkwall',rx:1,ry:1}, [0,PLH/2,0]);
+    const bodyMat = stdMat({color:P.DARK_TOWER,roughness:0.15,metalness:0.3,tex:'darkwall',rx:1,ry:3});
+    bodyMat.emissive = new THREE.Color(0x1a1a2e); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    // Separate the dark wall from its foundation edge to prevent a flickering seam.
+    body.position.y = PLH+bh/2+0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = PLH+bh;
+    // Dark cone roof
+    part(g, new THREE.ConeGeometry(1.0,1.4,6), {color:0x2A2A30,roughness:0.2,tex:'darkwall',rx:2,ry:1}, [0,top+0.7,0]);
+    // Purple aura ring
+    part(g, new THREE.TorusGeometry(0.9,0.04,8,24), {color:0x6B4FE8,emissive:0x6B4FE8,emissiveIntensity:0.3}, [0,PLH+bh*0.35,0], false).rotation.x = Math.PI/2;
+    // Dark orb on top
+    part(g, new THREE.SphereGeometry(0.15,12,12), {color:0x1a1a2e,emissive:0x4B3FE8,emissiveIntensity:0.15}, [0,top+1.4+0.15,0], false);
+    // Blue entrance disc. Keep it clear of the platform's top face.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+1.4+0.5};
+  }
+  
+  // 05 LAWS — pavilion with cone roof (reuse existing pavilion)
+  function buildPavilion(cfg) {
+    const g = new THREE.Group();
+    const bw=2.4, bh=2.3;
+    part(g, new THREE.BoxGeometry(3.1,0.25,3.1), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
+    const bodyMat = mkBodyMat('stone', 1, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const bodyTop = 0.25+bh;
+    part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:2,ry:2}, [0,bodyTop+0.05,0]);
+    const coneH=1.05;
+    part(g, new THREE.CylinderGeometry(0.08,1.38,coneH,24), {color:0xF0EFEC,roughness:0.35,tex:'rooftile',rx:3,ry:1}, [0,bodyTop+0.1+coneH/2,0]);
+    part(g, new THREE.SphereGeometry(0.1,12,12), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.3}, [0,bodyTop+0.1+coneH+0.1,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:bodyTop+0.1+coneH+0.6};
+  }
+  
+  // 06 LIBRARY — wide classical building with pediment and columns
+  function buildLibrary(cfg) {
+    const g = new THREE.Group();
+    const bw=3.0, bh=2.0;
+    part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
+    const bodyMat = mkBodyMat('brick', 2, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.25+bh;
+    // Cornice
+    part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:3,ry:3}, [0,top+0.05,0]);
+    // Triangular pediment
+    part(g, new THREE.CylinderGeometry(0.01,1.5,0.5,3), {color:0xF5F4F1,roughness:0.2}, [0,top+0.1+0.25,0]).rotation.z = 0;
+    const ped = mk(new THREE.ConeGeometry(1.55, 0.55, 3), stdMat({color:0xF5F4F1,roughness:0.2,tex:'stone',rx:2,ry:1}));
+    ped.rotation.y = Math.PI/6; ped.position.y = top+0.1+0.275; g.add(ped);
+    // Columns at front (4)
+    [-0.9,-0.3,0.3,0.9].forEach(cx =>
+      part(g, new THREE.CylinderGeometry(0.08,0.09,bh*0.9,10), {color:0xF8F7F5,roughness:0.3,tex:'stone',rx:1,ry:2}, [cx,0.25+bh*0.45,bw/2+0.15]));
+    // Book silo (round reading room on roof)
+    part(g, new THREE.CylinderGeometry(0.5,0.5,0.7,16), {color:0xF0EFEC,roughness:0.15,tex:'stone',rx:2,ry:1}, [0,top+0.1+0.35,0]);
+    part(g, new THREE.SphereGeometry(0.5,16,8,0,Math.PI*2,0,Math.PI/2), {color:0xEEEDEA,roughness:0.1,tex:'rooftile',rx:2,ry:1}, [0,top+0.1+0.7,0]);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.1+0.7+0.5+0.4};
+  }
+  
+  // 07 LITREVIEW — abandoned ruins with broken top
+  function buildRuins(cfg) {
+    const g = new THREE.Group();
+    const bw=2.2, bh=1.6;
+    part(g, new THREE.BoxGeometry(2.7,0.22,2.3), {color:0x9A988E,roughness:0.9,tex:'ruin',rx:2,ry:2}, [0,0.11,0]);
+    const bodyMat = stdMat({color:P.RUIN_GREY,roughness:0.85,tex:'ruin',rx:1,ry:1});
+    bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.22+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.22+bh;
+    // Broken/jagged top — several uneven blocks
+    part(g, new THREE.BoxGeometry(0.6,0.4,0.6), {color:P.RUIN_GREY,roughness:0.85,tex:'ruin',rx:1,ry:1}, [-0.6,top+0.2,0]);
+    part(g, new THREE.BoxGeometry(0.4,0.25,0.4), {color:0xA5A29A,roughness:0.85,tex:'ruin',rx:1,ry:1}, [0.1,top+0.12,0.3]);
+    part(g, new THREE.BoxGeometry(0.35,0.15,0.35), {color:0x9A988E,roughness:0.85,tex:'ruin',rx:1,ry:1}, [0.7,top+0.07,-0.2]);
+    // Faded sign (desaturated board)
+    part(g, new THREE.BoxGeometry(0.8,0.4,0.04), {color:0xC8C2B0,roughness:0.9,tex:'wood',rx:1,ry:1}, [0,0.22+bh*0.6,bw/2+0.03]);
+    // Overgrown vine
+    part(g, new THREE.SphereGeometry(0.18,8,8), {color:0x8A8870,roughness:0.95}, [-0.8,0.22+0.3,0.8]);
+    part(g, new THREE.SphereGeometry(0.15,8,8), {color:0x7A7860,roughness:0.95}, [0.9,0.22+0.2,-0.6]);
+    // Story-locked ruins have no entrance marker until narrative content opts in.
+    if (!cfg.storyLocked) {
+      part(g, new THREE.CylinderGeometry(0.12,0.12,0.04,16), {color:0x7A7A82,emissive:0x4A4A52,emissiveIntensity:0.1}, [0,0.22+0.045,0], false);
+    }
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.6};
+  }
+  
+  // 08 CATCAFE — very tall thin skyscraper with banded floors
+  function buildSkyscraper(cfg) {
+    const g = new THREE.Group();
+    const bw=1.3, bh=6.5;
+    part(g, new THREE.BoxGeometry(2.0,PLH,2.0), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
+    const bodyMat = stdMat({color:0xFDFCFA,roughness:0.06,tex:'glass',rx:1,ry:4});
+    bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = PLH+bh;
+    // Floor banding (horizontal lines every ~1 unit)
+    for (let i = 1; i < 7; i++) {
+      part(g, new THREE.BoxGeometry(bw+0.04,0.06,bw+0.04), {color:0xE8E7E4,roughness:0.4,tex:'metal',rx:1,ry:1}, [0,PLH+i*0.95,0]);
+    }
+    // Rooftop
+    part(g, new THREE.BoxGeometry(bw+0.1,0.1,bw+0.1), {color:P.ROOF_RIM,roughness:0.4,tex:'metal',rx:1,ry:1}, [0,top+0.05,0]);
+    // Cat silhouette on roof (small sphere + cones for ears)
+    part(g, new THREE.SphereGeometry(0.15,10,10), {color:0xE8A838,emissive:0xE8A838,emissiveIntensity:0.12}, [0,top+0.1+0.15,0]);
+    part(g, new THREE.ConeGeometry(0.06,0.12,4), {color:0xE8A838,emissive:0xE8A838,emissiveIntensity:0.12}, [-0.07,top+0.1+0.3,0]);
+    part(g, new THREE.ConeGeometry(0.06,0.12,4), {color:0xE8A838,emissive:0xE8A838,emissiveIntensity:0.12}, [0.07,top+0.1+0.3,0]);
+    // Wind chimes
+    part(g, new THREE.CylinderGeometry(0.02,0.02,0.3,6), {color:0xD4D3D0,roughness:0.5}, [-0.5,top+0.1+0.15,0]);
+    part(g, new THREE.CylinderGeometry(0.02,0.02,0.25,6), {color:0xD4D3D0,roughness:0.5}, [0.5,top+0.1+0.12,0]);
+    // Keep the entry marker clear of the platform top to avoid depth flicker.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
+  }
+  
+  // 09 ACADEMY — wide campus with annex (reuse existing campus)
+  function buildCampus(cfg) {
+    const g = new THREE.Group();
+    const mw=2.9, mh=2.1, md=2.1;
+    part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
+    const bodyMat = mkBodyMat('wall', 2, 1);
+    const body = mk(new THREE.BoxGeometry(mw,mh,md), bodyMat);
+    body.position.y = 0.25+mh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const mainTop = 0.25+mh;
+    part(g, new THREE.BoxGeometry(mw+0.18,0.1,md+0.18), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:3,ry:3}, [0,mainTop+0.05,0]);
+    const aw=1.05, ah=1.5, ad=1.85;
+    const aX = -(mw/2-aw/2), aZ = md/2+ad/2;
+    part(g, new THREE.BoxGeometry(aw,ah,ad), {color:0xFDFCFA,roughness:0.1,tex:'wall',rx:1,ry:1}, [aX,0.25+ah/2,aZ]);
+    part(g, new THREE.BoxGeometry(aw+0.14,0.08,ad+0.14), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:2,ry:2}, [aX,0.25+ah+0.04,aZ]);
+    [[-0.7,0.22],[0,0.18],[0.75,0.26]].forEach(([rx,rh]) => {
+      part(g, new THREE.BoxGeometry(0.32,rh,0.32), {color:0xF0EFEC,roughness:0.3,tex:'stone',rx:1,ry:1}, [rx,mainTop+0.1+rh/2,-0.5]);
+    });
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:mainTop+0.7};
+  }
+  
+  // 10/11 KIOSK — small square structure with awning (for news & mutualaid)
+  function buildKiosk(cfg) {
+    const g = new THREE.Group();
+    const bw=1.6, bh=1.5;
+    const accentColor = cfg.id === 'news' ? 0xD4A838 : 0x6B8FE8;
+    part(g, new THREE.BoxGeometry(2.1,0.2,1.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.1,0]);
+    const bodyMat = mkBodyMat('wood', 1, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.2+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.2+bh;
+    // Flat roof
+    part(g, new THREE.BoxGeometry(bw+0.4,0.08,bw+0.4), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:2,ry:2}, [0,top+0.04,0]);
+    // Striped awning (alternating color bands)
+    for (let i = 0; i < 5; i++) {
+      const x = -bw/2 - 0.1 + i * (bw+0.2)/5;
+      part(g, new THREE.BoxGeometry((bw+0.2)/5-0.02, 0.06, 0.4), {color: i%2===0 ? accentColor : 0xF5F4F1, roughness:0.5}, [x+0.1, top+0.02, bw/2+0.2]);
+    }
+    // Window cutout (simulated with darker box)
+    part(g, new THREE.BoxGeometry(bw*0.7,bh*0.5,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [0,0.2+bh*0.5,bw/2+0.02]);
+    // Sign on top
+    part(g, new THREE.BoxGeometry(bw*0.6,0.3,0.05), {color:accentColor,roughness:0.4,tex:'wood',rx:1,ry:1}, [0,top+0.08+0.15,0]);
+    // Blue accent disc
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
+  }
+  
+  // 12 SCREEN — wall structure with glowing blue screen
+  function buildScreen(cfg) {
+    const g = new THREE.Group();
+    const bw=2.8, bh=3.2;
+    part(g, new THREE.BoxGeometry(3.4,0.25,1.0), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.125,0]);
+    const bodyMat = mkBodyMat('wall', 2, 2);
+    const body = mk(new THREE.BoxGeometry(bw,bh,0.6), bodyMat);
+    body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.25+bh;
+    // Roof slab
+    part(g, new THREE.BoxGeometry(bw+0.3,0.12,1.0), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:3,ry:1}, [0,top+0.06,0]);
+    // Glowing screen on front face — layers stepped outward with clear gaps so no
+    // coplanar faces z-fight (screen→frame→glow lines all distinct depths).
+    const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1});
+    part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.05), screenMat, [0,0.25+bh*0.5,0.41], false);
+    // Screen frame
+    part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.05), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.34], false);
+    // Screen glow lines
+    for (let i = 0; i < 4; i++) {
+      part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.03), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2}, [0,0.25+bh*0.3+i*0.4,0.475], false);
+    }
+    // Antenna on top
+    part(g, new THREE.CylinderGeometry(0.03,0.03,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0,top+0.12+0.25,0]);
+    part(g, new THREE.SphereGeometry(0.06,8,8), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.3}, [0,top+0.12+0.5,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.12+0.5+0.5};
+  }
+  
+  // 13 ELEVATOR — tall narrow shaft with door and button panel
+  function buildShaft(cfg) {
+    const g = new THREE.Group();
+    const bw=1.3, bh=3.8;
+    part(g, new THREE.BoxGeometry(2.0,PLH,1.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
+    const bodyMat = stdMat({color:0xE8E7E4,roughness:0.2,metalness:0.4,tex:'metal',rx:1,ry:3});
+    bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = PLH+bh;
+    // Roof
+    part(g, new THREE.BoxGeometry(bw+0.15,0.1,bw+0.15), {color:P.ROOF_RIM,roughness:0.3,tex:'metal',rx:1,ry:1}, [0,top+0.05,0]);
+    // Elevator door (split design)
+    part(g, new THREE.BoxGeometry(bw*0.7,1.6,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.6,tex:'metal',rx:1,ry:2}, [0,PLH+0.8,bw/2+0.02], false);
+    part(g, new THREE.BoxGeometry(0.02,1.6,0.04), {color:0x2A2A30,roughness:0.3,tex:'metal',rx:1,ry:1}, [0,PLH+0.8,bw/2+0.03], false);
+    // Button panel
+    part(g, new THREE.BoxGeometry(0.15,0.4,0.03), {color:0x2A2A30,roughness:0.3,tex:'metal',rx:1,ry:1}, [bw/2-0.1,PLH+1.2,bw/2+0.02], false);
+    // Floor indicator (glowing)
+    part(g, new THREE.BoxGeometry(0.1,0.08,0.02), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.3}, [0,PLH+bh-0.4,bw/2+0.02], false);
+    // Top indicator light
+    part(g, new THREE.SphereGeometry(0.06,8,8), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.4}, [0,top+0.1+0.06,0], false);
+    // Keep the entry marker clear of the platform top to avoid depth flicker.
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5};
+  }
+  
+  // 14 RESIDENTID — stone altar with paper on top
+  function buildAltar(cfg) {
+    const g = new THREE.Group();
+    const bw=2.0, bh=1.2;
+    part(g, new THREE.BoxGeometry(2.6,0.2,1.8), {color:0xD4D3D0,roughness:0.85,tex:'stone',rx:2,ry:2}, [0,0.1,0]);
+    const bodyMat = stdMat({color:0xE8E7E4,roughness:0.6,tex:'stone',rx:1,ry:1});
+    bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.2+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.2+bh;
+    // Stone table top (wider slab)
+    part(g, new THREE.BoxGeometry(bw+0.4,0.12,bw+0.4), {color:0xF0EFEC,roughness:0.5,tex:'stone',rx:2,ry:2}, [0,top+0.06,0]);
+    // Paper/certificate on top
+    part(g, new THREE.BoxGeometry(1.2,0.04,0.8), {color:0xF8F4E8,roughness:0.9}, [0,top+0.12+0.02,0]);
+    // Wax seal (gold dot)
+    part(g, new THREE.CylinderGeometry(0.08,0.08,0.03,12), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.2}, [0,top+0.12+0.04,0], false);
+    // Pillars at corners
+    [[-0.8,-0.8],[-0.8,0.8],[0.8,-0.8],[0.8,0.8]].forEach(([cx,cz]) =>
+      part(g, new THREE.CylinderGeometry(0.07,0.08,bh,8), {color:0xDEDDE0,roughness:0.5}, [cx,0.2+bh/2,cz]));
+    // Decorative arch
+    part(g, new THREE.BoxGeometry(1.6,0.08,0.1), {color:0xE8E7E4,roughness:0.5}, [0,top+0.5,0]);
+    part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0xD0CFCC,roughness:0.5}, [-0.7,top+0.3,0]);
+    part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0.7,top+0.3,0]);
+    // Quill pen
+    part(g, new THREE.CylinderGeometry(0.02,0.02,0.4,6), {color:0xE8E7E4,roughness:0.5}, [0.3,top+0.12+0.2,0.2]);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.5+0.3};
+  }
+  
+  // 15 STATS — octagonal observatory with pulsing glow ring
+  function buildObservatory(cfg) {
+    const g = new THREE.Group();
+    part(g, new THREE.CylinderGeometry(1.65,1.65,0.22,8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.11,0]);
+    const bodyMat = mkBodyMat('stone', 2, 1);
+    const body = mk(new THREE.CylinderGeometry(1.1,1.22,2.1,8), bodyMat);
+    body.position.y = 0.22+1.05; body.castShadow = body.receiveShadow = true; g.add(body);
+    part(g, new THREE.CylinderGeometry(1.28,1.28,0.09,24), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:3,ry:1}, [0,0.22+1.05,0]);
+    const bodyTop = 0.22+2.1;
+    part(g, new THREE.CylinderGeometry(1.3,1.3,0.1,24), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:3,ry:1}, [0,bodyTop+0.05,0]);
+    const glowMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.2,roughness:0.2});
+    part(g, new THREE.CylinderGeometry(1.12,1.12,0.06,24), glowMat, [0,bodyTop+0.1+0.03,0], false);
+    const domeY = bodyTop+0.1+0.06;
+    part(g, new THREE.SphereGeometry(1.1,20,10,0,Math.PI*2,0,Math.PI/2), {color:0xF8F7F5,roughness:0.06,metalness:0.05,tex:'metal',rx:2,ry:1}, [0,domeY,0]);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    const labelY = domeY+1.1+0.5;
+    return {...cfg, group:g, body, bodyMat, glowMat, labelEl:null, labelY};
+  }
+  
+  // 16 PAGODA — multi-tiered Asian tower
+  function buildPagoda(cfg) {
+    const g = new THREE.Group();
+    const tiers = 3, bw = 1.6, tierH = 0.6;
+    let y = PLH;
+    // Keep the facade on the actual closed wall meshes. A detached facade plane
+    // leaves visible gaps around the stepped tiers and can be mistaken for a wall.
+    const bodyMat = mkBodyMat('facade_pagoda', 1, 1);
+    let body = null;
+    for (let i = 0; i < tiers; i++) {
+      const w = bw * (1 - i * 0.18);
+      const tierBody = mk(new THREE.BoxGeometry(w, tierH, w), bodyMat);
+      tierBody.position.y = y + tierH/2; tierBody.castShadow = tierBody.receiveShadow = true; g.add(tierBody);
+      if (!body) body = tierBody;
+      const roofW = w + 0.6;
+      const roof = part(g, new THREE.ConeGeometry(roofW * 0.72, 0.22, 4), {color:0xC45A4A,roughness:0.4,tex:'pagoda_tile',rx:2,ry:1}, [0, y + tierH + 0.11, 0]);
+      roof.rotation.y = Math.PI/4;
+      y += tierH + 0.2;
+    }
+    part(g, new THREE.ConeGeometry(0.08, 0.35, 6), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.2}, [0, y, 0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:y+0.5};
+  }
+  
+  // 17 MARKET — open-air stalls with striped awning
+  function buildMarket(cfg) {
+    const g = new THREE.Group();
+    const bw = 2.6, bh = 1.6;
+    part(g, new THREE.BoxGeometry(3.2,0.2,2.2), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.1,0]);
+    const bodyMat = mkBodyMat('wood', 1, 1);
+    [-1.1,1.1].forEach(cx =>
+      part(g, new THREE.BoxGeometry(0.1,bh,0.1), {color:0xC4A86D,roughness:0.6,tex:'wood',rx:1,ry:2}, [cx,0.2+bh/2,0]));
+    const body = mk(new THREE.BoxGeometry(0.1,bh,0.1), bodyMat);
+    body.position.y = 0.2+bh/2; g.add(body);
+    // Striped awning
+    for (let i = 0; i < 5; i++) {
+      const x = -bw/2 - 0.1 + i*(bw+0.2)/5;
+      part(g, new THREE.BoxGeometry((bw+0.2)/5-0.02, 0.06, 2.0), {color: i%2===0?0xE8A838:0xF5F4F1, roughness:0.5, tex:'fabric',rx:1,ry:1}, [x+0.1, 0.2+bh, 0]);
+    }
+    // Goods crates
+    part(g, new THREE.BoxGeometry(0.4,0.35,0.4), {color:0xB8956B,roughness:0.7,tex:'wood',rx:1,ry:1}, [-0.7,0.2+0.175,0.5], false);
+    part(g, new THREE.BoxGeometry(0.35,0.3,0.35), {color:0xC4A86D,roughness:0.7,tex:'wood',rx:1,ry:1}, [0.7,0.2+0.15,-0.4], false);
+    part(g, new THREE.SphereGeometry(0.1,8,8), {color:0xE85858,roughness:0.8}, [-0.5,0.2+0.55,0.5], false);
+    part(g, new THREE.SphereGeometry(0.08,8,8), {color:0xE8A838,roughness:0.8}, [0.5,0.2+0.5,-0.4], false);
+    // Counter
+    part(g, new THREE.BoxGeometry(1.4,0.55,0.45), {color:0xC4A86D,roughness:0.6,tex:'wood',rx:2,ry:1}, [0,0.2+0.275,0.65]);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:0.2+bh+0.5};
+  }
+  
+  // 18 GREENHOUSE — glass dome with plants
+  function buildGreenhouse(cfg) {
+    const g = new THREE.Group();
+    const bw = 2.4, bh = 1.8;
+    part(g, new THREE.BoxGeometry(3.0,0.2,2.4), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.1,0]);
+    const bodyMat = mkBodyMat('glass', 2, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.2+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    // Domed glass roof
+    part(g, new THREE.SphereGeometry(bw/2, 20, 10, 0, Math.PI*2, 0, Math.PI/2), {color:0xE0F0D8,roughness:0.05,transparent:true,opacity:0.85,tex:'glass',rx:2,ry:1}, [0,0.2+bh,0]);
+    // Plants inside
+    part(g, new THREE.SphereGeometry(0.35,10,10), {color:0x6A9A4A,roughness:0.9}, [-0.5,0.2+0.3,0.3], false);
+    part(g, new THREE.SphereGeometry(0.28,10,10), {color:0x5A8A3A,roughness:0.9}, [0.5,0.2+0.25,-0.3], false);
+    part(g, new THREE.CylinderGeometry(0.04,0.04,0.5,6), {color:0x8A6A3A,roughness:0.8,tex:'wood',rx:1,ry:1}, [0,0.2+0.25,0], false);
+    part(g, new THREE.SphereGeometry(0.2,10,10), {color:0x7AAA5A,roughness:0.9}, [0,0.2+0.5,0], false);
+    part(g, new THREE.SphereGeometry(0.15,10,10), {color:0xE85858,roughness:0.8}, [0.3,0.2+0.6,0.1], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:0.2+bh+bw/2+0.3};
+  }
+  
+  // 19 CLOCKTOWER — tall brick tower with clock faces
+  function buildClockTower(cfg) {
+    const g = new THREE.Group();
+    const bw = 1.5, bh = 4.0;
+    part(g, new THREE.BoxGeometry(2.2,PLH,2.2), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
+    const bodyMat = mkBodyMat('brick', 1, 3);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = PLH+bh;
+    // Clock face (4 sides)
+    const clockFaces = [
+      { position: [0, top-0.6, bw/2+0.04], rotation: 0 },
+      { position: [0, top-0.6, -bw/2-0.04], rotation: Math.PI },
+      { position: [bw/2+0.04, top-0.6, 0], rotation: Math.PI/2 },
+      { position: [-bw/2-0.04, top-0.6, 0], rotation: -Math.PI/2 },
+    ];
+    clockFaces.forEach(({position, rotation}) => {
+      const face = new THREE.Group();
+      const disc = part(face, new THREE.CylinderGeometry(0.3,0.3,0.04,20), {color:0xF8F4E8,roughness:0.3,emissive:0xF8F4E8,emissiveIntensity:0.05}, [0,0,0], false);
+      disc.rotation.x = Math.PI/2;
+      part(face, new THREE.BoxGeometry(0.02,0.28,0.02), {color:0x2A2A2A,roughness:0.4}, [0,0.05,0.02], false);
+      part(face, new THREE.BoxGeometry(0.22,0.02,0.02), {color:0x2A2A2A,roughness:0.4}, [0,0.1,0.02], false);
+      face.position.set(...position); face.rotation.y = rotation; g.add(face);
+    });
+    // Pyramidal roof
+    part(g, new THREE.ConeGeometry(1.1,0.8,4), {color:0x8A5A3A,roughness:0.5,tex:'rooftile',rx:2,ry:1}, [0,top+0.4,0]).rotation.y = Math.PI/4;
+    // Weather vane
+    part(g, new THREE.CylinderGeometry(0.02,0.02,0.3,6), {color:0xD0CFCC,roughness:0.5,tex:'metal',rx:1,ry:1}, [0,top+0.8+0.15,0], false);
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,PLH+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.8+0.5};
+  }
+  
+  // 20 TEMPLE — classical Greek-style temple
+  function buildTemple(cfg) {
+    const g = new THREE.Group();
+    const bw = 2.8, bh = 1.8;
+    part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
+    const bodyMat = mkBodyMat('stone', 2, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.25+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.25+bh;
+    // Cornice
+    part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.ROOF_RIM,roughness:0.5,tex:'stone',rx:3,ry:3}, [0,top+0.05,0]);
+    // Columns all around
+    [-1.1,-0.55,0.55,1.1].forEach(cx => {
+      part(g, new THREE.CylinderGeometry(0.08,0.09,bh*0.95,12), {color:0xF8F7F5,roughness:0.3,tex:'stone',rx:1,ry:2}, [cx,0.25+bh*0.475,bw/2+0.15]);
+      part(g, new THREE.CylinderGeometry(0.08,0.09,bh*0.95,12), {color:0xF8F7F5,roughness:0.3,tex:'stone',rx:1,ry:2}, [cx,0.25+bh*0.475,-bw/2-0.15]);
+    });
+    // Front steps
+    part(g, new THREE.BoxGeometry(bw-0.4,0.08,bw/2), {color:0xF0EFEC,roughness:0.5,tex:'stone',rx:2,ry:1}, [0,0.04,bw/2+0.1]);
+    // Triangular pediment
+    const ped = mk(new THREE.ConeGeometry(1.5,0.5,3), stdMat({color:0xF5F4F1,roughness:0.2,tex:'stone',rx:2,ry:1}));
+    ped.rotation.y = Math.PI/6; ped.position.y = top+0.1+0.25; g.add(ped);
+    // Roof
+    part(g, new THREE.ConeGeometry(1.8,0.4,4), {color:0xC45A4A,roughness:0.4,tex:'pagoda_tile',rx:2,ry:1}, [0,top+0.1+0.5+0.2,0]).rotation.y = Math.PI/4;
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.8+0.5};
+  }
+  
+  // 21 FACTORY — industrial building with chimney
+  function buildFactory(cfg) {
+    const g = new THREE.Group();
+    const bw = 3.0, bh = 1.8;
+    part(g, new THREE.BoxGeometry(3.6,0.2,2.6), {color:P.BUILDING_BASE,roughness:0.85,tex:'stone',rx:2,ry:2}, [0,0.1,0]);
+    const bodyMat = mkBodyMat('metal', 2, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.2+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.2+bh;
+    // Flat corrugated roof
+    part(g, new THREE.BoxGeometry(bw+0.2,0.08,bw+0.2), {color:0xB0AFAA,roughness:0.6,tex:'metal',rx:3,ry:3}, [0,top+0.04,0]);
+    // Chimney
+    part(g, new THREE.CylinderGeometry(0.18,0.22,1.8,12), {color:0xC4A86D,roughness:0.7,tex:'brick',rx:2,ry:1}, [bw/2-0.4,top+0.9,0]);
+    // Smoke
+    part(g, new THREE.SphereGeometry(0.15,10,10), {color:0xD0CFCC,transparent:true,opacity:0.4,roughness:1}, [bw/2-0.4,top+1.8+0.15,0], false);
+    part(g, new THREE.SphereGeometry(0.1,10,10), {color:0xD0CFCC,transparent:true,opacity:0.3,roughness:1}, [bw/2-0.4,top+2.1,0], false);
+    // Loading door. Keep all facade details fully in front of the generated
+    // facade plane; overlapping it made the Writing Club visibly flicker.
+    const facadeGap = 0.055;
+    part(g, new THREE.BoxGeometry(0.6,0.8,0.04), {color:0x4A6FA8,roughness:0.3,metalness:0.4,tex:'metal',rx:1,ry:1}, [0,0.2+0.4,bw/2+facadeGap], false);
+    // Side pipes
+    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x8A8A8E,roughness:0.4,metalness:0.3,tex:'metal',rx:1,ry:1}, [-bw/2+0.3,0.2+0.6,bw/2+facadeGap], false);
+    // Windows
+    for (let i = 0; i < 3; i++) {
+      part(g, new THREE.BoxGeometry(0.4,0.4,0.02), {color:0xA8C8F8,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [-0.8+i*0.8, 0.2+bh*0.6, bw/2+facadeGap], false);
+    }
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.2+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+1.5};
+  }
+  
+  // 22 MALL — large shopping center with glass facade, billboard, entrance awning
+  function buildMall(cfg) {
+    const g = new THREE.Group();
+    const bw = 3.6, bd = 2.8, bh = 2.4;
+    part(g, new THREE.BoxGeometry(bw+0.6, 0.25, bd+0.6), {color:P.BUILDING_BASE,roughness:0.85,tex:'pavement',rx:2,ry:1}, [0,0.125,0]);
+    const bodyMat = stdMat({color:0xD8E0E8, roughness:0.08, metalness:0.3, tex:'mallglass', rx:1, ry:1});
+    bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(bw,bh,bd), bodyMat);
+    body.position.y = 0.25+bh/2+0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.25+bh;
+    // Flat dark parapet roof. Keep it above the glass body so the black fascia
+    // cannot share a depth boundary with the reflective wall.
+    const roofLift = 0.025;
+    part(g, new THREE.BoxGeometry(bw+0.15,0.18,bd+0.15), {color:P.MALL_FRAME,roughness:0.4,metalness:0.5,tex:'metal',rx:2,ry:1}, [0,top+0.09+roofLift,0]);
+    // Rooftop sign / billboard
+    part(g, new THREE.BoxGeometry(2.4,0.55,0.12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.22,roughness:0.3,tex:'fabric',rx:2,ry:1}, [0,top+0.18+0.275+roofLift,bd/2-0.3]);
+    part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-1.0,top+0.18+0.275+roofLift,bd/2-0.3]);
+    part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [1.0,top+0.18+0.275+roofLift,bd/2-0.3]);
+    // Entrance awning (curved feel via thin slab)
+    part(g, new THREE.BoxGeometry(2.0,0.08,0.9), {color:P.MALL_SIGN,roughness:0.5,tex:'fabric',rx:3,ry:1}, [0,0.25+1.0,bd/2+0.45]);
+    part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-0.9,0.25+0.55,bd/2+0.45], false).rotation.x = Math.PI/2;
+    part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [0.9,0.25+0.55,bd/2+0.45], false).rotation.x = Math.PI/2;
+    // Glass entrance doors
+    part(g, new THREE.BoxGeometry(1.2,1.0,0.04), {color:0xA8C8F8,roughness:0.05,metalness:0.4,transparent:true,opacity:0.85,tex:'glass',rx:1,ry:1}, [0,0.25+0.5,bd/2+0.02], false);
+    // Side accent windows (lower band)
+    for (let i = 0; i < 4; i++) {
+      part(g, new THREE.BoxGeometry(0.5,0.4,0.02), {color:0xB8D4F0,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [-1.35+i*0.9, 0.25+bh*0.55, bd/2+0.02], false);
+    }
+    // Accent corner pylon
+    // Offset both exterior faces from the glass walls to prevent z-fighting.
+    const pylonOffset = 0.025;
+    const pylonX = bw/2-0.15+pylonOffset;
+    const pylonZ = -bd/2+0.15-pylonOffset;
+    part(g, new THREE.BoxGeometry(0.3,2.8,0.3), {color:P.MALL_FRAME,roughness:0.4,metalness:0.5,tex:'metal',rx:1,ry:2}, [pylonX,0.25+1.4,pylonZ]);
+    part(g, new THREE.SphereGeometry(0.12,12,12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.35}, [pylonX,0.25+2.8+0.12,pylonZ], false);
+    // Blue entrance disc
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.18+0.55+0.5};
+  }
+  
+  // 23 SCHOOL — multi-building campus with playground, flagpole
+  function buildSchool(cfg) {
+    const g = new THREE.Group();
+    // Main building
+    const bw = 3.0, bh = 1.6;
+    part(g, new THREE.BoxGeometry(bw+0.6,0.22,bw+0.6), {color:P.BUILDING_BASE,roughness:0.85,tex:'pavement',rx:2,ry:2}, [0,0.11,0]);
+    const bodyMat = mkBodyMat('schoolbrick', 2, 1);
+    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
+    body.position.y = 0.22+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.22+bh;
+    // Pitched slate roof
+    part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.SCHOOL_ROOF,roughness:0.5,tex:'rooftile',rx:3,ry:3}, [0,top+0.05,0]);
+    // Roof ridge
+    part(g, new THREE.CylinderGeometry(0.05,0.05,bw+0.2,8), {color:0x4A3A2A,roughness:0.5,tex:'wood',rx:2,ry:1}, [0,top+0.1+0.025,0]).rotation.z = Math.PI/2;
+    // Front gable
+    part(g, new THREE.ConeGeometry(bw/2+0.1,0.6,4), {color:P.SCHOOL_ROOF,roughness:0.5,tex:'rooftile',rx:2,ry:1}, [0,top+0.1+0.3,bw/2-0.05]).rotation.y = Math.PI/4;
+    // Entrance door
+    part(g, new THREE.BoxGeometry(0.5,0.85,0.04), {color:0x6A4A3A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.425,bw/2+0.02], false);
+    part(g, new THREE.BoxGeometry(0.6,0.1,0.1), {color:0x4A3A2A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.85+0.05,bw/2+0.04], false);
+    // Front windows (rows)
+    for (let i = 0; i < 4; i++) {
+      const x = -1.05 + i*0.7;
+      part(g, new THREE.BoxGeometry(0.42,0.42,0.02), {color:0xA8C8E0,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [x, 0.22+bh*0.55, bw/2+0.02], false);
+      ctx2d_windows(g, x, 0.22+bh*0.55, bw/2+0.02);
+    }
+    // Flagpole in front
+    part(g, new THREE.CylinderGeometry(0.03,0.03,2.4,8), {color:0xD0CFCC,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:2}, [0,0.22+1.2,bw/2+1.0], false);
+    part(g, new THREE.BoxGeometry(0.5,0.32,0.02), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.18,roughness:0.5}, [0.25,0.22+2.3,bw/2+1.0], false);
+    // Playground: sandbox + see-saw + swing set (all raised to avoid z-fighting with ground)
+    // Sandbox
+    part(g, new THREE.CylinderGeometry(0.45,0.45,0.08,12), {color:0xE2C8A0,roughness:0.9,tex:'wood',rx:1,ry:1}, [bw/2+0.9,0.08,-bw/2+0.5], false);
+    part(g, new THREE.CylinderGeometry(0.42,0.42,0.05,12), {color:0xD8C098,roughness:0.95,tex:'wood',rx:1,ry:1}, [bw/2+0.9,0.11,-bw/2+0.5], false);
+    // Swing set
+    part(g, new THREE.BoxGeometry(1.4,0.06,0.06), {color:0x6A6A6E,roughness:0.4,metalness:0.4,tex:'metal',rx:2,ry:1}, [bw/2+0.9,0.22+1.2,-bw/2+1.4], false);
+    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x6A6A6E,roughness:0.4,metalness:0.4,tex:'metal',rx:1,ry:1}, [bw/2+0.9-0.65,0.22+0.6,-bw/2+1.4], false);
+    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x6A6A6E,roughness:0.4,metalness:0.4,tex:'metal',rx:1,ry:1}, [bw/2+0.9+0.65,0.22+0.6,-bw/2+1.4], false);
+    part(g, new THREE.BoxGeometry(0.2,0.3,0.04), {color:0xE8A838,roughness:0.6,tex:'wood',rx:1,ry:1}, [bw/2+0.9,0.22+0.45,-bw/2+1.4], false);
+    // See-saw
+    part(g, new THREE.BoxGeometry(1.4,0.06,0.18), {color:0xE85858,roughness:0.6,tex:'wood',rx:2,ry:1}, [bw/2+1.8,0.22+0.25,-bw/2+0.4], false);
+    part(g, new THREE.CylinderGeometry(0.08,0.08,0.25,8), {color:0x6A6A6E,roughness:0.5,metalness:0.4,tex:'metal',rx:1,ry:1}, [bw/2+1.8,0.22+0.125,-bw/2+0.4], false);
+    // Side wing: gym
+    part(g, new THREE.BoxGeometry(1.4,1.0,1.2), {color:P.SCHOOL_BRICK,roughness:0.4,tex:'schoolbrick',rx:1,ry:1}, [-bw/2-0.9,0.22+0.5,-bw/2+0.3]);
+    part(g, new THREE.CylinderGeometry(0.7,0.7,0.18,16), {color:0xC0BFBC,roughness:0.5,tex:'metal',rx:3,ry:1}, [-bw/2-0.9,0.22+1.0+0.09,-bw/2+0.3]);
+    // Blue entrance disc
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.05,0], false);
+    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.7};
+  }
+  
+  // helper: small window cross bars for school
+  function ctx2d_windows(g, x, y, z) {
+    part(g, new THREE.BoxGeometry(0.45,0.02,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y+0.21, z+0.005], false);
+    part(g, new THREE.BoxGeometry(0.02,0.45,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y, z+0.005], false);
+  }
+  
+  // 30 KINGICE — crown-shaped golden building with "King Ice" text
+  function buildCrown(cfg) {
+    const g = new THREE.Group();
+    // Stone base
+    part(g, new THREE.CylinderGeometry(1.8, 2.0, 0.3, 32), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.15,0]);
+    // Crown band — main cylinder body with golden "King Ice" texture
+    const bodyMat = stdMat({color:0xE8A838,roughness:0.25,metalness:0.35,tex:'kingice',rx:1,ry:1});
+    bodyMat.emissive = new THREE.Color(P.GOLD); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.CylinderGeometry(1.5, 1.6, 1.6, 32), bodyMat);
+    body.position.y = 0.3 + 0.8; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = 0.3 + 1.6;
+    // Gold rim at top of band
+    part(g, new THREE.CylinderGeometry(1.58, 1.58, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, top + 0.04, 0]);
+    // Gold rim at bottom of band
+    // Do not let the lower gold ring share the stone base's top face.
+    part(g, new THREE.CylinderGeometry(1.62, 1.62, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, 0.355, 0]);
+    // 5 crown points (teeth) — evenly spaced around the top rim
+    const pointCount = 5;
+    const crownGemColors = [0x3B6FE0, 0xE85858, 0x5A8A3A, 0xA858E8, 0xE8A838];
+    for (let i = 0; i < pointCount; i++) {
+      const angle = (i / pointCount) * Math.PI * 2 - Math.PI / 2;
+      const px = Math.cos(angle) * 1.25;
+      const pz = Math.sin(angle) * 1.25;
+      // Tapered crown point — wider at base, narrow at tip
+      const pointH = 0.75 + (i % 2) * 0.15; // alternate heights for variety
+      part(g, new THREE.CylinderGeometry(0.06, 0.22, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
+      // Gem at each tip
+      part(g, new THREE.SphereGeometry(0.1, 12, 12), {color:crownGemColors[i],emissive:crownGemColors[i],emissiveIntensity:0.35,roughness:0.15,metalness:0.4}, [px, top + 0.08 + pointH + 0.1, pz], false);
+    }
+    // Short crown points between the tall ones (fill the gaps for full crown look)
+    for (let i = 0; i < pointCount; i++) {
+      const angle = ((i + 0.5) / pointCount) * Math.PI * 2 - Math.PI / 2;
+      const px = Math.cos(angle) * 1.35;
+      const pz = Math.sin(angle) * 1.35;
+      const pointH = 0.4;
+      part(g, new THREE.CylinderGeometry(0.04, 0.18, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
+      // Small gem at tip
+      part(g, new THREE.SphereGeometry(0.06, 8, 8), {color:0xFFF8E0,emissive:0xFFF8E0,emissiveIntensity:0.25,roughness:0.2,metalness:0.3}, [px, top + 0.08 + pointH + 0.06, pz], false);
+    }
+    // Blue entrance disc at base
+    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.3+0.05,0], false);
+    // Label Y for floating tag
+    const labelY = top + 0.08 + 0.85 + 0.5;
+    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY};
+  }
+  
+  // 30 BANANA PALACE — 布拿拉宫
+  function buildBanana(cfg) {
+    const g = new THREE.Group();
+    const bw = 4.0, bh = 3.5, bd = 4.0;
+    part(g, new THREE.BoxGeometry(bw+0.8, PLH, bd+0.8), {color:0xD4C020, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, PLH/2, 0]);
+    const bodyMat = stdMat({color:0xF5E838, roughness:0.3, metalness:0.1});
+    bodyMat.emissive = new THREE.Color(0xE8D528); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.SphereGeometry(1, 24, 16), bodyMat);
+    body.scale.set(bw/2, bh/2, bd/2); body.position.y = PLH + bh/2 + 0.012;
+    body.castShadow = true; body.receiveShadow = true; g.add(body);
+    const stem = mk(new THREE.ConeGeometry(0.5, 1.5, 12), stdMat({color:0x5A4A00, roughness:0.6}));
+    stem.position.set(0, PLH+bh+0.4, 0); stem.castShadow = true; g.add(stem);
+    for (let i = 0; i < 4; i++) {
+      const a = (i/4)*Math.PI*2;
+      const strip = mk(new THREE.SphereGeometry(0.3, 8, 6, 0, Math.PI*0.6, 0, Math.PI/2), stdMat({color:0xE8D528, roughness:0.4}));
+      strip.position.set(Math.cos(a)*1.2, PLH+0.1, Math.sin(a)*1.2); strip.rotation.y = a + Math.PI/2;
+      strip.scale.set(2, 0.5, 2); strip.castShadow = true; g.add(strip);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = (i/6)*Math.PI*2;
+      const win = mk(new THREE.CircleGeometry(0.18, 16), stdMat({color:0x4A6FA8, roughness:0.2, metalness:0.3, emissive:0xA8C8F8, emissiveIntensity:0.1}));
+      win.position.set(Math.cos(a)*bw/2*0.9, PLH+bh*0.5, Math.sin(a)*bd/2*0.9);
+      win.lookAt(Math.cos(a)*bw, PLH+bh*0.5, Math.sin(a)*bd); g.add(win);
+    }
+    part(g, new THREE.BoxGeometry(0.6, 0.8, 0.06), {color:0x8A5A00, roughness:0.6, tex:'wood', rx:1, ry:1}, [0, PLH+0.4, bd/2+0.02], false);
+    part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.05, 0], false);
+    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: PLH+bh+0.4+1.5+0.5};
+  }
+  
+  // 31 QIPAI — 棋气派 grand chess-themed building
+  function buildQipai(cfg) {
+    const g = new THREE.Group();
+    const bw = 6.0, bh = 4.5, bd = 6.0;
+    part(g, new THREE.BoxGeometry(bw+1.0, PLH, bd+1.0), {color:P.BUILDING_BASE, roughness:0.8, tex:'stone', rx:2, ry:2}, [0, PLH/2, 0]);
+    const bodyMat = mkBodyMat('stone', 2, 2);
+    const body = mk(new THREE.BoxGeometry(bw, bh, bd), bodyMat);
+    body.position.y = PLH + bh/2 + 0.012; body.castShadow = true; body.receiveShadow = true; g.add(body);
+    const top = PLH + bh;
+    part(g, new THREE.BoxGeometry(bw+0.3, 0.3, bd+0.3), {color:P.ROOF_RIM, roughness:0.4, tex:'rooftile', rx:3, ry:3}, [0, top+0.15, 0]);
+    for (let i = 0; i < 12; i++) {
+      const a = (i/12)*Math.PI*2;
+      part(g, new THREE.BoxGeometry(0.4, 0.25, 0.4), {color:P.ROOF_RIM, roughness:0.4, tex:'rooftile', rx:1, ry:1}, [Math.cos(a)*(bw/2+0.15), top+0.3, Math.sin(a)*(bd/2+0.15)], false);
+    }
+    // King statue
+    const kingG = new THREE.Group();
+    part(kingG, new THREE.CylinderGeometry(0.35, 0.4, 0.15, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.075, 0]);
+    part(kingG, new THREE.CylinderGeometry(0.22, 0.32, 1.2, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+0.6, 0]);
+    part(kingG, new THREE.CylinderGeometry(0.3, 0.25, 0.12, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.06, 0]);
+    part(kingG, new THREE.CylinderGeometry(0.18, 0.2, 0.35, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.12+0.175, 0]);
+    part(kingG, new THREE.SphereGeometry(0.15, 12, 8), {color:0xE8A838, roughness:0.2, metalness:0.5, emissive:0xE8A838, emissiveIntensity:0.1}, [0, 0.15+1.2+0.12+0.35+0.15, 0], false);
+    kingG.position.set(-bw/2-0.8, 0, bd/2+0.3);
+    kingG.traverse(c => { if (c.isMesh) c.castShadow = true; });
+    g.add(kingG);
+    // Queen statue
+    const queenG = new THREE.Group();
+    part(queenG, new THREE.CylinderGeometry(0.35, 0.4, 0.15, 16), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [0, 0.075, 0]);
+    part(queenG, new THREE.CylinderGeometry(0.22, 0.32, 1.2, 16), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [0, 0.15+0.6, 0]);
+    part(queenG, new THREE.CylinderGeometry(0.28, 0.25, 0.12, 16), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.06, 0]);
+    for (let i = 0; i < 5; i++) {
+      const a = (i/5)*Math.PI*2 - Math.PI/2;
+      part(queenG, new THREE.ConeGeometry(0.06, 0.2, 6), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [Math.cos(a)*0.18, 0.15+1.2+0.12+0.1, Math.sin(a)*0.18], false);
+    }
+    queenG.position.set(bw/2+0.8, 0, bd/2+0.3);
+    queenG.traverse(c => { if (c.isMesh) c.castShadow = true; });
+    g.add(queenG);
+    // Grand entrance
+    part(g, new THREE.BoxGeometry(1.8, 0.1, 0.1), {color:P.ROOF_RIM, roughness:0.4, tex:'stone', rx:1, ry:1}, [0, PLH+1.8, bd/2+0.02], false);
+    part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [-0.9, PLH+0.9, bd/2+0.02], false);
+    part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [0.9, PLH+0.9, bd/2+0.02], false);
+    // Checker floor
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      const cw = 0.4, cx = -1.5 + c*cw + cw/2, cz = bd/2 + 0.3 + r*cw + cw/2;
+      part(g, new THREE.BoxGeometry(cw-0.02, 0.02, cw-0.02), {color:(r+c)%2===0?0x2A2A2E:0xF8F7F5, roughness:0.3}, [cx, PLH+0.035, cz], false);
+    }
+    part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, PLH+0.05, 0], false);
+    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: top+0.3+0.25+0.5};
+  }
+
+  const builders = {
+    bank: buildBank, board: buildBoard, tower: buildTower, darktower: buildDarkTower,
+    pavilion: buildPavilion, library: buildLibrary, ruins: buildRuins,
+    skyscraper: buildSkyscraper, campus: buildCampus, kiosk: buildKiosk,
+    screen: buildScreen, shaft: buildShaft, altar: buildAltar, observatory: buildObservatory,
+    pagoda: buildPagoda, market: buildMarket, greenhouse: buildGreenhouse,
+    clocktower: buildClockTower, temple: buildTemple, factory: buildFactory,
+    mall: buildMall, school: buildSchool, crown: buildCrown,
+    banana: buildBanana, qipai: buildQipai,
+  };
+
+  return { builders };
+}
