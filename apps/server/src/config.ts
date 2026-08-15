@@ -47,8 +47,29 @@ export const SESSION_TTL_DAYS = integer('SESSION_TTL_DAYS', 30, 1, 365);
 
 export const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? '';
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
+const parseAdminAccounts = (raw: string | undefined): ReadonlyArray<{ username: string; password: string }> => {
+  if (!raw?.trim()) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); }
+  catch { throw new Error('ADMIN_ACCOUNTS_JSON must be a JSON object mapping usernames to passwords'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('ADMIN_ACCOUNTS_JSON must be a JSON object mapping usernames to passwords');
+  }
+  return Object.entries(parsed).map(([username, password]) => {
+    if (!username || username.length > 128 || typeof password !== 'string') {
+      throw new Error('ADMIN_ACCOUNTS_JSON contains an invalid administrator account');
+    }
+    if (password.length < 16) throw new Error(`Password for administrator ${username} must contain at least 16 characters`);
+    return { username, password };
+  });
+};
+const additionalAdminAccounts = parseAdminAccounts(process.env.ADMIN_ACCOUNTS_JSON);
+export const ADMIN_ACCOUNTS = Object.freeze([
+  ...(ADMIN_USERNAME && ADMIN_PASSWORD ? [{ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }] : []),
+  ...additionalAdminAccounts,
+]);
 export const ADMIN_SESSION_TTL_MINUTES = integer('ADMIN_SESSION_TTL_MINUTES', 480, 15, 1_440);
-export const ADMIN_ENABLED = Boolean(ADMIN_USERNAME && ADMIN_PASSWORD);
+export const ADMIN_ENABLED = ADMIN_ACCOUNTS.length > 0;
 
 // Anti-abuse: cap how many new resident accounts a single IP may create.
 export const MAX_REGISTRATIONS_PER_IP = integer('MAX_REGISTRATIONS_PER_IP', 5, 1, 1_000);
@@ -64,7 +85,10 @@ if ((ADMIN_USERNAME && !ADMIN_PASSWORD) || (!ADMIN_USERNAME && ADMIN_PASSWORD)) 
   throw new Error('ADMIN_USERNAME and ADMIN_PASSWORD must be configured together');
 }
 if (ADMIN_PASSWORD && ADMIN_PASSWORD.length < 16) throw new Error('ADMIN_PASSWORD must contain at least 16 characters');
-if (IS_PRODUCTION && !ADMIN_ENABLED) throw new Error('Production requires ADMIN_USERNAME and ADMIN_PASSWORD');
+if (new Set(ADMIN_ACCOUNTS.map((account) => account.username)).size !== ADMIN_ACCOUNTS.length) {
+  throw new Error('Administrator usernames must be unique');
+}
+if (IS_PRODUCTION && !ADMIN_ENABLED) throw new Error('Production requires at least one administrator account');
 if (IS_PRODUCTION && ALLOWED_ORIGINS.size === 0) throw new Error('Production requires at least one ALLOWED_ORIGINS entry');
 
 for (const directory of [DATA_DIR, LOG_DIR, BACKUP_DIR]) {
