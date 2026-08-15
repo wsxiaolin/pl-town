@@ -55,6 +55,18 @@ export interface StoryDialogModel {
   onClose?: () => void;
 }
 
+export interface LyricsLineLike {
+  kind: 'verse' | 'chorus' | 'quote' | 'note' | 'gap';
+  text: string;
+}
+
+export interface MusicHallLyricsLike {
+  title: string;
+  subtitle: string;
+  dedication: string;
+  lines: readonly LyricsLineLike[];
+}
+
 export interface CityDialogControllerOptions {
   document: Document;
   buildingContent: Readonly<Record<string, BuildingContentLike>>;
@@ -65,6 +77,7 @@ export interface CityDialogControllerOptions {
   pauseNpcs: () => void;
   resumeNpcs: () => void;
   showToast: (message: string) => void;
+  musicHallLyrics?: MusicHallLyricsLike;
   signal?: AbortSignal;
 }
 
@@ -73,6 +86,7 @@ export interface CityDialogController {
   isOpen(): boolean;
   openBuilding(building: BuildingLike): void;
   closeBuilding(): void;
+  closeLyrics(): void;
   openNpc(npc: NpcEntityLike, playerPosition?: { x: number; z: number }): void;
   openStory(story: StoryDialogModel): void;
   closeNpc(): void;
@@ -191,11 +205,41 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     renderNode(firstNode(npc));
   };
 
+  const openLyrics = (): void => {
+    const lyrics = options.musicHallLyrics;
+    if (!lyrics) return;
+    setIdentityField(document, 'lyricsTitle', lyrics.title);
+    setIdentityField(document, 'lyricsSubtitle', lyrics.subtitle);
+    setIdentityField(document, 'lyricsDedication', lyrics.dedication);
+    const scroll = getElement<HTMLDivElement>(document, 'lyricsScroll');
+    scroll.replaceChildren();
+    let rowIndex = 0;
+    lyrics.lines.forEach((line) => {
+      if (line.kind === 'gap') {
+        const gap = document.createElement('div');
+        gap.className = 'lyrics-gap';
+        scroll.appendChild(gap);
+        return;
+      }
+      const paragraph = document.createElement('p');
+      paragraph.className = `lyrics-line lyrics-${line.kind}`;
+      paragraph.textContent = line.text;
+      paragraph.style.animationDelay = `${Math.min(rowIndex, 14) * 0.09}s`;
+      scroll.appendChild(paragraph);
+      rowIndex += 1;
+    });
+    getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.add('open');
+  };
+
   const controller: CityDialogController = {
     setup() {
       getElement<HTMLButtonElement>(document, 'modalClose').addEventListener('click', controller.closeBuilding, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'modalOverlay').addEventListener('click', (event) => {
         if (event.target === getElement<HTMLDivElement>(document, 'modalOverlay')) controller.closeBuilding();
+      }, { signal: options.signal });
+      getElement<HTMLButtonElement>(document, 'lyricsClose').addEventListener('click', controller.closeLyrics, { signal: options.signal });
+      getElement<HTMLDivElement>(document, 'lyricsOverlay').addEventListener('click', (event) => {
+        if (event.target === getElement<HTMLDivElement>(document, 'lyricsOverlay')) controller.closeLyrics();
       }, { signal: options.signal });
       getElement<HTMLButtonElement>(document, 'npcClose').addEventListener('click', controller.closeNpc, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'npcOverlay').addEventListener('click', (event) => {
@@ -209,6 +253,10 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     },
     isOpen: () => npcOpen,
     openBuilding(building) {
+      if (building.id === 'musichall' && options.musicHallLyrics?.lines.length) {
+        openLyrics();
+        return;
+      }
       const content = options.buildingContent[building.id] ?? {
         name: building.label || '小城建筑',
         slogan: '这座小城的一角。',
@@ -238,6 +286,9 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     },
     closeBuilding() {
       getElement<HTMLDivElement>(document, 'modalOverlay').classList.remove('open');
+    },
+    closeLyrics() {
+      getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.remove('open');
     },
     openNpc(npc, playerPosition) {
       openDialogue(npc, true, playerPosition);
