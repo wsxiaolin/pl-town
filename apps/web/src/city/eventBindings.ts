@@ -26,6 +26,7 @@ export type EventBindingsOptions = {
     postWorkComment: (event: any) => any;
   } | null;
   getMapController: () => { isOpen: () => boolean; updateImage: () => void } | null;
+  getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   toggleMapMode: () => void;
   closeModal: () => void;
   closeNpcDialog: () => void;
@@ -95,6 +96,7 @@ export function createEventBindings(options: EventBindingsOptions) {
       closeStats: () => options.getStatsPanelController()?.close(),
       setStatsMode: (mode) => options.getStatsPanelController()?.setMode(mode),
       closeWorks: () => communityPanels?.closeWorksPanel(),
+      closeWriterCatalog: () => options.getWriterCatalogController()?.close(),
       closeWorkDetail: () => communityPanels?.closeWorkDetail(),
       toggleWorkStar: () => communityPanels?.toggleWorkStar(),
       loadWorkComments: () => communityPanels?.loadWorkComments(),

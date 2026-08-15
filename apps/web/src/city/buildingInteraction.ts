@@ -18,6 +18,7 @@ export type BuildingInteractionOptions = {
     toggleWorkStar: () => any;
     closeWorksPanel: () => void;
   } | null;
+  getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
 };
 
@@ -51,6 +52,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     const phoneEntry = PHONE_BUILDINGS[b.id];
     if (phoneEntry) {
       options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1] as any);
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'culturehall') {
+      options.getWriterCatalogController()?.open();
       options.trackInteraction(b.id);
       return;
     }
