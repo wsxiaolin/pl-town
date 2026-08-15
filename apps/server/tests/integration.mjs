@@ -93,6 +93,7 @@ const waitForServer = () => new Promise((resolve, reject) => {
 let alice;
 let bob;
 let charlie;
+let requester;
 try {
   await waitForServer();
 
@@ -318,11 +319,68 @@ try {
   const clearTelemetry = await fetch(`${adminBase}/telemetry/clear`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf } });
   if (!clearTelemetry.ok) throw new Error('Admin telemetry clear must require CSRF and succeed');
 
-  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, and telemetry');
+  // NPC change requests: player submits a ticket, admin reviews the queue.
+  // Reconnect a resident here to obtain a fresh, valid session token (earlier
+  // reconnects invalidate previously issued tokens).
+  const requester = await connect('Dana');
+  const requesterToken = requester.hello.token;
+  if (!requesterToken) throw new Error('Server hello must issue a session token for authenticated residents');
+  const unauthenticatedNpcRequest = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ npcId: 'linche', kind: 'dialog', title: 'No token', summary: 'should fail' }),
+  });
+  if (unauthenticatedNpcRequest.status !== 401) throw new Error('NPC change request submission must require authentication');
+  const invalidKind = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: requesterToken, npcId: 'linche', kind: 'bogus', title: 'Bad kind', summary: 'should fail' }),
+  });
+  if (invalidKind.status !== 400) throw new Error('NPC change request submission must reject invalid change kind');
+  const unknownNpc = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: requesterToken, npcId: 'does_not_exist', kind: 'edit', title: 'Unknown NPC', summary: 'should fail' }),
+  });
+  if (unknownNpc.status !== 400) throw new Error('NPC change request submission must reject unknown NPC for non-add kinds');
+  const submitted = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: requesterToken, npcId: 'linche', kind: 'dialog', title: '润色林澈开场白', summary: '建议把第一句改得更柔和。' }),
+  });
+  const submittedPayload = await submitted.json();
+  if (submitted.status !== 201 || !submittedPayload.ok || !submittedPayload.id) throw new Error('Authenticated NPC change request submission must succeed and return an id');
+
+  const npcCatalog = await fetch(`${adminBase}/npcs`, { headers: { cookie } });
+  const npcCatalogPayload = await npcCatalog.json();
+  if (!npcCatalog.ok || !Array.isArray(npcCatalogPayload.items) || npcCatalogPayload.items.length === 0) throw new Error('Admin NPC catalog must return the read-only NPC mirror');
+  if (!npcCatalogPayload.items.some((npc) => npc.id === 'linche')) throw new Error('Admin NPC catalog must include the story NPC linche');
+
+  const pendingRequests = await fetch(`${adminBase}/npc-change-requests?status=pending`, { headers: { cookie } });
+  const pendingPayload = await pendingRequests.json();
+  if (!pendingRequests.ok || !pendingPayload.items.some((item) => item.id === submittedPayload.id && item.status === 'pending')) throw new Error('Admin NPC change request queue must list the pending ticket');
+
+  const approve = await fetch(`${adminBase}/npc-change-requests/${submittedPayload.id}/approve`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ note: '已记录' }),
+  });
+  const approvePayload = await approve.json();
+  if (!approve.ok || !approvePayload.ok || approvePayload.request.status !== 'approved') throw new Error('Admin must be able to approve a pending NPC change request');
+  const reApprove = await fetch(`${adminBase}/npc-change-requests/${submittedPayload.id}/approve`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({}),
+  });
+  if (reApprove.status !== 404) throw new Error('Admin must not be able to review an already-processed NPC change request');
+
+  // Story topology: read-only graph data for the topology page.
+  const topology = await fetch(`${adminBase}/story-topology?storyId=${encodeURIComponent('main.echo.act-one')}`, { headers: { cookie } });
+  const topologyPayload = await topology.json();
+  if (!topology.ok || !topologyPayload.summary || !Array.isArray(topologyPayload.summary.nodes) || !Array.isArray(topologyPayload.summary.edges) || topologyPayload.summary.nodes.length === 0) throw new Error('Admin story topology must return populated nodes and edges for the echo story');
+  const topologyHtml = await fetch(`${adminOrigin}/admin/story-topology`);
+  if (!topologyHtml.ok || topologyHtml.headers.get('cache-control') !== 'no-store') throw new Error('Story topology HTML shell must be served without caching');
+
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, and story topology');
 } finally {
   alice?.socket.close();
   bob?.socket.close();
   charlie?.socket.close();
+  requester?.socket.close();
   server.kill();
   await new Promise((resolve) => server.once('exit', resolve));
   for (let attempt = 0; attempt < 5; attempt += 1) {

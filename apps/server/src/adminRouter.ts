@@ -14,7 +14,8 @@ import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { logger } from './logger.js';
 import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './requestSecurity.js';
-import { STORY_CATALOG, getStorySummary } from './storyCatalog.js';
+import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
+import { NPC_CATALOG } from './npcCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 
 type Context = { online: () => number; disconnectUser: (userId: string) => void; disconnectAll: () => void; startedAt: number };
@@ -32,6 +33,8 @@ const readAsset = (relative: string) => readFileSync(fileURLToPath(new URL(relat
 const staticAssets: ReadonlyArray<[string, AdminAsset]> = [
   ['/admin/styles.css', { type: 'text/css; charset=utf-8', body: readAsset('../admin/styles.css') }],
   ['/admin/app.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/app.js') }],
+  ['/admin/story-topology.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/story-topology.js') }],
+  ['/admin/story-topology.css', { type: 'text/css; charset=utf-8', body: readAsset('../admin/story-topology.css') }],
 ];
 const assetVersions = new Map(staticAssets.map(([path, asset]) => [path, fingerprint(asset.body)]));
 const assets = new Map<string, AdminAsset>(staticAssets);
@@ -40,6 +43,11 @@ const adminHtml = readAsset('../admin/index.html')
   .replace('/admin/styles.css', `/admin/styles.css?v=${assetVersions.get('/admin/styles.css')}`)
   .replace('/admin/app.js', `/admin/app.js?v=${assetVersions.get('/admin/app.js')}`);
 assets.set('/admin/', { type: 'text/html; charset=utf-8', body: Buffer.from(adminHtml, 'utf8') });
+const topologyHtml = readAsset('../admin/story-topology.html')
+  .toString('utf8')
+  .replace('/admin/story-topology.css', `/admin/story-topology.css?v=${assetVersions.get('/admin/story-topology.css')}`)
+  .replace('/admin/story-topology.js', `/admin/story-topology.js?v=${assetVersions.get('/admin/story-topology.js')}`);
+assets.set('/admin/story-topology', { type: 'text/html; charset=utf-8', body: Buffer.from(topologyHtml, 'utf8') });
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 const respond = (response: ServerResponse, status: number, payload: unknown, extra: Record<string, string> = {}) => {
@@ -79,11 +87,11 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'GET' && asset) {
     response.writeHead(200, {
       'content-type': asset.type,
-      // The HTML shell is never cached, so it always references the latest
+      // The HTML shells are never cached, so they always reference the latest
       // fingerprinted asset URLs. Versioned assets are immutable for a year:
       // their content changes only when the fingerprint (and thus the URL)
       // changes, so long-lived caching is safe and never serves stale code.
-      'cache-control': assetPath === '/admin/' ? 'no-store' : 'public, max-age=31536000, immutable',
+      'cache-control': asset.type.startsWith('text/html') ? 'no-store' : 'public, max-age=31536000, immutable',
       'content-security-policy': csp, 'cross-origin-opener-policy': 'same-origin', 'cross-origin-resource-policy': 'same-origin',
       'permissions-policy': 'camera=(), microphone=(), geolocation=()', 'referrer-policy': 'no-referrer',
       'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'x-robots-tag': 'noindex, nofollow',
@@ -252,6 +260,58 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const storyId = (url.searchParams.get('storyId') ?? '').slice(0, 64) || undefined;
     const { items, total } = db.listStoryProgress({ query, storyId, limit, offset });
     respond(response, 200, { total, items: items.map((row) => { const story = getStorySummary(row.storyId); return { ...row, story, nodeTitle: story.nodes.find((node) => node.id === row.nodeId)?.title ?? row.nodeId }; }) });
+    return true;
+  }
+
+  // Story topology: read-only graph data for the standalone topology page.
+  if (request.method === 'GET' && path === '/admin/api/story-topology') {
+    const url = new URL(request.url ?? path, 'http://localhost');
+    const storyId = (url.searchParams.get('storyId') ?? '').slice(0, 64) || (STORY_CATALOG[0]?.id ?? '');
+    respond(response, 200, getStoryTopology(storyId));
+    return true;
+  }
+
+  // NPC catalog + change-request workflow (player proposals + admin review).
+  if (request.method === 'GET' && path === '/admin/api/npcs') {
+    respond(response, 200, { items: NPC_CATALOG });
+    return true;
+  }
+  if (request.method === 'GET' && path === '/admin/api/npc-change-requests') {
+    const url = new URL(request.url ?? path, 'http://localhost');
+    const limit = integer(url.searchParams.get('limit'), 50, 1, 200);
+    const offset = integer(url.searchParams.get('offset'), 0, 0, 1_000_000);
+    const status = (url.searchParams.get('status') ?? '').slice(0, 16) || undefined;
+    const npcId = (url.searchParams.get('npcId') ?? '').slice(0, 100) || undefined;
+    respond(response, 200, db.listNpcChangeRequests({ status: status as db.NpcChangeStatus | undefined, npcId, limit, offset }));
+    return true;
+  }
+  const npcReview = path.match(/^\/admin\/api\/npc-change-requests\/([0-9]+)\/(approve|reject)$/);
+  if (request.method === 'POST' && npcReview) {
+    const id = Number(npcReview[1]);
+    if (!Number.isInteger(id) || id <= 0) { error(response, 400, 'INVALID_BODY', '申请 ID 无效'); return true; }
+    const body = await readJson(request, 1_024).catch(() => ({} as Record<string, unknown>));
+    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : undefined;
+    const status = npcReview[2] === 'approve' ? 'approved' : 'rejected';
+    const reviewed = db.reviewNpcChangeRequest(id, status, principal.actor, note);
+    if (!reviewed) { error(response, 404, 'REQUEST_NOT_FOUND', '申请不存在或已处理'); return true; }
+    db.recordAdminAudit(principal.actor, status === 'approved' ? 'npc.change.approve' : 'npc.change.reject', String(id), { npcId: reviewed.npcId, note });
+    respond(response, 200, { ok: true, request: reviewed });
+    return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/npc-change-requests') {
+    const body = await readJson(request, 16_000);
+    const npcId = typeof body.npcId === 'string' ? body.npcId.trim() : '';
+    const kind = typeof body.kind === 'string' ? body.kind : '';
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const summary = typeof body.summary === 'string' ? body.summary.trim() : '';
+    if (!npcId || npcId.length > 100) { error(response, 400, 'INVALID_BODY', 'NPC ID 无效'); return true; }
+    if (kind !== 'add' && kind !== 'edit' && kind !== 'dialog') { error(response, 400, 'INVALID_BODY', '变更类型无效'); return true; }
+    if (!title || title.length > 120) { error(response, 400, 'INVALID_BODY', '标题无效'); return true; }
+    if (!summary || summary.length > 2_000) { error(response, 400, 'INVALID_BODY', '摘要无效'); return true; }
+    const change = body.change && typeof body.change === 'object' && !Array.isArray(body.change) ? body.change as Record<string, unknown> : {};
+    const created = db.createAdminNpcChangeRequest({ reviewer: principal.actor, npcId, kind, title, summary, change });
+    db.recordAdminAudit(principal.actor, 'npc.change.direct', String(created.id), { npcId, kind, title });
+    respond(response, 201, { ok: true, request: created });
     return true;
   }
 

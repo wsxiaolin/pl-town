@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>剧情拓扑 · MiniCity 管理后台</title>
+  <link rel="stylesheet" href="/admin/story-topology.css" />
+</head>
+<body class="topology-shell">
+  <header class="topology-header">
+    <div>
+      <p class="eyebrow">STORY TOPOLOGY</p>
+      <h1 id="topologyTitle">剧情拓扑</h1>
+      <p class="topology-subtitle" id="topologySubtitle">只读视图 · 不可编辑</p>
+    </div>
+    <div class="topology-actions">
+      <label class="topology-select"><span>剧情</span><select id="topologyStorySelect" disabled></select></label>
+      <a class="topology-back" href="/admin">返回后台</a>
+    </div>
+  </header>
+
+  <div class="topology-legend" id="topologyLegend" hidden>
+    <span class="legend-item"><span class="legend-line legend-line--choice"></span>对话分支（choices.next）</span>
+    <span class="legend-item"><span class="legend-line legend-line--world"></span>世界触发（worldInteractions）</span>
+    <span class="legend-item"><span class="legend-line legend-line--building"></span>建筑触发（buildingInteractions）</span>
+    <span class="legend-item"><span class="legend-line legend-line--actor"></span>角色触发（interactions）</span>
+  </div>
+
+  <main class="topology-canvas-wrap">
+    <p class="topology-empty" id="topologyEmpty" hidden>该剧情暂无拓扑数据。</p>
+    <svg id="topologySvg" class="topology-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="剧情节点拓扑图"></svg>
+  </main>
+
+  <p class="topology-status" id="topologyStatus" role="status" hidden></p>
+
+  <script type="module" src="/admin/story-topology.js"></script>
+</body>
+</html>

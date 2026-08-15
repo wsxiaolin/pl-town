@@ -2,12 +2,13 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
-import { authenticate } from './auth.js';
+import { authenticate, tokenHash } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
+import { getNpcCatalogEntry } from './npcCatalog.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
@@ -36,6 +37,7 @@ const globalPublicMutationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
+const npcChangeRequestRate = new FixedWindowRateLimiter(3, 60_000);
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
@@ -312,6 +314,34 @@ const http = createServer(async (request, response) => {
     }
   }
   if (await handleTelemetryCollection(request, response)) return;
+  if (request.method === 'POST' && request.url === '/town-api/npc-change-requests') {
+    try {
+      const body = await readJson(request, 32_000);
+      const token = typeof body.token === 'string' ? body.token : '';
+      if (!token || token.length > 128) throw new HttpBodyError('Login is required', 401);
+      const user = db.getUserByToken(tokenHash(token));
+      if (!user) throw new HttpBodyError('Login is required', 401);
+      if (!npcChangeRequestRate.consume(user.id).allowed) {
+        response.writeHead(429, { ...headers, 'retry-after': '60' });
+        response.end(JSON.stringify({ error: 'Too many requests' }));
+        return;
+      }
+      const npcId = typeof body.npcId === 'string' ? body.npcId.trim() : '';
+      const kind = typeof body.kind === 'string' ? body.kind : '';
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const summary = typeof body.summary === 'string' ? body.summary.trim() : '';
+      if (!npcId || npcId.length > 100) throw new HttpBodyError('NPC is required', 400);
+      if (kind !== 'add' && kind !== 'edit' && kind !== 'dialog') throw new HttpBodyError('Invalid change kind', 400);
+      if (!title || title.length > 120) throw new HttpBodyError('A title (1-120 chars) is required', 400);
+      if (!summary || summary.length > 2_000) throw new HttpBodyError('A summary (1-2000 chars) is required', 400);
+      if (!getNpcCatalogEntry(npcId) && kind !== 'add') throw new HttpBodyError('Unknown NPC', 400);
+      const change = body.change && typeof body.change === 'object' && !Array.isArray(body.change) ? body.change as Record<string, unknown> : {};
+      const created = db.createNpcChangeRequest({ requesterId: user.id, requesterNickname: user.nickname, npcId, kind, title, summary, change });
+      response.writeHead(201, headers);
+      response.end(JSON.stringify({ ok: true, id: created.id }));
+    } catch (error) { if (respondHttpBodyError(response, error)) return; logApiError(request, error); response.writeHead(500, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Request failed' })); }
+    return;
+  }
   const match = request.url?.match(/^\/town-api\/works\?scope=(knowledge|senate|all|discussion|featured)$/);
   if (request.method === 'GET' && match) {
     try { response.writeHead(200, headers); response.end(JSON.stringify(await getPublicWorks(match[1] as 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured'))); }

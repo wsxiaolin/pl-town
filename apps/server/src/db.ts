@@ -167,6 +167,23 @@ db.exec(`
     PRIMARY KEY (ip, user_id)
   );
   CREATE INDEX IF NOT EXISTS account_registrations_ip_idx ON account_registrations(ip, created_at DESC);
+  CREATE TABLE IF NOT EXISTS npc_change_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requester_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    requester_nickname TEXT NOT NULL,
+    npc_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('add','edit','dialog')),
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    change_json TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')),
+    reviewer TEXT,
+    review_note TEXT,
+    created_at TEXT NOT NULL,
+    reviewed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS npc_change_requests_status_idx ON npc_change_requests(status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS npc_change_requests_npc_idx ON npc_change_requests(npc_id);
 `);
 {
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
@@ -841,6 +858,89 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
 }
 
 const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+
+// ── NPC change requests (player proposals + admin review) ───────────────
+export type NpcChangeKind = 'add' | 'edit' | 'dialog';
+export type NpcChangeStatus = 'pending' | 'approved' | 'rejected';
+
+export type NpcChangeRequest = {
+  id: number;
+  requesterId: string | null;
+  requesterNickname: string;
+  npcId: string;
+  kind: NpcChangeKind;
+  title: string;
+  summary: string;
+  change: Record<string, unknown>;
+  status: NpcChangeStatus;
+  reviewer: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
+const NPC_CHANGE_KINDS = new Set<NpcChangeKind>(['add', 'edit', 'dialog']);
+
+export function createNpcChangeRequest(input: {
+  requesterId: string; requesterNickname: string; npcId: string; kind: NpcChangeKind;
+  title: string; summary: string; change: Record<string, unknown>;
+}): NpcChangeRequest {
+  if (!NPC_CHANGE_KINDS.has(input.kind)) throw new Error('Invalid NPC change kind');
+  const timestamp = now();
+  const result = db.prepare(
+    `INSERT INTO npc_change_requests (requester_id, requester_nickname, npc_id, kind, title, summary, change_json, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+  ).run(input.requesterId, input.requesterNickname, input.npcId, input.kind, input.title, input.summary, JSON.stringify(input.change), timestamp);
+  return getNpcChangeRequest(Number(result.lastInsertRowid))!;
+}
+
+export function getNpcChangeRequest(id: number): NpcChangeRequest | null {
+  const row = db.prepare('SELECT * FROM npc_change_requests WHERE id = ?').get(id) as any;
+  return row ? rowNpcChangeRequest(row) : null;
+}
+
+export function listNpcChangeRequests(input: { status?: NpcChangeStatus; npcId?: string; limit: number; offset: number }): { items: NpcChangeRequest[]; total: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  if (input.status) { conditions.push('status = ?'); params.push(input.status); }
+  if (input.npcId) { conditions.push('npc_id = ?'); params.push(input.npcId); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const total = (db.prepare(`SELECT COUNT(*) AS count FROM npc_change_requests ${where}`).get(...params) as { count: number }).count;
+  const rows = db.prepare(`SELECT * FROM npc_change_requests ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
+  return { total, items: rows.map(rowNpcChangeRequest) };
+}
+
+export function reviewNpcChangeRequest(id: number, status: 'approved' | 'rejected', reviewer: string, note?: string): NpcChangeRequest | null {
+  if (status !== 'approved' && status !== 'rejected') throw new Error('Invalid review status');
+  const timestamp = now();
+  const result = db.prepare(
+    `UPDATE npc_change_requests SET status = ?, reviewer = ?, review_note = ?, reviewed_at = ? WHERE id = ? AND status = 'pending'`,
+  ).run(status, reviewer, note ?? null, timestamp, id);
+  return result.changes > 0 ? getNpcChangeRequest(id) : null;
+}
+
+export function createAdminNpcChangeRequest(input: {
+  reviewer: string; npcId: string; kind: NpcChangeKind; title: string; summary: string; change: Record<string, unknown>;
+}): NpcChangeRequest {
+  if (!NPC_CHANGE_KINDS.has(input.kind)) throw new Error('Invalid NPC change kind');
+  const timestamp = now();
+  const result = db.prepare(
+    `INSERT INTO npc_change_requests (requester_id, requester_nickname, npc_id, kind, title, summary, change_json, status, reviewer, created_at, reviewed_at)
+     VALUES (NULL, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?)`,
+  ).run(input.reviewer, input.npcId, input.kind, input.title, input.summary, JSON.stringify(input.change), input.reviewer, timestamp, timestamp);
+  return getNpcChangeRequest(Number(result.lastInsertRowid))!;
+}
+
+function rowNpcChangeRequest(row: any): NpcChangeRequest {
+  let change: Record<string, unknown> = {};
+  try { change = JSON.parse(row.change_json) as Record<string, unknown>; } catch { /* keep empty */ }
+  return {
+    id: row.id, requesterId: row.requester_id ?? null, requesterNickname: row.requester_nickname,
+    npcId: row.npc_id, kind: row.kind, title: row.title, summary: row.summary, change,
+    status: row.status, reviewer: row.reviewer ?? null, reviewNote: row.review_note ?? null,
+    createdAt: row.created_at, reviewedAt: row.reviewed_at ?? null,
+  };
+}
 
 export function closeDatabase(): void {
   if (db.open) db.close();

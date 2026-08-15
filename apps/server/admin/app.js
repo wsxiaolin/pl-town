@@ -1,4 +1,4 @@
-const state = { csrf: '', actor: '', view: 'overview', houses: [], chatFilter: 'visible', storyFilter: '' };
+const state = { csrf: '', actor: '', view: 'overview', houses: [], chatFilter: 'visible', storyFilter: '', npcs: [], npcSelectedId: '', npcRequestFilter: 'pending' };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const formatNumber = (value) => new Intl.NumberFormat('zh-CN').format(Number(value) || 0);
@@ -263,8 +263,89 @@ async function loadTelemetry() {
   $('#errorRows').replaceChildren(...(errorRows.length ? errorRows : [emptyRow(4, '暂无错误')]));
 }
 
-const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress, telemetry: loadTelemetry };
-const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务', telemetry: '运行监控' };
+async function loadNpcs() {
+  const data = await api('/npcs');
+  state.npcs = data.items;
+  $('#npcCount').textContent = `${formatNumber(data.items.length)} 个 NPC`;
+  const rows = data.items.map((npc) => {
+    const row = node('tr');
+    row.append(node('td', npc.name), node('td', npc.role), node('td', npc.npcType === 'story' ? '剧情' : '居民'));
+    row.addEventListener('click', () => renderNpcDialog(npc));
+    row.style.cursor = 'pointer';
+    return row;
+  });
+  $('#npcRows').replaceChildren(...(rows.length ? rows : [emptyRow(3, '没有 NPC 数据')]));
+  if (state.npcSelectedId) {
+    const selected = data.items.find((npc) => npc.id === state.npcSelectedId);
+    if (selected) renderNpcDialog(selected);
+  }
+  await loadNpcRequests();
+}
+function renderNpcDialog(npc) {
+  state.npcSelectedId = npc.id;
+  $('#npcDetailTitle').textContent = `${npc.name} · ${npc.role}`;
+  $('#npcMeta').textContent = `${npc.id} · ${npc.dialogNodes.length} 节点 · ${npc.dialogEdges.length} 选项 · ${npc.npcType === 'story' ? '剧情' : '居民'}${npc.core ? ' · 核心' : ''}`;
+  const container = $('#npcDialog');
+  container.replaceChildren();
+  const edgesByNode = new Map();
+  for (const edge of npc.dialogEdges) {
+    const [nodeIndex] = edge.from;
+    if (!edgesByNode.has(nodeIndex)) edgesByNode.set(nodeIndex, []);
+    edgesByNode.get(nodeIndex).push(edge);
+  }
+  npc.dialogNodes.forEach((dialogNode) => {
+    const block = node('div', undefined, 'npc-dialog-node');
+    block.append(node('div', `[${dialogNode.index}] ${dialogNode.text}`, 'npc-dialog-text'));
+    const options = edgesByNode.get(dialogNode.index) ?? [];
+    if (options.length) {
+      const list = node('ul', undefined, 'npc-dialog-options');
+      for (const option of options) {
+        const item = node('li');
+        const target = option.to === null ? '对话结束' : `→ 节点 ${option.to}`;
+        item.append(node('span', option.label || '（自动继续）', 'npc-dialog-option-label'), node('small', target));
+        list.append(item);
+      }
+      block.append(list);
+    }
+    container.append(block);
+  });
+  if (!npc.dialogNodes.length) container.append(node('p', '该 NPC 没有对话数据。', 'empty'));
+}
+async function loadNpcRequests() {
+  const status = state.npcRequestFilter;
+  const data = await api(`/npc-change-requests?status=${encodeURIComponent(status)}&limit=100`);
+  const rows = data.items.map((request) => {
+    const card = node('article', undefined, 'npc-request-card');
+    const header = node('header');
+    header.append(node('strong', request.title), node('span', `${request.kind === 'add' ? '新增' : request.kind === 'edit' ? '编辑' : '对话'} · ${request.npcId} · ${request.status}`, 'npc-request-meta'));
+    card.append(header);
+    card.append(node('p', request.summary));
+    const foot = node('footer');
+    foot.append(node('small', `提交人：${request.requesterNickname} · ${formatDate(request.createdAt)}${request.reviewedAt ? ` · 已处理 ${formatDate(request.reviewedAt)}` : ''}`));
+    if (request.status === 'pending') {
+      const actions = node('div', undefined, 'row-actions');
+      const approve = node('button', '批准'); approve.type = 'button';
+      approve.addEventListener('click', () => confirmAction('批准 NPC 变更申请', `批准「${request.title}」？批准后作为开发者编辑清单处理，不会自动改源码。`, () => reviewNpcRequest(request.id, 'approve')));
+      const reject = node('button', '拒绝', 'warning'); reject.type = 'button';
+      reject.addEventListener('click', () => reviewNpcRequest(request.id, 'reject'));
+      actions.append(approve, reject);
+      foot.append(actions);
+    }
+    card.append(foot);
+    return card;
+  });
+  $('#npcRequestRows').replaceChildren(...(rows.length ? rows : [node('p', '暂无变更申请', 'empty')]));
+}
+async function reviewNpcRequest(id, action) {
+  try {
+    await api(`/npc-change-requests/${id}/${action}`, { method: 'POST', body: JSON.stringify({}) });
+    showNotice(action === 'approve' ? '已批准变更申请' : '已拒绝变更申请', true);
+    await loadNpcRequests();
+  } catch (error) { showNotice(error.message); }
+}
+
+const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, npc: loadNpcs, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress, telemetry: loadTelemetry };
+const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', npc: 'NPC 管理', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务', telemetry: '运行监控' };
 async function switchView(view) {
   state.view = view; $$('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.view === view));
   $$('.view').forEach((page) => { const active = page.dataset.page === view; page.hidden = !active; page.classList.toggle('active', active); });
@@ -291,6 +372,7 @@ $('#checkpointButton').addEventListener('click', async () => { try { await api('
 $('#logoutButton').addEventListener('click', async () => { try { await api('/logout', { method: 'POST' }); } finally { showLogin(); } });
 $('#chatSearch').addEventListener('submit', (event) => { event.preventDefault(); void loadChat(); });
 $('#chatFilter').addEventListener('change', (event) => { state.chatFilter = event.target.value; void loadChat(); });
+$('#npcRequestFilter').addEventListener('change', (event) => { state.npcRequestFilter = event.target.value; void loadNpcRequests(); });
 $('#storySearch').addEventListener('submit', (event) => { event.preventDefault(); void loadStoryProgress(); });
 $('#userDialogSubmit').addEventListener('click', () => void submitUserEditor());
 $('#houseDialogSubmit').addEventListener('click', () => void submitHouseEditor());
