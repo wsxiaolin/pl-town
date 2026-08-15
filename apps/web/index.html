@@ -207,6 +207,19 @@
     </header>
     <div class="works-list" id="worksList"></div>
   </aside>
+
+  <!-- Writer catalog: opened by the culture hall -->
+  <aside class="works-panel" id="writerCatalogPanel" role="dialog" aria-modal="false" aria-labelledby="writerCatalogTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker">WRITER CATALOG · 物实作家图鉴</span>
+        <h2 id="writerCatalogTitle">物实作家图鉴</h2>
+        <p id="writerCatalogNote"></p>
+      </div>
+      <button class="works-close" id="writerCatalogClose" type="button" aria-label="关闭">&times;</button>
+    </header>
+    <div class="works-list" id="writerCatalogList"></div>
+  </aside>
   <!-- 作品详细内容板块暂时注释，待后续恢复：
   <aside class="work-detail-panel" id="workDetailPanel" role="dialog" aria-labelledby="workDetailTitle">
     <button class="works-close" id="workDetailClose" type="button" aria-label="Close">&times;</button>
@@ -318,6 +331,22 @@
       <div class="modal-body" id="modalBody"></div>
       <div class="modal-footer">
         <button class="modal-close" id="modalClose">合上</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Music Hall Lyrics Modal -->
+  <div class="lyrics-overlay" id="lyricsOverlay">
+    <div class="lyrics-stage" id="lyricsStage">
+      <span class="lyrics-badge" aria-hidden="true">🆕</span>
+      <div class="lyrics-header">
+        <h2 class="lyrics-title" id="lyricsTitle"></h2>
+        <p class="lyrics-subtitle" id="lyricsSubtitle"></p>
+        <p class="lyrics-dedication" id="lyricsDedication"></p>
+      </div>
+      <div class="lyrics-scroll" id="lyricsScroll"></div>
+      <div class="lyrics-footer">
+        <button class="lyrics-close" id="lyricsClose">谢幕</button>
       </div>
     </div>
   </div>

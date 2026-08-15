@@ -5,6 +5,8 @@ import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, upda
 import type { User } from './types.js';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
+/** Public SHA-256 token digest used to look up game-resident sessions over HTTP. */
+export const tokenHash = hash;
 const passwordWork = new AsyncGate(4, 32);
 const derivePassword = (password: string, salt: Buffer, length = 64): Promise<Buffer> => passwordWork.run(() => new Promise((resolve, reject) => {
   scrypt(password, salt, length, (error, derived) => error ? reject(error) : resolve(derived));

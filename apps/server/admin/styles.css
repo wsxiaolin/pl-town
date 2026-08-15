@@ -137,3 +137,25 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .panel--logs header { flex: 0 0 auto; }
 .panel--logs .log-view { flex: 1 1 auto; max-height: none; margin-bottom: 14px; }
 .panel--logs #refreshLogsButton { flex: 0 0 auto; align-self: flex-start; }
+
+/* NPC 管理 */
+.topology-link { font-size: 12px; font-weight: 650; color: #324039; text-decoration: none; }
+.topology-link:hover { text-decoration: underline; }
+.npc-layout { display: grid; grid-template-columns: 1.2fr 1.4fr; gap: 18px; margin-bottom: 18px; }
+.npc-table-wrap { max-height: 520px; overflow: auto; }
+.npc-table-wrap tr { cursor: pointer; }
+.npc-table-wrap tr:hover { background: #f0f4f2; }
+.npc-dialog { max-height: 520px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.npc-dialog-node { border-left: 3px solid #176b4a; padding: 8px 12px; background: #f6faf8; border-radius: 0 5px 5px 0; }
+.npc-dialog-text { font-size: 13px; line-height: 1.5; word-break: break-word; }
+.npc-dialog-options { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.npc-dialog-options li { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 4px 8px; background: #fff; border: 1px solid #e3eae6; border-radius: 4px; }
+.npc-dialog-option-label { color: #2c3a33; }
+.npc-dialog-options small { color: #718078; white-space: nowrap; }
+.npc-request-list { display: flex; flex-direction: column; gap: 12px; }
+.npc-request-card { padding: 12px 14px; background: #f8faf9; border: 1px solid #dce3df; border-radius: 7px; }
+.npc-request-card header { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.npc-request-card p { margin: 8px 0; font-size: 13px; line-height: 1.5; word-break: break-word; }
+.npc-request-card footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+.npc-request-meta { color: #718078; font-size: 12px; }
+@media (max-width: 860px) { .npc-layout { grid-template-columns: 1fr; } }
