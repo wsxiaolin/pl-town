@@ -10,6 +10,7 @@ import { createWorldDecorations } from '../rendering/worldDecorations';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
+import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -424,6 +425,7 @@ function init() {
     pauseNpcs,
     resumeNpcs,
     showToast: showUnlockToast,
+    musicHallLyrics: MUSIC_HALL_LYRICS,
     signal: eventController.signal,
   });
   cityDialogs.setup();
