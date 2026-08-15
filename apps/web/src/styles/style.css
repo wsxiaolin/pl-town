@@ -173,6 +173,15 @@ body.night { --text-mid: #666662; }
 @keyframes works-spin { to { transform:rotate(360deg); } }
 @media (max-width:680px){ .works-head{padding:23px 20px 18px}.works-tools{padding:14px 20px 10px}.works-summary{padding-left:20px}.works-list{padding:0 20px 22px} }
 
+/* Writer catalog drawer (culture hall) */
+.writer-author { padding:20px 0; border-top:1px solid #dedfda; }
+.writer-author:first-child { border-top:0; }
+.writer-author h3 { font-size:17px; line-height:1.35; font-weight:650; letter-spacing:0; }
+.writer-signature { margin-top:8px; color:#3b6fe0; font-size:12px; line-height:1.6; }
+.writer-desc { margin-top:10px; color:#646964; font-size:12px; line-height:1.65; }
+.writer-works { display:inline-block; margin-top:12px; padding:4px 8px; border:1px solid #d7d9d5; color:#737873; font-size:10px; }
+
+
 /* ===== CANVAS ===== */
 #c {
   position: fixed;
@@ -1508,25 +1517,6 @@ body.night .time-display::before { background: #8FB4E8; }
 .inventory-panel [data-item-id="mandarin"] .inventory-item-icon { background: #fff0dc; color: #ba6719; }
 .inventory-panel [data-item-id="dragonwell_tea"] .inventory-item-icon { background: #e5f0e1; color: #397044; }
 .inventory-panel .sp-ul-name { min-width: 0; flex: 1; margin-left: 7px; overflow: hidden; color: #3d454e; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-
-/* NPC 变更申请面板 */
-.npc-panel { width: 100%; padding: 12px; background: #f7f7f4; overflow-y: auto; }
-.npc-panel-hero { margin: 0 0 12px; }
-.npc-panel-hero span { color: #929691; font-size: 9px; font-weight: 700; letter-spacing: .04em; }
-.npc-panel-hero strong { display: block; margin: 3px 0 4px; color: #3d454e; font-size: 14px; }
-.npc-panel-hero p { margin: 0; color: #6d7278; font-size: 10px; line-height: 1.45; }
-.npc-change-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.npc-change-field { display: flex; flex-direction: column; gap: 3px; }
-.npc-change-field--full { grid-column: 1 / -1; }
-.npc-change-field span { color: #6d7278; font-size: 9px; font-weight: 600; }
-.npc-change-field input, .npc-change-field select, .npc-change-field textarea { width: 100%; padding: 7px 8px; border: 1px solid #d7d9d4; border-radius: 5px; background: #fff; color: #3d454e; font: inherit; font-size: 11px; }
-.npc-change-field textarea { min-height: 84px; resize: vertical; }
-.npc-change-form button[type="submit"] { grid-column: 1 / -1; justify-self: start; padding: 8px 16px; border: 0; border-radius: 6px; background: #176b4a; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
-.npc-change-form button[type="submit"]:hover { background: #115c3d; }
-.npc-change-form button[type="submit"]:disabled { opacity: .6; cursor: not-allowed; }
-.npc-change-status { grid-column: 1 / -1; color: #8c2727; font-size: 10px; }
-.npc-change-status.success { color: #155d3f; }
-@media (max-width: 360px) { .npc-change-form { grid-template-columns: 1fr; } }
 .inventory-panel .sp-ul-thresh { margin-left: 4px; font-size: 8px; color: #858b91; white-space: nowrap; }
 .shop-product { display: flex; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid rgba(20,30,40,.08); }
 .shop-product-icon { width: 46px; height: 46px; flex-basis: 46px; font-size: 18px; background: #dcebd8; }

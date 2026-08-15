@@ -34,22 +34,6 @@ test('resident phone switches between housing and chat', async ({ page }) => {
   await expect(page.locator('#onlineChatView')).toHaveClass(/active/);
 });
 
-test('resident phone opens the NPC change request panel', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('minicityCGSeenV3','true'); localStorage.setItem('minicityUser','tester');
-    localStorage.setItem('minicityRenderSettings',JSON.stringify({resolution:1,antialias:false,anisotropy:1,shadows:false,exposure:1.18}));
-  });
-  await page.goto('/');
-  await page.locator('#onlinePanelToggle').click({force:true});
-  await page.locator('[data-online-tab="npc"]').click({force:true});
-  await expect(page.locator('#onlineNpcView')).toHaveClass(/active/);
-  await expect(page.locator('#npcChangeForm')).toBeVisible();
-  // Submitting without a server token surfaces a friendly status, not a crash.
-  await page.locator('#npcChangeSubmit').click({force:true});
-  await expect(page.locator('#npcChangeStatus')).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
-});
-
 test('render settings use the available width and keep controls responsive', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {
@@ -472,4 +456,41 @@ test('an expired session can log in again from the header', async ({ page }) => 
   await page.locator('#loginBtn').click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBe('renewed-token');
   await expect(loginEntry).toHaveText('— tester');
+});
+
+test('culture hall opens the writer catalog drawer from the right', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3', 'true');
+    localStorage.setItem('minicityUser', 'culture-tester');
+    localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
+    const NativeWebSocket = window.WebSocket;
+    class CultureGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      send() {}
+      close() { this.readyState = NativeWebSocket.CLOSED; }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new CultureGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+  });
+
+  await page.goto('/');
+  await page.waitForFunction(() => {
+    const mini = (window as any).__mini?.();
+    return !!mini?.player?.visible;
+  }, undefined, { timeout: 30_000 });
+
+  await page.evaluate(() => (window as any).__mini().interactBuilding('culturehall'));
+  const panel = page.locator('#writerCatalogPanel');
+  await expect(panel).toHaveClass(/open/);
+  await expect(page.locator('#writerCatalogTitle')).toHaveText('物实作家图鉴');
+  await expect(page.locator('#writerCatalogList .writer-author')).toHaveCount(38);
+  await expect(page.locator('#writerCatalogList')).toContainText('一只屑整数虫');
+  await expect(page.locator('#writerCatalogList')).toContainText('Nebulapolaris');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
+  await page.locator('#writerCatalogClose').click();
+  await expect(panel).not.toHaveClass(/open/);
 });

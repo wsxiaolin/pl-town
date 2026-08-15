@@ -96,7 +96,6 @@
       <button class="online-tab active" data-online-tab="chat" type="button">公聊</button>
       <button class="online-tab" data-online-tab="houses" type="button">住宅</button>
       <button class="online-tab" data-online-tab="inventory" type="button">背包</button>
-      <button class="online-tab" data-online-tab="npc" type="button">NPC</button>
       <!-- 社交板块暂时注释，待后续恢复：
       <button class="online-tab" data-online-tab="social" type="button">社交</button>
       -->
@@ -113,17 +112,6 @@
       <section class="online-view inventory-panel" id="onlineInventoryView" aria-label="背包">
         <div class="inventory-balance"><span>物实币</span><strong data-currency>0</strong></div>
         <div class="sp-unlocks" data-inventory-section><div class="sp-ul-title">已有物品</div><div data-inventory-list></div></div>
-      </section>
-      <section class="online-view npc-panel" id="onlineNpcView" aria-label="NPC 变更申请">
-        <div class="npc-panel-hero"><span>TOWN HALL</span><strong>NPC 变更申请</strong><p>向开发者提交 NPC 对话或设定的修改建议，审批后会进入编辑清单（不会自动改动游戏）。</p></div>
-        <form class="npc-change-form" id="npcChangeForm">
-          <label class="npc-change-field"><span>类型</span><select id="npcChangeKind"><option value="dialog">对话文案</option><option value="edit">设定调整</option><option value="add">新增 NPC</option></select></label>
-          <label class="npc-change-field"><span>NPC 名称 / ID</span><input id="npcChangeNpcId" type="text" maxlength="100" placeholder="例如 linche 或 NPC 名称" autocomplete="off"></label>
-          <label class="npc-change-field"><span>标题</span><input id="npcChangeTitle" type="text" maxlength="120" placeholder="一句话概括建议" autocomplete="off"></label>
-          <label class="npc-change-field npc-change-field--full"><span>详细说明</span><textarea id="npcChangeSummary" maxlength="2000" placeholder="说明希望修改的内容、原因和预期效果（最多 2000 字）"></textarea></label>
-          <button type="submit" id="npcChangeSubmit">提交申请</button>
-          <small class="npc-change-status" id="npcChangeStatus" role="status" hidden></small>
-        </form>
       </section>
       <!-- 通知板块暂时停用，保留结构以便后续恢复。
       <section class="online-view" id="onlineNotificationsView"><div class="phone-feed" id="phoneNotifications"><div class="phone-bind-prompt" id="phoneNotificationBind"><form id="phoneBindForm"><label><span>账号</span><input id="phoneBindEmail" type="text" placeholder="邮箱或手机号" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label><span>密码</span><input id="phoneBindPassword" type="password" placeholder="密码" autocomplete="current-password"></label><button type="submit">绑定</button><small id="phoneBindError" role="alert"></small></form></div></div></section>
@@ -218,6 +206,19 @@
       <button class="works-close" id="worksClose" type="button" aria-label="Close">&times;</button>
     </header>
     <div class="works-list" id="worksList"></div>
+  </aside>
+
+  <!-- Writer catalog: opened by the culture hall -->
+  <aside class="works-panel" id="writerCatalogPanel" role="dialog" aria-modal="false" aria-labelledby="writerCatalogTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker">WRITER CATALOG · 物实作家图鉴</span>
+        <h2 id="writerCatalogTitle">物实作家图鉴</h2>
+        <p id="writerCatalogNote"></p>
+      </div>
+      <button class="works-close" id="writerCatalogClose" type="button" aria-label="关闭">&times;</button>
+    </header>
+    <div class="works-list" id="writerCatalogList"></div>
   </aside>
   <!-- 作品详细内容板块暂时注释，待后续恢复：
   <aside class="work-detail-panel" id="workDetailPanel" role="dialog" aria-labelledby="workDetailTitle">
