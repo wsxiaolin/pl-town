@@ -322,7 +322,7 @@ try {
   // NPC change requests: player submits a ticket, admin reviews the queue.
   // Reconnect a resident here to obtain a fresh, valid session token (earlier
   // reconnects invalidate previously issued tokens).
-  const requester = await connect('Dana');
+  requester = await connect('Dana');
   const requesterToken = requester.hello.token;
   if (!requesterToken) throw new Error('Server hello must issue a session token for authenticated residents');
   const unauthenticatedNpcRequest = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {

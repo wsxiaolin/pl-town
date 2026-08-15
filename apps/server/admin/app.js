@@ -327,7 +327,7 @@ async function loadNpcRequests() {
       const approve = node('button', '批准'); approve.type = 'button';
       approve.addEventListener('click', () => confirmAction('批准 NPC 变更申请', `批准「${request.title}」？批准后作为开发者编辑清单处理，不会自动改源码。`, () => reviewNpcRequest(request.id, 'approve')));
       const reject = node('button', '拒绝', 'warning'); reject.type = 'button';
-      reject.addEventListener('click', () => reviewNpcRequest(request.id, 'reject'));
+      reject.addEventListener('click', () => confirmAction('拒绝 NPC 变更申请', `拒绝「${request.title}」？`, () => reviewNpcRequest(request.id, 'reject')));
       actions.append(approve, reject);
       foot.append(actions);
     }

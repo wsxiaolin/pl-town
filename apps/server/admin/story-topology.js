@@ -136,7 +136,7 @@ function renderTopology(summary) {
   const edgeLayer = el('g');
   const drawEdge = (fromPos, toPos, kind) => {
     const path = el('path', {
-      d: `M ${fromPos.cx} ${fromPos.cy + (fromPos === toPos ? 0 : 0)} C ${fromPos.cx} ${(fromPos.cy + toPos.cy) / 2}, ${toPos.cx} ${(fromPos.cy + toPos.cy) / 2}, ${toPos.cx} ${toPos.cy}`,
+      d: `M ${fromPos.cx} ${fromPos.cy} C ${fromPos.cx} ${(fromPos.cy + toPos.cy) / 2}, ${toPos.cx} ${(fromPos.cy + toPos.cy) / 2}, ${toPos.cx} ${toPos.cy}`,
       class: `topology-edge ${kind === 'choice' ? '' : kind}`,
       'marker-end': 'url(#arrow)',
     });
@@ -179,8 +179,8 @@ function renderTopology(summary) {
 }
 
 function edgeKindForSource(source, triggerEdges) {
-  const edge = triggerEdges.find((e) => e.from === source);
-  return edge?.kind ?? 'actor';
+  const kinds = new Set(triggerEdges.filter((e) => e.from === source).map((e) => e.kind));
+  return kinds.size === 1 ? [...kinds][0] : 'actor';
 }
 
 async function loadTopology(storyId) {

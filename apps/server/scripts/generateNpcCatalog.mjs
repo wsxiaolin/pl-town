@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import ts from 'typescript';
 
 // Generates apps/server/src/npcCatalog.ts from the authoritative client NPC
@@ -93,5 +93,6 @@ lines.push('  return NPC_BY_ID.get(id);');
 lines.push('}');
 lines.push('');
 
+mkdirSync(SERVER_SRC_DATA, { recursive: true });
 writeFileSync(new URL('npcCatalog.ts', SERVER_SRC_DATA), lines.join('\n'));
 console.log(`npcCatalog.ts generated: ${entries.length} NPCs`);
