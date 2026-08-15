@@ -1,0 +1,45 @@
+:root {
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: #18201c;
+  background: #f5f7f6;
+}
+* { box-sizing: border-box; }
+.topology-shell { min-height: 100vh; margin: 0; padding: 0 28px 40px; background: #f5f7f6; }
+.eyebrow { margin: 0 0 5px; color: #718078; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
+.topology-header { min-height: 92px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #dfe5e2; flex-wrap: wrap; }
+.topology-header h1 { margin: 0; font-size: 21px; }
+.topology-subtitle { margin: 6px 0 0; color: #6d7872; font-size: 12px; }
+.topology-actions { display: flex; align-items: center; gap: 12px; }
+.topology-select { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #4e5a54; }
+.topology-select select { height: 36px; padding: 0 10px; border: 1px solid #cfd7d3; border-radius: 5px; background: #fff; font: inherit; }
+.topology-back { display: inline-flex; align-items: center; height: 36px; padding: 0 13px; color: #324039; background: #fff; border: 1px solid #cbd4cf; border-radius: 5px; text-decoration: none; font-size: 12px; font-weight: 650; }
+.topology-back:hover { background: #f1f4f2; }
+.topology-legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0 0; padding: 12px 14px; background: #fff; border: 1px solid #dce2df; border-radius: 7px; font-size: 12px; color: #4e5a54; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; }
+.legend-line { display: inline-block; width: 26px; height: 0; border-top: 2px solid #176b4a; }
+.legend-line--choice { border-top-style: solid; border-top-color: #176b4a; }
+.legend-line--world { border-top-style: dashed; border-top-color: #3b6fe0; }
+.legend-line--building { border-top-style: dashed; border-top-color: #b5852a; }
+.legend-line--actor { border-top-style: dashed; border-top-color: #8a4a8a; }
+.topology-canvas-wrap { position: relative; margin-top: 16px; background: #fff; border: 1px solid #dce2df; border-radius: 7px; overflow: auto; min-height: 360px; }
+.topology-svg { display: block; min-width: 100%; }
+.topology-empty { padding: 40px; text-align: center; color: #7c8781; }
+.topology-status { margin: 14px 0 0; padding: 10px 12px; font-size: 13px; color: #8c2727; background: #fff1f1; border: 1px solid #efcccc; border-radius: 5px; }
+.topology-status.success { color: #155d3f; background: #ecf8f2; border-color: #bfe5d1; }
+.topology-node rect { fill: #eaf6f0; stroke: #176b4a; stroke-width: 1.4; }
+.topology-node.start rect { fill: #d6efe1; stroke: #115c3d; stroke-width: 2; }
+.topology-node text { fill: #18201c; font-size: 11px; pointer-events: none; }
+.topology-node .topology-node-id { fill: #748078; font-size: 9px; }
+.topology-edge { fill: none; stroke: #176b4a; stroke-width: 1.3; }
+.topology-edge.world { stroke: #3b6fe0; stroke-dasharray: 5 4; }
+.topology-edge.building { stroke: #b5852a; stroke-dasharray: 5 4; }
+.topology-edge.actor { stroke: #8a4a8a; stroke-dasharray: 5 4; }
+.topology-trigger rect { fill: #f3f0fa; stroke: #8a4a8a; stroke-width: 1.2; }
+.topology-trigger.building rect { fill: #faf2e6; stroke: #b5852a; }
+.topology-trigger.world rect { fill: #eef3fc; stroke: #3b6fe0; }
+.topology-trigger text { fill: #18201c; font-size: 10px; pointer-events: none; }
+@media (max-width: 720px) {
+  .topology-shell { padding: 0 14px 32px; }
+  .topology-header { min-height: 78px; }
+  .topology-legend { gap: 12px; }
+}

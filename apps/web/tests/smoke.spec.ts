@@ -34,6 +34,22 @@ test('resident phone switches between housing and chat', async ({ page }) => {
   await expect(page.locator('#onlineChatView')).toHaveClass(/active/);
 });
 
+test('resident phone opens the NPC change request panel', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3','true'); localStorage.setItem('minicityUser','tester');
+    localStorage.setItem('minicityRenderSettings',JSON.stringify({resolution:1,antialias:false,anisotropy:1,shadows:false,exposure:1.18}));
+  });
+  await page.goto('/');
+  await page.locator('#onlinePanelToggle').click({force:true});
+  await page.locator('[data-online-tab="npc"]').click({force:true});
+  await expect(page.locator('#onlineNpcView')).toHaveClass(/active/);
+  await expect(page.locator('#npcChangeForm')).toBeVisible();
+  // Submitting without a server token surfaces a friendly status, not a crash.
+  await page.locator('#npcChangeSubmit').click({force:true});
+  await expect(page.locator('#npcChangeStatus')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
 test('render settings use the available width and keep controls responsive', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {

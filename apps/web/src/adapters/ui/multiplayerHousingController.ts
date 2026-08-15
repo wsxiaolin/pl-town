@@ -351,7 +351,7 @@ export function createMultiplayerHousingController(options) {
   }
 
   function activatePhoneTab(target) {
-    const views={chat:'onlineChatView',houses:'onlineHousesView',inventory:'onlineInventoryView',archive:'onlineArchiveView',social:'onlineSocialView'};
+    const views={chat:'onlineChatView',houses:'onlineHousesView',inventory:'onlineInventoryView',npc:'onlineNpcView',archive:'onlineArchiveView',social:'onlineSocialView'};
     document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item.dataset.onlineTab === target));
     document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === views[target]));
   }

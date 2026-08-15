@@ -94,11 +94,33 @@ try {
   await page.locator('#backupRows').waitFor();
   await page.locator('[data-view="users"]').click();
   await page.locator('#userRows').waitFor();
+
+  // NPC management: list + dialog hierarchy render without errors.
+  await page.locator('[data-view="npc"]').click();
+  await page.locator('#npcRows').waitFor();
+  const npcRowCount = await page.locator('#npcRows tr').count();
+  if (npcRowCount === 0) throw new Error('NPC management view must list NPCs');
+  await page.locator('#npcRows tr').first().click();
+  await page.locator('#npcDialog .npc-dialog-node').first().waitFor();
+  await page.locator('#npcRequestRows').waitFor();
+
   await page.locator('[data-view="telemetry"]').click();
   await page.locator('#telemetryMetrics .metric').first().waitFor();
   await page.locator('#serverLogs').waitFor();
   await page.locator('[data-view="overview"]').click();
   await page.locator('#metrics .metric').first().waitFor();
+
+  // Story topology: read-only standalone graph page renders nodes/edges.
+  const topologyPage = await context.newPage();
+  topologyPage.on('pageerror', (error) => browserErrors.push(`topology: ${error.message}`));
+  await topologyPage.goto(`${origin}/admin/story-topology`, { waitUntil: 'networkidle' });
+  await topologyPage.locator('#topologyStorySelect').waitFor();
+  const topologyOptionCount = await topologyPage.locator('#topologyStorySelect option').count();
+  if (topologyOptionCount === 0) throw new Error('Story topology page must list stories to inspect');
+  // The page auto-loads the first story; wait for the SVG graph to render nodes.
+  await topologyPage.locator('#topologySvg').waitFor();
+  await topologyPage.locator('#topologySvg .topology-node').first().waitFor({ timeout: 10_000 });
+  await topologyPage.close();
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);

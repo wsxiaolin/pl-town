@@ -10,7 +10,8 @@
     "db:restore": "node dist/restoreBackup.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:integration": "npm run build && node tests/integration.mjs && node tests/restore.mjs",
-    "test:admin-ui": "npm run build && node tests/admin-ui.mjs"
+    "test:admin-ui": "npm run build && node tests/admin-ui.mjs",
+    "gen:npc-catalog": "node scripts/generateNpcCatalog.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
