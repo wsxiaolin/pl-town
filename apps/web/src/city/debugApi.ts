@@ -18,13 +18,16 @@ export type DebugApiOptions = {
   destroyBuilding: (buildingId: string) => boolean;
   destroyResidence: (residenceId: string) => boolean;
   destroyAll: () => number;
+  restoreBuilding: (buildingId: string) => boolean;
+  restoreResidence: (residenceId: string) => boolean;
+  restoreAll: () => number;
   openModal: (building: any) => void;
   interactWithSceneInterestPoint: (id: any) => void;
   getSceneInterestPoints: () => { entities: Map<string, any> } | null;
 };
 
 export function installDebugApi(options: DebugApiOptions) {
-  (window as any).__mini = () => ({
+  const api = () => ({
     scene: options.getScene(),
     camera: options.getCamera(),
     renderer: options.getRenderer(),
@@ -50,6 +53,9 @@ export function installDebugApi(options: DebugApiOptions) {
     destroyBuilding: (buildingId: string) => options.destroyBuilding(buildingId),
     destroyResidence: (residenceId: string) => options.destroyResidence(residenceId),
     destroyAll: () => options.destroyAll(),
+    restoreBuilding: (buildingId: string) => options.restoreBuilding(buildingId),
+    restoreResidence: (residenceId: string) => options.restoreResidence(residenceId),
+    restoreAll: () => options.restoreAll(),
     openBuildingDialog: (buildingId: string) => {
       const building = options.getBuildings().find((item: any) => item.id === buildingId);
       if (!building || options.isBuildingUnavailable(building)) return false;
@@ -66,4 +72,11 @@ export function installDebugApi(options: DebugApiOptions) {
       return true;
     },
   });
+  (window as any).__mini = api;
+  (window as any).destroyBuilding = options.destroyBuilding;
+  (window as any).destroyResidence = options.destroyResidence;
+  (window as any).destroyAll = options.destroyAll;
+  (window as any).restoreBuilding = options.restoreBuilding;
+  (window as any).restoreResidence = options.restoreResidence;
+  (window as any).restoreAll = options.restoreAll;
 }

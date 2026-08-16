@@ -7,6 +7,39 @@ export type DamageableBuilding = {
   labelEl?: HTMLElement | null;
 };
 
+type MeshSnapshot = {
+  mesh: THREE.Mesh;
+  material: THREE.Material | THREE.Material[];
+  visible: boolean;
+};
+
+type BuildingSnapshot = {
+  meshes: MeshSnapshot[];
+  body?: { position: THREE.Vector3; scale: THREE.Vector3; rotation: THREE.Euler };
+};
+
+const snapshots = new WeakMap<THREE.Group, BuildingSnapshot>();
+
+function snapshotBuilding(building: DamageableBuilding): BuildingSnapshot {
+  const existing = snapshots.get(building.group);
+  if (existing) return existing;
+  const snapshot: BuildingSnapshot = { meshes: [] };
+  building.group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    snapshot.meshes.push({ mesh, material: mesh.material, visible: mesh.visible });
+  });
+  if (building.body) {
+    snapshot.body = {
+      position: building.body.position.clone(),
+      scale: building.body.scale.clone(),
+      rotation: building.body.rotation.clone(),
+    };
+  }
+  snapshots.set(building.group, snapshot);
+  return snapshot;
+}
+
 function damagedMaterial(material: THREE.Material): THREE.Material {
   const clone = material.clone() as THREE.MeshStandardMaterial;
   clone.color?.multiplyScalar(0.42);
@@ -101,6 +134,7 @@ function toLocalBounds(group: THREE.Group): THREE.Box3 {
 export function applyBuildingDestroyedPresentation(building: DamageableBuilding): boolean {
   if (building.group.userData.buildingState === 'damaged') return false;
 
+  snapshotBuilding(building);
   building.group.userData.buildingState = 'damaged';
   building.group.userData.destroyed = true;
   building.group.traverse((object) => {
@@ -121,6 +155,60 @@ export function applyBuildingDestroyedPresentation(building: DamageableBuilding)
   collapseBuilding(building);
   addRubble(building.group, bounds);
   return true;
+}
+
+export function restoreBuildingPresentation(building: DamageableBuilding): boolean {
+  if (building.group.userData.buildingState !== 'damaged') return false;
+  const snapshot = snapshots.get(building.group);
+  if (!snapshot) return false;
+
+  building.group.getObjectByName('building-destruction-rubble')?.removeFromParent();
+  snapshot.meshes.forEach(({ mesh, material, visible }) => {
+    mesh.material = material;
+    mesh.visible = visible;
+  });
+  if (building.body && snapshot.body) {
+    building.body.position.copy(snapshot.body.position);
+    building.body.scale.copy(snapshot.body.scale);
+    building.body.rotation.copy(snapshot.body.rotation);
+  }
+  building.group.userData.buildingState = 'default';
+  building.group.userData.destroyed = false;
+  if (building.labelEl) {
+    building.labelEl.hidden = false;
+    building.labelEl.removeAttribute('aria-disabled');
+    building.labelEl.tabIndex = 0;
+  }
+  return true;
+}
+
+export function refreshBuildingDestroyedPresentation(building: DamageableBuilding): boolean {
+  if (building.group.userData.buildingState !== 'damaged') return false;
+  building.group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || object.parent?.name === 'building-destruction-rubble') return;
+    const source = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const materials = source.map(damagedMaterial);
+    mesh.material = Array.isArray(mesh.material) ? materials : materials[0]!;
+  });
+  if (building.labelEl) {
+    building.labelEl.hidden = true;
+    building.labelEl.setAttribute('aria-disabled', 'true');
+  }
+  return true;
+}
+
+export function readDestroyedIds(storage: Pick<Storage, 'getItem'> = window.localStorage): string[] {
+  try {
+    const value = JSON.parse(storage.getItem('minicityDestroyedBuildings') ?? '[]');
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeDestroyedIds(ids: readonly string[], storage: Pick<Storage, 'setItem'> = window.localStorage): void {
+  storage.setItem('minicityDestroyedBuildings', JSON.stringify([...new Set(ids)]));
 }
 
 export function isBuildingDestroyed(building: { group: THREE.Object3D }): boolean {

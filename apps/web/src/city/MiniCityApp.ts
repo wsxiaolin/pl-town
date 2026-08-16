@@ -41,7 +41,7 @@ import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { addCityFountain, addCityLighting } from './scenePresentationController';
 import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
 import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
-import { applyBuildingDestroyedPresentation, isBuildingDestroyed } from './buildingDamage';
+import { applyBuildingDestroyedPresentation, isBuildingDestroyed, readDestroyedIds, refreshBuildingDestroyedPresentation, restoreBuildingPresentation, writeDestroyedIds } from './buildingDamage';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameHour } from '../gameplay/time/townClock';
@@ -334,7 +334,7 @@ function init() {
   cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
   addRealBuildingModels(scene, buildings)
-    .then(() => { cacheBuildingBoxes(); mapController?.invalidateShot(); })
+    .then(() => { cacheBuildingBoxes(); applyPersistedDestroyedBuildings(); })
     .catch(error => console.error('3D model loading failed', error));
   buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isBuildingUnavailable, interact: interactOrWalk });
   buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
@@ -349,6 +349,7 @@ function init() {
     isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
   });
+  applyPersistedDestroyedBuildings();
   progressionController = createProgressionController({
     getStats,
     saveStats,
@@ -527,6 +528,9 @@ function setupScene() {
     destroyBuilding,
     destroyResidence,
     destroyAll,
+    restoreBuilding,
+    restoreResidence,
+    restoreAll,
     openModal,
     interactWithSceneInterestPoint,
     getSceneInterestPoints: () => sceneInterestPoints,
@@ -574,7 +578,10 @@ export function destroyBuilding(buildingId: string): boolean {
   const building = buildings.find((item) => item.id === buildingId);
   if (!building || isBuildingDestroyed(building)) return false;
   const destroyed = applyBuildingDestroyedPresentation(building);
-  if (destroyed) mapController?.invalidateShot();
+  if (destroyed) {
+    persistDestroyedBuildings();
+    mapController?.invalidateShot();
+  }
   return destroyed;
 }
 
@@ -583,6 +590,7 @@ export function destroyResidence(residenceId: string): boolean {
   if (!residence || isBuildingDestroyed(residence)) return false;
   const destroyed = applyBuildingDestroyedPresentation(residence);
   if (destroyed) {
+    persistDestroyedBuildings();
     mapController?.invalidateShot();
     multiplayerHousing?.renderMapHouseTags();
   }
@@ -596,6 +604,46 @@ export function destroyAll(): number {
       : destroyResidence(item.id);
     return count + (destroyed ? 1 : 0);
   }, 0);
+}
+
+export function restoreBuilding(buildingId: string): boolean {
+  const building = buildings.find((item) => item.id === buildingId);
+  if (!building || !restoreBuildingPresentation(building)) return false;
+  persistDestroyedBuildings();
+  mapController?.invalidateShot();
+  return true;
+}
+
+export function restoreResidence(residenceId: string): boolean {
+  const residence = residences.find((item) => item.id === residenceId);
+  if (!residence || !restoreBuildingPresentation(residence)) return false;
+  persistDestroyedBuildings();
+  mapController?.invalidateShot();
+  multiplayerHousing?.renderMapHouseTags();
+  return true;
+}
+
+export function restoreAll(): number {
+  return [...buildings, ...residences].reduce((count, item) => {
+    const restored = buildings.includes(item)
+      ? restoreBuilding(item.id)
+      : restoreResidence(item.id);
+    return count + (restored ? 1 : 0);
+  }, 0);
+}
+
+function persistDestroyedBuildings(): void {
+  writeDestroyedIds([...buildings, ...residences].filter(isBuildingDestroyed).map(item => item.id));
+}
+
+function applyPersistedDestroyedBuildings(): void {
+  const destroyedIds = new Set(readDestroyedIds());
+  [...buildings, ...residences].forEach((item) => {
+    if (!destroyedIds.has(item.id)) return;
+    if (isBuildingDestroyed(item)) refreshBuildingDestroyedPresentation(item);
+    else applyBuildingDestroyedPresentation(item);
+  });
+  mapController?.invalidateShot();
 }
 
 function isResidenceUnavailable(residenceId: string): boolean {
