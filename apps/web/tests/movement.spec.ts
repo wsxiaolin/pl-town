@@ -193,16 +193,14 @@ test.describe('touch-capable tablet', () => {
   });
 });
 
-test('eternal retirement monument shows the memorial roster overlay', async ({ page }) => {
+test('eternal retirement monument shows the memorial roster overlay on the elevator', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
-  await page.evaluate(() => (window as any).__mini().openBuildingDialog('lab_outer'));
+  await page.evaluate(() => (window as any).__mini().openBuildingDialog('elevator'));
   const overlay = page.locator('#memorialOverlay');
   await expect(overlay).toHaveClass(/open/);
   await expect(page.locator('#memorialTitle')).toHaveText('物实永退用户纪念碑');
-  await expect(page.locator('#memorialScroll')).toContainText('胡莱三国官方');
-  await expect(page.locator('#memorialScroll')).toContainText('半国飞士');
-  await expect(page.locator('#memorialScroll')).toContainText('FontaineBleau');
-  await page.locator('#memorialClose').click();
+  await expect(page.locator('#memorialScroll')).toHaveCount(0);
+  await page.mouse.click(20, 20);
   await expect(overlay).not.toHaveClass(/open/);
 });

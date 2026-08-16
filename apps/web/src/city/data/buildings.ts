@@ -374,7 +374,7 @@ export const BUILDING_DEFS = [
   {
     id: "lab_outer",
     num: "34",
-    label: "永退用户纪念碑",
+    label: "数据中心",
     x: 33,
     z: 9,
     shape: "greenhouse",
@@ -1029,11 +1029,11 @@ export const BUILDING_CONTENT = {
     ],
   },
   lab_outer: {
-    name: "永退用户纪念碑",
-    slogan: "阴阳有序，命运无常。每一次告别，都是灵魂的返航。",
+    name: "数据中心",
+    slogan: "数据即星辰，也即尘埃。",
     dialog: [
-      "碑身刻着一个个被铭记的名字。",
-      "「感谢你们曾为这座城留下痕迹。」",
+      "一排排机柜亮着冷静的蓝光，风扇声低鸣不止。",
+      "「这里保存着这座城所有被记住的数据。」",
     ],
   },
   teahouse: {
