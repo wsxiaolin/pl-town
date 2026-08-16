@@ -19,11 +19,12 @@ export type BuildingInteractionOptions = {
     closeWorksPanel: () => void;
   } | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
+  getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, string?]> = {
-  bulletin: ['inventory'], news: ['inventory'], newsstand: ['inventory'],
+  bulletin: ['inventory'], news: ['inventory'],
   community: ['social', 'profile'], records: ['social', 'mine'],
   tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
   mutualaid: ['social', 'following'],
@@ -57,6 +58,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'culturehall') {
       options.getWriterCatalogController()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'newsstand') {
+      options.getNewsstandController()?.open();
       options.trackInteraction(b.id);
       return;
     }

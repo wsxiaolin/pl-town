@@ -516,3 +516,87 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
   await page.locator('#writerCatalogClose').click();
   await expect(panel).not.toHaveClass(/open/);
 });
+
+test('newsstand opens the newspaper catalog and reads a multi-page issue', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3', 'true');
+    localStorage.setItem('minicityUser', 'news-tester');
+    localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
+    const NativeWebSocket = window.WebSocket;
+    class NewsGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      progress = {
+        currency: 0,
+        inventory: {},
+        achievements: ['citizen'],
+        unlockedBuildings: ['newsstand'],
+        visitedBuildings: ['activity', 'library', 'newsstand'],
+      };
+      catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      send(raw: string) {
+        const request = JSON.parse(raw);
+        let response: Record<string, unknown> | null = null;
+        if (request.type === 'hello') {
+          response = {
+            type: 'hello', token: 'news-token',
+            user: { id: 'news-user', nickname: 'news-tester', email: null, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog,
+          };
+        } else if (request.type === 'progress.building.visit') {
+          response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
+        }
+        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+      }
+      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new NewsGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+  });
+
+  await page.goto('/');
+  await page.waitForFunction(() => {
+    const mini = (window as any).__mini?.();
+    return !!mini?.player?.visible;
+  }, undefined, { timeout: 30_000 });
+
+  await page.evaluate(() => (window as any).__mini().interactBuilding('newsstand'));
+  const panel = page.locator('#newsstandPanel');
+  await expect(panel).toHaveClass(/open/);
+  await expect(page.locator('#newsstandTitle')).toHaveText('报摊 · 星辉刊物目录');
+  await expect(page.locator('#newsstandList .np-year')).toHaveCount(4);
+  await expect(page.locator('#newsstandList .np-issue').first()).toContainText('2026.1.4');
+  const oldestIssue = page.locator('#newsstandList .np-issue', { hasText: '2023.7.23' });
+  await expect(oldestIssue).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
+  // Open the very first archived issue (2023.7.23) and confirm the reader renders.
+  await oldestIssue.click();
+  const reader = page.locator('#newspaperOverlay');
+  await expect(reader).toHaveClass(/open/);
+  await expect(page.locator('#newspaperMeta')).toContainText('星辉周刊 2023.7.23');
+  await expect(page.locator('#newspaperStage .np-issue-title')).toHaveText('星辉周刊 2023.7.23');
+  await expect(page.locator('#newspaperStage .np-motto')).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-body')).toContainText('精知优选');
+
+  // The first issue spans multiple pages; flip to the last one.
+  const total = Number(await page.locator('#newspaperPageTotal').textContent());
+  expect(total).toBeGreaterThan(1);
+  const nextBtn = page.locator('#newspaperNext');
+  for (let index = 0; index < total - 1; index += 1) {
+    await expect(nextBtn).toBeEnabled();
+    await nextBtn.click();
+  }
+  await expect(page.locator('#newspaperNext')).toBeDisabled();
+  await expect(page.locator('#newspaperPageNo')).toHaveText(String(total));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
+  // Going back returns to the catalog without errors.
+  await page.locator('#newspaperClose').click();
+  await expect(reader).not.toHaveClass(/open/);
+  await expect(panel).toHaveClass(/open/);
+  await page.locator('#newsstandClose').click();
+  await expect(panel).not.toHaveClass(/open/);
+});

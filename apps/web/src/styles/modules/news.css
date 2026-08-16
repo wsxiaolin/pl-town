@@ -1,0 +1,101 @@
+/* Newsstand: catalog drawer + newspaper reader */
+
+/* Catalog drawer shares the civic-archive drawer layout. */
+.newsstand-panel {
+  position: fixed; inset: 0 0 0 auto; z-index: 215; width: min(420px, 100vw); height: 100dvh;
+  display: flex; flex-direction: column; background: #f7f7f4; color: #20242a;
+  border-left: 1px solid #d8d9d5; box-shadow: -22px 0 55px rgba(32,36,42,.14);
+  transform: translateX(102%); visibility: hidden; transition: transform .32s cubic-bezier(.16,1,.3,1), visibility .32s;
+}
+.newsstand-panel.open { transform: none; visibility: visible; }
+.newsstand-list { flex: 1; overflow: auto; padding: 0 30px 28px; }
+
+.np-year { padding: 22px 0 6px; border-top: 1px solid #dedfda; }
+.np-year:first-child { border-top: 0; }
+.np-year-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.np-year-head h3 { margin: 0; font-size: 15px; font-weight: 750; letter-spacing: .02em; color: #2d333b; }
+.np-year-count { color: #9a9e98; font-size: 10px; letter-spacing: .06em; }
+.np-year-list { margin-top: 10px; display: grid; gap: 6px; }
+.np-issue {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  width: 100%; padding: 11px 12px; border: 1px solid #dcddd9; background: #fff; color: #34383e;
+  font: inherit; text-align: left; cursor: pointer; transition: border-color .18s, background .18s;
+}
+.np-issue:hover { border-color: #3b6fe0; background: #f2f6ff; }
+.np-issue b { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.np-issue span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #737873; font-size: 10px; }
+.np-issue i { padding: 3px 7px; border: 1px solid #d9dad6; color: #8a8e89; font-size: 9px; font-style: normal; }
+
+/* Reader overlay */
+.newspaper-overlay {
+  position: fixed; inset: 0; z-index: 230; display: grid; place-items: center;
+  background: rgba(23, 29, 41, .72); backdrop-filter: blur(3px);
+  opacity: 0; visibility: hidden; transition: opacity .26s ease, visibility .26s;
+}
+.newspaper-overlay.open { opacity: 1; visibility: visible; }
+.newspaper-viewport {
+  width: min(880px, calc(100vw - 28px)); height: min(720px, calc(100dvh - 28px));
+  display: flex; flex-direction: column; border-radius: 6px; overflow: hidden;
+  background: #f4f0e4; color: #26201a; box-shadow: 0 30px 90px rgba(0,0,0,.45);
+}
+.newspaper-toolbar {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: #2e333c; color: #e7e2d4;
+}
+.newspaper-back, .newspaper-close {
+  height: 30px; padding: 0 12px; border: 1px solid rgba(255,255,255,.22); background: transparent;
+  color: #f0eadb; font: inherit; font-size: 11px; cursor: pointer;
+}
+.newspaper-back:hover, .newspaper-close:hover { border-color: #fff; }
+.newspaper-meta { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; letter-spacing: .04em; }
+.newspaper-stage { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.newspaper-nav {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; background: #f4f0e4; border-top: 1px solid #d9d2c0;
+}
+.np-page-btn {
+  height: 34px; padding: 0 16px; border: 1px solid #c8c0ab; background: #efe9d9; color: #3a3329;
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.np-page-btn:disabled { opacity: .4; cursor: default; }
+.np-page-indicator { color: #7c715c; font-size: 11px; letter-spacing: .05em; }
+.np-page-indicator b { color: #2a2419; }
+
+/* The paper sheet itself */
+.np-sheet { max-width: 720px; margin: 0 auto; padding: 30px 34px 40px; background: #fbf8ef; }
+.np-masthead { text-align: center; padding-bottom: 14px; border-bottom: 2px solid #26201a; }
+.np-kicker { display: block; color: #9a4b2d; font-size: 10px; font-weight: 800; letter-spacing: .22em; }
+.np-issue-title { margin: 8px 0 4px; font-family: Georgia, 'Songti SC', 'STSong', serif; font-size: 28px; font-weight: 700; letter-spacing: .05em; }
+.np-page-caption { margin: 0; color: #8a8068; font-size: 11px; letter-spacing: .18em; }
+.np-body { padding-top: 18px; }
+.np-motto { margin: 2px 0 14px; color: #9a6a14; font-family: Georgia, 'Songti SC', serif; font-size: 17px; font-style: italic; text-align: center; }
+.np-separator { margin: 18px 0 12px; color: #9a6a14; font-size: 12px; letter-spacing: .12em; text-align: center; }
+.np-section {
+  margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #cfc6b0;
+  color: #26201a; font-family: Georgia, 'Songti SC', serif; font-size: 19px; font-weight: 700; letter-spacing: .04em;
+}
+.np-label { margin: 14px 0 4px; color: #9a4b2d; font-size: 12px; font-weight: 750; letter-spacing: .1em; }
+.np-text { margin: 6px 0; color: #3a3329; font-size: 14px; line-height: 1.85; }
+.np-text:first-child { margin-top: 0; }
+.np-editor { margin: 10px 0 2px; color: #8a8068; font-size: 11px; letter-spacing: .06em; }
+.np-link {
+  display: inline-block; margin: 5px 6px 5px 0; padding: 5px 10px 5px 6px;
+  border: 1px solid #cfc6b0; border-radius: 3px; background: #f1ecdf; color: #3a3329; font-size: 12px;
+}
+.np-link i { display: inline-block; margin-right: 7px; padding: 2px 4px; border-radius: 2px; background: #9a4b2d; color: #fbf8ef; font-size: 9px; font-style: normal; }
+.np-link-experiment i { background: #2d5a7a; }
+.np-link b { font-weight: 600; }
+
+@media (max-width: 680px) {
+  .newsstand-panel { width: 100vw; }
+  .newsstand-list { padding: 0 18px 22px; }
+  .newspaper-viewport { width: 100vw; height: 100dvh; border-radius: 0; }
+  .newspaper-toolbar { padding: 8px 10px; }
+  .newspaper-nav { padding: 8px 10px; }
+  .np-page-btn { flex: 1; }
+  .np-sheet { padding: 20px 18px 30px; }
+  .np-issue-title { font-size: 22px; }
+  .np-motto { font-size: 15px; }
+  .np-text { font-size: 13.5px; line-height: 1.8; }
+  .np-section { font-size: 17px; }
+}

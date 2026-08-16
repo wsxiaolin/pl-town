@@ -23,6 +23,7 @@ import { createCityDialogController, type CityDialogController, type NpcEntityLi
 import { createCommunityPanelController } from '../adapters/ui/communityPanelController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
 import { createWriterCatalogController } from '../adapters/ui/writerCatalogController';
+import { createNewsstandController } from '../adapters/ui/newsstandController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
 import { createNpcSystem } from './npcSystem';
@@ -98,7 +99,7 @@ let cameraController;
 let progressionController;
 let buildingSceneController;
 let buildingLabelController;
-let communityPanels, writerCatalogController;
+let communityPanels, writerCatalogController, newsstandController;
 let multiplayerHousing;
 let worldDecorations;
 let npcSystem;
@@ -226,6 +227,7 @@ const buildingInteraction = createBuildingInteraction({
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
+  getNewsstandController: () => newsstandController,
   trackInteraction,
 });
 
@@ -336,6 +338,7 @@ function init() {
   buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   writerCatalogController = createWriterCatalogController({ document });
+  newsstandController = createNewsstandController({ document, signal: eventController.signal });
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
