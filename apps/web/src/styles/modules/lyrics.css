@@ -29,12 +29,8 @@
   position: relative;
   width: 100%;
   max-width: 560px;
-  max-height: 84vh;
-  max-height: 84dvh;
-  display: flex;
-  flex-direction: column;
   border-radius: 20px;
-  padding: 30px 34px 22px;
+  padding: 30px 34px;
   background:
     radial-gradient(ellipse at 50% 0%, rgba(255,214,140,0.14), transparent 55%),
     linear-gradient(160deg, #191227 0%, #241a38 45%, #120d1f 100%);
@@ -66,33 +62,10 @@
   border-radius: 20px;
 }
 
-.lyrics-badge {
-  position: absolute;
-  top: 16px;
-  right: 18px;
-  z-index: 2;
-  font-size: 13px;
-  line-height: 1;
-  padding: 6px 10px;
-  border-radius: 999px;
-  color: #1c1430;
-  background: linear-gradient(135deg, #ffd98a, #f6b14b);
-  box-shadow: 0 2px 10px rgba(246,177,75,0.45);
-  letter-spacing: 0.02em;
-  animation: lyricsBadgePulse 2.4s ease-in-out infinite;
-}
-
-@keyframes lyricsBadgePulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 2px 10px rgba(246,177,75,0.45); }
-  50% { transform: scale(1.06); box-shadow: 0 4px 18px rgba(246,177,75,0.7); }
-}
-
 .lyrics-header {
   position: relative;
   z-index: 1;
   text-align: center;
-  padding-right: 56px;
-  margin-bottom: 6px;
 }
 
 .lyrics-title {
@@ -105,117 +78,10 @@
   text-shadow: 0 0 24px rgba(255,217,138,0.35);
 }
 
-.lyrics-subtitle {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: #cdb98a;
-  letter-spacing: 0.06em;
-}
-
-.lyrics-dedication {
-  margin: 5px 0 0;
-  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
-  font-size: 14px;
-  font-style: italic;
-  color: #9fd8a8;
-  letter-spacing: 0.04em;
-}
-
-.lyrics-scroll {
-  position: relative;
-  z-index: 1;
-  margin-top: 18px;
-  padding: 18px 14px 8px 18px;
-  border-radius: 14px;
-  background: rgba(8,6,16,0.35);
-  border: 1px solid rgba(212,175,112,0.16);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.lyrics-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-.lyrics-scroll::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #d9a85c, #8a5fb0);
-  border-radius: 3px;
-}
-.lyrics-scroll::-webkit-scrollbar-track {
-  background: rgba(255,255,255,0.05);
-}
-
-.lyrics-line {
-  margin: 0;
-  padding: 4px 0;
-  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
-  font-size: 15px;
-  line-height: 1.75;
-  letter-spacing: 0.02em;
-  opacity: 0;
-  animation: lyricsLineRise 0.6s ease forwards;
-}
-
-.lyrics-verse {
-  color: #e8e0d0;
-}
-.lyrics-chorus {
-  color: #ffd98a;
-  font-weight: 700;
-  text-shadow: 0 0 14px rgba(255,217,138,0.25);
-}
-.lyrics-quote {
-  color: #9fd8a8;
-  font-style: italic;
-}
-.lyrics-note {
-  color: #9a8fb8;
-  font-size: 12.5px;
-  letter-spacing: 0.03em;
-}
-
-.lyrics-gap {
-  height: 14px;
-}
-
-@keyframes lyricsLineRise {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.lyrics-footer {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: center;
-  margin-top: 18px;
-}
-
-.lyrics-close {
-  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
-  font-size: 14px;
-  letter-spacing: 0.14em;
-  color: #ffd98a;
-  background: linear-gradient(135deg, rgba(212,175,112,0.16), rgba(138,95,176,0.16));
-  border: 1px solid rgba(212,175,112,0.55);
-  border-radius: 999px;
-  padding: 8px 34px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.lyrics-close:hover {
-  background: linear-gradient(135deg, rgba(212,175,112,0.36), rgba(138,95,176,0.36));
-  border-color: #ffd98a;
-  color: #fff4da;
-}
-.lyrics-close:active { transform: scale(0.98); }
-
 /* Mobile lyrics */
 @media (max-width: 680px) {
   .lyrics-stage {
-    padding: 26px 20px 18px;
+    padding: 26px 20px;
   }
   .lyrics-title { font-size: 23px; }
-  .lyrics-header { padding-right: 0; padding-top: 18px; }
-  .lyrics-line { font-size: 14px; line-height: 1.7; }
-  .lyrics-scroll { padding: 14px 12px 6px 14px; }
 }

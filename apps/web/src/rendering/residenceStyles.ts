@@ -37,7 +37,7 @@ export function residenceStyleFor(x: number, z: number, index: number): number {
   return family * 2 + alternate;
 }
 
-export function createResidenceModel(options: ResidenceStyleOptions): { group: THREE.Group; styleId: number; styleName: string } {
+export function createResidenceModel(options: ResidenceStyleOptions): { group: THREE.Group; body: THREE.Mesh; styleId: number; styleName: string } {
   const { x, z, index, lotType, isNight, part } = options;
   const group = new THREE.Group();
   const styleId = residenceStyleFor(x, z, index);
@@ -57,7 +57,7 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
     part(group, geometry, material, position, cast);
 
   mesh(new THREE.BoxGeometry(width + 0.38, 0.12, depth + 0.38), { color: 0xe0dfdc, roughness: 0.86, tex: 'stone', rx: 1, ry: 1 }, [0, 0.06, 0]);
-  mesh(new THREE.BoxGeometry(width, height, depth), { color: palette.wall, roughness: 0.32, tex: palette.wallTex, rx: 1, ry: 1 }, [0, 0.12 + height / 2, 0]);
+  const body = mesh(new THREE.BoxGeometry(width, height, depth), { color: palette.wall, roughness: 0.32, tex: palette.wallTex, rx: 1, ry: 1 }, [0, 0.12 + height / 2, 0]);
 
   const roofY = 0.12 + height;
   if ([0, 1, 7, 9, 10, 11].includes(styleId)) {
@@ -111,5 +111,5 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
   group.userData.residenceStyleId = styleId;
   group.userData.residenceStyleName = STYLE_NAMES[styleId];
   group.userData.navigationFootprint = { width: width + 0.12, depth: depth + 0.12 };
-  return { group, styleId, styleName: STYLE_NAMES[styleId]! };
+  return { group, body, styleId, styleName: STYLE_NAMES[styleId]! };
 }

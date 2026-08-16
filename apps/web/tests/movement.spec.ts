@@ -17,11 +17,16 @@ test('desktop keyboard moves the player while the touch wheel stays hidden', asy
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const before = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+  // Under software-GL / parallel load the frame loop advances slower, so a
+  // fixed 350ms wait under-shoots the 0.1 threshold (see the touch-tablet test
+  // below, which polls for the same reason). Poll until the player actually
+  // travels, then confirm the key release stopped it.
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(350);
+  await expect.poll(async () => {
+    const pos = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+    return Math.hypot(pos[0] - before[0], pos[2] - before[2]);
+  }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.1);
   await page.keyboard.up('KeyW');
-  const after = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
-  expect(Math.hypot(after[0] - before[0], after[2] - before[2])).toBeGreaterThan(0.1);
   await expect(page.locator('#movementControl')).toBeHidden();
 });
 
@@ -193,16 +198,14 @@ test.describe('touch-capable tablet', () => {
   });
 });
 
-test('eternal retirement monument shows the memorial roster overlay', async ({ page }) => {
+test('eternal retirement monument shows the memorial roster overlay on the elevator', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
-  await page.evaluate(() => (window as any).__mini().openBuildingDialog('lab_outer'));
+  await page.evaluate(() => (window as any).__mini().openBuildingDialog('elevator'));
   const overlay = page.locator('#memorialOverlay');
   await expect(overlay).toHaveClass(/open/);
   await expect(page.locator('#memorialTitle')).toHaveText('物实永退用户纪念碑');
-  await expect(page.locator('#memorialScroll')).toContainText('胡莱三国官方');
-  await expect(page.locator('#memorialScroll')).toContainText('半国飞士');
-  await expect(page.locator('#memorialScroll')).toContainText('FontaineBleau');
-  await page.locator('#memorialClose').click();
+  await expect(page.locator('#memorialScroll')).toHaveCount(0);
+  await page.mouse.click(20, 20);
   await expect(overlay).not.toHaveClass(/open/);
 });

@@ -25,9 +25,15 @@ test('Memorial roster has intro and footer copy', () => {
   assert.ok(MEMORIAL_ROSTER.footer.length > 0);
 });
 
-test('lab_outer is relabelled as the eternal retirement monument', () => {
+test('lab_outer is relabelled as the data center', () => {
   const building = BUILDING_DEFS.find((item) => item.id === 'lab_outer');
   assert.ok(building);
-  assert.equal(building.label, '永退用户纪念碑');
-  assert.equal(BUILDING_CONTENT.lab_outer.name, '永退用户纪念碑');
+  assert.equal(building.label, '数据中心');
+  assert.equal(BUILDING_CONTENT.lab_outer.name, '数据中心');
+});
+
+test('the elevator building remains bound as the memorial site', () => {
+  const building = BUILDING_DEFS.find((item) => item.id === 'elevator');
+  assert.ok(building);
+  assert.equal(building.id, 'elevator');
 });

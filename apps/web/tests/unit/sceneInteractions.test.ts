@@ -5,6 +5,8 @@ import { getNpcType } from '../../src/city/data/npcTypes';
 import { createSceneInterestPointController } from '../../src/city/sceneInterestPointController';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { residenceStyleFor } from '../../src/rendering/residenceStyles';
+import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
+import { MUSIC_HALL_LYRICS } from '../../src/city/data/musicHallLyrics';
 import {
   beijingDayKey,
   evaluateDailyOrange,
@@ -115,6 +117,16 @@ test('residence styles cover twelve models while neighboring lots share a family
   assert.deepEqual([...styles].sort((a, b) => a - b), [0,1,2,3,4,5,6,7,8,9,10,11]);
   const family = Math.floor(residenceStyleFor(-30, -30, 0) / 2);
   assert.equal(Math.floor(residenceStyleFor(-27, -27, 8) / 2), family);
+});
+
+test('建筑更新保留音乐厅歌词和两家商店名称', () => {
+  assert.equal(MUSIC_HALL_LYRICS.title, '改版《孤勇者》');
+  assert.ok(MUSIC_HALL_LYRICS.lines.some((line) => line.text === '都，是被害者'));
+  assert.ok(MUSIC_HALL_LYRICS.lines.some((line) => line.text === '我们目的是祖国以我为荣！'));
+  assert.equal(BUILDING_DEFS.find((building) => building.id === 'mall_south')?.label, '金月店');
+  assert.equal(BUILDING_DEFS.find((building) => building.id === 'mall_west')?.label, '断星玄');
+  assert.equal(BUILDING_CONTENT.mall_south.name, '金月店');
+  assert.equal(BUILDING_CONTENT.mall_west.name, '断星玄');
 });
 
 test('west beach encounter grants Tirpitz once and awards the achievement', async () => {

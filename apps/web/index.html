@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2378a8ff'/%3E%3Cpath d='M8 24V13h5v11h6V8h5v16z' fill='white'/%3E%3C/svg%3E" />
   <title>物实小城 — MiniCity</title>
   <style id="bootCritical">
@@ -14,7 +15,7 @@
   <div class="landscape-required" id="landscapeRequired" role="alert" aria-live="assertive">
     <strong>请横屏使用</strong>
     <span>旋转设备后即可进入小城</span>
-    <a class="landscape-fullscreen" id="landscapeFullscreen" href="javascript:void(0)">全屏访问效果更加（点击）</a>
+    <a class="landscape-fullscreen" id="landscapeFullscreen" href="#">全屏访问效果更加（点击）</a>
   </div>
 
   <!-- First-paint shell shown while the WebGL city is being prepared. -->
@@ -231,6 +232,36 @@
   </aside>
   -->
 
+  <!-- Newsstand: newspaper catalog (opened by the 报摊 building) -->
+  <aside class="newsstand-panel" id="newsstandPanel" role="dialog" aria-modal="false" aria-labelledby="newsstandTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker">SNO. 星尘报社 · 星辉刊物目录</span>
+        <h2 id="newsstandTitle">报摊 · 星辉刊物目录</h2>
+        <p>过往每一期周刊都被收进报摊的木箱。内容为静态配置，可随社区增删。</p>
+      </div>
+      <button class="works-close" id="newsstandClose" type="button" aria-label="关闭报摊目录">✕</button>
+    </header>
+    <div class="newsstand-list" id="newsstandList"></div>
+  </aside>
+
+  <!-- Newspaper reader overlay -->
+  <div class="newspaper-overlay" id="newspaperOverlay" role="dialog" aria-modal="true" aria-labelledby="newspaperMeta">
+    <div class="newspaper-viewport">
+      <header class="newspaper-toolbar">
+        <button class="newspaper-back" id="newspaperBack" type="button" aria-label="返回目录">‹ 目录</button>
+        <span class="newspaper-meta" id="newspaperMeta"></span>
+        <button class="newspaper-close" id="newspaperClose" type="button" aria-label="关闭报纸">✕</button>
+      </header>
+      <div class="newspaper-stage" id="newspaperStage"></div>
+      <footer class="newspaper-nav">
+        <button class="np-page-btn" id="newspaperPrev" type="button">‹ 上一版</button>
+        <span class="np-page-indicator">第 <b id="newspaperPageNo">1</b> / <span id="newspaperPageTotal">1</span> 版</span>
+        <button class="np-page-btn" id="newspaperNext" type="button">下一版 ›</button>
+      </footer>
+    </div>
+  </div>
+
   <div class="stats-panel render-settings-panel" id="renderSettings" role="dialog" aria-label="画面设置">
      <div class="sp-head render-settings-head">
        <div class="render-settings-heading">
@@ -338,15 +369,8 @@
   <!-- Music Hall Lyrics Modal -->
   <div class="lyrics-overlay" id="lyricsOverlay">
     <div class="lyrics-stage" id="lyricsStage">
-      <span class="lyrics-badge" aria-hidden="true">🆕</span>
       <div class="lyrics-header">
         <h2 class="lyrics-title" id="lyricsTitle"></h2>
-        <p class="lyrics-subtitle" id="lyricsSubtitle"></p>
-        <p class="lyrics-dedication" id="lyricsDedication"></p>
-      </div>
-      <div class="lyrics-scroll" id="lyricsScroll"></div>
-      <div class="lyrics-footer">
-        <button class="lyrics-close" id="lyricsClose">谢幕</button>
       </div>
     </div>
   </div>
@@ -356,14 +380,7 @@
     <div class="lyrics-stage memorial-stage" id="memorialStage">
       <div class="lyrics-header">
         <h2 class="lyrics-title memorial-title" id="memorialTitle"></h2>
-        <p class="lyrics-subtitle" id="memorialSubtitle"></p>
-        <p class="lyrics-dedication memorial-dedication" id="memorialDedication"></p>
       </div>
-      <div class="lyrics-scroll" id="memorialScroll"></div>
-      <div class="lyrics-footer">
-        <button class="lyrics-close memorial-close" id="memorialClose">闭碑</button>
-      </div>
-      <p class="memorial-footer" id="memorialFooter"></p>
     </div>
   </div>
 

@@ -14,7 +14,8 @@ export type InteractionPointerOptions = {
   getEchoStoryController: () => any;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getConfig: () => { npcTalkRadius: number; buildingInteractRadius: number };
-  isStoryLockedBuilding: (building: any) => boolean;
+  isBuildingUnavailable: (building: any) => boolean;
+  isResidenceUnavailable: (residenceId: string) => boolean;
   findRaycastBuilding: (hits: any[]) => any;
   raycastUserData: (object: THREE.Object3D, key: string) => any;
   npcForRaycast: () => any;
@@ -81,8 +82,14 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
   }
 
+  function liftForClick(b: any) {
+    if (hoveredB && hoveredB !== b) unhover(hoveredB);
+    hover(b);
+  }
+
   function interactOrWalk(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
+    liftForClick(b);
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
     const buildingDistance = cursorChar ? Math.hypot(
@@ -153,7 +160,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
       const firstHit = hits[0];
       if (firstHit) {
         const residenceId = options.raycastUserData(firstHit.object, 'residenceId');
-        if (residenceId) { options.openResidence(residenceId); return; }
+        if (residenceId && !options.isResidenceUnavailable(residenceId)) { options.openResidence(residenceId); return; }
       }
       const b = findBuildingFromHits(hits);
       if (b) { interactOrWalk(b); return; }
@@ -169,7 +176,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     if (pendingBuilding && cursorChar) {
       const b = pendingBuilding;
       const distance = Math.hypot(cursorChar.position.x - b.group.position.x, cursorChar.position.z - b.group.position.z);
-      if (distance <= CONFIG.buildingInteractRadius) { pendingBuilding = null; options.navigateTo(b); }
+      if (distance <= CONFIG.buildingInteractRadius) { pendingBuilding = null; liftForClick(b); options.navigateTo(b); }
     }
     if (pendingSceneInterestPoint && cursorChar) {
       const id = pendingSceneInterestPoint;

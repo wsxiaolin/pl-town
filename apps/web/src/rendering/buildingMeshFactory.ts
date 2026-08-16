@@ -3,6 +3,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
+import { RENDER_ORDER } from './layers';
 
 export function createBuildingMeshFactory(options) {
   const {
@@ -253,8 +254,10 @@ export function createBuildingMeshFactory(options) {
       const x = -bw/2 - 0.1 + i * (bw+0.2)/5;
       part(g, new THREE.BoxGeometry((bw+0.2)/5-0.02, 0.06, 0.4), {color: i%2===0 ? accentColor : 0xF5F4F1, roughness:0.5}, [x+0.1, top+0.02, bw/2+0.2]);
     }
-    // Window cutout (simulated with darker box)
-    part(g, new THREE.BoxGeometry(bw*0.7,bh*0.5,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [0,0.2+bh*0.5,bw/2+0.02]);
+    // Window cutout (simulated with darker box). Keep it fully in front of the
+    // generated facade plane (depth/2 + 0.024) so its faces never share a depth
+    // boundary with the facade and flicker at the photo-studio wall.
+    part(g, new THREE.BoxGeometry(bw*0.7,bh*0.5,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [0,0.2+bh*0.5,bw/2+0.055]);
     // Sign on top
     part(g, new THREE.BoxGeometry(bw*0.6,0.3,0.05), {color:accentColor,roughness:0.4,tex:'wood',rx:1,ry:1}, [0,top+0.08+0.15,0]);
     // Blue accent disc
@@ -277,12 +280,15 @@ export function createBuildingMeshFactory(options) {
     // Glowing screen on front face — layers stepped outward with clear gaps so no
     // coplanar faces z-fight (screen→frame→glow lines all distinct depths).
     const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1});
-    part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.05), screenMat, [0,0.25+bh*0.5,0.41], false);
+    const screen = part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.08), screenMat, [0,0.25+bh*0.5,0.46], false);
+    screen.renderOrder = RENDER_ORDER.buildingSurface;
     // Screen frame
-    part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.05), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.34], false);
+    const screenFrame = part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.08), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.33], false);
+    screenFrame.renderOrder = RENDER_ORDER.buildingSurface;
     // Screen glow lines
     for (let i = 0; i < 4; i++) {
-      part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.03), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2}, [0,0.25+bh*0.3+i*0.4,0.475], false);
+      const glowLine = part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.04), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2,depthWrite:false}, [0,0.25+bh*0.3+i*0.4,0.54], false);
+      glowLine.renderOrder = RENDER_ORDER.overlay;
     }
     // Antenna on top
     part(g, new THREE.CylinderGeometry(0.03,0.03,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0,top+0.12+0.25,0]);
@@ -548,10 +554,14 @@ export function createBuildingMeshFactory(options) {
     // cannot share a depth boundary with the reflective wall.
     const roofLift = 0.025;
     part(g, new THREE.BoxGeometry(bw+0.15,0.18,bd+0.15), {color:P.MALL_FRAME,roughness:0.4,metalness:0.5,tex:'metal',rx:2,ry:1}, [0,top+0.09+roofLift,0]);
-    // Rooftop sign / billboard
-    part(g, new THREE.BoxGeometry(2.4,0.55,0.12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.22,roughness:0.3,tex:'fabric',rx:2,ry:1}, [0,top+0.18+0.275+roofLift,bd/2-0.3]);
-    part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-1.0,top+0.18+0.275+roofLift,bd/2-0.3]);
-    part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [1.0,top+0.18+0.275+roofLift,bd/2-0.3]);
+    // Rooftop sign / billboard. The sign and its posts sit clear of the roof
+    // top surface (signLift) so their bottom faces never share the roof's depth
+    // boundary, which otherwise flickers as black pixels in far views.
+    const signLift = 0.02;
+    const signY = top+0.18+0.275+roofLift+signLift;
+    part(g, new THREE.BoxGeometry(2.4,0.55,0.12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.22,roughness:0.3,tex:'fabric',rx:2,ry:1}, [0,signY,bd/2-0.3]);
+    part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-1.0,signY,bd/2-0.3]);
+    part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [1.0,signY,bd/2-0.3]);
     // Entrance awning (curved feel via thin slab)
     part(g, new THREE.BoxGeometry(2.0,0.08,0.9), {color:P.MALL_SIGN,roughness:0.5,tex:'fabric',rx:3,ry:1}, [0,0.25+1.0,bd/2+0.45]);
     part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-0.9,0.25+0.55,bd/2+0.45], false).rotation.x = Math.PI/2;

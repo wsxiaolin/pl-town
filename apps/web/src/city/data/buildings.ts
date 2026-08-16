@@ -291,7 +291,8 @@ export const BUILDING_DEFS = [
   {
     id: "mall_south",
     num: "26",
-    label: "南门商场",
+    // <discussion=654782b83b13265ec0206f9a>五金月饼&一瓶农夫山泉『金月店』</discussion>
+    label: "金月店",
     x: 22.5,
     z: -22.5,
     shape: "mall",
@@ -313,7 +314,8 @@ export const BUILDING_DEFS = [
   {
     id: "mall_west",
     num: "28",
-    label: "西门商场",
+    // <discussion=6738a487ce449cb493cd6349>小店</discussion>
+    label: "断星玄",
     x: -22.5,
     z: 22.5,
     shape: "mall",
@@ -374,7 +376,7 @@ export const BUILDING_DEFS = [
   {
     id: "lab_outer",
     num: "34",
-    label: "永退用户纪念碑",
+    label: "数据中心",
     x: 33,
     z: 9,
     shape: "greenhouse",
@@ -843,7 +845,7 @@ export const BUILDING_CONTENT = {
   },
   // ── New city-life dialogs ──
   mall_south: {
-    name: "南门商场",
+    name: "金月店",
     slogan: "霓虹之下，欲望被精心陈列。",
     dialog: [
       '自动门"嗖"地滑开，空调冷风裹住刚进来的你。',
@@ -852,7 +854,7 @@ export const BUILDING_CONTENT = {
     ],
   },
   mall_west: {
-    name: "西门商场",
+    name: "断星玄",
     slogan: "旧街坊与霓虹的交界处。",
     dialog: [
       "这间商场比南门那家旧些，但人却不显得少。",
@@ -1029,11 +1031,11 @@ export const BUILDING_CONTENT = {
     ],
   },
   lab_outer: {
-    name: "永退用户纪念碑",
-    slogan: "阴阳有序，命运无常。每一次告别，都是灵魂的返航。",
+    name: "数据中心",
+    slogan: "数据即星辰，也即尘埃。",
     dialog: [
-      "碑身刻着一个个被铭记的名字。",
-      "「感谢你们曾为这座城留下痕迹。」",
+      "一排排机柜亮着冷静的蓝光，风扇声低鸣不止。",
+      "「这里保存着这座城所有被记住的数据。」",
     ],
   },
   teahouse: {

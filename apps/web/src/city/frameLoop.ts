@@ -14,6 +14,7 @@ export type FrameLoopOptions = {
   getSceneInterestPoints: () => { update: (time: number) => void; entities: Map<string, any> } | null;
   getSceneInterestPointController: () => { interact: (id: string) => Promise<void> | void } | null;
   getMapController: () => { isOpen: () => boolean; updateMarker: () => void } | null;
+  getBurnOverlay: () => { render: (renderer: THREE.Renderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getLastFrameTime: () => number;
@@ -56,7 +57,10 @@ export function createFrameLoop(options: FrameLoopOptions) {
       void options.getSceneInterestPointController()?.interact('west-beach');
     }
     updateLabels();
-    options.getRenderer().render(options.getScene(), options.getCamera());
+    const renderer = options.getRenderer();
+    renderer.render(options.getScene(), options.getCamera());
+    const burn = options.getBurnOverlay();
+    if (burn?.isActive()) burn.render(renderer);
     if (options.getMapController()?.isOpen()) options.getMapController()?.updateMarker();
   }
 

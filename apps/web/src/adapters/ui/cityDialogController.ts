@@ -226,25 +226,6 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     const lyrics = options.musicHallLyrics;
     if (!lyrics) return;
     setIdentityField(document, 'lyricsTitle', lyrics.title);
-    setIdentityField(document, 'lyricsSubtitle', lyrics.subtitle);
-    setIdentityField(document, 'lyricsDedication', lyrics.dedication);
-    const scroll = getElement<HTMLDivElement>(document, 'lyricsScroll');
-    scroll.replaceChildren();
-    let rowIndex = 0;
-    lyrics.lines.forEach((line) => {
-      if (line.kind === 'gap') {
-        const gap = document.createElement('div');
-        gap.className = 'lyrics-gap';
-        scroll.appendChild(gap);
-        return;
-      }
-      const paragraph = document.createElement('p');
-      paragraph.className = `lyrics-line lyrics-${line.kind}`;
-      paragraph.textContent = line.text;
-      paragraph.style.animationDelay = `${Math.min(rowIndex, 14) * 0.09}s`;
-      scroll.appendChild(paragraph);
-      rowIndex += 1;
-    });
     getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.add('open');
   };
 
@@ -252,48 +233,6 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     const roster = options.memorialRoster;
     if (!roster) return;
     setIdentityField(document, 'memorialTitle', roster.title);
-    setIdentityField(document, 'memorialSubtitle', roster.subtitle);
-    setIdentityField(document, 'memorialDedication', roster.dedication);
-    const scroll = getElement<HTMLDivElement>(document, 'memorialScroll');
-    scroll.replaceChildren();
-    const appendNote = (text: string): void => {
-      const paragraph = document.createElement('p');
-      paragraph.className = 'lyrics-note memorial-note';
-      paragraph.textContent = text;
-      scroll.appendChild(paragraph);
-    };
-    roster.intro.forEach((line) => {
-      const paragraph = document.createElement('p');
-      paragraph.className = 'lyrics-line lyrics-quote memorial-intro';
-      paragraph.textContent = line;
-      scroll.appendChild(paragraph);
-    });
-    const gap = document.createElement('div');
-    gap.className = 'lyrics-gap';
-    scroll.appendChild(gap);
-    appendNote(`主名录 · 共 ${roster.main.length} 位`);
-    let rowIndex = 0;
-    roster.main.forEach((entry, index) => {
-      const paragraph = document.createElement('p');
-      paragraph.className = 'lyrics-line lyrics-verse memorial-entry';
-      paragraph.textContent = `${index + 1}. ${entry.name}${entry.note ? `　${entry.note}` : ''}`;
-      paragraph.style.animationDelay = `${Math.min(rowIndex, 14) * 0.06}s`;
-      scroll.appendChild(paragraph);
-      rowIndex += 1;
-    });
-    const gapTwo = document.createElement('div');
-    gapTwo.className = 'lyrics-gap';
-    scroll.appendChild(gapTwo);
-    appendNote(`评论区补充 · 共 ${roster.comments.length} 条`);
-    roster.comments.forEach((name) => {
-      const paragraph = document.createElement('p');
-      paragraph.className = 'lyrics-line lyrics-verse memorial-comment';
-      paragraph.textContent = name;
-      paragraph.style.animationDelay = `${Math.min(rowIndex, 14) * 0.04}s`;
-      scroll.appendChild(paragraph);
-      rowIndex += 1;
-    });
-    setIdentityField(document, 'memorialFooter', roster.footer);
     getElement<HTMLDivElement>(document, 'memorialOverlay').classList.add('open');
   };
 
@@ -303,11 +242,9 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       getElement<HTMLDivElement>(document, 'modalOverlay').addEventListener('click', (event) => {
         if (event.target === getElement<HTMLDivElement>(document, 'modalOverlay')) controller.closeBuilding();
       }, { signal: options.signal });
-      getElement<HTMLButtonElement>(document, 'lyricsClose').addEventListener('click', controller.closeLyrics, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'lyricsOverlay').addEventListener('click', (event) => {
         if (event.target === getElement<HTMLDivElement>(document, 'lyricsOverlay')) controller.closeLyrics();
       }, { signal: options.signal });
-      getElement<HTMLButtonElement>(document, 'memorialClose').addEventListener('click', controller.closeMemorial, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'memorialOverlay').addEventListener('click', (event) => {
         if (event.target === getElement<HTMLDivElement>(document, 'memorialOverlay')) controller.closeMemorial();
       }, { signal: options.signal });
@@ -323,11 +260,11 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     },
     isOpen: () => npcOpen,
     openBuilding(building) {
-      if (building.id === 'musichall' && options.musicHallLyrics?.lines.length) {
+      if (building.id === 'musichall' && options.musicHallLyrics) {
         openLyrics();
         return;
       }
-      if (building.id === 'lab_outer' && options.memorialRoster) {
+      if (building.id === 'elevator' && options.memorialRoster) {
         openMemorial();
         return;
       }

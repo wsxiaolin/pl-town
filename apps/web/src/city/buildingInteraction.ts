@@ -1,7 +1,7 @@
 import { BUILDING_API_QUERIES } from './data/buildings';
 
 export type BuildingInteractionOptions = {
-  isStoryLockedBuilding: (building: any) => boolean;
+  isBuildingUnavailable: (building: any) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
   getCityDialogs: () => { openBuilding: (building: any) => void; closeBuilding: () => void } | null;
   getEchoStoryController: () => { interactBuilding: (id: string, dialogs: any) => boolean } | null;
@@ -19,11 +19,13 @@ export type BuildingInteractionOptions = {
     closeWorksPanel: () => void;
   } | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
+  getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
+  burnCity?: () => boolean;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, string?]> = {
-  bulletin: ['inventory'], news: ['inventory'], newsstand: ['inventory'],
+  bulletin: ['inventory'], news: ['inventory'],
   community: ['social', 'profile'], records: ['social', 'mine'],
   tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
   mutualaid: ['social', 'following'],
@@ -39,7 +41,13 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateUnlocked(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
+    // 点击「文训社（外环）」触发火烧小城效果：城市像纸片从东侧被烧尽。
+    if (b.id === 'writingclub_outer') {
+      options.trackInteraction(b.id);
+      options.burnCity?.();
+      return;
+    }
     const dialogs = options.getCityDialogs();
     const echo = options.getEchoStoryController();
     if (dialogs && echo?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
@@ -60,6 +68,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       options.trackInteraction(b.id);
       return;
     }
+    if (b.id === 'newsstand') {
+      options.getNewsstandController()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
     const configuredQuery = (BUILDING_API_QUERIES as Record<string, any>)[b.id];
     if (configuredQuery) {
       options.getCommunityPanels()?.openWorksPanel(b.id, configuredQuery);
@@ -71,7 +84,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateTo(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }
 
