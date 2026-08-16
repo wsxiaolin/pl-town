@@ -9,6 +9,8 @@ async function enterCity(page: import('@playwright/test').Page) {
   await page.goto('/');
   await page.waitForFunction(() => Boolean((window as any).__mini?.().player));
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
+  // Let the boot-screen fade settle before interacting (see helpers.waitForCityBooted).
+  await page.waitForTimeout(1_000);
 }
 
 test('desktop keyboard moves the player while the touch wheel stays hidden', async ({ page }) => {
@@ -158,9 +160,13 @@ test.describe('touch-capable tablet', () => {
     await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }] });
     await expect(base).toHaveCSS('opacity', '1');
     await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x + 52, y: start.y, id: 1, radiusX: 2, radiusY: 2 }] });
-    await page.waitForTimeout(350);
-    const after = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
-    expect(Math.hypot(after[0] - before[0], after[2] - before[2])).toBeGreaterThan(0.3);
+    // Under software-GL / parallel load the frame loop advances slower, so a
+    // fixed 350ms wait under-shoots the 0.3 threshold. Poll for the player to
+    // actually travel past it instead of asserting on a single snapshot.
+    await expect.poll(async () => {
+      const after = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+      return Math.hypot(after[0] - before[0], after[2] - before[2]);
+    }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.3);
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await expect(base).toHaveCSS('opacity', '0');
   });
