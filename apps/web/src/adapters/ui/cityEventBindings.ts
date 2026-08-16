@@ -28,7 +28,8 @@ export function bindCityUiEvents(options: {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen();
   }, { signal });
-  document.getElementById('landscapeFullscreen')?.addEventListener('click', () => {
+  document.getElementById('landscapeFullscreen')?.addEventListener('click', (event) => {
+    event.preventDefault();
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen();
   }, { signal });

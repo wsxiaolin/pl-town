@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2378a8ff'/%3E%3Cpath d='M8 24V13h5v11h6V8h5v16z' fill='white'/%3E%3C/svg%3E" />
   <title>物实小城 — MiniCity</title>
   <style id="bootCritical">
@@ -14,7 +15,7 @@
   <div class="landscape-required" id="landscapeRequired" role="alert" aria-live="assertive">
     <strong>请横屏使用</strong>
     <span>旋转设备后即可进入小城</span>
-    <a class="landscape-fullscreen" id="landscapeFullscreen" href="javascript:void(0)">全屏访问效果更加（点击）</a>
+    <a class="landscape-fullscreen" id="landscapeFullscreen" href="#">全屏访问效果更加（点击）</a>
   </div>
 
   <!-- First-paint shell shown while the WebGL city is being prepared. -->
