@@ -351,7 +351,7 @@ function init() {
   newsstandController = createNewsstandController({ document, signal: eventController.signal });
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
-    makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
+    makeCharacter, showLoginEntry, showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
     mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
     getLegacyAchievements: () => getStats().achievements || [],
@@ -579,6 +579,7 @@ function onMouseMove(e) { interactionPointer.onMouseMove(e); }
 function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
 function setupMultiplayer(nickname, password) { multiplayerHousing.connect(nickname, password); }
 function showLoginEntry() { loginController?.showLoginEntry(); }
+function showLoginOverlay() { loginController?.showLogin(); }
 function updateRemotePlayers(delta) { multiplayerHousing.updateRemotePlayers(delta); }
 function setPhoneOpen(open) { multiplayerHousing?.setPhoneOpen(open); }
 function renderMapHouseTags() { multiplayerHousing.renderMapHouseTags(); }

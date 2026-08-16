@@ -18,6 +18,7 @@ export function bindCityUiEvents(options: {
   closeModal: () => void;
   closeNpcDialog: () => void;
   login: () => void;
+  loginFeedback: () => void;
   showLogin: () => void;
   resize: () => void;
 }) {
@@ -52,6 +53,7 @@ export function bindCityUiEvents(options: {
   document.getElementById('loginBtn')?.addEventListener('click', options.login, { signal });
   document.getElementById('loginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
   document.getElementById('loginPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
+  document.getElementById('loginInput')?.addEventListener('input', options.loginFeedback, { signal });
   document.getElementById('logoUser')?.addEventListener('click', (event) => {
     if ((event.currentTarget as HTMLElement).classList.contains('login-required')) options.showLogin();
   }, { signal });
