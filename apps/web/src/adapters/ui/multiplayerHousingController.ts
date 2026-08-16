@@ -10,6 +10,7 @@ export function createMultiplayerHousingController(options) {
     showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
     getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
     getLegacyAchievements = () => [],
+    isResidenceUnavailable = () => false,
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -545,7 +546,7 @@ export function createMultiplayerHousingController(options) {
       const name = house.name?.trim();
       if (!name) return;
       const residence = residences.find((item) => item.id === house.buildingId);
-      if (!residence) return;
+      if (!residence || isResidenceUnavailable(residence.id)) return;
       const tag = document.createElement('button');
       tag.type = 'button'; tag.className = 'map-house-tag'; tag.textContent = name;
       tag.style.left = ((residence.group.position.x + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
@@ -558,7 +559,7 @@ export function createMultiplayerHousingController(options) {
   
   function openResidence(residenceId) {
     const residence = residences.find((item) => item.id === residenceId);
-    if (!residence) return;
+    if (!residence || isResidenceUnavailable(residenceId)) return;
     selectedResidenceId = residenceId;
     residenceClaimId = residenceId;
     const house = currentHouses.find((item) => item.buildingId === residenceId);
@@ -607,7 +608,7 @@ export function createMultiplayerHousingController(options) {
   
   function navigateToResidence(residenceId) {
     const residence = residences.find((item) => item.id === residenceId);
-    if (!residence) return;
+    if (!residence || isResidenceUnavailable(residenceId)) return;
     closeResidencePanel();
     movePlayerTo(residence.group.position.clone());
   }

@@ -89,6 +89,15 @@ function collapseBuilding(building: DamageableBuilding): void {
   });
 }
 
+function toLocalBounds(group: THREE.Group): THREE.Box3 {
+  const worldBounds = new THREE.Box3().setFromObject(group);
+  const corners = [
+    new THREE.Vector3(worldBounds.min.x, worldBounds.min.y, worldBounds.min.z),
+    new THREE.Vector3(worldBounds.max.x, worldBounds.max.y, worldBounds.max.z),
+  ].map(point => group.worldToLocal(point));
+  return new THREE.Box3().setFromPoints(corners);
+}
+
 export function applyBuildingDestroyedPresentation(building: DamageableBuilding): boolean {
   if (building.group.userData.buildingState === 'damaged') return false;
 
@@ -108,7 +117,7 @@ export function applyBuildingDestroyedPresentation(building: DamageableBuilding)
     building.labelEl.setAttribute('aria-disabled', 'true');
   }
 
-  const bounds = new THREE.Box3().setFromObject(building.group);
+  const bounds = toLocalBounds(building.group);
   collapseBuilding(building);
   addRubble(building.group, bounds);
   return true;

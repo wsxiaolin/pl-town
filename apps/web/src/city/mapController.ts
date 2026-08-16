@@ -129,13 +129,21 @@ export function createMapController(options: MapControllerOptions) {
 
   function renderIcons(): void {
     const wrap = options.document.getElementById('mapIcons');
-    if (!wrap || iconsBuilt) return;
+    if (!wrap) return;
+    if (iconsBuilt) {
+      wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
+        const building = options.getBuildings().find((item) => item.id === icon.dataset.buildingId);
+        icon.hidden = !building || options.isStoryLocked(building);
+      });
+      return;
+    }
     iconsBuilt = true;
     options.getBuildings().filter((building) => !options.isStoryLocked(building)).forEach((building) => {
       const icon = options.document.createElement('button');
       icon.type = 'button';
       icon.className = 'map-icon';
       icon.dataset.buildingId = building.id;
+      icon.hidden = options.isStoryLocked(building);
       icon.title = building.label ?? building.id;
       icon.innerHTML = building.icon ?? '';
       icon.style.left = `${((building.group.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;
@@ -151,6 +159,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function openTip(building: Building): void {
+    if (options.isStoryLocked(building)) return;
     tipBuilding = building;
     const content = options.getBuildingContent(building.id);
     options.document.getElementById('mapTipTitle')!.textContent = content?.name ?? building.label ?? building.id;

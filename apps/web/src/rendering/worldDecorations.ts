@@ -175,12 +175,12 @@ export function createWorldDecorations(options) {
   }
   
   function addSmallBlock(x,y,z,type,i) {
-    const { group:g, styleId, styleName } = createResidenceModel({x,z,index:i,lotType:type,isNight:getIsNight(),part});
+    const { group:g, body, styleId, styleName } = createResidenceModel({x,z,index:i,lotType:type,isNight:getIsNight(),part});
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
     g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
     g.traverse((object)=>{ if(object.isMesh) { object.userData.residenceId=residenceId; object.userData.residenceStyleId=styleId; } });
     scene.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
-    residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅 · ${styleName}`,group:g,labelEl:null,styleId});
+    residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅 · ${styleName}`,group:g,body,labelEl:null,styleId});
     // ── 建筑下面的小地块贴图（成片共享纹理）──
     const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
     const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];

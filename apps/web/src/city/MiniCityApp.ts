@@ -151,7 +151,8 @@ const interactionPointer = createInteractionPointer({
   getEchoStoryController: () => echoStoryController,
   getCityDialogs: () => cityDialogs,
   getConfig: () => CONFIG,
-  isStoryLockedBuilding,
+  isBuildingUnavailable,
+  isResidenceUnavailable,
   findRaycastBuilding,
   raycastUserData,
   npcForRaycast,
@@ -345,6 +346,7 @@ function init() {
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
     mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
+    isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
   });
   progressionController = createProgressionController({
@@ -518,10 +520,13 @@ function setupScene() {
     getNavigation: () => roadNavigation,
     getPlayerPath: () => playerPath,
     getBuildings: () => buildings,
+    getResidences: () => residences,
     openNpcDialog,
     navigateTo,
     isBuildingUnavailable,
     destroyBuilding,
+    destroyResidence,
+    destroyAll,
     openModal,
     interactWithSceneInterestPoint,
     getSceneInterestPoints: () => sceneInterestPoints,
@@ -571,6 +576,31 @@ export function destroyBuilding(buildingId: string): boolean {
   const destroyed = applyBuildingDestroyedPresentation(building);
   if (destroyed) mapController?.invalidateShot();
   return destroyed;
+}
+
+export function destroyResidence(residenceId: string): boolean {
+  const residence = residences.find((item) => item.id === residenceId);
+  if (!residence || isBuildingDestroyed(residence)) return false;
+  const destroyed = applyBuildingDestroyedPresentation(residence);
+  if (destroyed) {
+    mapController?.invalidateShot();
+    multiplayerHousing?.renderMapHouseTags();
+  }
+  return destroyed;
+}
+
+export function destroyAll(): number {
+  return [...buildings, ...residences].reduce((count, item) => {
+    const destroyed = buildings.includes(item)
+      ? destroyBuilding(item.id)
+      : destroyResidence(item.id);
+    return count + (destroyed ? 1 : 0);
+  }, 0);
+}
+
+function isResidenceUnavailable(residenceId: string): boolean {
+  const residence = residences.find((item) => item.id === residenceId);
+  return !residence || isBuildingDestroyed(residence);
 }
 
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
