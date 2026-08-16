@@ -1,0 +1,131 @@
+name: AI PR Reviewer
+
+# 移植自 NetLogo-Mobile/plweb2 的 opencode-review.yml。
+# PR 创建或更新时，自动驱动 AI 代理读取 diff 与 Git 历史，按 AGENTS.md 约定
+# 审查代码质量并下发评论。审查是只读的，不会修改代码。
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read # 读取代码与 Git 历史
+  pull-requests: write # 在 PR 下发评论
+
+# 同一 PR 连续推送时取消旧的审查运行，避免重复评论与重复 LLM 开销
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  code-review:
+    # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # AI 需要完整 Git 历史以对比 diff
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install OpenCode CLI & update skills
+        run: |
+          npm install -g opencode-ai
+          npx skills update
+
+      - name: Fetch target base branch
+        run: |
+          # fetch-depth: 0 已提供 origin/<base_ref>；这里只更新远端引用，不创建同名本地分支
+          # （直接 fetch <base> 会写入 FETCH_HEAD 并更新 origin/<base>，避免本地分支冲突）
+          git fetch origin "$BASE_REF"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+
+      - name: Execute OpenCode agent (self-exploration mode)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # 先写入解析后的 PR 上下文（env 变量在此处插值），再追加静态指令
+          {
+            echo "You are a Senior Engineer performing an expert-level Pull Request Code Review for the"
+            echo "MiniCity (pl-town) repository — a Vite + TypeScript + Three.js npm workspace"
+            echo "(apps/web frontend + apps/server Node.js WebSocket/HTTP server)."
+            echo ""
+            echo "【PR Context】:"
+            echo "- PR Title: $PR_TITLE"
+            echo "- Base Branch: origin/$BASE_REF"
+            echo "- Current Head: HEAD"
+            echo ""
+            echo "【PR Description】:"
+            printf '%s\n' "$PR_BODY"
+            echo ""
+            cat << 'EOF'
+          【Your Review Mission】:
+          0. Explicitly load the `code-review-skill` first, then conduct the review using it.
+          1. Use terminal commands to inspect history and changes, e.g.:
+             `git log origin/$BASE_REF..HEAD`
+             `git diff --stat origin/$BASE_REF...HEAD`
+             `git diff origin/$BASE_REF...HEAD -- <filepath>`
+          2. Skip lock files (package-lock.json), build artifacts (dist/, apps/web/dist),
+             runtime data (data/, logs/) and generated test reports (test-results/,
+             playwright-report/).
+          3. If changed files are large, inspect them file-by-file; read full files for context
+             when needed.
+          4. Read `Agents.md` and evaluate changes strictly against its rules:
+             - 依赖方向：渲染层可消费城市数据；领域/数据模块不得反向依赖 UI 或网络。
+             - 模块边界：业务逻辑不得继续写入 `apps/web/src/city/MiniCityApp.ts`（迁移期仅保留必要 wrapper）。
+             - 源码体积：普通逻辑文件 ≤ 1000 行，MiniCityApp.ts ≤ 2000 行。
+             - 3D 渲染：远镜头下 z-fighting —— 贴地网格/覆盖层不得共用相同 y 高度，
+               layers.ts 的 SURFACE_Y 各层需保留足够 Y 差（如 ≥ 0.004）。
+             - 测试：新增用户可见行为应补 Playwright 烟雾测试；新增服务端协议/持久化应补
+               apps/server/tests/integration.mjs。
+             - 安全：不在日志/URL 中写入会话令牌、密码；保留 WebSocket 的 JSON、大小限制、
+               频率限制与输入校验。
+          5. Write a concise, objective, constructive Markdown review report. Group findings as
+             🔴 Blocker / 🟡 Suggestion / 🟢 Nit, and skip empty categories.
+          EOF
+          } > review_prompt.txt
+
+          # 代理运行期间移除令牌，避免模型自行下发评论或修改 PR；评论步骤单独注入 GH_TOKEN
+          unset GITHUB_TOKEN GH_TOKEN
+          opencode run \
+            --model opencode/deepseek-v4-flash-free \
+            --variant high \
+            --dangerously-skip-permissions \
+            "$(cat review_prompt.txt)" > review_report.md
+
+      - name: Post PR review comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -s review_report.md ]; then
+            # 删除上一轮遗留的 AI 审查评论，避免连续推送时评论堆积
+            COMMENT_MARKER="### 🤖 AI Code Review (OpenCode)"
+            for cid in $(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+                          --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id"); do
+              gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$cid" || true
+            done
+
+            # 去除可能残留的 ANSI 转义序列，保证评论渲染干净
+            sed -r 's/\x1B\[[0-9;]*[mK]//g' review_report.md > review_report_clean.md
+            {
+              echo "### 🤖 AI Code Review (OpenCode)"
+              echo "> 💡 Autonomous AI reviewer inspecting git history and code quality against \`Agents.md\`."
+              echo ""
+              cat review_report_clean.md
+              echo ""
+              echo "_This review was generated by an AI agent (Auto-Review workflow) on behalf of the maintainer._"
+            } > final_comment.md
+
+            gh pr comment "$PR_NUMBER" --body-file final_comment.md
+          else
+            echo "No review report generated."
+          fi
