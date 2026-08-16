@@ -1,0 +1,4 @@
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  .b-label-item, .welcome-block, .you-block, .ui-header { transition: none !important; }
+}

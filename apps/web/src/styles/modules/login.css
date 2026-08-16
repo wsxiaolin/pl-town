@@ -1,0 +1,115 @@
+/* ===== LOGO USER TAG ===== */
+.logo-user {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-light);
+  letter-spacing: 0.06em;
+  margin-left: 2px;
+  cursor: default;
+}
+.logo-user.login-required {
+  color: var(--blue);
+  font-weight: 600;
+  cursor: pointer;
+}
+.logo-user.login-required:hover {
+  opacity: 0.72;
+}
+.logo-user.login-required:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 4px;
+}
+
+/* ===== LOGIN OVERLAY ===== */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(249,248,246,0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 600;
+  transition: opacity 0.5s ease;
+}
+.login-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.login-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  text-align: center;
+  padding: 52px 48px 48px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.08), 0 2px 12px rgba(0,0,0,0.04);
+  max-width: 360px;
+  width: 90%;
+}
+
+.login-title {
+  font-size: 24px;
+  font-weight: 300;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+
+.login-sub {
+  font-size: 12px;
+  color: var(--text-light);
+  letter-spacing: 0.04em;
+  margin-bottom: 28px;
+}
+
+.login-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1.5px solid #E8E7E4;
+  padding: 10px 0;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text-dark);
+  background: transparent;
+  outline: none;
+  text-align: center;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  transition: border-color 0.2s;
+  margin-bottom: 32px;
+}
+.login-input:focus { border-bottom-color: var(--blue); }
+.login-input::placeholder { color: var(--text-light); }
+.login-input + .login-input { margin-top: -16px; }
+
+.login-error {
+  width: 100%;
+  margin: -16px 0 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #c0392b;
+}
+
+.login-btn {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 28px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  font-family: inherit;
+}
+.login-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.login-btn:active { transform: none; }
+
