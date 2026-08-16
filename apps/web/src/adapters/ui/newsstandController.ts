@@ -1,4 +1,5 @@
-import { NEWSPAPER_ARCHIVE, type NewspaperBlock, type NewspaperIssue } from '../../city/data/newspapers';
+import { NEWSPAPER_CATALOG, type NewspaperCatalogEntry } from '../../city/data/newspapers/newspapers-catalog';
+import type { NewspaperBlock, NewspaperIssue } from '../../city/data/newspapers/newspapers-types';
 
 export interface NewsstandControllerOptions {
   document: Document;
@@ -9,13 +10,31 @@ export interface NewsstandController {
   open(): void;
   close(): void;
   isOpen(): boolean;
-  openIssue(issue: NewspaperIssue): void;
+  openIssue(issueId: string): Promise<void>;
 }
 
 function getElement<T extends HTMLElement>(document: Document, id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing newsstand element #${id}`);
   return element as T;
+}
+
+// 报摊内容按年份拆分为独立 chunk，仅在用户点击某期时按需加载，
+// 避免在页面初始加载时拉取全部报纸正文。
+const YEAR_LOADERS: Readonly<Record<string, () => Promise<{ NEWSPAPER_ISSUES_2023?: readonly NewspaperIssue[]; NEWSPAPER_ISSUES_2024?: readonly NewspaperIssue[]; NEWSPAPER_ISSUES_2025?: readonly NewspaperIssue[]; NEWSPAPER_ISSUES_2026?: readonly NewspaperIssue[] }>>> = {
+  '2023': () => import('../../city/data/newspapers/newspapers-2023'),
+  '2024': () => import('../../city/data/newspapers/newspapers-2024'),
+  '2025': () => import('../../city/data/newspapers/newspapers-2025'),
+  '2026': () => import('../../city/data/newspapers/newspapers-2026'),
+} as const;
+
+async function loadIssue(entry: NewspaperCatalogEntry): Promise<NewspaperIssue | undefined> {
+  const year = entry.date.split('.')[0] ?? '';
+  const loader = YEAR_LOADERS[year];
+  if (!loader) return undefined;
+  const mod = await loader();
+  const list = mod[`NEWSPAPER_ISSUES_${year}` as keyof typeof mod] as readonly NewspaperIssue[] | undefined;
+  return list?.find((issue) => issue.id === entry.id);
 }
 
 function renderBlock(document: Document, block: NewspaperBlock): HTMLElement {
@@ -96,48 +115,51 @@ function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number
 export function createNewsstandController(options: NewsstandControllerOptions): NewsstandController {
   const { document } = options;
   let opened = false;
+  const loaded = new Map<string, NewspaperIssue>();
 
   const renderCatalog = (): void => {
     const list = getElement<HTMLDivElement>(document, 'newsstandList');
     list.replaceChildren();
-    const byYear = new Map<string, NewspaperIssue[]>();
-    for (const issue of NEWSPAPER_ARCHIVE) {
-      const year = issue.date.split('.')[0] ?? '未注明';
+    const byYear = new Map<string, NewspaperCatalogEntry[]>();
+    for (const entry of NEWSPAPER_CATALOG) {
+      const year = entry.date.split('.')[0] ?? '未注明';
       const bucket = byYear.get(year) ?? [];
-      bucket.push(issue);
+      bucket.push(entry);
       byYear.set(year, bucket);
     }
     const years = [...byYear.keys()].sort((a, b) => Number(b) - Number(a));
     for (const year of years) {
-      const issues = byYear.get(year) ?? [];
+      const entries = byYear.get(year) ?? [];
       const group = document.createElement('section');
       group.className = 'np-year';
       const heading = document.createElement('h3');
       heading.textContent = `${year} 年`;
       const count = document.createElement('span');
       count.className = 'np-year-count';
-      count.textContent = `${issues.length} 期`;
+      count.textContent = `${entries.length} 期`;
       const headRow = document.createElement('div');
       headRow.className = 'np-year-head';
       headRow.append(heading, count);
-      const entries = document.createElement('div');
-      entries.className = 'np-year-list';
-      for (const issue of issues) {
+      const items = document.createElement('div');
+      items.className = 'np-year-list';
+      for (const entry of entries) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'np-issue';
-        button.dataset.issueId = issue.id;
+        button.dataset.issueId = entry.id;
         const date = document.createElement('b');
-        date.textContent = issue.date;
+        date.textContent = entry.date;
         const series = document.createElement('span');
-        series.textContent = issue.series;
+        series.textContent = entry.series;
         const pages = document.createElement('i');
-        pages.textContent = `${issue.pages.length} 版`;
+        pages.textContent = `${entry.pageCount} 版`;
         button.append(date, series, pages);
-        button.addEventListener('click', () => controller.openIssue(issue), { signal: options.signal });
-        entries.append(button);
+        button.addEventListener('click', () => {
+          void controller.openIssue(entry.id);
+        }, { signal: options.signal });
+        items.append(button);
       }
-      group.append(headRow, entries);
+      group.append(headRow, items);
       list.append(group);
     }
   };
@@ -155,6 +177,18 @@ export function createNewsstandController(options: NewsstandControllerOptions): 
     (getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId = issue.id);
   };
 
+  const getLoadedIssue = async (): Promise<NewspaperIssue | undefined> => {
+    const id = getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId;
+    if (!id) return undefined;
+    const cached = loaded.get(id);
+    if (cached) return cached;
+    const entry = NEWSPAPER_CATALOG.find((item) => item.id === id);
+    if (!entry) return undefined;
+    const issue = await loadIssue(entry);
+    if (issue) loaded.set(id, issue);
+    return issue;
+  };
+
   const controller: NewsstandController = {
     open() {
       if (opened) return;
@@ -169,7 +203,18 @@ export function createNewsstandController(options: NewsstandControllerOptions): 
       getElement<HTMLDivElement>(document, 'newspaperOverlay').classList.remove('open');
     },
     isOpen: () => opened,
-    openIssue(issue) {
+    async openIssue(issueId) {
+      const cached = loaded.get(issueId);
+      if (cached) {
+        getElement<HTMLDivElement>(document, 'newspaperOverlay').classList.add('open');
+        renderIssue(cached, 0);
+        return;
+      }
+      const entry = NEWSPAPER_CATALOG.find((item) => item.id === issueId);
+      if (!entry) return;
+      const issue = await loadIssue(entry);
+      if (!issue) return;
+      loaded.set(issueId, issue);
       getElement<HTMLDivElement>(document, 'newspaperOverlay').classList.add('open');
       renderIssue(issue, 0);
     },
@@ -183,16 +228,20 @@ export function createNewsstandController(options: NewsstandControllerOptions): 
     getElement<HTMLDivElement>(document, 'newspaperOverlay').classList.remove('open');
   }, { signal: options.signal });
   getElement<HTMLButtonElement>(document, 'newspaperPrev').addEventListener('click', () => {
-    const issue = NEWSPAPER_ARCHIVE.find((item) => item.id === getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId);
-    if (!issue) return;
-    const current = Number(getElement<HTMLSpanElement>(document, 'newspaperPageNo').textContent) - 1;
-    renderIssue(issue, current - 1);
+    void (async () => {
+      const issue = await getLoadedIssue();
+      if (!issue) return;
+      const current = Number(getElement<HTMLSpanElement>(document, 'newspaperPageNo').textContent) - 1;
+      renderIssue(issue, current - 1);
+    })();
   }, { signal: options.signal });
   getElement<HTMLButtonElement>(document, 'newspaperNext').addEventListener('click', () => {
-    const issue = NEWSPAPER_ARCHIVE.find((item) => item.id === getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId);
-    if (!issue) return;
-    const current = Number(getElement<HTMLSpanElement>(document, 'newspaperPageNo').textContent) - 1;
-    renderIssue(issue, current + 1);
+    void (async () => {
+      const issue = await getLoadedIssue();
+      if (!issue) return;
+      const current = Number(getElement<HTMLSpanElement>(document, 'newspaperPageNo').textContent) - 1;
+      renderIssue(issue, current + 1);
+    })();
   }, { signal: options.signal });
 
   return controller;
