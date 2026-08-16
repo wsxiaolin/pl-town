@@ -43,3 +43,11 @@ Entries discovered by the Agent during task execution should follow this format:
   - After `npm install`, Vite may fail with "Cannot find module @rollup/rollup-linux-x64-gnu" (npm optional-dependency bug). Fix by `npm install @rollup/rollup-linux-x64-gnu@<same-version-as-installed-rollup> --no-save`.
   - Backend admin UI/API live on `/admin/`, verified via the same Vite proxy; health checks `/healthz` and `/readyz` hit the backend on 127.0.0.1:8787.
   - Origin validation is strict: in production, browser requests (admin login and WebSocket) are rejected unless the origin is in `ALLOWED_ORIGINS`. Preview-domain access requires `ALLOWED_ORIGINS=https://<preview-domain>` (set the exact `*.monkeycode-ai.online` preview URL), otherwise the backend appears "down/offline" with 403 on admin login. Wrong credentials return 401.
+  - Backend supports multiple administrators: the primary account comes from `ADMIN_USERNAME`/`ADMIN_PASSWORD`, additional accounts come from `ADMIN_ACCOUNTS_JSON` (JSON object mapping username to password, each password >= 16 chars).
+- Date: 2026-08-16
+- Context: Discovered by Agent while converting lab_outer into a memorial monument, then debugging why the app would not boot (`Cannot access 'clamp' before initialization`)
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - In `apps/web/src/city/MiniCityApp.ts` (a `@ts-nocheck` monolith), module-top-level `const roadNavigation = createRoadNavigationSystem({...})` and its destructured helpers (`clamp`, `buildRoadPath`, `nearestRoadCoord`, `FOUNTAIN_CLEAR`, etc.) MUST be declared BEFORE any module-top-level call that references them in an object literal (e.g. `createEventBindings({..., clamp, ...})`), otherwise a TDZ `Cannot access ... before initialization` error is thrown at load and the whole city fails to boot.
+  - This ordering was wrong on `origin/main`; the fix moved the `roadNavigation` block above `createBuildingInteraction`/`createEventBindings`.
+  - Headless Playwright (chromium headless shell) needs `npx playwright install chromium --with-deps`; without it, `browserType.launch` fails on the missing headless shell binary.
