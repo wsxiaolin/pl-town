@@ -584,7 +584,7 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   await expect(oldestIssue).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 
-  // Open the very first archived issue (2023.7.23) and confirm the reader renders.
+  // Open the first weekly issue (2023.7.23) and confirm the reader renders.
   await oldestIssue.click();
   const reader = page.locator('#newspaperOverlay');
   await expect(reader).toHaveClass(/open/);

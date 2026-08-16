@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NEWSPAPER_ARCHIVE, type NewspaperBlock, type NewspaperIssue } from '../../src/city/data/newspapers';
+import { NEWSPAPER_CATALOG } from '../../src/city/data/newspapers/newspapers-catalog';
 
 test('Newspaper archive retains every extracted weekly issue', () => {
-  assert.ok(NEWSPAPER_ARCHIVE.length >= 80);
+  assert.ok(NEWSPAPER_ARCHIVE.length >= 90);
   const ids = new Set<string>();
   for (const issue of NEWSPAPER_ARCHIVE) {
     assert.ok(issue.id, 'issue has an id');
@@ -51,9 +52,22 @@ test('Blocks carry valid kinds and link metadata', () => {
 test('Chronologically ordered archive shows the oldest issue first', () => {
   const first = NEWSPAPER_ARCHIVE[0];
   assert.ok(first);
-  assert.equal(first.series, '星辉周刊');
-  assert.equal(first.date, '2023.7.23');
+  assert.equal(first.series, '星辉×物实观察');
+  assert.equal(first.date, '2023.7.14');
   const dates = NEWSPAPER_ARCHIVE.map((issue: NewspaperIssue) => issue.date);
   const sorted = [...dates].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   assert.deepEqual(dates, sorted, 'issues are sorted chronologically');
+});
+
+test('Catalog metadata stays consistent with the full archive', () => {
+  assert.equal(NEWSPAPER_CATALOG.length, NEWSPAPER_ARCHIVE.length);
+  const byId = new Map(NEWSPAPER_ARCHIVE.map((issue) => [issue.id, issue]));
+  for (const entry of NEWSPAPER_CATALOG) {
+    const issue = byId.get(entry.id);
+    assert.ok(issue, `catalog references unknown issue ${entry.id}`);
+    assert.equal(entry.title, issue.title, `${entry.id} title`);
+    assert.equal(entry.series, issue.series, `${entry.id} series`);
+    assert.equal(entry.date, issue.date, `${entry.id} date`);
+    assert.equal(entry.pageCount, issue.pages.length, `${entry.id} pageCount`);
+  }
 });
