@@ -41,6 +41,7 @@ import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { addCityFountain, addCityLighting } from './scenePresentationController';
 import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
 import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
+import { applyBuildingDestroyedPresentation, isBuildingDestroyed } from './buildingDamage';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameHour } from '../gameplay/time/townClock';
@@ -220,7 +221,7 @@ const nearestRoadCoord = roadNavigation.nearestRoadCoord;
 const clamp = roadNavigation.clamp;
 
 const buildingInteraction = createBuildingInteraction({
-  isStoryLockedBuilding,
+  isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
   getEchoStoryController: () => echoStoryController,
@@ -334,7 +335,7 @@ function init() {
   addRealBuildingModels(scene, buildings)
     .then(() => { cacheBuildingBoxes(); mapController?.invalidateShot(); })
     .catch(error => console.error('3D model loading failed', error));
-  buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isStoryLockedBuilding, interact: interactOrWalk });
+  buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isBuildingUnavailable, interact: interactOrWalk });
   buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   writerCatalogController = createWriterCatalogController({ document });
@@ -385,7 +386,7 @@ function init() {
     getStats,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
-    isStoryLocked: isStoryLockedBuilding,
+    isStoryLocked: isBuildingUnavailable,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget,
     movePlayerTo,
@@ -519,7 +520,8 @@ function setupScene() {
     getBuildings: () => buildings,
     openNpcDialog,
     navigateTo,
-    isStoryLockedBuilding,
+    isBuildingUnavailable,
+    destroyBuilding,
     openModal,
     interactWithSceneInterestPoint,
     getSceneInterestPoints: () => sceneInterestPoints,
@@ -559,6 +561,18 @@ function setupEvents() { eventBindings.setupEvents(); }
 
 function isStoryLockedBuilding(building) { return STORY_LOCKED_BUILDINGS.has(building.id); }
 
+function isBuildingUnavailable(building) {
+  return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
+}
+
+export function destroyBuilding(buildingId: string): boolean {
+  const building = buildings.find((item) => item.id === buildingId);
+  if (!building || isBuildingDestroyed(building)) return false;
+  const destroyed = applyBuildingDestroyedPresentation(building);
+  if (destroyed) mapController?.invalidateShot();
+  return destroyed;
+}
+
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
 
 function onMouseMove(e) { interactionPointer.onMouseMove(e); }
@@ -573,7 +587,7 @@ function openResidence(residenceId) { multiplayerHousing.openResidence(residence
 function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
 function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
 function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
-function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isStoryLockedBuilding }); }
+function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
 function onCanvasClick(event) { interactionPointer.onCanvasClick(event); }
 
 function talkToOrWalk(npc) { interactionPointer.talkToOrWalk(npc); }

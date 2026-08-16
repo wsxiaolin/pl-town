@@ -1,7 +1,7 @@
 import { BUILDING_API_QUERIES } from './data/buildings';
 
 export type BuildingInteractionOptions = {
-  isStoryLockedBuilding: (building: any) => boolean;
+  isBuildingUnavailable: (building: any) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
   getCityDialogs: () => { openBuilding: (building: any) => void; closeBuilding: () => void } | null;
   getEchoStoryController: () => { interactBuilding: (id: string, dialogs: any) => boolean } | null;
@@ -40,7 +40,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateUnlocked(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     const dialogs = options.getCityDialogs();
     const echo = options.getEchoStoryController();
     if (dialogs && echo?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
@@ -77,7 +77,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateTo(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }
 

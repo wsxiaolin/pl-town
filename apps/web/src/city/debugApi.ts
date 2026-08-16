@@ -13,7 +13,8 @@ export type DebugApiOptions = {
   getBuildings: () => any[];
   openNpcDialog: (npc: any) => void;
   navigateTo: (building: any) => void;
-  isStoryLockedBuilding: (building: any) => boolean;
+  isBuildingUnavailable: (building: any) => boolean;
+  destroyBuilding: (buildingId: string) => boolean;
   openModal: (building: any) => void;
   interactWithSceneInterestPoint: (id: any) => void;
   getSceneInterestPoints: () => { entities: Map<string, any> } | null;
@@ -38,13 +39,14 @@ export function installDebugApi(options: DebugApiOptions) {
     },
     interactBuilding: (buildingId: string) => {
       const building = options.getBuildings().find((item: any) => item.id === buildingId);
-      if (!building || options.isStoryLockedBuilding(building)) return false;
+      if (!building || options.isBuildingUnavailable(building)) return false;
       options.navigateTo(building);
       return true;
     },
+    destroyBuilding: (buildingId: string) => options.destroyBuilding(buildingId),
     openBuildingDialog: (buildingId: string) => {
       const building = options.getBuildings().find((item: any) => item.id === buildingId);
-      if (!building) return false;
+      if (!building || options.isBuildingUnavailable(building)) return false;
       options.openModal(building);
       return true;
     },
