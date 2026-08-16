@@ -11,6 +11,7 @@ import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
+import { MEMORIAL_ROSTER } from './data/memorialRoster';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -201,6 +202,21 @@ const frameLoop = createFrameLoop({
   npcYieldToPlayer,
   isStoryLockedBuilding,
 });
+
+const roadNavigation = createRoadNavigationSystem({
+  roadCoords: ROAD_COORDS,
+  echoObservatoryArea: ECHO_OBSERVATORY_AREA,
+  westBeach: WEST_BEACH,
+  cityLimit: CITY_LIMIT,
+  getBuildings: () => buildings,
+});
+const FOUNTAIN_CLEAR = roadNavigation.fountainClear;
+const buildRoadPath = roadNavigation.buildRoadPath;
+const buildingRoadEntry = roadNavigation.buildingRoadEntry;
+const pointInAnyBuilding = roadNavigation.pointInAnyBuilding;
+const cacheBuildingBoxes = roadNavigation.cacheBuildingBoxes;
+const nearestRoadCoord = roadNavigation.nearestRoadCoord;
+const clamp = roadNavigation.clamp;
 
 const buildingInteraction = createBuildingInteraction({
   isStoryLockedBuilding,
@@ -428,6 +444,7 @@ function init() {
     resumeNpcs,
     showToast: showUnlockToast,
     musicHallLyrics: MUSIC_HALL_LYRICS,
+    memorialRoster: MEMORIAL_ROSTER,
     signal: eventController.signal,
   });
   cityDialogs.setup();
@@ -588,21 +605,6 @@ function movePlayerTo(target) { playerController?.moveTo(target); }
 function handlePlayerIdle() { interactionPointer.handlePlayerIdle(); }
 
 function flushDistance(amount) { interactionTracker.flushDistance(amount); }
-
-const roadNavigation = createRoadNavigationSystem({
-  roadCoords: ROAD_COORDS,
-  echoObservatoryArea: ECHO_OBSERVATORY_AREA,
-  westBeach: WEST_BEACH,
-  cityLimit: CITY_LIMIT,
-  getBuildings: () => buildings,
-});
-const FOUNTAIN_CLEAR = roadNavigation.fountainClear;
-const buildRoadPath = roadNavigation.buildRoadPath;
-const buildingRoadEntry = roadNavigation.buildingRoadEntry;
-const pointInAnyBuilding = roadNavigation.pointInAnyBuilding;
-const cacheBuildingBoxes = roadNavigation.cacheBuildingBoxes;
-const nearestRoadCoord = roadNavigation.nearestRoadCoord;
-const clamp = roadNavigation.clamp;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STATS / PROGRESSION SYSTEM

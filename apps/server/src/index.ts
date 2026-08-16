@@ -295,6 +295,7 @@ const http = createServer(async (request, response) => {
     online: () => clients.size,
     disconnectUser: (userId) => clients.get(userId)?.socket.close(4003, 'Account status changed'),
     disconnectAll: () => { for (const client of clients.values()) client.socket.close(4003, 'Database restored'); },
+    broadcastHousing: broadcastHousingState,
     startedAt,
   })) return;
   const headers = jsonSecurityHeaders;

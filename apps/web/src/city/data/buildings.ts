@@ -374,7 +374,7 @@ export const BUILDING_DEFS = [
   {
     id: "lab_outer",
     num: "34",
-    label: "实验楼（外环）",
+    label: "永退用户纪念碑",
     x: 33,
     z: 9,
     shape: "greenhouse",
@@ -1029,11 +1029,11 @@ export const BUILDING_CONTENT = {
     ],
   },
   lab_outer: {
-    name: "实验楼（外环）",
-    slogan: "试错是这座城的燃料。",
+    name: "永退用户纪念碑",
+    slogan: "阴阳有序，命运无常。每一次告别，都是灵魂的返航。",
     dialog: [
-      "玻璃门后是整齐的仪器和不太整齐的便签。",
-      "「不要把异常丢掉。异常有时候是入口。」",
+      "碑身刻着一个个被铭记的名字。",
+      "「感谢你们曾为这座城留下痕迹。」",
     ],
   },
   teahouse: {

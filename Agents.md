@@ -158,6 +158,7 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 - `cg.css`：CG 片头动画「城之诞生」。
 - `modal.css`：建筑详情纸质弹窗。
 - `lyrics.css`：音乐厅歌词舞台。
+- `memorial.css`：永退用户纪念碑长卷 overlay。
 - `npc.css`：NPC 对话面板（含 story-mode / cg-mode / blackout-mode）。
 
 新增样式优先放入对应模块文件，单个文件目标 50–60 行，较大组件可到几百行但不建议超过 ~600 行。新增模块需在 `index.css` 中按视觉/级联需要追加 `@import`，保持 import 顺序与原单文件顺序一致，避免层叠覆盖意外变化。CSS 文件不在 `check:source-size` 扫描范围（仅扫描 `.ts/.tsx/.js/.mjs`），但仍应遵循同样的拆分原则。
