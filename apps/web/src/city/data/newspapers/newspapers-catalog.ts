@@ -1,7 +1,5 @@
 // 报摊目录（轻量元数据，不含版面内容，用于列表渲染）
 // 内容仍按年份存放在 newspapers-<year>.ts 中，点击期次时才按需加载。
-import type { NewspaperIssue } from "./newspapers-types";
-
 export interface NewspaperCatalogEntry {
   id: string;
   title: string;

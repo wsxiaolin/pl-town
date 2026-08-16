@@ -26,13 +26,23 @@ const YEAR_LOADERS: Readonly<Record<string, () => Promise<{ NEWSPAPER_ISSUES_202
   '2024': () => import('../../city/data/newspapers/newspapers-2024'),
   '2025': () => import('../../city/data/newspapers/newspapers-2025'),
   '2026': () => import('../../city/data/newspapers/newspapers-2026'),
-} as const;
+};
+
+// 历年刊物已静态归档；目录里如出现归档年份之外的条目（例如未来新增的年份），
+// 加载器会缺失，此时向用户提示“暂不可用”而非静默失败。
+const UNAVAILABLE_MESSAGE = '该期暂不可用';
 
 async function loadIssue(entry: NewspaperCatalogEntry): Promise<NewspaperIssue | undefined> {
   const year = entry.date.split('.')[0] ?? '';
   const loader = YEAR_LOADERS[year];
   if (!loader) return undefined;
-  const mod = await loader();
+  let mod: Awaited<ReturnType<typeof loader>>;
+  try {
+    mod = await loader();
+  } catch {
+    // 动态 chunk 加载失败（离线、CDN 异常等）时返回 undefined，由调用方提示用户。
+    return undefined;
+  }
   const list = mod[`NEWSPAPER_ISSUES_${year}` as keyof typeof mod] as readonly NewspaperIssue[] | undefined;
   return list?.find((issue) => issue.id === entry.id);
 }
@@ -116,6 +126,8 @@ export function createNewsstandController(options: NewsstandControllerOptions): 
   const { document } = options;
   let opened = false;
   const loaded = new Map<string, NewspaperIssue>();
+  // openIssue 防竞态序号：每次发起异步加载自增，await 后若序号已变说明有更新的点击。
+  let clickSeq = 0;
 
   const renderCatalog = (): void => {
     const list = getElement<HTMLDivElement>(document, 'newsstandList');
@@ -177,6 +189,26 @@ export function createNewsstandController(options: NewsstandControllerOptions): 
     (getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId = issue.id);
   };
 
+  // 当某期加载失败或年份未归档时，向用户展示可见提示，而不是静默无反应。
+  const renderUnavailable = (entry: NewspaperCatalogEntry): void => {
+    const sheet = document.createElement('article');
+    sheet.className = 'np-sheet np-unavailable';
+    const heading = document.createElement('h2');
+    heading.className = 'np-issue-title';
+    heading.textContent = entry.title;
+    const note = document.createElement('p');
+    note.className = 'np-text';
+    note.textContent = UNAVAILABLE_MESSAGE;
+    sheet.append(heading, note);
+    getElement<HTMLDivElement>(document, 'newspaperStage').replaceChildren(sheet);
+    getElement<HTMLSpanElement>(document, 'newspaperPageNo').textContent = '0';
+    getElement<HTMLSpanElement>(document, 'newspaperPageTotal').textContent = '0';
+    getElement<HTMLButtonElement>(document, 'newspaperPrev').disabled = true;
+    getElement<HTMLButtonElement>(document, 'newspaperNext').disabled = true;
+    getElement<HTMLSpanElement>(document, 'newspaperMeta').textContent = `${entry.series} ${entry.date}`;
+    delete getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId;
+  };
+
   const getLoadedIssue = async (): Promise<NewspaperIssue | undefined> => {
     const id = getElement<HTMLDivElement>(document, 'newspaperStage').dataset.issueId;
     if (!id) return undefined;
@@ -212,11 +244,18 @@ export function createNewsstandController(options: NewsstandControllerOptions): 
       }
       const entry = NEWSPAPER_CATALOG.find((item) => item.id === issueId);
       if (!entry) return;
+      // 防竞态：连续点击不同年份的冷期次会触发多个并发 import()，
+      // 用单调递增的序号保证只有“最后一次点击”的渲染会生效。
+      const seq = ++clickSeq;
       const issue = await loadIssue(entry);
-      if (!issue) return;
-      loaded.set(issueId, issue);
+      if (seq !== clickSeq) return;
       getElement<HTMLDivElement>(document, 'newspaperOverlay').classList.add('open');
-      renderIssue(issue, 0);
+      if (issue) {
+        loaded.set(issueId, issue);
+        renderIssue(issue, 0);
+      } else {
+        renderUnavailable(entry);
+      }
     },
   };
 
