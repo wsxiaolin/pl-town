@@ -81,7 +81,7 @@ export function createWestBeach(options: BeachOptions): {
   sand.renderOrder = 4;
   const waterWidth = 66;
   const waterLength = 140;
-  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, waterLength), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, 0.01, 10]);
+  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, waterLength), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, -0.02, 10]);
   water.castShadow = false;
   water.renderOrder = 3;
   const coastLine = addMesh(object, options, new THREE.BoxGeometry(0.12, 0.02, waterLength), { color: 0xf3e9d4, roughness: 0.55, transparent: true, opacity: 0.9, depthWrite: false }, [WEST_BEACH.coastlineX + 0.03, 0.095, 10]);

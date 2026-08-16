@@ -254,8 +254,10 @@ export function createBuildingMeshFactory(options) {
       const x = -bw/2 - 0.1 + i * (bw+0.2)/5;
       part(g, new THREE.BoxGeometry((bw+0.2)/5-0.02, 0.06, 0.4), {color: i%2===0 ? accentColor : 0xF5F4F1, roughness:0.5}, [x+0.1, top+0.02, bw/2+0.2]);
     }
-    // Window cutout (simulated with darker box)
-    part(g, new THREE.BoxGeometry(bw*0.7,bh*0.5,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [0,0.2+bh*0.5,bw/2+0.02]);
+    // Window cutout (simulated with darker box). Keep it fully in front of the
+    // generated facade plane (depth/2 + 0.024) so its faces never share a depth
+    // boundary with the facade and flicker at the photo-studio wall.
+    part(g, new THREE.BoxGeometry(bw*0.7,bh*0.5,0.04), {color:0x4A6FA8,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [0,0.2+bh*0.5,bw/2+0.055]);
     // Sign on top
     part(g, new THREE.BoxGeometry(bw*0.6,0.3,0.05), {color:accentColor,roughness:0.4,tex:'wood',rx:1,ry:1}, [0,top+0.08+0.15,0]);
     // Blue accent disc
