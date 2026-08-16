@@ -9,6 +9,7 @@ export type ReplaceableBuilding = {
   id: string;
   group: THREE.Group;
   bodyMat?: THREE.MeshStandardMaterial;
+  body?: THREE.Mesh;
 };
 
 const loader = new GLTFLoader();
@@ -64,6 +65,9 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
   const model = normalizeModel(detachedClone(source), size);
   building.group.clear();
   building.group.add(model);
+  building.body = undefined;
+  building.group.userData.buildingState = 'default';
+  building.group.userData.destroyed = false;
   let firstMaterial: THREE.MeshStandardMaterial | undefined;
   model.traverse(child => {
     const mesh = child as THREE.Mesh;
@@ -71,6 +75,7 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
     mesh.userData.buildingId = building.id;
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
     if (!firstMaterial && material instanceof THREE.MeshStandardMaterial) firstMaterial = material;
+    if (!building.body) building.body = mesh;
   });
   if (firstMaterial) building.bodyMat = firstMaterial;
 }
