@@ -24,6 +24,9 @@ export type DebugApiOptions = {
   openModal: (building: any) => void;
   interactWithSceneInterestPoint: (id: any) => void;
   getSceneInterestPoints: () => { entities: Map<string, any> } | null;
+  burnCity: () => boolean;
+  burnCityActive: () => boolean;
+  burnCityProgress: () => number;
 };
 
 export function installDebugApi(options: DebugApiOptions) {
@@ -71,6 +74,9 @@ export function installDebugApi(options: DebugApiOptions) {
       options.interactWithSceneInterestPoint(id);
       return true;
     },
+    burnCity: () => options.burnCity(),
+    burnCityActive: () => options.burnCityActive(),
+    burnCityProgress: () => options.burnCityProgress(),
   });
   (window as any).__mini = api;
   (window as any).destroyBuilding = options.destroyBuilding;
