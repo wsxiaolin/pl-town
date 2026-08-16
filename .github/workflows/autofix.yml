@@ -14,7 +14,8 @@ permissions:
 
 jobs:
   issue-agent-coding:
-    if: github.event.label.name == 'autofix'
+    # 仅处理真正的 Issue（PR 也是 Issue 的一种，打标签时也会触发 issues 事件）
+    if: github.event.label.name == 'autofix' && github.event.issue.pull_request == null
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +23,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
+          # 不把写权限凭据留在 .git/config，AI 代理运行期间无法直接 push；
+          # 推送所需的鉴权在最后的建分支步骤中通过 gh auth setup-git 重新注入
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -99,6 +102,9 @@ jobs:
         run: |
           rm -f issue_prompt.txt
 
+          # skills update 可能改写 skills-lock.json 的 computedHash，恢复以免混入 PR
+          git checkout -- skills-lock.json 2>/dev/null || true
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -126,13 +132,16 @@ jobs:
             git checkout -b "$BRANCH_NAME"
             git add .
             git commit -m "Auto-fix: Resolve Issue #$ISSUE_NUMBER"
+
+            # persist-credentials: false 下，这里用 GITHUB_TOKEN 重新配置推送鉴权
+            gh auth setup-git
             git push origin "$BRANCH_NAME"
 
             gh pr create \
               --title "auto-fix: $ISSUE_TITLE (Resolves #$ISSUE_NUMBER)" \
               --body-file pr_body.txt \
               --head "$BRANCH_NAME" \
-              --base "main"
+              --base "${{ github.event.repository.default_branch }}"
 
             rm -f pr_body.txt
           else
