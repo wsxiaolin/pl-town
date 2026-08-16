@@ -3,6 +3,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
+import { RENDER_ORDER } from './layers';
 
 export function createBuildingMeshFactory(options) {
   const {
@@ -277,12 +278,15 @@ export function createBuildingMeshFactory(options) {
     // Glowing screen on front face — layers stepped outward with clear gaps so no
     // coplanar faces z-fight (screen→frame→glow lines all distinct depths).
     const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1});
-    part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.05), screenMat, [0,0.25+bh*0.5,0.41], false);
+    const screen = part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.08), screenMat, [0,0.25+bh*0.5,0.46], false);
+    screen.renderOrder = RENDER_ORDER.buildingSurface;
     // Screen frame
-    part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.05), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.34], false);
+    const screenFrame = part(g, new THREE.BoxGeometry(bw*0.85,bh*0.75,0.08), {color:0x2A2A30,roughness:0.3}, [0,0.25+bh*0.5,0.33], false);
+    screenFrame.renderOrder = RENDER_ORDER.buildingSurface;
     // Screen glow lines
     for (let i = 0; i < 4; i++) {
-      part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.03), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2}, [0,0.25+bh*0.3+i*0.4,0.475], false);
+      const glowLine = part(g, new THREE.BoxGeometry(bw*0.6,0.03,0.04), {color:0xA8C8F8,emissive:0xA8C8F8,emissiveIntensity:0.2,depthWrite:false}, [0,0.25+bh*0.3+i*0.4,0.54], false);
+      glowLine.renderOrder = RENDER_ORDER.overlay;
     }
     // Antenna on top
     part(g, new THREE.CylinderGeometry(0.03,0.03,0.5,6), {color:0xD0CFCC,roughness:0.5}, [0,top+0.12+0.25,0]);
