@@ -23,6 +23,7 @@ export function createProceduralTextureLibrary(
     const repeatX = rx || 1, repeatY = ry || 1;
     return resources.texture(`repeat:${key}:${repeatX}:${repeatY}`, () => {
       const t = new THREE.CanvasTexture(c);
+      t.name = key;
       t.wrapS = THREE.RepeatWrapping;
       t.wrapT = THREE.RepeatWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -670,7 +671,7 @@ export function createProceduralTextureLibrary(
     // --- Residence tile: muted green roof tiles for the new garden family ---
     _canvas('residence_tile', 256, (ctx, s) => {
       ctx.fillStyle = '#6C9279'; ctx.fillRect(0, 0, s, s);
-      const tile = 20;
+      const tile = 16;
       for (let y = 0; y < s; y += tile) {
         const offset = (y / tile % 2) * (tile / 2);
         for (let x = -tile; x < s + tile; x += tile) {
@@ -681,6 +682,40 @@ export function createProceduralTextureLibrary(
         }
       }
       _noise(ctx, s, 0.02);
+    });
+
+    // --- Residence shingle: blue-grey slate tiles for the brick-chimney family ---
+    _canvas('residence_shingle', 256, (ctx, s) => {
+      ctx.fillStyle = '#59656F'; ctx.fillRect(0, 0, s, s);
+      const tile = 32;
+      for (let y = 0; y < s; y += tile) {
+        const offset = (y / tile % 2) * (tile / 2);
+        for (let x = -tile; x < s + tile; x += tile) {
+          const bx = x + offset, sh = 0.85 + Math.random() * 0.25;
+          ctx.fillStyle = _shade([89, 101, 111], sh);
+          ctx.fillRect(bx + 1, y + 1, tile - 3, tile - 3);
+          ctx.fillStyle = 'rgba(0,0,0,0.15)';
+          ctx.fillRect(bx + tile - 3, y, 3, tile);
+          ctx.fillRect(bx, y + tile - 3, tile, 3);
+        }
+      }
+      _noise(ctx, s, 0.025);
+    });
+
+    // --- Residence panel: warm horizontal clapboard for the red-roof family ---
+    _canvas('residence_panel', 256, (ctx, s) => {
+      ctx.fillStyle = '#E5D1B8'; ctx.fillRect(0, 0, s, s);
+      const bh = 32;
+      for (let y = 0; y < s; y += bh) {
+        const sh = 0.92 + Math.random() * 0.12;
+        ctx.fillStyle = _shade([229, 209, 184], sh);
+        ctx.fillRect(0, y, s, bh - 6);
+        ctx.fillStyle = 'rgba(120, 80, 50, 0.15)';
+        ctx.fillRect(0, y + bh - 6, s, 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(0, y, s, 2);
+      }
+      _noise(ctx, s, 0.025);
     });
   
     // ══ 建筑立面贴图（完整立面，非重复）══
