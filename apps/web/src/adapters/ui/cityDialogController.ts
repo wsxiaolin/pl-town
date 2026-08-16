@@ -67,6 +67,21 @@ export interface MusicHallLyricsLike {
   lines: readonly LyricsLineLike[];
 }
 
+export interface MemorialEntryLike {
+  name: string;
+  note?: string;
+}
+
+export interface MemorialRosterLike {
+  title: string;
+  subtitle: string;
+  dedication: string;
+  intro: readonly string[];
+  main: readonly MemorialEntryLike[];
+  comments: readonly string[];
+  footer: string;
+}
+
 export interface CityDialogControllerOptions {
   document: Document;
   buildingContent: Readonly<Record<string, BuildingContentLike>>;
@@ -78,6 +93,7 @@ export interface CityDialogControllerOptions {
   resumeNpcs: () => void;
   showToast: (message: string) => void;
   musicHallLyrics?: MusicHallLyricsLike;
+  memorialRoster?: MemorialRosterLike;
   signal?: AbortSignal;
 }
 
@@ -87,6 +103,7 @@ export interface CityDialogController {
   openBuilding(building: BuildingLike): void;
   closeBuilding(): void;
   closeLyrics(): void;
+  closeMemorial(): void;
   openNpc(npc: NpcEntityLike, playerPosition?: { x: number; z: number }): void;
   openStory(story: StoryDialogModel): void;
   closeNpc(): void;
@@ -231,6 +248,55 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.add('open');
   };
 
+  const openMemorial = (): void => {
+    const roster = options.memorialRoster;
+    if (!roster) return;
+    setIdentityField(document, 'memorialTitle', roster.title);
+    setIdentityField(document, 'memorialSubtitle', roster.subtitle);
+    setIdentityField(document, 'memorialDedication', roster.dedication);
+    const scroll = getElement<HTMLDivElement>(document, 'memorialScroll');
+    scroll.replaceChildren();
+    const appendNote = (text: string): void => {
+      const paragraph = document.createElement('p');
+      paragraph.className = 'lyrics-note memorial-note';
+      paragraph.textContent = text;
+      scroll.appendChild(paragraph);
+    };
+    roster.intro.forEach((line) => {
+      const paragraph = document.createElement('p');
+      paragraph.className = 'lyrics-line lyrics-quote memorial-intro';
+      paragraph.textContent = line;
+      scroll.appendChild(paragraph);
+    });
+    const gap = document.createElement('div');
+    gap.className = 'lyrics-gap';
+    scroll.appendChild(gap);
+    appendNote(`主名录 · 共 ${roster.main.length} 位`);
+    let rowIndex = 0;
+    roster.main.forEach((entry, index) => {
+      const paragraph = document.createElement('p');
+      paragraph.className = 'lyrics-line lyrics-verse memorial-entry';
+      paragraph.textContent = `${index + 1}. ${entry.name}${entry.note ? `　${entry.note}` : ''}`;
+      paragraph.style.animationDelay = `${Math.min(rowIndex, 14) * 0.06}s`;
+      scroll.appendChild(paragraph);
+      rowIndex += 1;
+    });
+    const gapTwo = document.createElement('div');
+    gapTwo.className = 'lyrics-gap';
+    scroll.appendChild(gapTwo);
+    appendNote(`评论区补充 · 共 ${roster.comments.length} 条`);
+    roster.comments.forEach((name) => {
+      const paragraph = document.createElement('p');
+      paragraph.className = 'lyrics-line lyrics-verse memorial-comment';
+      paragraph.textContent = name;
+      paragraph.style.animationDelay = `${Math.min(rowIndex, 14) * 0.04}s`;
+      scroll.appendChild(paragraph);
+      rowIndex += 1;
+    });
+    setIdentityField(document, 'memorialFooter', roster.footer);
+    getElement<HTMLDivElement>(document, 'memorialOverlay').classList.add('open');
+  };
+
   const controller: CityDialogController = {
     setup() {
       getElement<HTMLButtonElement>(document, 'modalClose').addEventListener('click', controller.closeBuilding, { signal: options.signal });
@@ -240,6 +306,10 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       getElement<HTMLButtonElement>(document, 'lyricsClose').addEventListener('click', controller.closeLyrics, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'lyricsOverlay').addEventListener('click', (event) => {
         if (event.target === getElement<HTMLDivElement>(document, 'lyricsOverlay')) controller.closeLyrics();
+      }, { signal: options.signal });
+      getElement<HTMLButtonElement>(document, 'memorialClose').addEventListener('click', controller.closeMemorial, { signal: options.signal });
+      getElement<HTMLDivElement>(document, 'memorialOverlay').addEventListener('click', (event) => {
+        if (event.target === getElement<HTMLDivElement>(document, 'memorialOverlay')) controller.closeMemorial();
       }, { signal: options.signal });
       getElement<HTMLButtonElement>(document, 'npcClose').addEventListener('click', controller.closeNpc, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'npcOverlay').addEventListener('click', (event) => {
@@ -255,6 +325,10 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     openBuilding(building) {
       if (building.id === 'musichall' && options.musicHallLyrics?.lines.length) {
         openLyrics();
+        return;
+      }
+      if (building.id === 'lab_outer' && options.memorialRoster) {
+        openMemorial();
         return;
       }
       const content = options.buildingContent[building.id] ?? {
@@ -289,6 +363,9 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     },
     closeLyrics() {
       getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.remove('open');
+    },
+    closeMemorial() {
+      getElement<HTMLDivElement>(document, 'memorialOverlay').classList.remove('open');
     },
     openNpc(npc, playerPosition) {
       openDialogue(npc, true, playerPosition);
