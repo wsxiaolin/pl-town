@@ -231,6 +231,36 @@
   </aside>
   -->
 
+  <!-- Newsstand: newspaper catalog (opened by the 报摊 building) -->
+  <aside class="newsstand-panel" id="newsstandPanel" role="dialog" aria-modal="false" aria-labelledby="newsstandTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker">SNO. 星尘报社 · 星辉刊物目录</span>
+        <h2 id="newsstandTitle">报摊 · 星辉刊物目录</h2>
+        <p>过往每一期周刊都被收进报摊的木箱。内容为静态配置，可随社区增删。</p>
+      </div>
+      <button class="works-close" id="newsstandClose" type="button" aria-label="关闭报摊目录">✕</button>
+    </header>
+    <div class="newsstand-list" id="newsstandList"></div>
+  </aside>
+
+  <!-- Newspaper reader overlay -->
+  <div class="newspaper-overlay" id="newspaperOverlay" role="dialog" aria-modal="true" aria-labelledby="newspaperMeta">
+    <div class="newspaper-viewport">
+      <header class="newspaper-toolbar">
+        <button class="newspaper-back" id="newspaperBack" type="button" aria-label="返回目录">‹ 目录</button>
+        <span class="newspaper-meta" id="newspaperMeta"></span>
+        <button class="newspaper-close" id="newspaperClose" type="button" aria-label="关闭报纸">✕</button>
+      </header>
+      <div class="newspaper-stage" id="newspaperStage"></div>
+      <footer class="newspaper-nav">
+        <button class="np-page-btn" id="newspaperPrev" type="button">‹ 上一版</button>
+        <span class="np-page-indicator">第 <b id="newspaperPageNo">1</b> / <span id="newspaperPageTotal">1</span> 版</span>
+        <button class="np-page-btn" id="newspaperNext" type="button">下一版 ›</button>
+      </footer>
+    </div>
+  </div>
+
   <div class="stats-panel render-settings-panel" id="renderSettings" role="dialog" aria-label="画面设置">
      <div class="sp-head render-settings-head">
        <div class="render-settings-heading">
