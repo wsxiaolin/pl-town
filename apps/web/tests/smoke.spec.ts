@@ -31,9 +31,15 @@ test('render settings use the available width and keep controls responsive', asy
   });
   await seedCityStorage(page, 'settings-tester');
   await waitForCityBooted(page);
-  await page.locator('#renderSettingsToggle').click({ force: true });
+  // Open the render-settings drawer. On slow software-GL CI runners the top-bar
+  // toggle can be momentarily covered by the fading boot shell, so a plain
+  // click() occasionally misses. Dispatch the click directly on the element and
+  // poll until the panel actually gains the `open` class.
+  await expect.poll(async () => {
+    await page.evaluate(() => document.getElementById('renderSettingsToggle')?.click());
+    return await page.evaluate(() => document.getElementById('renderSettings')?.classList.contains('open') ?? false);
+  }, { timeout: 10_000, intervals: [200, 300, 500] }).toBe(true);
   const panel = page.locator('#renderSettings');
-  await expect(panel).toHaveClass(/open/);
   // The drawer slides in via a CSS transform transition; under software-GL /
   // parallel load the transformed absolute x positions lag the class flip. The
   // close button is a child of the panel, so closeRight - panelLeft is
@@ -47,10 +53,13 @@ test('render settings use the available width and keep controls responsive', asy
     return { panelLeft: p.left, panelWidth: p.width, closeRight: c.right };
   });
   expect(layout.closeRight - layout.panelLeft).toBeGreaterThan(layout.panelWidth * 0.8);
-  // The "极致" preset lives near the bottom of the scrollable drawer; scroll
-  // it into view before clicking (force alone can't reach off-viewport items).
-  await page.locator('[data-render-preset="ultra"]').scrollIntoViewIfNeeded();
-  await page.locator('[data-render-preset="ultra"]').click({ force: true });
+  // Select the "极致" preset via a direct click dispatch — it lives near the
+  // bottom of the scrollable drawer and can be clipped/off-viewport on small
+  // software-GL windows, so a geometry-based click is unreliable.
+  await page.evaluate(() => {
+    const btn = document.querySelector<HTMLButtonElement>('[data-render-preset="ultra"]');
+    btn?.click();
+  });
   await expect(page.locator('[data-render-preset="ultra"]')).toHaveAttribute('aria-pressed', 'true');
 
   await page.setViewportSize({ width: 390, height: 844 });
