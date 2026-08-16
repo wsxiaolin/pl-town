@@ -53,6 +53,7 @@ import { showUnlockToast } from './toast';
 import { createInteractionTracker } from './interactionTracker';
 import { createSceneAnimations } from './sceneAnimations';
 import { createFrameLoop } from './frameLoop';
+import { createBurnCityEffect } from './burnCityEffect';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
@@ -196,6 +197,7 @@ const frameLoop = createFrameLoop({
   getSceneInterestPoints: () => sceneInterestPoints,
   getSceneInterestPointController: () => sceneInterestPointController,
   getMapController: () => mapController,
+  getBurnOverlay: () => burnCityEffect,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
   getLastFrameTime: () => lastFrameTime,
@@ -219,6 +221,13 @@ const cacheBuildingBoxes = roadNavigation.cacheBuildingBoxes;
 const nearestRoadCoord = roadNavigation.nearestRoadCoord;
 const clamp = roadNavigation.clamp;
 
+const burnCityEffect = createBurnCityEffect({
+  getScene: () => scene,
+  getRenderer: () => renderer,
+  cityLimit: CITY_LIMIT,
+  reduced: REDUCED,
+});
+
 const buildingInteraction = createBuildingInteraction({
   isStoryLockedBuilding,
   getMultiplayerHousing: () => multiplayerHousing,
@@ -229,6 +238,7 @@ const buildingInteraction = createBuildingInteraction({
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
   trackInteraction,
+  burnCity: () => burnCityEffect.trigger(),
 });
 
 const eventBindings = createEventBindings({
@@ -523,6 +533,9 @@ function setupScene() {
     openModal,
     interactWithSceneInterestPoint,
     getSceneInterestPoints: () => sceneInterestPoints,
+    burnCity: () => burnCityEffect.trigger(),
+    burnCityActive: () => burnCityEffect.isActive(),
+    burnCityProgress: () => burnCityEffect.getProgress(),
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }

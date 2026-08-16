@@ -21,6 +21,7 @@ export type BuildingInteractionOptions = {
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
+  burnCity?: () => boolean;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, string?]> = {
@@ -41,6 +42,12 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateUnlocked(b: any) {
     if (options.isStoryLockedBuilding(b)) return;
+    // 点击「文训社（外环）」触发火烧小城效果：城市像纸片从东侧被烧尽。
+    if (b.id === 'writingclub_outer') {
+      options.trackInteraction(b.id);
+      options.burnCity?.();
+      return;
+    }
     const dialogs = options.getCityDialogs();
     const echo = options.getEchoStoryController();
     if (dialogs && echo?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
