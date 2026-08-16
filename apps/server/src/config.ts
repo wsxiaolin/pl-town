@@ -81,6 +81,14 @@ export const BACKUP_INTERVAL_MINUTES = integer('BACKUP_INTERVAL_MINUTES', 1_440,
 export const BACKUP_RETENTION_DAYS = integer('BACKUP_RETENTION_DAYS', 30, 1, 3_650);
 export const BACKUP_MAX_FILES = integer('BACKUP_MAX_FILES', 30, 1, 1_000);
 
+// Automatic chat text moderation via ZhipuAI / BigModel content safety API.
+// The key is intentionally read from the environment only; a missing or empty
+// key disables automatic moderation so chat keeps working without it.
+export const ZHIPUAI_API_KEY = process.env.ZHIPUAI_API_KEY ?? '';
+export const MODERATION_API_URL = process.env.MODERATION_API_URL ?? 'https://open.bigmodel.cn/api/paas/v4/moderations';
+export const MODERATION_TIMEOUT_MS = integer('MODERATION_TIMEOUT_MS', 10_000, 1_000, 30_000);
+export const MODERATION_ENABLED = boolean('MODERATION_ENABLED', ZHIPUAI_API_KEY.length > 0);
+
 if ((ADMIN_USERNAME && !ADMIN_PASSWORD) || (!ADMIN_USERNAME && ADMIN_PASSWORD)) {
   throw new Error('ADMIN_USERNAME and ADMIN_PASSWORD must be configured together');
 }

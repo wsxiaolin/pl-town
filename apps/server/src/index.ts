@@ -8,6 +8,7 @@ import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
+import { isModerationEnabled, isModerationViolation, moderateText, type ModerationResult } from './moderation.js';
 import { getNpcCatalogEntry } from './npcCatalog.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
@@ -53,6 +54,32 @@ function broadcastHousingState() {
     });
   }, 50);
   housingBroadcastTimer.unref();
+}
+
+// Background text moderation: the message is already live (sent first), then we
+// ask the content-safety API. Non-compliant messages are hidden everywhere and
+// the verdict is persisted as an audit trace. API failures fail open so a
+// moderation outage never censors residents by mistake.
+async function runChatModeration(id: number, text: string) {
+  if (!isModerationEnabled()) return;
+  let result: ModerationResult;
+  try { result = await moderateText(text); }
+  catch (error) {
+    logger.warn('Chat moderation request failed; message kept visible', { id, error: error instanceof Error ? error.message : String(error) });
+    return;
+  }
+  const hidden = db.recordModerationResult(id, {
+    risk: result.riskLevel,
+    riskTypes: result.riskTypes,
+    description: result.description,
+    violation: isModerationViolation(result),
+  });
+  if (hidden) {
+    logger.warn('Chat message hidden by automatic moderation', { id, risk: result.riskLevel, riskTypes: result.riskTypes });
+    broadcast({ type: 'chat.removed', id }, undefined);
+  } else if (result.riskLevel === 'REVIEW') {
+    logger.info('Chat message flagged for manual review by automatic moderation', { id, riskTypes: result.riskTypes });
+  }
 }
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
@@ -147,7 +174,7 @@ async function handle(client: Client, raw: string) {
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); bumpMetric('chatMessages'); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
+      const text = message.text.trim(); if (text) { const id = db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); bumpMetric('chatMessages'); broadcast({ type: 'chat', id, userId, nickname: client.user.nickname, text }, undefined); void runChatModeration(id, text.slice(0, 500)); } return;
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {

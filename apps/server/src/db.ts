@@ -155,6 +155,9 @@ db.exec(`
     flagged_at TEXT,
     hidden_at TEXT,
     hidden_by TEXT,
+    moderated_at TEXT,
+    moderation_risk TEXT,
+    moderation_detail TEXT,
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS chat_messages_created_idx ON chat_messages(created_at DESC);
@@ -194,6 +197,12 @@ db.exec(`
 {
   const columns = db.prepare('PRAGMA table_info(story_progress)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'definition_version')) db.exec('ALTER TABLE story_progress ADD COLUMN definition_version INTEGER NOT NULL DEFAULT 1');
+}
+{
+  const columns = db.prepare('PRAGMA table_info(chat_messages)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'moderated_at')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderated_at TEXT');
+  if (!columns.some((column) => column.name === 'moderation_risk')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderation_risk TEXT');
+  if (!columns.some((column) => column.name === 'moderation_detail')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderation_detail TEXT');
 }
 // Existing achievements may already have paid their legacy reward. Recording
 // them prevents an upgrade from paying those rewards a second time.
@@ -617,11 +626,36 @@ export type ChatMessage = {
   flaggedAt: string | null;
   hiddenAt: string | null;
   hiddenBy: string | null;
+  moderatedAt: string | null;
+  moderationRisk: string | null;
+  moderationDetail: string | null;
   createdAt: string;
 };
 
-export function recordChatMessage(userId: string, nickname: string, text: string): void {
-  db.prepare('INSERT INTO chat_messages (user_id, nickname, text, created_at) VALUES (?, ?, ?, ?)').run(userId, nickname, text, now());
+export const MODERATION_ACTOR = 'auto-moderation';
+
+export function recordChatMessage(userId: string, nickname: string, text: string): number {
+  const result = db.prepare('INSERT INTO chat_messages (user_id, nickname, text, created_at) VALUES (?, ?, ?, ?)').run(userId, nickname, text, now());
+  return Number(result.lastInsertRowid);
+}
+
+// Records the background moderation verdict for a chat message. Violations are
+// hidden (soft-deleted) and flagged for admin review; "REVIEW" results are only
+// flagged so a human can decide. Returns true when this call hid the message.
+export function recordModerationResult(id: number, options: { risk: string; riskTypes: string[]; description: string; violation: boolean }): boolean {
+  if (!options.violation && options.risk !== 'REVIEW') return false;
+  const row = db.prepare('SELECT hidden_at FROM chat_messages WHERE id = ?').get(id) as { hidden_at: string | null } | undefined;
+  if (!row || row.hidden_at) return false;
+  const timestamp = now();
+  const detail = JSON.stringify({ riskTypes: options.riskTypes, description: options.description });
+  if (options.violation) {
+    db.prepare('UPDATE chat_messages SET moderated_at = ?, moderation_risk = ?, moderation_detail = ?, hidden_at = ?, hidden_by = ?, flagged_at = ? WHERE id = ?')
+      .run(timestamp, options.risk, detail, timestamp, MODERATION_ACTOR, timestamp, id);
+    return true;
+  }
+  db.prepare('UPDATE chat_messages SET moderated_at = ?, moderation_risk = ?, moderation_detail = ?, flagged_at = ? WHERE id = ?')
+    .run(timestamp, options.risk, detail, timestamp, id);
+  return false;
 }
 
 export type ChatListFilter = { query?: string; includeHidden?: boolean; onlyHidden?: boolean; onlyFlagged?: boolean; userId?: string; limit: number; offset: number };
@@ -637,10 +671,12 @@ export function listChatMessages(input: ChatListFilter): { items: ChatMessage[];
   else if (!input.includeHidden) conditions.push('hidden_at IS NULL');
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM chat_messages ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`SELECT id, user_id, nickname, text, flagged_at, hidden_at, hidden_by, created_at FROM chat_messages ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
+  const rows = db.prepare(`SELECT id, user_id, nickname, text, flagged_at, hidden_at, hidden_by, moderated_at, moderation_risk, moderation_detail, created_at FROM chat_messages ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
   return { total, items: rows.map((row) => ({
     id: row.id, userId: row.user_id, nickname: row.nickname, text: row.text,
-    flaggedAt: row.flagged_at ?? null, hiddenAt: row.hidden_at ?? null, hiddenBy: row.hidden_by ?? null, createdAt: row.created_at,
+    flaggedAt: row.flagged_at ?? null, hiddenAt: row.hidden_at ?? null, hiddenBy: row.hidden_by ?? null,
+    moderatedAt: row.moderated_at ?? null, moderationRisk: row.moderation_risk ?? null, moderationDetail: row.moderation_detail ?? null,
+    createdAt: row.created_at,
   })) };
 }
 

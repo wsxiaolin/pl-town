@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
@@ -36,6 +37,7 @@ const server = spawn(process.execPath, ['dist/index.js'], {
   },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
+server.stdout.on('error', () => {});
 
 const connect = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -103,10 +105,30 @@ const waitForServer = () => new Promise((resolve, reject) => {
   });
 });
 
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const waitForHttpReady = (baseUrl) => new Promise((resolve, reject) => {
+  const deadline = Date.now() + 5_000;
+  const attempt = async () => {
+    try {
+      const response = await fetch(`${baseUrl}/healthz`);
+      if (response.ok) return resolve();
+    } catch { /* not up yet */ }
+    if (Date.now() > deadline) return reject(new Error('Server did not become ready'));
+    setTimeout(attempt, 100);
+  };
+  attempt();
+});
+
 let alice;
 let bob;
 let charlie;
 let requester;
+let moderationServer;
+let mockModeration;
+let moderationDataDir = mkdtempSync(join(tmpdir(), 'minicity-moderation-'));
+let mAlice;
+let mBob;
 try {
   await waitForServer();
 
@@ -424,21 +446,121 @@ try {
   const topologyHtml = await fetch(`${adminOrigin}/admin/story-topology`);
   if (!topologyHtml.ok || topologyHtml.headers.get('cache-control') !== 'no-store') throw new Error('Story topology HTML shell must be served without caching');
 
-  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, and story topology');
+  // ── 自动文本审核（ZhipuAI content-safety moderation）─────────────
+  // Start a mock moderation API and a second server instance pointed at it.
+  // Moderation must run in the background: the message is broadcast first, and
+  // only a non-compliant verdict hides it everywhere and records a trace.
+  const mockModerationPort = 8793;
+  mockModeration = createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      let input = '';
+      try { input = String(JSON.parse(Buffer.concat(chunks).toString('utf8')).input ?? ''); } catch { /* keep empty */ }
+      const verdict = (riskLevel, riskType = [], riskDescription = '') => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ id: 'mock-moderation', result_list: [{ content_type: 'text', risk_level: riskLevel, risk_type: riskType, risk_description: riskDescription }] }));
+      };
+      if (input.includes('block-me')) verdict('BLOCK', ['fraud'], 'mock block');
+      else if (input.includes('review-me')) verdict('REVIEW', ['political'], 'mock review');
+      else if (input.includes('fail-me')) { response.writeHead(500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: { message: 'mock upstream failure' } })); }
+      else verdict('PASS');
+    });
+  });
+  await new Promise((resolve) => mockModeration.listen(mockModerationPort, resolve));
+  moderationServer = spawn(process.execPath, ['dist/index.js'], {
+    cwd: new URL('..', import.meta.url),
+    env: {
+      ...process.env, PORT: '8792', DATA_DIR: moderationDataDir,
+      ZHIPUAI_API_KEY: 'integration-test-key',
+      MODERATION_API_URL: `http://127.0.0.1:${mockModerationPort}`,
+      ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'integration-admin-password',
+      AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: 'http://127.0.0.1:8792',
+    },
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+  await waitForHttpReady('http://127.0.0.1:8792');
+
+  const mAlice = await connect('Moderated Alice');
+  const mBob = await connect('Moderated Bob');
+  await waitFor(mAlice, 'player.joined', (message) => message.player.id === mBob.hello.user.id);
+
+  send(mAlice, { type: 'chat', text: 'plain text' });
+  const passed = await waitFor(mBob, 'chat', (message) => message.text === 'plain text');
+  if (typeof passed.id !== 'number' || passed.id <= 0) throw new Error('Chat broadcasts must carry a numeric message id for removal tracking');
+  await sleep(400);
+  if (mBob.messages.some((message) => message.type === 'chat.removed')) throw new Error('Messages that pass moderation must never be removed');
+
+  mBob.messages.length = 0;
+  send(mAlice, { type: 'chat', text: 'block-me please' });
+  const blocked = await waitFor(mBob, 'chat', (message) => message.text === 'block-me please');
+  await waitFor(mBob, 'chat.removed', (message) => message.id === blocked.id);
+  await waitFor(mAlice, 'chat.removed', (message) => message.id === blocked.id);
+
+  mBob.messages.length = 0;
+  send(mAlice, { type: 'chat', text: 'review-me please' });
+  const reviewed = await waitFor(mBob, 'chat', (message) => message.text === 'review-me please');
+  await sleep(400);
+  if (mBob.messages.some((message) => message.type === 'chat.removed' && message.id === reviewed.id)) throw new Error('REVIEW verdicts must not remove the message immediately');
+
+  mBob.messages.length = 0;
+  send(mAlice, { type: 'chat', text: 'fail-me please' });
+  const failedUpstream = await waitFor(mBob, 'chat', (message) => message.text === 'fail-me please');
+  await sleep(400);
+  if (mBob.messages.some((message) => message.type === 'chat.removed' && message.id === failedUpstream.id)) throw new Error('A moderation API outage must fail open and keep messages visible');
+
+  // The moderation server keeps its own admin sessions, so sign in again.
+  const moderationOrigin = 'http://127.0.0.1:8792';
+  const moderationAdminBase = `${moderationOrigin}/admin/api`;
+  const moderationLogin = await fetch(`${moderationAdminBase}/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: moderationOrigin },
+    body: JSON.stringify({ username: 'operator', password: 'integration-admin-password' }),
+  });
+  const moderationLoginPayload = await moderationLogin.json();
+  const moderationCookie = moderationLogin.headers.get('set-cookie')?.split(';', 1)[0];
+  if (!moderationLogin.ok || !moderationCookie || !moderationLoginPayload.csrf) throw new Error('Moderation server admin sign-in must succeed');
+
+  const hiddenChat = await fetch(`${moderationAdminBase}/chat?hidden=only&q=block-me`, { headers: { cookie: moderationCookie } });
+  const hiddenChatPayload = await hiddenChat.json();
+  const hiddenItem = hiddenChatPayload.items.find((item) => item.id === blocked.id);
+  if (!hiddenItem || !hiddenItem.hiddenAt || hiddenItem.hiddenBy !== 'auto-moderation' || hiddenItem.moderationRisk !== 'BLOCK') {
+    throw new Error('Blocked messages must be hidden with an auto-moderation audit trace');
+  }
+  if (!hiddenItem.flaggedAt) throw new Error('Blocked messages must also be flagged for admin review');
+  const reviewedChat = await fetch(`${moderationAdminBase}/chat?q=review-me`, { headers: { cookie: moderationCookie } });
+  const reviewedChatPayload = await reviewedChat.json();
+  const reviewedItem = reviewedChatPayload.items.find((item) => item.id === reviewed.id);
+  if (!reviewedItem || reviewedItem.hiddenAt || reviewedItem.moderationRisk !== 'REVIEW' || !reviewedItem.flaggedAt) {
+    throw new Error('REVIEW verdicts must persist a moderation trace and flag the message without hiding it');
+  }
+
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, story topology, and automatic chat moderation');
 } finally {
   alice?.socket.close();
   bob?.socket.close();
   charlie?.socket.close();
   requester?.socket.close();
-  server.kill();
-  await new Promise((resolve) => server.once('exit', resolve));
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      rmSync(dataDir, { recursive: true, force: true });
-      break;
-    } catch (error) {
-      if (attempt === 4) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+  mAlice?.socket.close();
+  mBob?.socket.close();
+  mockModeration?.closeAllConnections?.();
+  mockModeration?.close();
+  const stopServer = (child) => new Promise((resolve) => {
+    if (!child) return resolve();
+    if (child.exitCode !== null || child.signalCode !== null) return resolve();
+    child.once('exit', resolve);
+    child.kill();
+  });
+  await stopServer(moderationServer);
+  await stopServer(server);
+  for (const directory of [dataDir, moderationDataDir]) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        rmSync(directory, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if (attempt === 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
     }
   }
 }

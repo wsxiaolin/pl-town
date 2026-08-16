@@ -174,7 +174,8 @@ export function createMultiplayerHousingController(options) {
         if (remote) { remote.target.set(position.x, position.y, position.z); remote.rotation = position.rotation ?? remote.rotation; }
       },
       playerLeft: (id) => { onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
-      chat: (message) => appendChat(message.nickname, message.text, message.userId === multiplayer?.user?.id),
+      chat: (message) => appendChat(message.nickname, message.text, message.userId === multiplayer?.user?.id, message.id),
+      chatRemoved: (id) => removeChatMessage(id),
       houses: renderHouseList,
       requests: (requests) => {
         currentHousingRequests = requests;
@@ -240,10 +241,11 @@ export function createMultiplayerHousingController(options) {
     });
   }
   
-  function appendChat(nickname, text, own) {
+  function appendChat(nickname, text, own, id) {
     const log = document.getElementById('chatLog');
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
+    if (id) row.dataset.chatId = String(id);
     const author = document.createElement('b'); author.textContent = nickname;
     const body = document.createElement('span'); body.textContent = text;
     row.append(author, body); log.appendChild(row);
@@ -253,6 +255,13 @@ export function createMultiplayerHousingController(options) {
     const panel = document.getElementById('onlinePanel');
     const chatActive = document.querySelector('[data-online-tab="chat"]')?.classList.contains('active');
     if (!own && (!panel?.classList.contains('open') || !chatActive)) bumpUnreadChats();
+  }
+
+  // 后台审核判定违规后，服务器会广播 chat.removed，把对应消息从所有在线居民的聊天栏移除。
+  function removeChatMessage(id) {
+    const log = document.getElementById('chatLog');
+    if (!log || !id) return;
+    log.querySelectorAll(`[data-chat-id="${id}"]`).forEach((row) => row.remove());
   }
   
   function renderHouseList(houses) {
