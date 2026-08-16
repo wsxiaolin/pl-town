@@ -61,6 +61,10 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 新增或修改浏览器交互、布局、WebGL、端到端流程的测试时，注意：软件渲染下帧率偏低，涉及动画/位移的断言应使用 `expect.poll` 轮询而非固定 `waitForTimeout`；点击顶栏控件前必须经过 `waitForCityBooted`（等待启动屏淡出）；被画布拦截点击的控件使用 `click({ force: true })`。
 
+### 全屏覆盖层与 WebGL 上下文
+
+需要全屏覆盖效果（如火烧城市 `burnCityEffect`）时，**不要创建第二个 `WebGLRenderer`/独立 canvas**：SwiftShader 等软件渲染下多 WebGL 上下文极易触发 `webglcontextlost`，使效果在约 1 秒后中断。正确做法是把覆盖层接入主帧循环——在 `frameLoop` 城市渲染之后调用 `getBurnOverlay().render(renderer)`，用主 renderer 在默认帧缓冲上叠加一个 `depthTest:false` 的全屏 quad（`renderer.autoClear=false` 避免清掉城市）。覆盖层进度由 GSAP timeline 驱动；`burnCityEffect` 通过 `frameLoop` 的 `getBurnOverlay` 选项接入，点击 `writingclub_outer`（文训社外环）经 `buildingInteraction` 触发。
+
 ## 代码组织与依赖方向
 
 ### 前端
