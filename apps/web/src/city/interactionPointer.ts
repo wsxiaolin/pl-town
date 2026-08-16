@@ -81,8 +81,14 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
   }
 
+  function liftForClick(b: any) {
+    if (hoveredB && hoveredB !== b) unhover(hoveredB);
+    hover(b);
+  }
+
   function interactOrWalk(b: any) {
     if (options.isStoryLockedBuilding(b)) return;
+    liftForClick(b);
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
     const buildingDistance = cursorChar ? Math.hypot(
@@ -169,7 +175,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     if (pendingBuilding && cursorChar) {
       const b = pendingBuilding;
       const distance = Math.hypot(cursorChar.position.x - b.group.position.x, cursorChar.position.z - b.group.position.z);
-      if (distance <= CONFIG.buildingInteractRadius) { pendingBuilding = null; options.navigateTo(b); }
+      if (distance <= CONFIG.buildingInteractRadius) { pendingBuilding = null; liftForClick(b); options.navigateTo(b); }
     }
     if (pendingSceneInterestPoint && cursorChar) {
       const id = pendingSceneInterestPoint;
