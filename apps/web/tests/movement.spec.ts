@@ -100,24 +100,30 @@ test('generated resident houses block manual movement', async ({ page }) => {
   expect(collision!.crossed).toBe(false);
 });
 
-test('city renders ten residence models and the modeled west beach', async ({ page }) => {
+test('city renders twelve residence models and the modeled west beach', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const sceneContent = await page.evaluate(() => {
     const mini = (window as any).__mini();
     const styles = new Set<number>();
+    const textures = new Set<string>();
     mini.scene.traverse((object: any) => {
       if (typeof object.userData?.residenceStyleId === 'number') styles.add(object.userData.residenceStyleId);
+      const map = object.material?.map;
+      if (map?.name) textures.add(map.name);
     });
     return {
       styles: [...styles].sort((a, b) => a - b),
+      textures: [...textures].sort(),
       beach: Boolean(mini.scene.getObjectByName('west-beach')),
       seaGod: Boolean(mini.scene.getObjectByName('yihang-sea-god')),
       ships: ['bismarck-model', 'hipper-model'].every((name) => Boolean(mini.scene.getObjectByName(name))),
       waterSize: new mini.THREE.Box3().setFromObject(mini.scene.getObjectByName('west-beach')).getSize(new mini.THREE.Vector3()).toArray(),
     };
   });
-  expect(sceneContent.styles).toEqual([0,1,2,3,4,5,6,7,8,9]);
+  expect(sceneContent.styles).toEqual([0,1,2,3,4,5,6,7,8,9,10,11]);
+  expect(sceneContent.styles).toEqual(expect.arrayContaining([10, 11]));
+  expect(sceneContent.textures).toEqual(expect.arrayContaining(['residence_plaster', 'residence_wood', 'residence_tile']));
   expect(sceneContent.beach && sceneContent.seaGod && sceneContent.ships).toBe(true);
   expect(sceneContent.waterSize[0]).toBeGreaterThan(55);
   expect(sceneContent.waterSize[2]).toBeGreaterThan(80);
