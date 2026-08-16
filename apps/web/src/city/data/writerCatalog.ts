@@ -10,9 +10,9 @@ export interface WriterCatalogAuthor {
 // 顺序仅为收录顺序，并无文笔排名与过于主观的评价！
 export const WRITER_CATALOG = {
   title: '物实作家图鉴',
-  version: 'v1.4.3 物实省流版',
+  version: 'v1.4.3',
   intro:
-    '本图鉴立志登记所有物实里优秀和经典的小说家。以下为收录作者，并非代表物实高端或低端小说力量！顺序仅为收录顺序，并无文笔排名与过于主观的评价！本贴仅有昭示较为优秀或经典的作品目的，并不存在褒贬意味！',
+    '上个时代的产物，算是物实历史',
   authors: [
     {
       name: '一只屑整数虫',
