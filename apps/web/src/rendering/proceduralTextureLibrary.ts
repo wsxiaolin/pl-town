@@ -23,6 +23,7 @@ export function createProceduralTextureLibrary(
     const repeatX = rx || 1, repeatY = ry || 1;
     return resources.texture(`repeat:${key}:${repeatX}:${repeatY}`, () => {
       const t = new THREE.CanvasTexture(c);
+      t.name = key;
       t.wrapS = THREE.RepeatWrapping;
       t.wrapT = THREE.RepeatWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -639,6 +640,80 @@ export function createProceduralTextureLibrary(
         const x = Math.random()*s, y = Math.random()*s;
         ctx.fillStyle = Math.random() > 0.5 ? 'rgba(220,205,180,0.4)' : 'rgba(180,165,140,0.4)';
         ctx.fillRect(x, y, 1, 2);
+      }
+      _noise(ctx, s, 0.025);
+    });
+
+    // --- Residence plaster: soft painted wall with restrained block seams ---
+    _canvas('residence_plaster', 256, (ctx, s) => {
+      ctx.fillStyle = '#D9EADC'; ctx.fillRect(0, 0, s, s);
+      for (let y = 0; y < s; y += 64) {
+        ctx.fillStyle = 'rgba(255,255,255,0.13)'; ctx.fillRect(0, y, s, 4);
+        ctx.fillStyle = 'rgba(85,120,95,0.08)'; ctx.fillRect(0, y + 60, s, 4);
+      }
+      for (let i = 0; i < 90; i++) {
+        ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.12)' : 'rgba(70,100,80,0.07)';
+        ctx.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+      }
+      _noise(ctx, s, 0.018);
+    });
+
+    // --- Residence wood: painted timber boards for porches and trim ---
+    _canvas('residence_wood', 128, (ctx, s) => {
+      ctx.fillStyle = '#E4D2B6'; ctx.fillRect(0, 0, s, s);
+      for (let y = 0; y < s; y += 16) {
+        ctx.fillStyle = y % 32 ? 'rgba(112,82,57,0.16)' : 'rgba(255,255,255,0.18)';
+        ctx.fillRect(0, y, s, 3);
+      }
+      _noise(ctx, s, 0.025);
+    });
+
+    // --- Residence tile: muted green roof tiles for the new garden family ---
+    _canvas('residence_tile', 256, (ctx, s) => {
+      ctx.fillStyle = '#6C9279'; ctx.fillRect(0, 0, s, s);
+      const tile = 16;
+      for (let y = 0; y < s; y += tile) {
+        const offset = (y / tile % 2) * (tile / 2);
+        for (let x = -tile; x < s + tile; x += tile) {
+          const bx = x + offset;
+          ctx.fillStyle = `rgba(255,255,255,${0.08 + Math.random() * 0.08})`;
+          ctx.beginPath(); ctx.arc(bx + tile / 2, y + tile, tile / 2 - 1, Math.PI, 0); ctx.fill();
+          ctx.fillStyle = 'rgba(35,65,45,0.16)'; ctx.fillRect(bx, y + tile - 2, tile, 2);
+        }
+      }
+      _noise(ctx, s, 0.02);
+    });
+
+    // --- Residence shingle: blue-grey slate tiles for the brick-chimney family ---
+    _canvas('residence_shingle', 256, (ctx, s) => {
+      ctx.fillStyle = '#59656F'; ctx.fillRect(0, 0, s, s);
+      const tile = 32;
+      for (let y = 0; y < s; y += tile) {
+        const offset = (y / tile % 2) * (tile / 2);
+        for (let x = -tile; x < s + tile; x += tile) {
+          const bx = x + offset, sh = 0.85 + Math.random() * 0.25;
+          ctx.fillStyle = _shade([89, 101, 111], sh);
+          ctx.fillRect(bx + 1, y + 1, tile - 3, tile - 3);
+          ctx.fillStyle = 'rgba(0,0,0,0.15)';
+          ctx.fillRect(bx + tile - 3, y, 3, tile);
+          ctx.fillRect(bx, y + tile - 3, tile, 3);
+        }
+      }
+      _noise(ctx, s, 0.025);
+    });
+
+    // --- Residence panel: warm horizontal clapboard for the red-roof family ---
+    _canvas('residence_panel', 256, (ctx, s) => {
+      ctx.fillStyle = '#E5D1B8'; ctx.fillRect(0, 0, s, s);
+      const bh = 32;
+      for (let y = 0; y < s; y += bh) {
+        const sh = 0.92 + Math.random() * 0.12;
+        ctx.fillStyle = _shade([229, 209, 184], sh);
+        ctx.fillRect(0, y, s, bh - 6);
+        ctx.fillStyle = 'rgba(120, 80, 50, 0.15)';
+        ctx.fillRect(0, y + bh - 6, s, 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(0, y, s, 2);
       }
       _noise(ctx, s, 0.025);
     });

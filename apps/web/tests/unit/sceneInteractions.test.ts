@@ -107,12 +107,12 @@ test('亦航 keeps the requested schedule, park spawn, and dialogue branches', (
   assert.match(yihang.dialog[2].text, /棍母/);
 });
 
-test('residence styles cover ten models while neighboring lots share a family', () => {
+test('residence styles cover twelve models while neighboring lots share a family', () => {
   const styles = new Set<number>();
   for (let x = -39; x <= 39; x += 3) {
     for (let z = -39; z <= 39; z += 3) styles.add(residenceStyleFor(x, z, Math.abs(x * 31 + z)));
   }
-  assert.deepEqual([...styles].sort((a, b) => a - b), [0,1,2,3,4,5,6,7,8,9]);
+  assert.deepEqual([...styles].sort((a, b) => a - b), [0,1,2,3,4,5,6,7,8,9,10,11]);
   const family = Math.floor(residenceStyleFor(-30, -30, 0) / 2);
   assert.equal(Math.floor(residenceStyleFor(-27, -27, 8) / 2), family);
 });

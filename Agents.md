@@ -40,6 +40,27 @@ npm test                 # 前端 Playwright + 服务端集成测试
 
 前端 Playwright 配置使用 Chromium、单 worker，并自动启动 `4173` 端口的 Vite 服务。`apps/web/tests/diagnostics/` 下的诊断脚本是按需运行的性能/视觉检查，不属于默认烟雾套件。
 
+### WebGL / Headless 与 CI 并发
+
+城市使用 Three.js / WebGL 渲染，headless Chromium（含 `--headless=new` 与 headless shell）无法创建 WebGL 上下文，因此测试套件以 **headed Chromium + Xvfb + SwiftShader（Vulkan/ANGLE 软件渲染）** 方式运行。本机有显示时 `npm run test:web` 直接可用；CI / 容器 / 无显示环境必须通过 `scripts/run-web-tests.sh` 包装（内部用 `xvfb-run --auto-servernum` 启动虚拟显示）：
+
+```bash
+scripts/run-web-tests.sh                 # 整套，默认单 worker
+PLAYWRIGHT_WORKERS=4 scripts/run-web-tests.sh
+scripts/run-web-tests.sh --shard=1/4     # 分片，配合 CI matrix
+```
+
+为避免在 GitHub CI 和不同 agent 机器上反复踩安装坑（Node 依赖、Playwright Chromium、xvfb、Vulkan/SwiftShader 系统库），所有依赖已打包进 `docker/test.Dockerfile`。镜像只预装稳定依赖、不拷贝源码，运行时挂载仓库即可复用：
+
+```bash
+docker build -f docker/test.Dockerfile -t pl-town-test .
+docker run --rm -v "$PWD":/work -w /work pl-town-test scripts/run-web-tests.sh
+```
+
+CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）/ 服务端测试在 runner 上直接跑；Web Playwright 套件按 4 分片矩阵并发执行，每个分片在 Xvfb + SwiftShader 下运行并上传报告产物。分片数通过 matrix `shard/total` 控制，套件变长时调大 `total`。
+
+新增或修改浏览器交互、布局、WebGL、端到端流程的测试时，注意：软件渲染下帧率偏低，涉及动画/位移的断言应使用 `expect.poll` 轮询而非固定 `waitForTimeout`；点击顶栏控件前必须经过 `waitForCityBooted`（等待启动屏淡出）；被画布拦截点击的控件使用 `click({ force: true })`。
+
 ## 代码组织与依赖方向
 
 ### 前端
