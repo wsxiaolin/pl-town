@@ -120,10 +120,9 @@ test('residence styles cover twelve models while neighboring lots share a family
 });
 
 test('建筑更新保留音乐厅歌词和两家商店名称', () => {
-  assert.deepEqual(MUSIC_HALL_LYRICS.lines.map((line) => line.text), [
-    'never goona give you up',
-    'never gonna let you down',
-  ]);
+  assert.equal(MUSIC_HALL_LYRICS.title, '改版《孤勇者》');
+  assert.ok(MUSIC_HALL_LYRICS.lines.some((line) => line.text === '都，是被害者'));
+  assert.ok(MUSIC_HALL_LYRICS.lines.some((line) => line.text === '我们目的是祖国以我为荣！'));
   assert.equal(BUILDING_DEFS.find((building) => building.id === 'mall_south')?.label, '金月店');
   assert.equal(BUILDING_DEFS.find((building) => building.id === 'mall_west')?.label, '断星玄');
   assert.equal(BUILDING_CONTENT.mall_south.name, '金月店');
