@@ -41,6 +41,8 @@ import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { addCityFountain, addCityLighting } from './scenePresentationController';
 import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
 import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
+import { isBuildingDestroyed } from './buildingDamage';
+import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameHour } from '../gameplay/time/townClock';
@@ -106,6 +108,7 @@ let worldDecorations;
 let npcSystem;
 let sceneInterestPoints;
 let sceneInterestPointController;
+let buildingDamageController;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
@@ -151,7 +154,8 @@ const interactionPointer = createInteractionPointer({
   getEchoStoryController: () => echoStoryController,
   getCityDialogs: () => cityDialogs,
   getConfig: () => CONFIG,
-  isStoryLockedBuilding,
+  isBuildingUnavailable,
+  isResidenceUnavailable,
   findRaycastBuilding,
   raycastUserData,
   npcForRaycast,
@@ -229,7 +233,7 @@ const burnCityEffect = createBurnCityEffect({
 });
 
 const buildingInteraction = createBuildingInteraction({
-  isStoryLockedBuilding,
+  isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
   getEchoStoryController: () => echoStoryController,
@@ -342,9 +346,9 @@ function init() {
   cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
   addRealBuildingModels(scene, buildings)
-    .then(() => { cacheBuildingBoxes(); mapController?.invalidateShot(); })
+    .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
     .catch(error => console.error('3D model loading failed', error));
-  buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isStoryLockedBuilding, interact: interactOrWalk });
+  buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isBuildingUnavailable, interact: interactOrWalk });
   buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   writerCatalogController = createWriterCatalogController({ document });
@@ -354,8 +358,16 @@ function init() {
     makeCharacter, showLoginEntry, showUnlockToast, movePlayerTo, pointInAnyBuilding,
     fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
     mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
+    isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
   });
+  buildingDamageController = createBuildingDamageController({
+    getBuildings: () => buildings,
+    getResidences: () => residences,
+    invalidateMap: () => mapController?.invalidateShot(),
+    refreshResidenceLabels: () => multiplayerHousing?.renderMapHouseTags(),
+  });
+  buildingDamageController.applyPersisted();
   progressionController = createProgressionController({
     getStats,
     saveStats,
@@ -395,7 +407,7 @@ function init() {
     getStats,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
-    isStoryLocked: isStoryLockedBuilding,
+    isStoryLocked: isBuildingUnavailable,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget,
     movePlayerTo,
@@ -527,9 +539,16 @@ function setupScene() {
     getNavigation: () => roadNavigation,
     getPlayerPath: () => playerPath,
     getBuildings: () => buildings,
+    getResidences: () => residences,
     openNpcDialog,
     navigateTo,
-    isStoryLockedBuilding,
+    isBuildingUnavailable,
+    destroyBuilding,
+    destroyResidence,
+    destroyAll,
+    restoreBuilding,
+    restoreResidence,
+    restoreAll,
     openModal,
     interactWithSceneInterestPoint,
     getSceneInterestPoints: () => sceneInterestPoints,
@@ -572,6 +591,39 @@ function setupEvents() { eventBindings.setupEvents(); }
 
 function isStoryLockedBuilding(building) { return STORY_LOCKED_BUILDINGS.has(building.id); }
 
+function isBuildingUnavailable(building) {
+  return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
+}
+
+export function destroyBuilding(buildingId: string): boolean {
+  return buildingDamageController?.destroyBuilding(buildingId) ?? false;
+}
+
+export function destroyResidence(residenceId: string): boolean {
+  return buildingDamageController?.destroyResidence(residenceId) ?? false;
+}
+
+export function destroyAll(): number {
+  return buildingDamageController?.destroyAll() ?? 0;
+}
+
+export function restoreBuilding(buildingId: string): boolean {
+  return buildingDamageController?.restoreBuilding(buildingId) ?? false;
+}
+
+export function restoreResidence(residenceId: string): boolean {
+  return buildingDamageController?.restoreResidence(residenceId) ?? false;
+}
+
+export function restoreAll(): number {
+  return buildingDamageController?.restoreAll() ?? 0;
+}
+
+function isResidenceUnavailable(residenceId: string): boolean {
+  const residence = residences.find((item) => item.id === residenceId);
+  return !residence || isBuildingDestroyed(residence);
+}
+
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
 
 function onMouseMove(e) { interactionPointer.onMouseMove(e); }
@@ -586,7 +638,7 @@ function openResidence(residenceId) { multiplayerHousing.openResidence(residence
 function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
 function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
 function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
-function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isStoryLockedBuilding }); }
+function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
 function onCanvasClick(event) { interactionPointer.onCanvasClick(event); }
 
 function talkToOrWalk(npc) { interactionPointer.talkToOrWalk(npc); }

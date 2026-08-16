@@ -1,7 +1,7 @@
 import { BUILDING_API_QUERIES } from './data/buildings';
 
 export type BuildingInteractionOptions = {
-  isStoryLockedBuilding: (building: any) => boolean;
+  isBuildingUnavailable: (building: any) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
   getCityDialogs: () => { openBuilding: (building: any) => void; closeBuilding: () => void } | null;
   getEchoStoryController: () => { interactBuilding: (id: string, dialogs: any) => boolean } | null;
@@ -41,7 +41,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateUnlocked(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     // 点击「文训社（外环）」触发火烧小城效果：城市像纸片从东侧被烧尽。
     if (b.id === 'writingclub_outer') {
       options.trackInteraction(b.id);
@@ -84,7 +84,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateTo(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }
 

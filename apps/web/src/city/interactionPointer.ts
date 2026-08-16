@@ -14,7 +14,8 @@ export type InteractionPointerOptions = {
   getEchoStoryController: () => any;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getConfig: () => { npcTalkRadius: number; buildingInteractRadius: number };
-  isStoryLockedBuilding: (building: any) => boolean;
+  isBuildingUnavailable: (building: any) => boolean;
+  isResidenceUnavailable: (residenceId: string) => boolean;
   findRaycastBuilding: (hits: any[]) => any;
   raycastUserData: (object: THREE.Object3D, key: string) => any;
   npcForRaycast: () => any;
@@ -87,7 +88,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
   }
 
   function interactOrWalk(b: any) {
-    if (options.isStoryLockedBuilding(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     liftForClick(b);
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
@@ -159,7 +160,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
       const firstHit = hits[0];
       if (firstHit) {
         const residenceId = options.raycastUserData(firstHit.object, 'residenceId');
-        if (residenceId) { options.openResidence(residenceId); return; }
+        if (residenceId && !options.isResidenceUnavailable(residenceId)) { options.openResidence(residenceId); return; }
       }
       const b = findBuildingFromHits(hits);
       if (b) { interactOrWalk(b); return; }

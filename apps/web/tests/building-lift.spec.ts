@@ -79,3 +79,47 @@ test('clicking a building label lifts it up', async ({ page }) => {
   console.log('LABEL-CLICK', JSON.stringify({ after }));
   expect(after.groupY).toBe(0.22);
 });
+
+test('destroyed buildings persist across reload and can be restored globally', async ({ page }) => {
+  test.setTimeout(90_000);
+  await seedCityStorage(page, 'damage-persistence-tester');
+  await waitForCityBooted(page);
+  await waitForEntranceSettled(page);
+
+  const beforeReload = await page.evaluate(() => {
+    const result = (window as any).destroyBuilding('library');
+    return {
+      result,
+      stored: JSON.parse(localStorage.getItem('minicityDestroyedBuildings') || '[]'),
+      hasGlobalRestore: typeof (window as any).restoreBuilding === 'function',
+    };
+  });
+  expect(beforeReload.result).toBe(true);
+  expect(beforeReload.stored).toContain('library');
+  expect(beforeReload.hasGlobalRestore).toBe(true);
+
+  await page.reload();
+  await waitForCityBooted(page);
+  await waitForEntranceSettled(page);
+  const afterReload = await page.evaluate(() => {
+    const mini = (window as any).__mini();
+    let libraryMesh: any = null;
+    mini.scene.traverse((object: any) => {
+      if (!libraryMesh && object.userData?.buildingId === 'library') libraryMesh = object;
+    });
+    let group = libraryMesh;
+    while (group?.parent && group.parent !== mini.scene) group = group.parent;
+    return {
+      stored: JSON.parse(localStorage.getItem('minicityDestroyedBuildings') || '[]'),
+      damaged: group?.userData?.buildingState === 'damaged',
+      rubble: Boolean(group?.getObjectByName('building-destruction-rubble')),
+      restored: (window as any).restoreBuilding('library'),
+      restoredState: group?.userData?.buildingState,
+    };
+  });
+  expect(afterReload.stored).toContain('library');
+  expect(afterReload.damaged).toBe(true);
+  expect(afterReload.rubble).toBe(true);
+  expect(afterReload.restored).toBe(true);
+  expect(afterReload.restoredState).toBe('default');
+});
