@@ -2705,6 +2705,72 @@ body.night .modal-paper {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
+/* MEMORIAL ROSTER — eternal retirement monument                               */
+/* ════════════════════════════════════════════════════════════════════════════ */
+
+.memorial-overlay {
+  background:
+    radial-gradient(ellipse at 50% 16%, rgba(200,150,90,0.18), transparent 52%),
+    radial-gradient(ellipse at 50% 120%, rgba(90,60,120,0.3), transparent 60%),
+    rgba(12,8,20,0.78);
+}
+
+.memorial-stage {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(232,196,150,0.12), transparent 55%),
+    linear-gradient(160deg, #1a1410 0%, #241b14 45%, #120e0c 100%);
+  border: 1px solid rgba(224,188,138,0.4);
+}
+
+.memorial-title {
+  color: #f0d9b0;
+  text-shadow: 0 0 24px rgba(240,217,176,0.3);
+}
+
+.memorial-dedication {
+  color: #cf9f6a;
+}
+
+.memorial-scroll {
+  background: rgba(10,7,6,0.4);
+  border: 1px solid rgba(224,188,138,0.14);
+}
+
+.memorial-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #c9a06a, #7a5a3a);
+}
+
+.memorial-intro {
+  color: #e8d8be;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.memorial-note {
+  color: #b9a27e;
+  margin-top: 6px;
+}
+
+.memorial-entry {
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+  font-size: 14px;
+  color: #e9dfce;
+}
+
+.memorial-comment {
+  font-size: 13.5px;
+  color: #cdc0aa;
+}
+
+.memorial-footer {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8d7a5f;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════ */
 /* NPC DIALOG — resident profile & options                                       */
 /* ════════════════════════════════════════════════════════════════════════════ */
 
