@@ -277,7 +277,7 @@ export function createBuildingMeshFactory(options) {
     part(g, new THREE.BoxGeometry(bw+0.3,0.12,1.0), {color:P.ROOF_RIM,roughness:0.4,tex:'rooftile',rx:3,ry:1}, [0,top+0.06,0]);
     // Glowing screen on front face — layers stepped outward with clear gaps so no
     // coplanar faces z-fight (screen→frame→glow lines all distinct depths).
-    const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+    const screenMat = stdMat({color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.25,roughness:0.1});
     const screen = part(g, new THREE.BoxGeometry(bw*0.8,bh*0.7,0.08), screenMat, [0,0.25+bh*0.5,0.46], false);
     screen.renderOrder = RENDER_ORDER.buildingSurface;
     // Screen frame

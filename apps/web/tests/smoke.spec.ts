@@ -300,6 +300,18 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   expect(lockedAudit).toEqual({ storyLocked: true, emissiveIntensity: 0 });
 });
 
+test('renamed mall buildings surface their new store names', async ({ page }) => {
+  await waitForCityReady(page, 'mall-rename-tester');
+  await expect(page.locator('.b-label-item[data-building-id="mall_south"] .bl-name')).toHaveText('金月店');
+  await expect(page.locator('.b-label-item[data-building-id="mall_west"] .bl-name')).toHaveText('断星玄');
+  await page.evaluate(() => (window as any).__mini().openBuildingDialog('mall_south'));
+  await expect(page.locator('#modalTitle')).toHaveText('金月店');
+  await page.locator('#modalClose').click();
+  await page.evaluate(() => (window as any).__mini().openBuildingDialog('mall_west'));
+  await expect(page.locator('#modalTitle')).toHaveText('断星玄');
+  await page.locator('#modalClose').click();
+});
+
 test('NPC side quest flows from offer to building objective to delivery', async ({ page }) => {
   test.setTimeout(120_000);
   await page.addInitScript(() => {
