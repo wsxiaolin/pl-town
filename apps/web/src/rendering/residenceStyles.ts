@@ -20,6 +20,7 @@ type ResidenceStyleOptions = {
 const STYLE_NAMES = [
   '白墙坡顶', '暖砖烟囱', '青瓦小院', '木构檐廊', '海蓝露台',
   '浅石塔楼', '玻璃现代', '红瓦花园', '双层公寓', '斜顶工作室',
+  '薄荷洋房', '木窗公寓',
 ] as const;
 
 function seededInt(x: number, z: number, salt: number): number {
@@ -31,7 +32,7 @@ function seededInt(x: number, z: number, salt: number): number {
 export function residenceStyleFor(x: number, z: number, index: number): number {
   const districtX = Math.floor((x + 42) / 12);
   const districtZ = Math.floor((z + 42) / 12);
-  const family = seededInt(districtX, districtZ, 17) % 5;
+  const family = seededInt(districtX, districtZ, 17) % 6;
   const alternate = seededInt(x, z, index) % 5 === 0 ? 1 : 0;
   return family * 2 + alternate;
 }
@@ -49,17 +50,18 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
     { wall: 0xdce8e9, wallTex: 'suburb', roof: 0x557d91, roofTex: 'metal' },
     { wall: 0xd8d5cb, wallTex: 'stone', roof: 0x3d4651, roofTex: 'metal' },
     { wall: 0xe5d1b8, wallTex: 'brick', roof: 0xa5493c, roofTex: 'rooftile' },
+    { wall: 0xd9eadc, wallTex: 'residence_plaster', roof: 0x6c9279, roofTex: 'residence_tile' },
   ] as const;
   const palette = families[Math.floor(styleId / 2)]!;
   const mesh = (geometry: THREE.BufferGeometry, material: Record<string, unknown>, position: readonly [number, number, number], cast = true) =>
     part(group, geometry, material, position, cast);
 
-  mesh(new THREE.BoxGeometry(width + 0.38, 0.12, depth + 0.38), { color: 0xd3c9b8, roughness: 0.9, tex: 'stone', rx: 1, ry: 1 }, [0, 0.06, 0]);
-  mesh(new THREE.BoxGeometry(width, height, depth), { color: palette.wall, roughness: 0.68, tex: palette.wallTex, rx: 1, ry: 1 }, [0, 0.12 + height / 2, 0]);
+  mesh(new THREE.BoxGeometry(width + 0.38, 0.12, depth + 0.38), { color: 0xe0dfdc, roughness: 0.86, tex: 'stone', rx: 1, ry: 1 }, [0, 0.06, 0]);
+  mesh(new THREE.BoxGeometry(width, height, depth), { color: palette.wall, roughness: 0.32, tex: palette.wallTex, rx: 1, ry: 1 }, [0, 0.12 + height / 2, 0]);
 
   const roofY = 0.12 + height;
-  if ([0, 1, 7, 9].includes(styleId)) {
-    const roof = mesh(new THREE.ConeGeometry(Math.max(width, depth) * 0.68, 0.55, 4), { color: palette.roof, roughness: 0.62, tex: palette.roofTex, rx: 2, ry: 1 }, [0, roofY + 0.275, 0]);
+  if ([0, 1, 7, 9, 10, 11].includes(styleId)) {
+    const roof = mesh(new THREE.ConeGeometry(Math.max(width, depth) * 0.68, 0.55, 4), { color: palette.roof, roughness: 0.5, tex: palette.roofTex, rx: 2, ry: 1 }, [0, roofY + 0.275, 0]);
     roof.rotation.y = Math.PI / 4;
   } else if ([2, 3].includes(styleId)) {
     const lower = mesh(new THREE.ConeGeometry(Math.max(width, depth) * 0.72, 0.34, 4), { color: palette.roof, roughness: 0.7, tex: 'pagoda_tile', rx: 2, ry: 1 }, [0, roofY + 0.17, 0]);
@@ -69,7 +71,7 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
       upper.rotation.y = Math.PI / 4;
     }
   } else {
-    mesh(new THREE.BoxGeometry(width + 0.18, 0.11, depth + 0.18), { color: palette.roof, roughness: 0.66, tex: palette.roofTex, rx: 2, ry: 2 }, [0, roofY + 0.055, 0]);
+    mesh(new THREE.BoxGeometry(width + 0.18, 0.11, depth + 0.18), { color: palette.roof, roughness: 0.6, tex: palette.roofTex, rx: 2, ry: 2 }, [0, roofY + 0.055, 0]);
   }
 
   const glass = { color: 0xa9cae5, emissive: 0x7ea8d5, emissiveIntensity: isNight ? 0.16 : 0.025, roughness: 0.18, tex: 'glass', rx: 1, ry: 1 };
@@ -81,7 +83,7 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
   }
   mesh(new THREE.BoxGeometry(0.27, 0.5, 0.045), { color: styleId === 4 ? 0xf1f0e8 : 0x76513a, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, 0.37, depth / 2 + 0.025], false);
 
-  if (styleId === 1) mesh(new THREE.BoxGeometry(0.17, 0.55, 0.17), { color: 0x79564a, roughness: 0.82, tex: 'brick', rx: 1, ry: 1 }, [width * 0.3, roofY + 0.28, 0], true);
+  if ([1, 11].includes(styleId)) mesh(new THREE.BoxGeometry(0.17, 0.55, 0.17), { color: 0x79564a, roughness: 0.82, tex: 'brick', rx: 1, ry: 1 }, [width * 0.3, roofY + 0.28, 0], true);
   if (styleId === 3) {
     [-0.48, 0.48].forEach((px) => mesh(new THREE.BoxGeometry(0.07, 0.68, 0.07), { color: 0x74533c, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [px, 0.46, depth / 2 + 0.24]));
     mesh(new THREE.BoxGeometry(width * 0.82, 0.08, 0.46), { color: 0x8a6041, roughness: 0.82, tex: 'wood', rx: 2, ry: 1 }, [0, 0.82, depth / 2 + 0.22]);
@@ -97,6 +99,13 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
   if (styleId === 9) {
     const studioWindow = mesh(new THREE.BoxGeometry(width * 0.55, 0.035, 0.48), glass, [0, roofY + 0.22, 0], false);
     studioWindow.rotation.x = -0.55;
+  }
+  if (styleId === 10) {
+    mesh(new THREE.BoxGeometry(width * 0.84, 0.07, 0.42), { color: 0xf4f0df, roughness: 0.82, tex: 'residence_wood', rx: 2, ry: 1 }, [0, 0.78, depth / 2 + 0.19]);
+    [-0.42, 0.42].forEach((px) => mesh(new THREE.BoxGeometry(0.045, 0.54, 0.045), { color: 0x6e7f68, roughness: 0.8, tex: 'residence_wood', rx: 1, ry: 1 }, [px, 0.48, depth / 2 + 0.2]));
+  }
+  if (styleId === 11) {
+    mesh(new THREE.BoxGeometry(width + 0.12, 0.08, 0.26), { color: 0x6c9279, roughness: 0.55, tex: 'residence_tile', rx: 2, ry: 1 }, [0, 0.86, depth / 2 + 0.15]);
   }
 
   group.userData.residenceStyleId = styleId;

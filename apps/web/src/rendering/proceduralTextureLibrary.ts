@@ -642,6 +642,46 @@ export function createProceduralTextureLibrary(
       }
       _noise(ctx, s, 0.025);
     });
+
+    // --- Residence plaster: soft painted wall with restrained block seams ---
+    _canvas('residence_plaster', 256, (ctx, s) => {
+      ctx.fillStyle = '#D9EADC'; ctx.fillRect(0, 0, s, s);
+      for (let y = 0; y < s; y += 64) {
+        ctx.fillStyle = 'rgba(255,255,255,0.13)'; ctx.fillRect(0, y, s, 4);
+        ctx.fillStyle = 'rgba(85,120,95,0.08)'; ctx.fillRect(0, y + 60, s, 4);
+      }
+      for (let i = 0; i < 90; i++) {
+        ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.12)' : 'rgba(70,100,80,0.07)';
+        ctx.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+      }
+      _noise(ctx, s, 0.018);
+    });
+
+    // --- Residence wood: painted timber boards for porches and trim ---
+    _canvas('residence_wood', 128, (ctx, s) => {
+      ctx.fillStyle = '#E4D2B6'; ctx.fillRect(0, 0, s, s);
+      for (let y = 0; y < s; y += 16) {
+        ctx.fillStyle = y % 32 ? 'rgba(112,82,57,0.16)' : 'rgba(255,255,255,0.18)';
+        ctx.fillRect(0, y, s, 3);
+      }
+      _noise(ctx, s, 0.025);
+    });
+
+    // --- Residence tile: muted green roof tiles for the new garden family ---
+    _canvas('residence_tile', 256, (ctx, s) => {
+      ctx.fillStyle = '#6C9279'; ctx.fillRect(0, 0, s, s);
+      const tile = 20;
+      for (let y = 0; y < s; y += tile) {
+        const offset = (y / tile % 2) * (tile / 2);
+        for (let x = -tile; x < s + tile; x += tile) {
+          const bx = x + offset;
+          ctx.fillStyle = `rgba(255,255,255,${0.08 + Math.random() * 0.08})`;
+          ctx.beginPath(); ctx.arc(bx + tile / 2, y + tile, tile / 2 - 1, Math.PI, 0); ctx.fill();
+          ctx.fillStyle = 'rgba(35,65,45,0.16)'; ctx.fillRect(bx, y + tile - 2, tile, 2);
+        }
+      }
+      _noise(ctx, s, 0.02);
+    });
   
     // ══ 建筑立面贴图（完整立面，非重复）══
     function _win(ctx,x,y,w,h,frame,glass){ctx.fillStyle=frame;ctx.fillRect(x-2,y-2,w+4,h+4);const gr=ctx.createLinearGradient(x,y,x+w,y+h);gr.addColorStop(0,glass[0]);gr.addColorStop(0.5,glass[1]);gr.addColorStop(1,glass[2]);ctx.fillStyle=gr;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(255,255,255,0.25)';ctx.fillRect(x,y,w*0.35,h*0.35);ctx.fillStyle='rgba(60,70,90,0.15)';ctx.fillRect(x+w/2-0.5,y,1,h);ctx.fillRect(x,y+h/2-0.5,w,1);}
