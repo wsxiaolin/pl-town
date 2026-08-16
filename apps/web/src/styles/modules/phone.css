@@ -1,0 +1,247 @@
+/* ===== RESIDENT PHONE (multiplayer) ===== */
+/* 悬浮手机按钮：在线状态/公聊/住宅全部折叠进这部“居民手机” */
+.phone-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 78px;
+  z-index: 170;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.94);
+  box-shadow: 0 10px 26px rgba(50,45,35,0.16);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.phone-fab:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(50,45,35,0.2); }
+.phone-fab svg { width: 21px; height: 21px; fill: none; stroke: var(--text-dark); stroke-width: 1.7; stroke-linecap: round; }
+.phone-fab svg circle { fill: var(--text-dark); stroke: none; }
+.phone-fab.active { background: var(--blue); border-color: var(--blue); }
+.phone-fab.active svg { stroke: #fff; }
+.phone-fab.active svg circle { fill: #fff; }
+.phone-fab-state {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #b9b8b2;
+}
+.phone-fab.connected .phone-fab-state { background: #50a878; }
+.phone-fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #C45A4A;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(196,90,74,0.45);
+}
+
+/* 手机本体：深色边框 + 刘海 + 屏幕 + Home 条 */
+.phone {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 180;
+  width: min(340px, calc(100vw - 24px));
+  height: min(600px, calc(100dvh - 40px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 10px 12px;
+  border-radius: 38px;
+  background: #23252B;
+  box-shadow: 0 24px 60px rgba(35,32,26,0.35), inset 0 0 0 2px rgba(255,255,255,0.06);
+  color: var(--text-dark);
+  opacity: 0;
+  transform: translateY(26px) scale(0.94);
+  transform-origin: bottom right;
+  pointer-events: none;
+  transition: opacity 0.24s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.phone.open { opacity: 1; transform: none; pointer-events: all; }
+.phone-notch {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phone-speaker { width: 44px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.16); }
+.phone-camera { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.22); }
+.phone-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 9px;
+  color: rgba(255,255,255,0.85);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.phone-net { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+#onlineStateDot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #8a8a86; flex-shrink: 0; }
+#onlineStateDot.connected { background: #58C98A; box-shadow: 0 0 6px rgba(88,201,138,0.8); }
+.phone-owner { flex: 1; text-align: center; color: rgba(255,255,255,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-close {
+  border: 0;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+}
+.phone-close:hover { background: rgba(255,255,255,0.22); }
+.phone-tabs { border-radius: 14px 14px 0 0; overflow: hidden; }
+.phone-archive { min-height:100%; padding:18px 14px; background:#f4f5f2; }
+.phone-archive-intro { padding:8px 4px 18px; }
+.phone-archive-intro span { color:#3b6fe0; font-size:8px; font-weight:800; letter-spacing:.12em; }
+.phone-archive-intro strong { display:block; margin-top:6px; font-size:17px; letter-spacing:0; }
+.phone-archive-intro p { margin-top:5px; color:#858984; font-size:10px; line-height:1.5; }
+.phone-archive-link { width:100%; min-height:68px; display:flex; align-items:center; gap:12px; margin-bottom:8px; padding:10px 12px; border:1px solid #dfe1dd; background:#fff; color:#2b3036; text-align:left; cursor:pointer; }
+.phone-archive-link i { width:38px; height:38px; display:grid; place-items:center; flex:none; background:#30363d; color:#fff; font-size:9px; font-style:normal; font-weight:800; }
+.phone-archive-link span { min-width:0; flex:1; }
+.phone-archive-link b,.phone-archive-link small { display:block; }
+.phone-archive-link b { font-size:12px; }
+.phone-archive-link small { margin-top:4px; color:#929691; font-size:9px; }
+.phone-archive-link em { color:#8c908c; font-size:20px; font-style:normal; }
+.phone-archive-status { display:flex; align-items:center; gap:7px; margin:18px 4px 0; color:#898d88; font-size:8px; }
+.phone-archive-status i { width:6px; height:6px; border-radius:50%; background:#50a878; }
+.phone-archive-status b { margin-left:auto; color:#50a878; font-size:8px; }
+.phone-feed { min-height:100%; padding:14px; background:#f4f5f2; }
+.phone-feed-empty,.phone-feed-loading { padding:40px 12px; color:#898d88; text-align:center; font-size:10px; line-height:1.6; }
+.phone-bind-prompt { padding:14px 2px; background:transparent; }.phone-bind-prompt form{display:grid;gap:10px}.phone-bind-prompt label span{display:block;margin-bottom:4px;color:#7d827c;font-size:9px}.phone-bind-prompt input{width:100%;height:34px;padding:0 10px;border:1px solid #d5d8d3;background:#fff;border-radius:4px;font:inherit;font-size:10px;outline:none;box-sizing:border-box}.phone-bind-prompt input:focus{border-color:#6b8fd8;box-shadow:0 0 0 2px rgba(59,111,224,.12)}.phone-bind-prompt form button{height:34px;border:0;border-radius:4px;background:#30363d;color:#fff;font-size:10px;font-weight:700}.phone-bind-prompt form button:disabled{cursor:wait;opacity:.68}.phone-bind-prompt small{min-height:14px;color:#c45a4a;font-size:9px;line-height:1.45}.phone-social-tools[hidden],.phone-social-grid[hidden]{display:none}
+.phone-notice { display:flex; gap:10px; padding:13px 2px; border-bottom:1px solid #dfe1dd; }
+.pn-dot { width:7px; height:7px; margin-top:5px; flex:none; border-radius:50%; background:#3b6fe0; }
+.phone-notice b,.phone-notice p,.phone-notice small { display:block; }
+.phone-notice b { font-size:11px; }
+.phone-notice p { margin-top:5px; color:#6d726d; font-size:10px; line-height:1.45; }
+.phone-notice small { margin-top:6px; color:#9a9e99; font-size:8px; }
+.phone-feed .chat-line { display:block; min-width:0; margin:0 0 8px; padding:0 2px; }
+.phone-feed .chat-line b { display:block; min-width:0; overflow:hidden; color:var(--blue); text-overflow:ellipsis; white-space:nowrap; }
+.phone-feed .chat-line span { display:block; margin-top:4px; color:#6d726d; line-height:1.45; overflow-wrap:anywhere; }
+.phone-bind-prompt.session-expired small{color:#c45a4a}
+.phone-social { min-height:100%; padding:20px 14px; background:#f4f5f2; }
+.phone-social-hero span { color:#3b6fe0; font-size:8px; font-weight:800; letter-spacing:.12em; }
+.phone-social-hero strong { display:block; margin-top:7px; font-size:18px; }
+.phone-social-hero p { margin:6px 0 18px; color:#838883; font-size:10px; line-height:1.5; }
+.phone-social button { width:100%; display:flex; justify-content:space-between; padding:13px 12px; margin-top:8px; border:1px solid #dfe1dd; background:#fff; color:#292e35; text-align:left; font-size:11px; cursor:pointer; }
+.phone-social button b { color:#8e928d; font-size:17px; font-weight:400; }
+.phone-social-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.phone-social-grid button { min-height:42px; justify-content:center; align-items:center; padding:7px 4px; margin:0; font-size:9px; text-align:center; }
+.phone-social-results { max-height:210px; margin-top:12px; overflow:auto; border-top:1px solid #dfe1dd; border-bottom:1px solid #dfe1dd; }
+.phone-social-results>p { padding:24px 8px; color:#898d88; font-size:10px; text-align:center; }
+.social-row { display:flex; justify-content:space-between; gap:10px; padding:10px 3px; border-bottom:1px solid #e1e3df; }
+.social-row:last-child { border-bottom:0; }
+.social-row b,.social-row small { display:block; max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.social-row b { font-size:10px; }.social-row small { margin-top:3px; color:#90948f; font-size:8px; }.social-row>span { color:#3b6fe0; font-size:8px; white-space:nowrap; }
+.social-profile { padding:14px 3px; }.social-profile>strong,.social-profile>span { display:block; }.social-profile>strong{font-size:14px}.social-profile>span{margin-top:4px;color:#3b6fe0;font-size:9px}.social-profile>div{display:flex;gap:12px;margin-top:12px}.social-profile>div b{color:#737873;font-size:8px;font-weight:500}
+.phone-social .phone-social-wide { margin-top:12px; }
+.phone-social-results .social-follow { width:auto; min-width:48px; height:25px; align-self:center; justify-content:center; margin:0 0 0 auto; padding:0 7px; border-color:#bfcde7; color:#315bb6; font-size:8px; }
+.online-tabs { display: flex; background: #EDECE9; }
+.online-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-mid);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 11px;
+  transition: color 0.15s;
+}
+.online-tab.active { color: var(--blue); box-shadow: inset 0 -2px var(--blue); background: #F9F8F6; }
+.phone-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #F9F8F6;
+  overflow: hidden;
+}
+.online-view { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.online-view.active { display: flex; flex-direction: column; }
+.phone-homebar {
+  margin: 7px auto 0;
+  width: 96px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.25);
+  flex-shrink: 0;
+}
+
+/* 住宅认领是独立的场景操作，不嵌在居民手机的住宅列表里。 */
+.residence-claim {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(31, 34, 40, 0.22);
+  backdrop-filter: blur(3px);
+}
+.residence-claim[hidden] { display: none; }
+.residence-claim-card {
+  position: relative;
+  width: min(360px, calc(100vw - 32px));
+  padding: 26px 24px 22px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 18px;
+  background: #F9F8F6;
+  box-shadow: 0 22px 60px rgba(35,32,26,0.25);
+}
+.residence-claim-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.06);
+  color: var(--text-mid);
+  cursor: pointer;
+}
+.residence-claim-kicker { color: var(--blue); font-size: 9px; letter-spacing: .14em; }
+.residence-claim-card h2 { margin-top: 6px; color: var(--text-dark); font-size: 22px; }
+.residence-claim-address, .residence-claim-status { margin-top: 6px; color: var(--text-mid); font-size: 11px; line-height: 1.45; }
+.residence-name-field { display: grid; gap: 6px; margin-top: 18px; color: var(--text-mid); font-size: 10px; }
+.residence-name-field input {
+  width: 100%;
+  border: 1px solid rgba(0,0,0,0.14);
+  border-radius: 9px;
+  padding: 9px 10px;
+  outline: none;
+  background: #fff;
+  color: var(--text-dark);
+  font: inherit;
+  font-size: 12px;
+}
+.residence-name-field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,111,224,.12); }
+.residence-claim-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.residence-action { border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; font: inherit; font-size: 11px; }
+.residence-action.primary { background: var(--blue); color: #fff; }
+.residence-action.secondary { border: 1px solid rgba(0,0,0,0.12); background: transparent; color: var(--text-mid); }
+.residence-action:disabled, .hc-btn:disabled { opacity: .5; cursor: default; }
+

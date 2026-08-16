@@ -1,0 +1,31 @@
+/* ===== CHAT ===== */
+.chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 3px; }
+.chat-line { display: flex; gap: 7px; margin: 0 0 8px; font-size: 11.5px; line-height: 1.45; }
+.chat-line b { color: var(--blue); white-space: nowrap; }
+.chat-line.own b { color: #C45A4A; }
+.chat-form { display: flex; gap: 6px; margin-top: 10px; flex-shrink: 0; }
+.chat-form input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid rgba(0,0,0,0.13);
+  border-radius: 999px;
+  padding: 8px 12px;
+  outline: none;
+  font: inherit;
+  font-size: 11.5px;
+  background: #fff;
+}
+.chat-form input:focus { border-color: var(--blue); }
+.chat-form button {
+  border: 0;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 8px 14px;
+  flex-shrink: 0;
+}
+.chat-form button:hover { filter: brightness(1.08); }
+

@@ -1,0 +1,174 @@
+/* ===== WELCOME ===== */
+.landscape-required { display: none; }
+
+@media (orientation: portrait) {
+  .landscape-required {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    color: #f8faff;
+    text-align: center;
+    background: #111722;
+  }
+  .landscape-required strong { font-size: 22px; font-weight: 600; }
+  .landscape-required span { color: #afc8f1; font-size: 13px; }
+  .landscape-required .landscape-fullscreen {
+    margin-top: 6px;
+    color: #afc8f1;
+    font-size: 12px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}
+
+.welcome-block {
+  display: none;
+}
+.welcome-block.hidden { opacity: 0; }
+
+@media (min-width: 681px) {
+  .welcome-block { left: auto; right: 28px; }
+}
+@media (max-width: 680px) {
+  .welcome-block { left: 16px; right: auto; }
+}
+
+.welcome-main {
+  font-size: 21px;
+  font-weight: 300;
+  line-height: 1.38;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+}
+
+.welcome-sub {
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--text-light);
+  letter-spacing: 0.04em;
+}
+
+.welcome-accent {
+  margin-top: 10px;
+  width: 26px; height: 2px;
+  background: var(--blue);
+  border-radius: 1px;
+}
+
+/* ===== YOU BLOCK ===== */
+.you-block {
+  position: fixed;
+  bottom: 28px; left: 28px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.you-person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.yp-head {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #A8C8F8;
+}
+
+.yp-body {
+  width: 12px; height: 9px;
+  border-radius: 3px 3px 2px 2px;
+  background: var(--blue);
+}
+
+.you-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.you-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--blue);
+  text-transform: uppercase;
+}
+
+.you-sub {
+  font-size: 9px;
+  color: var(--text-light);
+  letter-spacing: 0.03em;
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 680px) {
+  html, body { overflow: auto; cursor: auto; }
+
+  #c { position: fixed; }
+
+  .labels-wrap {
+    display: block;
+  }
+  .b-label-item {
+    gap: 2px;
+    padding: 3px 4px;
+  }
+  .bl-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+  .bl-name {
+    font-size: 8px;
+    letter-spacing: 0.04em;
+  }
+  .you-block { display: flex; }
+  .you-text { display: none; }
+
+  .welcome-block { top: 68px; }
+
+  .ui-header {
+    height: 48px;
+    padding: 0 12px;
+  }
+  .logo-name {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .ui-nav { gap: 8px; }
+  .map-toggle {
+    border-radius: 8px;
+    padding: 5px 9px;
+    font-size: 8.5px;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .settings-toggle { width: 28px; height: 28px; }
+  .render-settings { top: 43px; right: 10px; width: 190px; }
+.fs-toggle { display: none; }
+@media (max-width: 680px) {
+  .fs-toggle { display: inline-block; }
+}
+
+.time-display {
+    border-radius: 8px;
+    padding: 5px 9px;
+    font-size: 9.5px;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+}
+

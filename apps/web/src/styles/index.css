@@ -1,2 +1,20 @@
 /* Application-wide styles live behind a stable source-owned entry point. */
-@import './style.css';
+@import './modules/base.css';
+@import './modules/boot.css';
+@import './modules/works.css';
+@import './modules/canvas.css';
+@import './modules/phone.css';
+@import './modules/chat.css';
+@import './modules/housing.css';
+@import './modules/labels.css';
+@import './modules/chrome.css';
+@import './modules/city-map.css';
+@import './modules/welcome.css';
+@import './modules/reduced-motion.css';
+@import './modules/login.css';
+@import './modules/stats.css';
+@import './modules/cg.css';
+@import './modules/modal.css';
+@import './modules/lyrics.css';
+@import './modules/memorial.css';
+@import './modules/npc.css';
