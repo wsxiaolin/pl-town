@@ -8,17 +8,30 @@ const port = 8791;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
 const productionConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
   cwd: new URL('..', import.meta.url),
-  env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ALLOWED_ORIGINS: '' },
+  env: { ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: '' },
   encoding: 'utf8', timeout: 5_000,
 });
 if (productionConfigCheck.status === 0 || !`${productionConfigCheck.stdout}${productionConfigCheck.stderr}`.includes('Production requires')) {
   throw new Error('Production configuration must fail closed when administrator credentials and origins are missing');
+}
+const multiAdminConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js').then((config) => console.log(`${config.ADMIN_ENABLED}:${config.ADMIN_ACCOUNTS.length}`))"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: '', ADMIN_PASSWORD: '',
+    ADMIN_ACCOUNTS_JSON: JSON.stringify({ operator: 'json-only-operator-password', reviewer: 'json-only-reviewer-password' }),
+    ALLOWED_ORIGINS: 'https://city.example.com',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (multiAdminConfigCheck.status !== 0 || !multiAdminConfigCheck.stdout.includes('true:2')) {
+  throw new Error(`Production configuration must support JSON-only administrator accounts:\n${multiAdminConfigCheck.stderr}`);
 }
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
     ...process.env, PORT: String(port), DATA_DIR: dataDir,
     ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'integration-admin-password',
+    ADMIN_ACCOUNTS_JSON: JSON.stringify({ reviewer: 'integration-reviewer-password' }),
     AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
   },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -133,6 +146,12 @@ try {
   const loginPayload = await login.json();
   const cookie = login.headers.get('set-cookie')?.split(';', 1)[0];
   if (!login.ok || !cookie || !loginPayload.csrf || !login.headers.get('set-cookie')?.includes('HttpOnly')) throw new Error('Admin sign-in must issue an HttpOnly session and CSRF token');
+  const reviewerLogin = await fetch(`${adminBase}/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ username: 'reviewer', password: 'integration-reviewer-password' }),
+  });
+  const reviewerPayload = await reviewerLogin.json();
+  if (!reviewerLogin.ok || reviewerPayload.actor !== 'reviewer' || !reviewerPayload.csrf || !reviewerLogin.headers.get('set-cookie')) throw new Error('Each configured administrator account must be able to sign in independently');
   const missingCsrf = await fetch(`${adminBase}/backups`, { method: 'POST', headers: { cookie, origin: adminOrigin } });
   if (missingCsrf.status !== 403) throw new Error('Admin mutations must require CSRF verification');
   const invalidJsonRequest = await fetch(`${adminOrigin}/town-api/works/query`, {
@@ -268,10 +287,30 @@ try {
   const secondInvitation = await waitFor(charlie, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'invite' && request.requesterId === alice.hello.user.id));
   send(charlie, { type: 'housing.accept', requestId: secondInvitation.requests.find((request) => request.kind === 'invite').id });
   await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.members.length === 3));
+  alice.messages.length = 0;
+  const editHouseMembers = await fetch(`${adminBase}/houses/${encodeURIComponent(buildingId)}`, {
+    method: 'PATCH',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ name: 'Integration Home', memberIds: [alice.hello.user.id, bob.hello.user.id] }),
+  });
+  if (!editHouseMembers.ok) throw new Error('Administrator must be able to remove a house member');
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId && house.members.length === 2 && !house.members.some((member) => member.userId === charlie.hello.user.id)));
   send(alice, { type: 'housing.transfer', buildingId, userId: bob.hello.user.id });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.ownerId === bob.hello.user.id));
   send(bob, { type: 'housing.release', buildingId });
   await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => house.buildingId === buildingId));
+
+  const adminDeletedBuildingId = 'residence:8.00:4.00';
+  send(bob, { type: 'housing.claim', buildingId: adminDeletedBuildingId, name: 'Admin Deleted Home' });
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === adminDeletedBuildingId));
+  alice.messages.length = 0;
+  const deleteHouse = await fetch(`${adminBase}/houses/${encodeURIComponent(adminDeletedBuildingId)}`, {
+    method: 'DELETE', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+  });
+  if (!deleteHouse.ok) throw new Error('Administrator must be able to delete a house');
+  await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => house.buildingId === adminDeletedBuildingId));
+  const housesAfterAdminDelete = await fetch(`${adminBase}/houses`, { headers: { cookie } }).then((response) => response.json());
+  if (housesAfterAdminDelete.items.some((house) => house.buildingId === adminDeletedBuildingId)) throw new Error('Deleted houses must be removed from the admin housing list');
 
   // 相同昵称+正确密码登录返回同一个全局唯一 ID
   const aliceAgain = await connect('Alice');
@@ -379,6 +418,9 @@ try {
   const topology = await fetch(`${adminBase}/story-topology?storyId=${encodeURIComponent('main.echo.act-one')}`, { headers: { cookie } });
   const topologyPayload = await topology.json();
   if (!topology.ok || !topologyPayload.summary || !Array.isArray(topologyPayload.summary.nodes) || !Array.isArray(topologyPayload.summary.edges) || topologyPayload.summary.nodes.length === 0) throw new Error('Admin story topology must return populated nodes and edges for the echo story');
+  const storyCatalog = await fetch(`${adminBase}/stories`, { headers: { cookie } });
+  const storyCatalogPayload = await storyCatalog.json();
+  if (!storyCatalog.ok || !storyCatalogPayload.items?.some((story) => story.id === 'main.echo.act-one' && story.nodes.length > 0)) throw new Error('Admin story catalog must expose node details even when no resident progress matches');
   const topologyHtml = await fetch(`${adminOrigin}/admin/story-topology`);
   if (!topologyHtml.ok || topologyHtml.headers.get('cache-control') !== 'no-store') throw new Error('Story topology HTML shell must be served without caching');
 

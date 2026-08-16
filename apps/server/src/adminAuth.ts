@@ -1,8 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  ADMIN_ENABLED, ADMIN_PASSWORD, ADMIN_SESSION_TTL_MINUTES,
-  ADMIN_USERNAME, IS_PRODUCTION,
+  ADMIN_ACCOUNTS, ADMIN_ENABLED, ADMIN_SESSION_TTL_MINUTES, IS_PRODUCTION,
 } from './config.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, requestOriginAllowed } from './requestSecurity.js';
@@ -45,9 +44,11 @@ export function adminLoginAllowed(request: IncomingMessage): boolean {
 }
 
 export function createAdminSession(request: IncomingMessage, response: ServerResponse, username: string, password: string): { actor: string; csrf: string } | null {
-  if (!ADMIN_ENABLED || !equal(username, ADMIN_USERNAME) || !equal(password, ADMIN_PASSWORD)) return null;
+  const account = ADMIN_ACCOUNTS.find((candidate) => equal(username, candidate.username));
+  const passwordMatches = equal(password, account?.password ?? 'invalid-administrator-password');
+  if (!ADMIN_ENABLED || !account || !passwordMatches) return null;
   const token = randomBytes(32).toString('base64url');
-  const session = { actor: ADMIN_USERNAME, csrf: randomBytes(24).toString('base64url'), expiresAt: Date.now() + SESSION_TTL_MS, ip: clientIp(request) };
+  const session = { actor: account.username, csrf: randomBytes(24).toString('base64url'), expiresAt: Date.now() + SESSION_TTL_MS, ip: clientIp(request) };
   sessions.set(token, session);
   while (sessions.size > 100) sessions.delete(sessions.keys().next().value as string);
   response.setHeader('set-cookie', cookie(token, Math.floor(SESSION_TTL_MS / 1_000)));

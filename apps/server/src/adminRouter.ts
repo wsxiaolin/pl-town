@@ -18,7 +18,13 @@ import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog
 import { NPC_CATALOG } from './npcCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 
-type Context = { online: () => number; disconnectUser: (userId: string) => void; disconnectAll: () => void; startedAt: number };
+type Context = {
+  online: () => number;
+  disconnectUser: (userId: string) => void;
+  disconnectAll: () => void;
+  broadcastHousing: () => void;
+  startedAt: number;
+};
 
 type AdminAsset = { type: string; body: Buffer };
 
@@ -167,15 +173,16 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       const result = db.moveUserToHouse(userId, target);
       if (!result.ok) { error(response, 400, 'HOUSE_MOVE_FAILED', result.reason ?? '住房分配失败'); return true; }
       db.recordAdminAudit(principal.actor, 'user.house.assign', userId, { houseId: target });
+      context.broadcastHousing();
     }
     context.disconnectUser(userId);
     respond(response, 200, { ok: true }); return true;
   }
   if (request.method === 'GET' && path === '/admin/api/houses') { respond(response, 200, { items: db.listAdminHouses() }); return true; }
-  const houseEdit = path.match(/^\/admin\/api\/houses\/(.+)$/);
-  if (request.method === 'PATCH' && houseEdit) {
+  const houseRoute = path.match(/^\/admin\/api\/houses\/(.+)$/);
+  if (request.method === 'PATCH' && houseRoute) {
     const body = await readJson(request, 4_096);
-    const buildingId = decodeURIComponent(houseEdit[1]!);
+    const buildingId = decodeURIComponent(houseRoute[1]!);
     if (typeof body.name === 'string') { const trimmed = body.name.trim().slice(0, 80); if (!trimmed) { error(response, 400, 'INVALID_BODY', '住房名称不能为空'); return true; } db.renameHouse(buildingId, trimmed); }
     if (Array.isArray(body.memberIds)) {
       if (!body.memberIds.every((id: unknown) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) { error(response, 400, 'INVALID_BODY', '成员列表无效'); return true; }
@@ -183,6 +190,14 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       if (!result.ok) { error(response, 400, 'INVALID_ROSTER', result.reason ?? '成员更新失败'); return true; }
     }
     db.recordAdminAudit(principal.actor, 'house.update', buildingId, { name: body.name, memberCount: Array.isArray(body.memberIds) ? body.memberIds.length : undefined });
+    context.broadcastHousing();
+    respond(response, 200, { ok: true }); return true;
+  }
+  if (request.method === 'DELETE' && houseRoute) {
+    const buildingId = decodeURIComponent(houseRoute[1]!);
+    if (!db.deleteHouse(buildingId)) { error(response, 404, 'HOUSE_NOT_FOUND', '住房不存在'); return true; }
+    db.recordAdminAudit(principal.actor, 'house.delete', buildingId);
+    context.broadcastHousing();
     respond(response, 200, { ok: true }); return true;
   }
   if (request.method === 'GET' && path === '/admin/api/audit') {

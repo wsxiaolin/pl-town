@@ -1,4 +1,7 @@
-const state = { csrf: '', actor: '', view: 'overview', houses: [], chatFilter: 'visible', storyFilter: '', npcs: [], npcSelectedId: '', npcRequestFilter: 'pending' };
+const state = {
+  csrf: '', actor: '', view: 'overview', houses: [], users: [], houseDraftMembers: [], houseEditingOwnerId: '',
+  chatFilter: 'visible', storyFilter: '', npcs: [], npcSelectedId: '', npcRequestFilter: 'pending',
+};
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const formatNumber = (value) => new Intl.NumberFormat('zh-CN').format(Number(value) || 0);
@@ -67,6 +70,7 @@ async function loadOverview() {
 
 async function loadUsers() {
   const query = encodeURIComponent($('#userQuery').value.trim()); const data = await api(`/users?q=${query}&limit=100`);
+  state.users = data.items;
   state.houses = (await api('/houses')).items;
   $('#userCount').textContent = `共 ${formatNumber(data.total)} 人`;
   const rows = data.items.map((user) => {
@@ -111,11 +115,15 @@ async function submitUserEditor() {
 }
 
 async function loadHouses() {
-  const data = await api('/houses'); $('#houseCount').textContent = `${data.items.length} 间`;
+  const [data, users] = await Promise.all([api('/houses'), api('/users?limit=100')]);
+  state.houses = data.items;
+  state.users = users.items;
+  $('#houseCount').textContent = `${data.items.length} 间`;
   const rows = data.items.map((house) => {
     const row = node('tr'); const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const edit = node('button', '编辑'); edit.type = 'button'; edit.addEventListener('click', () => openHouseEditor(house));
-    group.append(edit); actions.append(group);
+    const remove = node('button', '删除', 'warning'); remove.type = 'button'; remove.addEventListener('click', () => confirmAction('删除住房', `确认删除“${house.name || house.buildingId}”？成员将变为未入住状态，待处理的入住申请也会一并删除。`, () => deleteHouse(house.buildingId)));
+    group.append(edit, remove); actions.append(group);
     row.append(node('td', house.buildingId), node('td', house.ownerNickname), node('td', house.name || '未命名'), node('td', `${house.members.map((member) => member.nickname).join('、')}（${house.memberCount} 人）`), actions); return row;
   });
   $('#houseRows').replaceChildren(...(rows.length ? rows : [emptyRow(5, '暂无已认领住房')]));
@@ -124,18 +132,58 @@ function openHouseEditor(house) {
   const dialog = $('#houseDialog');
   $('#houseDialogId').value = house.buildingId;
   $('#houseDialogName').value = house.name || '';
-  const memberInput = $('#houseDialogMembers'); memberInput.value = house.members.map((member) => member.userId).join(',');
-  $('#houseDialogMemberHint').textContent = `当前 ${house.memberCount} 人；以逗号分隔用户 ID，房主会自动保留（最多 10 人）。`;
+  state.houseDraftMembers = house.members.map((member) => ({ ...member }));
+  state.houseEditingOwnerId = house.ownerId;
+  renderHouseMembers();
   dialog.returnValue = ''; dialog.showModal();
+}
+function renderHouseMembers() {
+  const memberList = $('#houseDialogMembers');
+  const rows = state.houseDraftMembers.map((member) => {
+    const item = node('div', undefined, 'member-item');
+    const identity = node('span', undefined, 'member-identity'); identity.append(node('strong', member.nickname), node('small', member.userId));
+    if (member.userId === state.houseEditingOwnerId) {
+      item.append(identity, node('span', '房主', 'member-owner'));
+    } else {
+      const remove = node('button', '删除', 'member-remove'); remove.type = 'button'; remove.addEventListener('click', () => {
+        state.houseDraftMembers = state.houseDraftMembers.filter((candidate) => candidate.userId !== member.userId);
+        renderHouseMembers();
+      });
+      item.append(identity, remove);
+    }
+    return item;
+  });
+  memberList.replaceChildren(...rows);
+
+  const selectedIds = new Set(state.houseDraftMembers.map((member) => member.userId));
+  const candidates = state.users.filter((user) => !selectedIds.has(user.id) && !user.houseId && !user.disabled);
+  const select = $('#houseDialogMemberSelect');
+  const placeholder = node('option', candidates.length ? '选择未入住居民' : '暂无可添加居民'); placeholder.value = '';
+  select.replaceChildren(placeholder, ...candidates.map((user) => { const option = node('option', `${user.nickname}（${user.id}）`); option.value = user.id; return option; }));
+  select.disabled = candidates.length === 0 || state.houseDraftMembers.length >= 10;
+  $('#houseDialogMemberAdd').disabled = select.disabled;
+  $('#houseDialogMemberHint').textContent = `当前 ${state.houseDraftMembers.length} 人；房主不可删除，最多 10 人。`;
+}
+function addHouseMember() {
+  const userId = $('#houseDialogMemberSelect').value;
+  const user = state.users.find((candidate) => candidate.id === userId);
+  if (!user || state.houseDraftMembers.some((member) => member.userId === userId) || state.houseDraftMembers.length >= 10) return;
+  state.houseDraftMembers.push({ userId: user.id, nickname: user.nickname });
+  renderHouseMembers();
 }
 async function submitHouseEditor() {
   const buildingId = $('#houseDialogId').value;
   const name = $('#houseDialogName').value.trim();
-  const raw = $('#houseDialogMembers').value.split(',').map((item) => item.trim()).filter(Boolean);
+  const memberIds = state.houseDraftMembers.map((member) => member.userId);
   try {
-    await api(`/houses/${encodeURIComponent(buildingId)}`, { method: 'PATCH', body: JSON.stringify({ name, memberIds: raw }) });
+    await api(`/houses/${encodeURIComponent(buildingId)}`, { method: 'PATCH', body: JSON.stringify({ name, memberIds }) });
     showNotice('住房信息已更新', true); $('#houseDialog').close(); await loadHouses();
   } catch (error) { showNotice(error.message); }
+}
+async function deleteHouse(buildingId) {
+  await api(`/houses/${encodeURIComponent(buildingId)}`, { method: 'DELETE' });
+  showNotice('住房已删除', true);
+  await loadHouses();
 }
 
 async function loadBackups() {
@@ -190,18 +238,30 @@ async function loadChat() {
   });
   $('#chatRows').replaceChildren(...(rows.length ? rows : [emptyRow(4, '暂无聊天记录')]));
   const authors = await api('/chat/authors?limit=100');
-  const authorRows = authors.items.map((author) => { const row = node('tr'); row.append(node('td', author.nickname), node('td', formatNumber(author.messages)), node('td', formatNumber(author.flagged)), node('td', formatNumber(author.hidden)), node('td', formatDate(author.lastAt))); return row; });
-  $('#chatAuthorRows').replaceChildren(...(authorRows.length ? authorRows : [emptyRow(5, '暂无发言')]));
+  const authorRows = authors.items.map((author) => {
+    const row = node('tr');
+    const identity = node('td'); identity.append(node('strong', author.nickname), node('small', author.userId));
+    const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
+    const ban = node('button', author.disabled ? '已封禁' : '封禁用户', author.disabled ? '' : 'warning'); ban.type = 'button'; ban.disabled = author.disabled;
+    ban.addEventListener('click', () => confirmAction('封禁用户', `确认封禁 ${author.nickname}？该用户会立即下线且无法再次登录。`, () => disableChatAuthor(author)));
+    group.append(ban); actions.append(group);
+    row.append(identity, node('td', formatNumber(author.messages)), node('td', formatNumber(author.flagged)), node('td', formatNumber(author.hidden)), node('td', formatDate(author.lastAt)), actions); return row;
+  });
+  $('#chatAuthorRows').replaceChildren(...(authorRows.length ? authorRows : [emptyRow(6, '暂无发言')]));
 }
 async function mutateChat(id, action) {
   try { await api(`/chat/${id}/${action}`, { method: 'POST' }); showNotice(action === 'flag' ? '已标记' : '已更新', true); await loadChat(); }
   catch (error) { showNotice(error.message); }
 }
+async function disableChatAuthor(author) {
+  await api(`/users/${author.userId}/status`, { method: 'PATCH', body: JSON.stringify({ disabled: true }) });
+  showNotice(`${author.nickname} 已封禁`, true);
+  await loadChat();
+}
 
 async function loadStoryProgress() {
   const query = encodeURIComponent($('#storyQuery').value.trim());
-  const data = await api(`/story-progress?q=${query}&limit=100`);
-  const catalog = await api('/stories');
+  const [data, catalog] = await Promise.all([api(`/story-progress?q=${query}&limit=100`), api('/stories')]);
   $('#storyProgressCount').textContent = `共 ${formatNumber(data.total)} 条`;
   const rows = data.items.map((row) => {
     const tr = node('tr');
@@ -213,7 +273,21 @@ async function loadStoryProgress() {
     tr.append(identity, storyCell, nodeCell, updated, nodesCell); return tr;
   });
   $('#storyRows').replaceChildren(...(rows.length ? rows : [emptyRow(5, '暂无剧情存档')]));
-  const storyList = $('#storyCatalog'); storyList.replaceChildren(...catalog.items.map((story) => { const li = node('li'); li.append(node('strong', story.title), node('small', `${story.id} · 定义版本 ${story.definitionVersion} · ${story.nodes.length} 个节点`)); return li; }));
+  const storyList = $('#storyCatalog');
+  storyList.replaceChildren(...catalog.items.map((story) => {
+    const li = node('li', undefined, 'story-catalog-item');
+    const heading = node('div', undefined, 'story-catalog-heading');
+    heading.append(node('strong', story.title), node('small', `${story.id} · 定义版本 ${story.definitionVersion} · ${story.nodes.length} 个节点`));
+    const nodes = node('div', undefined, 'story-node-grid');
+    nodes.append(...story.nodes.map((storyNode) => {
+      const entry = node('div', undefined, 'story-node-entry');
+      entry.append(node('code', storyNode.id), node('span', storyNode.title || '未命名节点'));
+      return entry;
+    }));
+    if (!story.nodes.length) nodes.append(node('p', '该任务尚未定义节点', 'empty'));
+    li.append(heading, nodes);
+    return li;
+  }));
 }
 
 const sparkline = (container, data, color) => {
@@ -376,6 +450,7 @@ $('#npcRequestFilter').addEventListener('change', (event) => { state.npcRequestF
 $('#storySearch').addEventListener('submit', (event) => { event.preventDefault(); void loadStoryProgress(); });
 $('#userDialogSubmit').addEventListener('click', () => void submitUserEditor());
 $('#houseDialogSubmit').addEventListener('click', () => void submitHouseEditor());
+$('#houseDialogMemberAdd').addEventListener('click', addHouseMember);
 $('#refreshLogsButton').addEventListener('click', () => void loadTelemetry());
 $('#clearTelemetryButton').addEventListener('click', () => confirmAction('清空监控数据', '将删除全部用户事件与错误报告记录，不可恢复。', async () => { await api('/telemetry/clear', { method: 'POST' }); showNotice('监控数据已清空', true); await loadTelemetry(); }));
 
