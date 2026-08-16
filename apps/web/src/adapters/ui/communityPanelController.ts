@@ -1,5 +1,6 @@
 // Physics Lab community API and panel state.
 // @ts-nocheck
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 export function createCommunityPanelController(options) {
   const { setPhoneOpen, showUnlockToast } = options;
   let phoneNotificationsRequest = 0;
@@ -100,7 +101,7 @@ export function createCommunityPanelController(options) {
       const rows=items.map(item=>{const template=phoneNotificationTemplates.find(entry=>String(entry.ID)===String(item.TemplateID));const row=document.createElement('div');row.className='chat-line';const author=document.createElement('b');author.textContent=formatNotificationText(template?.Subject?.Chinese||item.Title||item.Category||'系统',item);const content=document.createElement('span');content.textContent=formatNotificationText(template?.Content?.Chinese||item.Content||item.Fields?.Content||'',item);row.append(author,content);return row;});
       if(!append)results.replaceChildren();
       results.append(...rows); phoneNotificationsSkip+=items.length; phoneNotificationsHasMore=Boolean(payload.hasMore)&&items.length>0;
-    }catch(error){if(requestId===phoneNotificationsRequest)results.innerHTML=`<div class="phone-feed-empty">${error.message||'通知暂时无法同步'}</div>`;}
+    }catch(error){if(requestId===phoneNotificationsRequest)results.innerHTML=`<div class="phone-feed-empty">${esc(error.message)||'通知暂时无法同步'}</div>`;}
     finally{phoneNotificationsLoading=false;}
     phoneNotificationsObserver?.disconnect();
     if(phoneNotificationsHasMore){const sentinel=document.createElement('div');sentinel.className='works-sentinel';results.appendChild(sentinel);const scrollRoot=feed.parentElement||feed;phoneNotificationsObserver=new IntersectionObserver(e=>{if(e.some(x=>x.isIntersecting)&&!phoneNotificationsLoading)loadPhoneMessages(true);},{root:scrollRoot,rootMargin:'30%'});phoneNotificationsObserver.observe(sentinel);}
@@ -142,7 +143,7 @@ export function createCommunityPanelController(options) {
       const items=payload.data?.$values||[];
       target.replaceChildren(...(items.length?items.slice(0,12).map(item=>{const row=document.createElement('article');row.className='social-row';const user=item.User||item;row.innerHTML='<div><b></b><small></small></div><span></span>';row.querySelector('b').textContent=item.Subject||user.Nickname||'Untitled';row.querySelector('small').textContent=item.Subject?(user.Nickname||'Anonymous'):(user.Signature||user.Verification||'Resident');row.querySelector('span').textContent=item.Subject?`${item.Stars||0} ★`:(user.Verification||'');return row;}):[Object.assign(document.createElement('p'),{textContent:'这里还没有内容。'})]));
       if(!['mine','favorites'].includes(kind)) target.querySelectorAll('.social-row').forEach((row,index)=>{const user=items[index]?.User||items[index];if(!user?.ID)return;const button=document.createElement('button');button.type='button';button.className='social-follow';button.textContent=kind==='following'?'取消关注':'关注';button.addEventListener('click',event=>{event.stopPropagation();toggleSocialFollow(user.ID,kind!=='following',button);});row.appendChild(button);});
-    }catch(error){target.innerHTML=`<p>${error.message||'社区数据暂时不可用'}</p>`;}
+    }catch(error){target.innerHTML=`<p>${esc(error.message)||'社区数据暂时不可用'}</p>`;}
   }
   
   async function toggleSocialFollow(targetId,follow,button){
@@ -194,7 +195,7 @@ export function createCommunityPanelController(options) {
     const box=document.getElementById('workComments'); if(!activeWorkId)return; const session=localStorage.getItem('plSession');
     if(!session){box.innerHTML='<p class="work-comments-empty">Sign in with Physics Lab to load comments.</p>';return;}
     box.innerHTML='<p class="work-comments-empty">Loading comments…</p>';
-    try{const response=await fetch(`/town-api/pl/work/${activeWorkId}/comments`,{headers:{'x-town-pl-session':session,'x-town-work-category':activeWorkCategory}});const payload=await response.json();if(!response.ok)throw new Error(payload.error);const comments=payload.data?.Comments?.$values||payload.data?.$values||[];box.replaceChildren(...(comments.length?comments.map(comment=>{const row=document.createElement('article');row.className='work-comment';row.innerHTML='<b></b><p></p><small></small>';row.querySelector('b').textContent=comment.Author?.Nickname||'Resident';row.querySelector('p').textContent=comment.Content||'';row.querySelector('small').textContent=comment.SendDate?new Date(comment.SendDate).toLocaleDateString():'';return row;}):[Object.assign(document.createElement('p'),{className:'work-comments-empty',textContent:'No comments yet.'})]));}catch(error){box.innerHTML=`<p class="work-comments-empty">${error.message||'Comments unavailable.'}</p>`;}
+    try{const response=await fetch(`/town-api/pl/work/${activeWorkId}/comments`,{headers:{'x-town-pl-session':session,'x-town-work-category':activeWorkCategory}});const payload=await response.json();if(!response.ok)throw new Error(payload.error);const comments=payload.data?.Comments?.$values||payload.data?.$values||[];box.replaceChildren(...(comments.length?comments.map(comment=>{const row=document.createElement('article');row.className='work-comment';row.innerHTML='<b></b><p></p><small></small>';row.querySelector('b').textContent=comment.Author?.Nickname||'Resident';row.querySelector('p').textContent=comment.Content||'';row.querySelector('small').textContent=comment.SendDate?new Date(comment.SendDate).toLocaleDateString():'';return row;}):[Object.assign(document.createElement('p'),{className:'work-comments-empty',textContent:'No comments yet.'})]));}catch(error){box.innerHTML=`<p class="work-comments-empty">${esc(error.message)||'Comments unavailable.'}</p>`;}
   }
   async function postWorkComment(event){
     event.preventDefault(); if(!activeWorkId)return; const session=localStorage.getItem('plSession'); const input=document.getElementById('workCommentInput'); const content=input.value.trim();
@@ -204,11 +205,11 @@ export function createCommunityPanelController(options) {
   }
   async function loadWorkDerivatives(){
     const box=document.getElementById('workComments');if(!activeWorkId)return;const session=localStorage.getItem('plSession');if(!session){box.innerHTML='<p class="work-comments-empty">Sign in to view derivatives.</p>';return;}box.innerHTML='<p class="work-comments-empty">Loading derivatives…</p>';
-    try{const response=await fetch(`/town-api/pl/work/${activeWorkId}/derivatives`,{headers:{'x-town-pl-session':session,'x-town-work-category':activeWorkCategory}});const payload=await response.json();if(!response.ok)throw new Error(payload.error);const items=payload.data?.$values||payload.data?.Summaries?.$values||[];box.replaceChildren(...(items.length?items.map(item=>{const row=document.createElement('article');row.className='work-comment derivative-row';row.innerHTML='<b></b><p></p><small></small>';row.querySelector('b').textContent=item.Subject||'Untitled derivative';row.querySelector('p').textContent=item.User?.Nickname||'Anonymous';row.querySelector('small').textContent=`${item.Stars||0} stars · ${item.Comments||0} comments`;return row;}):[Object.assign(document.createElement('p'),{className:'work-comments-empty',textContent:'No derivatives yet.'})]));}catch(error){box.innerHTML=`<p class="work-comments-empty">${error.message||'Derivatives unavailable.'}</p>`;}
+    try{const response=await fetch(`/town-api/pl/work/${activeWorkId}/derivatives`,{headers:{'x-town-pl-session':session,'x-town-work-category':activeWorkCategory}});const payload=await response.json();if(!response.ok)throw new Error(payload.error);const items=payload.data?.$values||payload.data?.Summaries?.$values||[];box.replaceChildren(...(items.length?items.map(item=>{const row=document.createElement('article');row.className='work-comment derivative-row';row.innerHTML='<b></b><p></p><small></small>';row.querySelector('b').textContent=item.Subject||'Untitled derivative';row.querySelector('p').textContent=item.User?.Nickname||'Anonymous';row.querySelector('small').textContent=`${item.Stars||0} stars · ${item.Comments||0} comments`;return row;}):[Object.assign(document.createElement('p'),{className:'work-comments-empty',textContent:'No derivatives yet.'})]));}catch(error){box.innerHTML=`<p class="work-comments-empty">${esc(error.message)||'Derivatives unavailable.'}</p>`;}
   }
   async function loadWorkSupporters(){
     const box=document.getElementById('workComments');if(!activeWorkId)return;const session=localStorage.getItem('plSession');if(!session){box.innerHTML='<p class="work-comments-empty">Sign in to view supporters.</p>';return;}box.innerHTML='<p class="work-comments-empty">Loading supporters…</p>';
-    try{const response=await fetch(`/town-api/pl/work/${activeWorkId}/supporters`,{headers:{'x-town-pl-session':session,'x-town-work-category':activeWorkCategory}});const payload=await response.json();if(!response.ok)throw new Error(payload.error);const items=payload.data?.$values||[];box.replaceChildren(...(items.length?items.map(user=>{const row=document.createElement('article');row.className='work-comment';row.innerHTML='<b></b><p></p>';row.querySelector('b').textContent=user.Nickname||'Resident';row.querySelector('p').textContent=`Level ${user.Level||0}`;return row;}):[Object.assign(document.createElement('p'),{className:'work-comments-empty',textContent:'No supporters yet.'})]));}catch(error){box.innerHTML=`<p class="work-comments-empty">${error.message||'Supporters unavailable.'}</p>`;}
+    try{const response=await fetch(`/town-api/pl/work/${activeWorkId}/supporters`,{headers:{'x-town-pl-session':session,'x-town-work-category':activeWorkCategory}});const payload=await response.json();if(!response.ok)throw new Error(payload.error);const items=payload.data?.$values||[];box.replaceChildren(...(items.length?items.map(user=>{const row=document.createElement('article');row.className='work-comment';row.innerHTML='<b></b><p></p>';row.querySelector('b').textContent=user.Nickname||'Resident';row.querySelector('p').textContent=`Level ${user.Level||0}`;return row;}):[Object.assign(document.createElement('p'),{className:'work-comments-empty',textContent:'No supporters yet.'})]));}catch(error){box.innerHTML=`<p class="work-comments-empty">${esc(error.message)||'Supporters unavailable.'}</p>`;}
   }
   async function toggleWorkSupport(){
     if(!activeWorkId)return;const session=localStorage.getItem('plSession');if(!session){showUnlockToast('Sign in with Physics Lab to support works.');return;}const button=document.getElementById('workSupport');button.disabled=true;
@@ -279,11 +280,19 @@ export function createCommunityPanelController(options) {
     if(worksLoading&&!liveWorks.length){ list.innerHTML='<div class="works-loading"><i></i><span>Retrieving public works</span></div>'; return; }
     list.replaceChildren(...filtered.map(work=>{
       const article=document.createElement('article'); article.className='work-record'; article.dataset.workId=work.id||'';
-      const tags=work.tags.map(tag=>`<span>${tag}</span>`).join('');
-      article.innerHTML=`<div class="work-content"><div class="work-meta"><span>${work.category}</span><span>${work.year}</span><b>${work.status}</b></div><h3></h3><p class="work-byline"></p><p class="work-abstract"></p><div class="work-tags">${tags}</div></div>`;
-      article.querySelector('h3').textContent=work.title;
-      article.querySelector('.work-byline').textContent=`${work.author} · ${work.role}`;
-      article.querySelector('.work-abstract').textContent=work.abstract;
+      const content=document.createElement('div'); content.className='work-content';
+      const meta=document.createElement('div'); meta.className='work-meta';
+      const category=document.createElement('span'); category.textContent=work.category;
+      const year=document.createElement('span'); year.textContent=work.year;
+      const status=document.createElement('b'); status.textContent=work.status;
+      meta.append(category,year,status);
+      const title=document.createElement('h3'); title.textContent=work.title;
+      const byline=document.createElement('p'); byline.className='work-byline'; byline.textContent=`${work.author} · ${work.role}`;
+      const abstract=document.createElement('p'); abstract.className='work-abstract'; abstract.textContent=work.abstract;
+      const tags=document.createElement('div'); tags.className='work-tags';
+      (work.tags||[]).forEach(tag=>{const span=document.createElement('span'); span.textContent=tag; tags.appendChild(span);});
+      content.append(meta,title,byline,abstract,tags);
+      article.appendChild(content);
       // Work detail content is temporarily disabled; restore the click handler with the detail drawer.
       return article;
     }));
