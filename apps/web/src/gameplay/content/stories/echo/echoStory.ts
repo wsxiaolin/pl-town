@@ -6,7 +6,7 @@ import starlitCabinImage from "../../../../assets/cg/echo/starlit-cabin.png";
 
 export const ECHO_STORY: StoryDefinition = {
   schemaVersion: 1,
-  definitionVersion: 11,
+  definitionVersion: 12,
   id: "main.echo.act-one",
   title: "回声",
   startNode: "meeting",
@@ -109,6 +109,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "not-alone": {
+      savepoint: false,
       id: "not-alone",
       title: "林澈",
       role: "气象观测站守望人",
@@ -124,6 +125,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "mountain-memory": {
+      savepoint: false,
       id: "mountain-memory",
       title: "回忆",
       presentation: "cg",
@@ -140,6 +142,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "starlight-memory": {
+      savepoint: false,
       id: "starlight-memory",
       title: "回忆",
       presentation: "cg",
@@ -156,6 +159,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "four-seasons": {
+      savepoint: false,
       id: "four-seasons",
       title: "林澈",
       role: "气象观测站守望人",
@@ -209,6 +213,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "food-delivery": {
+      savepoint: false,
       id: "food-delivery",
       title: "林澈",
       role: "气象观测站守望人",
@@ -216,6 +221,7 @@ export const ECHO_STORY: StoryDefinition = {
       choices: [{ id: "continue-meal", label: "继续", next: "shared-meal" }],
     },
     "shared-meal": {
+      savepoint: false,
       id: "shared-meal",
       title: "回忆",
       presentation: "cg",
@@ -226,6 +232,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "food-thanks": {
+      savepoint: false,
       id: "food-thanks",
       title: "林澈",
       role: "气象观测站守望人",
@@ -239,6 +246,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "wish-complete": {
+      savepoint: false,
       id: "wish-complete",
       title: "林澈",
       role: "气象观测站守望人",
@@ -252,6 +260,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "bookstore-memory": {
+      savepoint: false,
       id: "bookstore-memory",
       title: "林澈",
       role: "气象观测站守望人",
@@ -296,6 +305,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "stone-hint": {
+      savepoint: false,
       id: "stone-hint",
       text: "散乱的石堆，每一个代表一天，估计有几百个",
       choices: [
@@ -307,6 +317,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "stone-question": {
+      savepoint: false,
       id: "stone-question",
       title: "林澈",
       role: "气象观测站守望人",
@@ -321,6 +332,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "stone-count": {
+      savepoint: false,
       id: "stone-count",
       title: "林澈",
       role: "气象观测站守望人",
@@ -335,6 +347,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "stone-excuse": {
+      savepoint: false,
       id: "stone-excuse",
       title: "林澈",
       role: "气象观测站守望人",
@@ -372,6 +385,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "archive-active": {
+      savepoint: false,
       id: "archive-active",
       activeActorIds: ["archive_elder"],
       guide: {
@@ -389,6 +403,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "archive-record": {
+      savepoint: false,
       id: "archive-record",
       title: "居民档案",
       role: "小城档案馆",
@@ -404,6 +419,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "archive-elder-story": {
+      savepoint: false,
       id: "archive-elder-story",
       title: "档案馆老人",
       role: "旧城居民",
@@ -462,6 +478,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "cabin-invitation": {
+      savepoint: false,
       id: "cabin-invitation",
       title: "林澈",
       role: "气象观测站守望人",
@@ -569,6 +586,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "diary-page-89": {
+      savepoint: false,
       id: "diary-page-89",
       title: "日记 · 第89页",
       role: "木屋里的日记",
@@ -579,6 +597,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "diary-page-67": {
+      savepoint: false,
       id: "diary-page-67",
       title: "日记 · 第67页",
       role: "木屋里的日记",
@@ -589,6 +608,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "diary-page-30": {
+      savepoint: false,
       id: "diary-page-30",
       title: "日记 · 第30页",
       role: "木屋里的日记",
@@ -599,6 +619,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "diary-page-1": {
+      savepoint: false,
       id: "diary-page-1",
       title: "日记 · 第1页",
       role: "木屋里的日记",
@@ -617,6 +638,7 @@ export const ECHO_STORY: StoryDefinition = {
     },
 
     "fifth-act-complete": {
+      savepoint: false,
       id: "fifth-act-complete",
       title: "真相",
       role: "内心独白",
@@ -636,6 +658,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "confrontation-active": {
+      savepoint: false,
       id: "confrontation-active",
       text: "林澈就在屋外。该把你看到的一切告诉他了。",
       choices: [
@@ -671,6 +694,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "abandon-confirm": {
+      savepoint: false,
       id: "abandon-confirm",
       title: "林澈",
       role: "最后的确认",
@@ -710,6 +734,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "forgotten-blackout": {
+      savepoint: false,
       id: "forgotten-blackout",
       title: "回声 · 遗忘",
       role: "坏结局",
@@ -737,6 +762,7 @@ export const ECHO_STORY: StoryDefinition = {
       text: "没有人记得他来过。",
     },
     "loop-response": {
+      savepoint: false,
       id: "loop-response",
       title: "林澈",
       role: "气象观测站守望人",
@@ -750,6 +776,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "loop-confusion": {
+      savepoint: false,
       id: "loop-confusion",
       title: "林澈",
       role: "逐渐混乱的故事",
@@ -792,6 +819,7 @@ export const ECHO_STORY: StoryDefinition = {
       text: "下一次，要编一个什么故事呢？",
     },
     "truth-question": {
+      savepoint: false,
       id: "truth-question",
       title: "林澈",
       role: "真相",
@@ -820,6 +848,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "truth-admission": {
+      savepoint: false,
       id: "truth-admission",
       title: "林澈",
       role: "真相",
@@ -846,6 +875,7 @@ export const ECHO_STORY: StoryDefinition = {
     },
 
     "truth-why": {
+      savepoint: false,
       id: "truth-why",
       title: "林澈",
       role: "坦白",
@@ -859,6 +889,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "truth-town": {
+      savepoint: false,
       id: "truth-town",
       title: "林澈",
       role: "坦白",
@@ -872,6 +903,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "support-offer": {
+      savepoint: false,
       id: "support-offer",
       title: "林澈",
       role: "真实的邀请",
@@ -927,6 +959,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "visit-one-memory": {
+      savepoint: false,
       id: "visit-one-memory",
       title: "黄昏的观测站",
       role: "真实的回访",
@@ -947,6 +980,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "visit-thanks": {
+      savepoint: false,
       id: "visit-thanks",
       title: "林澈",
       role: "终章",

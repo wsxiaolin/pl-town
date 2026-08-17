@@ -140,3 +140,87 @@ assert(delayedRuntime.choices({ gameDay: 12 }).length === 0, 'waiting-node choic
 assert(delayedRuntime.isNodeAvailable({ gameDay: 13 }), 'the next visit should unlock after the game day changes');
 assert(delayedRuntime.choose('return', 3, { gameDay: 13 }), 'the unlocked visit should advance normally');
 assert(delayedRuntime.state().activeGuide === undefined, 'guide: null should explicitly clear the inherited guide');
+
+// Checkpoint (savepoint) behavior: a node marked `savepoint: false` is a
+// transient beat. The live node advances so the player sees it, but the
+// persisted resumption node stays at the last savepoint and flags still
+// persist so condition-gated progress survives a reload.
+const checkpointDefinition: StoryDefinition = {
+  schemaVersion: 1,
+  definitionVersion: 1,
+  id: 'main.checkpoint',
+  title: 'Checkpoint',
+  startNode: 'hub',
+  nodes: {
+    hub: { id: 'hub', text: 'Hub.', choices: [{ id: 'go', label: 'Go', next: 'transient', effects: [{ type: 'flag.set', flagId: 'hubSeen', value: true }] }] },
+    transient: {
+      id: 'transient', savepoint: false, text: 'Passing through.',
+      choices: [{ id: 'mark', label: 'Mark', next: 'rest', effects: [{ type: 'flag.set', flagId: 'transientSeen', value: true }] }],
+    },
+    rest: { id: 'rest', terminal: true, text: 'Rest.' },
+  },
+};
+let checkpointState: StoryState | null = createInitialStoryState(checkpointDefinition, 1);
+let persistedNodeId: string = checkpointState!.nodeId;
+const checkpointRuntime = new StoryRuntime(checkpointDefinition, {
+  get: () => checkpointState,
+  update: (_storyId, patch) => {
+    persistedNodeId = (patch.nodeId ?? persistedNodeId) as string;
+    checkpointState = {
+      ...checkpointState!, ...patch,
+      flags: patch.flags ?? checkpointState!.flags,
+      activeGuide: patch.activeGuide === null ? undefined : patch.activeGuide ?? checkpointState!.activeGuide,
+      updatedAt: 4,
+    };
+    return checkpointState;
+  },
+});
+const equals = (a: string, b: string): boolean => a === b;
+assert(checkpointRuntime.choose('go', 4), 'choosing into a transient beat should still advance the live node');
+assert(checkpointRuntime.state().nodeId === 'transient', 'the live node should reflect the transient beat');
+assert(equals(persistedNodeId, 'hub'), 'a transient beat must not overwrite the persisted savepoint node');
+assert(getStoryEventCount(checkpointState!, 'hubSeen') === 0, 'flags use flag.set, not event counts');
+assert(checkpointState!.flags['hubSeen'] === true, 'flags set before entering a transient beat should persist');
+assert(checkpointRuntime.choose('mark', 5), 'choosing out of a transient beat into a savepoint should persist');
+assert(equals(persistedNodeId, 'rest'), 'reaching a savepoint node should update the persisted resumption node');
+assert(checkpointRuntime.state().nodeId === 'rest', 'the live node should follow the savepoint after it is reached');
+assert(checkpointState!.flags['transientSeen'] === true, 'flags set on a transient beat should still persist');
+
+// A chain of consecutive transient beats must keep the resumption node pinned
+// to the last savepoint (not drift forward to an intermediate transient node).
+const chainDefinition: StoryDefinition = {
+  schemaVersion: 1,
+  definitionVersion: 1,
+  id: 'main.chain',
+  title: 'Chain',
+  startNode: 'anchor',
+  nodes: {
+    anchor: { id: 'anchor', text: 'Anchor.', choices: [{ id: 'a1', label: 'Go', next: 't1' }] },
+    t1: { id: 't1', savepoint: false, text: 'T1.', choices: [{ id: 'a2', label: 'Go', next: 't2' }] },
+    t2: { id: 't2', savepoint: false, text: 'T2.', choices: [{ id: 'a3', label: 'Go', next: 't3' }] },
+    t3: { id: 't3', savepoint: false, text: 'T3.', choices: [{ id: 'a4', label: 'Go', next: 'final' }] },
+    final: { id: 'final', terminal: true, text: 'Final.' },
+  },
+};
+let chainState: StoryState | null = createInitialStoryState(chainDefinition, 1);
+let chainPersisted: string = chainState!.nodeId;
+const chainRuntime = new StoryRuntime(chainDefinition, {
+  get: () => chainState,
+  update: (_storyId, patch) => {
+    chainPersisted = (patch.nodeId ?? chainPersisted) as string;
+    chainState = {
+      ...chainState!, ...patch,
+      flags: patch.flags ?? chainState!.flags,
+      activeGuide: patch.activeGuide === null ? undefined : patch.activeGuide ?? chainState!.activeGuide,
+      updatedAt: 6,
+    };
+    return chainState;
+  },
+});
+assert(chainRuntime.choose('a1', 6), 'entering a transient chain should advance');
+assert(chainRuntime.choose('a2', 7), 'advancing within a transient chain should advance');
+assert(chainRuntime.choose('a3', 8), 'advancing within a transient chain should advance');
+assert(chainRuntime.state().nodeId === 't3', 'the live node should be the latest transient beat');
+assert(equals(chainPersisted, 'anchor'), 'a transient chain must keep the resumption node pinned to the last savepoint');
+assert(chainRuntime.choose('a4', 9), 'reaching the final savepoint should advance');
+assert(equals(chainPersisted, 'final'), 'reaching a savepoint at the end of a transient chain should update the resumption node');

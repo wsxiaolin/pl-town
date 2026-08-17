@@ -66,7 +66,7 @@ const ECHO_NODES: StoryNodeSummary[] = [
 // Edge mirror of apps/web ECHO_STORY. Choice edges follow each node's
 // choices[].next; trigger edges come from interactions / buildingInteractions /
 // worldInteractions and use the actor / building / interest-point id as their
-// `from` source. Keep this in sync with echoStory.ts (definitionVersion 11).
+// `from` source. Keep this in sync with echoStory.ts (definitionVersion 12).
 const ECHO_EDGES: StoryEdgeSummary[] = [
   { from: 'meeting', to: 'not-alone', kind: 'choice', label: '你一个人住在这里？' },
   { from: 'not-alone', to: 'mountain-memory', kind: 'choice', label: '' },
@@ -151,7 +151,7 @@ const ECHO_EDGES: StoryEdgeSummary[] = [
 ];
 
 export const STORY_CATALOG: readonly StorySummary[] = Object.freeze([
-  { id: 'main.echo.act-one', title: '回声', definitionVersion: 11, startNode: 'meeting', nodes: ECHO_NODES, edges: ECHO_EDGES },
+  { id: 'main.echo.act-one', title: '回声', definitionVersion: 12, startNode: 'meeting', nodes: ECHO_NODES, edges: ECHO_EDGES },
 ]);
 
 const STORY_BY_ID = new Map(STORY_CATALOG.map((story) => [story.id, story]));
