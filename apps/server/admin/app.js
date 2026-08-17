@@ -233,7 +233,7 @@ async function loadOffsiteBackups() {
   state.offsiteEnabled = true; $('#offsitePanel').hidden = false;
   const rows = data.items.map((backup) => {
     const row = node('tr');
-    const status = backup.orphan ? '本地缺失' : backup.inSync ? '已知' : '校验不一致';
+    const status = backup.orphan ? '本地缺失' : backup.inSync ? '一致' : '校验不一致';
     const statusCell = node('td'); const badge = node('span', status, `status nowrap${backup.orphan || !backup.inSync ? ' bad' : ''}`); statusCell.append(badge);
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const link = node('a', '下载', 'download'); link.href = `/admin/api/offsite/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
