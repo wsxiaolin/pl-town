@@ -81,6 +81,20 @@ export const BACKUP_INTERVAL_MINUTES = integer('BACKUP_INTERVAL_MINUTES', 1_440,
 export const BACKUP_RETENTION_DAYS = integer('BACKUP_RETENTION_DAYS', 30, 1, 3_650);
 export const BACKUP_MAX_FILES = integer('BACKUP_MAX_FILES', 30, 1, 1_000);
 
+// Off-site (Alibaba Cloud OSS) backups, uploaded/downloaded manually from the
+// admin console. The OSS store is a secondary copy: a remote object can only be
+// created from a local verified backup, so every remote backup always has a
+// local original ("remote is a subset of local").
+export const OSS_ENABLED = boolean('OSS_ENABLED', false);
+export const OSS_REGION = process.env.OSS_REGION ?? '';
+export const OSS_BUCKET = process.env.OSS_BUCKET ?? '';
+export const OSS_ACCESS_KEY_ID = process.env.OSS_ACCESS_KEY_ID ?? '';
+export const OSS_ACCESS_KEY_SECRET = process.env.OSS_ACCESS_KEY_SECRET ?? '';
+export const OSS_ENDPOINT = process.env.OSS_ENDPOINT ?? '';
+export const OSS_PREFIX = process.env.OSS_PREFIX ?? 'minicity/backups/';
+export const OSS_SECURE = boolean('OSS_SECURE', true);
+export const OFFSITE_BACKUP_ENABLED = OSS_ENABLED && OSS_BUCKET !== '' && OSS_ACCESS_KEY_ID !== '' && OSS_ACCESS_KEY_SECRET !== '';
+
 if ((ADMIN_USERNAME && !ADMIN_PASSWORD) || (!ADMIN_USERNAME && ADMIN_PASSWORD)) {
   throw new Error('ADMIN_USERNAME and ADMIN_PASSWORD must be configured together');
 }
@@ -90,6 +104,9 @@ if (new Set(ADMIN_ACCOUNTS.map((account) => account.username)).size !== ADMIN_AC
 }
 if (IS_PRODUCTION && !ADMIN_ENABLED) throw new Error('Production requires at least one administrator account');
 if (IS_PRODUCTION && ALLOWED_ORIGINS.size === 0) throw new Error('Production requires at least one ALLOWED_ORIGINS entry');
+if (OSS_ENABLED && !OFFSITE_BACKUP_ENABLED) throw new Error('OSS_ENABLED requires OSS_BUCKET, OSS_ACCESS_KEY_ID, and OSS_ACCESS_KEY_SECRET');
+if (OSS_ENABLED && OSS_REGION === '' && OSS_ENDPOINT === '') throw new Error('OSS_ENABLED requires OSS_REGION or OSS_ENDPOINT');
+if (OSS_ENABLED && OSS_PREFIX.startsWith('/')) throw new Error('OSS_PREFIX must not start with a slash');
 
 for (const directory of [DATA_DIR, LOG_DIR, BACKUP_DIR]) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });

@@ -1,6 +1,7 @@
 const state = {
   csrf: '', actor: '', view: 'overview', houses: [], users: [], houseDraftMembers: [], houseEditingOwnerId: '',
   chatFilter: 'visible', storyFilter: '', npcs: [], npcSelectedId: '', npcRequestFilter: 'pending',
+  offsiteEnabled: false, localBackups: [],
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -57,6 +58,7 @@ const detailRows = (container, rows) => {
 
 async function loadOverview() {
   const data = await api('/overview'); const { summary } = data;
+  state.offsiteEnabled = data.offsite?.enabled === true;
   $('#metrics').replaceChildren(
     metric('注册居民', formatNumber(summary.users), `${summary.disabledUsers} 个账号已停用`),
     metric('当前在线', formatNumber(data.online), '实时 WebSocket 会话'),
@@ -65,7 +67,7 @@ async function loadOverview() {
   );
   const integrity = $('#integrityStatus'); integrity.textContent = data.integrity.ok ? '正常' : '异常'; integrity.className = `status${data.integrity.ok ? '' : ' bad'}`;
   detailRows($('#databaseDetails'), [['完整性检查', data.integrity.message], ['物品记录', formatNumber(summary.inventoryRows)], ['剧情存档', formatNumber(summary.storyParticipants)], ['聊天记录', formatNumber(summary.chatMessages)], ['最近备份', data.backups[0] ? formatDate(data.backups[0].createdAt) : '尚无备份']]);
-  detailRows($('#backupPolicy'), [['自动备份', data.backupPolicy.enabled ? '已启用' : '已停用'], ['备份间隔', `${data.backupPolicy.intervalMinutes} 分钟`], ['保留期限', `${data.backupPolicy.retentionDays} 天`], ['现有备份', `${data.backups.length} 个（最近）`]]);
+  detailRows($('#backupPolicy'), [['自动备份', data.backupPolicy.enabled ? '已启用' : '已停用'], ['备份间隔', `${data.backupPolicy.intervalMinutes} 分钟`], ['保留期限', `${data.backupPolicy.retentionDays} 天`], ['现有备份', `${data.backups.length} 个（最近）`], ['异地备份', data.offsite?.enabled ? '已配置' : '未配置']]);
 }
 
 async function loadUsers() {
@@ -187,7 +189,12 @@ async function deleteHouse(buildingId) {
 }
 
 async function loadBackups() {
-  const data = await api('/backups'); const rows = data.items.map((backup) => {
+  const data = await api('/backups'); state.localBackups = data.items;
+  renderBackupRows(data.items);
+  if (state.offsiteEnabled) await loadOffsiteBackups();
+}
+function renderBackupRows(items) {
+  const rows = items.map((backup) => {
     const row = node('tr'); const actions = node('td', undefined, 'align-right');
     const group = node('div', undefined, 'row-actions');
     const verify = node('button', '重新校验'); verify.type = 'button'; verify.addEventListener('click', async () => {
@@ -198,10 +205,49 @@ async function loadBackups() {
     });
     const link = node('a', '下载', 'download'); link.href = `/admin/api/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
     const restore = node('button', '恢复'); restore.type = 'button'; restore.addEventListener('click', () => confirmAction('恢复备份', `将用 ${backup.name} 覆盖当前数据库，所有在线居民会被强制下线并需重新登录。确定继续？`, () => restoreBackup(backup.name)));
-    group.append(verify, link, restore); actions.append(group);
+    group.append(verify, link, restore);
+    if (state.offsiteEnabled) {
+      const offsite = node('button', '上传异地'); offsite.type = 'button';
+      offsite.addEventListener('click', async () => {
+        offsite.disabled = true;
+        try { await api(`/offsite/backups/${encodeURIComponent(backup.name)}/upload`, { method: 'POST' }); showNotice('备份已上传到异地', true); await loadBackups(); }
+        catch (error) { showNotice(error.message); }
+        finally { offsite.disabled = false; }
+      });
+      group.append(offsite);
+    }
+    actions.append(group);
     row.append(node('td', backup.name), node('td', formatDate(backup.createdAt)), node('td', backup.verified ? formatDate(backup.verifiedAt) : '待校验'), node('td', formatBytes(backup.bytes)), actions); return row;
   });
   $('#backupRows').replaceChildren(...(rows.length ? rows : [emptyRow(5, '尚无数据库备份')]));
+}
+async function loadOffsiteBackups() {
+  let data;
+  try { data = await api('/offsite/backups'); }
+  catch (error) {
+    if (state.offsiteEnabled) { state.offsiteEnabled = false; renderBackupRows(state.localBackups ?? []); }
+    $('#offsitePanel').hidden = true;
+    return;
+  }
+  const changed = state.offsiteEnabled !== true;
+  state.offsiteEnabled = true; $('#offsitePanel').hidden = false;
+  const rows = data.items.map((backup) => {
+    const row = node('tr');
+    const status = backup.orphan ? '本地缺失' : backup.inSync ? '本地一致' : '校验不一致';
+    const statusCell = node('td'); const badge = node('span', status, `status${backup.orphan || !backup.inSync ? ' bad' : ''}`); statusCell.append(badge);
+    const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
+    const link = node('a', '下载', 'download'); link.href = `/admin/api/offsite/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
+    const del = node('button', '删除', 'warning'); del.type = 'button';
+    del.addEventListener('click', () => confirmAction('删除异地备份', `将从阿里云 OSS 删除 ${backup.name}，本机备份不受影响。确定继续？`, () => deleteOffsite(backup.name)));
+    group.append(link, del); actions.append(group);
+    row.append(node('td', backup.name), node('td', formatDate(backup.uploadedAt)), node('td', backup.sha256 ? '已校验' : '—'), node('td', formatBytes(backup.bytes)), statusCell, actions); return row;
+  });
+  $('#offsiteRows').replaceChildren(...(rows.length ? rows : [emptyRow(6, '尚无异地备份，请在上方备份列表点击“上传异地”')]));
+  if (changed) renderBackupRows(state.localBackups ?? []);
+}
+async function deleteOffsite(name) {
+  try { await api(`/offsite/backups/${encodeURIComponent(name)}`, { method: 'DELETE' }); showNotice('异地备份已删除', true); await loadBackups(); }
+  catch (error) { showNotice(error.message); }
 }
 async function restoreBackup(name) {
   try { await api(`/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('备份已恢复，所有居民会话已撤销', true); await Promise.all([loadBackups(), loadOverview()]); }

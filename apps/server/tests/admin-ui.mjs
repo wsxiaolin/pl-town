@@ -92,6 +92,8 @@ try {
 
   await page.locator('[data-view="backups"]').click();
   await page.locator('#backupRows').waitFor();
+  const offsitePanelHidden = await page.locator('#offsitePanel').evaluate((element) => element.hidden);
+  if (!offsitePanelHidden) throw new Error('Admin off-site backup panel must stay hidden when OSS is not configured');
   await page.locator('[data-view="users"]').click();
   await page.locator('#userRows').waitFor();
 
