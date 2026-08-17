@@ -107,16 +107,32 @@
   padding: 14px 16px;
   border-bottom: 1px solid #d9d2c0;
 }
-/* 奇数栏（左侧）右边框作栏线 */
-.np-col:nth-child(odd) {
-  border-right: 1px solid #d9d2c0;
+/* 通栏板块：独占整行（单板块版面 / 奇数栏末尾孤栏） */
+.np-col-full {
+  grid-column: 1 / -1;
+}
+/* 桌面端栏线：仅奇数索引（左栏）右侧加竖线，通栏板块除外 */
+@media (min-width: 681px) {
+  .np-col:nth-child(odd):not(.np-col-full) {
+    border-right: 1px solid #d9d2c0;
+  }
 }
 
-/* 头条跨栏板块 */
+/* 头条通栏板块 */
 .np-col-lead {
   padding: 0 0 16px;
   border-bottom: 1px solid #cfc6b0;
   margin-bottom: 0;
+}
+
+/* 整版无内容占位 */
+.np-blank {
+  padding: 26px 0 18px;
+  text-align: center;
+  color: #8a8068;
+  font-size: 12px;
+  letter-spacing: .08em;
+  border-top: 1px solid #d9d2c0;
 }
 
 /* ── 元素样式 ── */
@@ -181,5 +197,4 @@
   .np-text { font-size: 12.5px; line-height: 1.7; }
   .np-section { font-size: 15px; }
   .np-grid { grid-template-columns: 1fr; }
-  .np-col { border-right: 0 !important; }
 }

@@ -163,14 +163,28 @@ function splitSections(blocks: readonly NewspaperBlock[]): NewsSection[] {
   return sections;
 }
 
-/** 渲染单个板块容器 */
-function renderSectionColumn(document: Document, section: NewsSection): HTMLElement {
+/** 渲染单个板块容器；fullWidth 时整版通栏（多栏网格中独占一行） */
+function renderSectionColumn(document: Document, section: NewsSection, fullWidth = false): HTMLElement {
   const col = document.createElement('div');
-  col.className = 'np-col';
+  col.className = fullWidth ? 'np-col np-col-full' : 'np-col';
   for (const block of section.blocks) {
     col.appendChild(renderBlock(document, block));
   }
   return col;
+}
+
+/**
+ * 渲染多栏网格。板块数量为奇数时，最后一个板块独占整行（通栏），
+ * 避免出现孤立的半栏 + 右侧空白。
+ */
+function renderGrid(document: Document, sections: NewsSection[]): HTMLElement {
+  const grid = document.createElement('div');
+  grid.className = 'np-grid';
+  sections.forEach((section, index) => {
+    const lastOrphan = sections.length > 1 && sections.length % 2 === 1 && index === sections.length - 1;
+    grid.appendChild(renderSectionColumn(document, section, lastOrphan));
+  });
+  return grid;
 }
 
 function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number): HTMLElement {
@@ -198,15 +212,15 @@ function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number
 
   const allSections = splitSections(page.blocks);
 
-  // 分离头版引导区（motto / separator 等，在第一个 section 之前的内容）
-  const firstSectionIdx = allSections.findIndex((s) => s.title !== '');
-  const preamble = firstSectionIdx > 0 ? allSections.slice(0, firstSectionIdx) : [];
-  const namedSections = firstSectionIdx >= 0 ? allSections.slice(firstSectionIdx) : allSections;
+  // 分离头版引导区（motto / separator 等，位于第一个具名板块之前的无名内容）
+  const firstNamedIdx = allSections.findIndex((s) => s.title !== '');
+  const preamble = firstNamedIdx > 0 ? allSections.slice(0, firstNamedIdx) : [];
+  const namedSections = firstNamedIdx >= 0 ? allSections.slice(firstNamedIdx) : allSections;
 
   // 过滤无实质内容的板块
   const contentSections = namedSections.filter(sectionHasContent);
 
-  // 引导区（motto + separator + 精知优选的 intro text）渲染为跨栏头条
+  // 引导区（motto + separator）渲染为报头下方的通栏引导
   if (preamble.length > 0) {
     const headline = document.createElement('div');
     headline.className = 'np-headline';
@@ -218,43 +232,40 @@ function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number
     body.appendChild(headline);
   }
 
-  // 按权重排序：最大的板块放头条跨栏，其余按多栏排版
-  if (contentSections.length > 0) {
+  if (contentSections.length === 0) {
+    // 整版无实质内容（如社论/新闻留空的版面）：显示占位而非空白
+    const blank = document.createElement('div');
+    blank.className = 'np-blank';
+    blank.textContent = '本版暂无内容';
+    body.appendChild(blank);
+  } else if (contentSections.length === 1) {
+    // 单板块版面（占绝大多数）：整版通栏，避免半栏 + 右侧空白
+    body.appendChild(renderSectionColumn(document, contentSections[0]!, true));
+  } else {
+    // 多板块版面：权重最高的板块作头条通栏，其余按多栏网格排版
     const weighted = contentSections.map((s) => ({
       section: s,
       weight: estimateSectionWeight(s.blocks),
     }));
 
-    // 权重最大的板块做跨栏头条（如果有多个板块且权重差距明显）
+    // 头条判定：板块足够多且权重差距明显时才拆分头条
     const maxWeight = Math.max(...weighted.map((w) => w.weight));
     const leadCandidates = weighted.filter((w) => w.weight >= maxWeight * 0.6);
     const hasLead = leadCandidates.length < weighted.length && contentSections.length >= 3;
 
     if (hasLead) {
-      // 头条跨栏
       const lead = weighted.reduce((best, w) => (w.weight > best.weight ? w : best));
-      const leadCol = renderSectionColumn(document, lead.section);
+      const leadCol = renderSectionColumn(document, lead.section, true);
       leadCol.classList.add('np-col-lead');
       body.appendChild(leadCol);
 
       // 其余板块多栏排列
       const rest = contentSections.filter((s) => s !== lead.section);
       if (rest.length > 0) {
-        const grid = document.createElement('div');
-        grid.className = 'np-grid';
-        for (const sec of rest) {
-          grid.appendChild(renderSectionColumn(document, sec));
-        }
-        body.appendChild(grid);
+        body.appendChild(renderGrid(document, rest));
       }
     } else {
-      // 板块不多时全部多栏
-      const grid = document.createElement('div');
-      grid.className = 'np-grid';
-      for (const sec of contentSections) {
-        grid.appendChild(renderSectionColumn(document, sec));
-      }
-      body.appendChild(grid);
+      body.appendChild(renderGrid(document, contentSections));
     }
   }
 

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { RENDER_SETTINGS, seedCityStorage, waitForCityBooted, waitForCityReady } from './helpers';
+import { RENDER_SETTINGS, seedCityStorage, stubNewsstandWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -618,42 +618,8 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
 
 test('newsstand opens the newspaper catalog and reads a multi-page issue', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.addInitScript(() => {
-    localStorage.setItem('minicityCGSeenV3', 'true');
-    localStorage.setItem('minicityUser', 'news-tester');
-    localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
-    const NativeWebSocket = window.WebSocket;
-    class NewsGameWebSocket extends EventTarget {
-      readyState = NativeWebSocket.CONNECTING;
-      progress = {
-        currency: 0,
-        inventory: {},
-        achievements: ['citizen'],
-        unlockedBuildings: ['newsstand'],
-        visitedBuildings: ['activity', 'library', 'newsstand'],
-      };
-      catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
-      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
-      send(raw: string) {
-        const request = JSON.parse(raw);
-        let response: Record<string, unknown> | null = null;
-        if (request.type === 'hello') {
-          response = {
-            type: 'hello', token: 'news-token',
-            user: { id: 'news-user', nickname: 'news-tester', email: null, position: { x: 0, y: 0, z: -6 } },
-            players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog,
-          };
-        } else if (request.type === 'progress.building.visit') {
-          response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
-        }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
-      }
-      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
-    }
-    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
-      construct(Target, args) { return String(args[0]).includes(':8787') ? new NewsGameWebSocket() : Reflect.construct(Target, args); },
-    }) });
-  });
+  await seedCityStorage(page, 'news-tester');
+  stubNewsstandWebSocket(page);
 
   await page.goto('/');
   await page.waitForFunction(() => {
@@ -679,6 +645,8 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   await expect(page.locator('#newspaperStage .np-issue-title')).toHaveText('星辉周刊 2023.7.23');
   await expect(page.locator('#newspaperStage .np-motto')).toBeVisible();
   await expect(page.locator('#newspaperStage .np-body')).toContainText('精知优选');
+  // 单板块版面整版通栏，不出现半栏 + 右侧空白
+  await expect(page.locator('#newspaperStage .np-body .np-col-full')).toHaveCount(1);
 
   // The first issue spans multiple pages; flip to the last one.
   const total = Number(await page.locator('#newspaperPageTotal').textContent());
@@ -690,6 +658,8 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   }
   await expect(page.locator('#newspaperNext')).toBeDisabled();
   await expect(page.locator('#newspaperPageNo')).toHaveText(String(total));
+  // 末版（无 section 的长文收尾）同样整版通栏
+  await expect(page.locator('#newspaperStage .np-body .np-col-full')).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 
   // Going back returns to the catalog without errors.
@@ -697,5 +667,62 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   await expect(reader).not.toHaveClass(/open/);
   await expect(panel).toHaveClass(/open/);
   await page.locator('#newsstandClose').click();
+  await expect(panel).not.toHaveClass(/open/);
+});
+
+test('newsstand hides empty pages and degrades to a single column on mobile', async ({ page }) => {
+  test.setTimeout(120_000);
+  await seedCityStorage(page, 'news-tester');
+  stubNewsstandWebSocket(page);
+
+  await page.goto('/');
+  await page.waitForFunction(() => {
+    const mini = (window as any).__mini?.();
+    return !!mini?.player?.visible;
+  }, undefined, { timeout: 30_000 });
+
+  await page.evaluate(() => (window as any).__mini().interactBuilding('newsstand'));
+  const panel = page.locator('#newsstandPanel');
+  await expect(panel).toHaveClass(/open/);
+
+  // Open a 2024 issue whose 社论呐喊 page is blank (content is「无」).
+  const blankIssue = page.locator('#newsstandList .np-issue', { hasText: '2024.7.7' });
+  await blankIssue.click();
+  const reader = page.locator('#newspaperOverlay');
+  await expect(reader).toHaveClass(/open/);
+  await expect(page.locator('#newspaperMeta')).toContainText('星辉周刊 2024.7.7');
+
+  // 第 5 版社论呐喊为空：整版显示占位提示而非空白
+  const total = Number(await page.locator('#newspaperPageTotal').textContent());
+  const nextBtn = page.locator('#newspaperNext');
+  for (let index = 0; index < 4; index += 1) {
+    await expect(nextBtn).toBeEnabled();
+    await nextBtn.click();
+  }
+  await expect(page.locator('#newspaperPageNo')).toHaveText('5');
+  await expect(page.locator('#newspaperStage .np-blank')).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-body')).not.toContainText('社论呐喊');
+  await expect(page.locator('#newspaperPageTotal')).toHaveText(String(total));
+
+  // 移动端视口：竖屏提示会拦截指针事件，改用 DOM 调用驱动；报纸保持单栏、无横向溢出
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    document.getElementById('newspaperClose')?.click();
+    document.getElementById('newsstandClose')?.click();
+  });
+  await expect(reader).not.toHaveClass(/open/);
+  await expect(panel).not.toHaveClass(/open/);
+  await page.evaluate(() => (window as any).__mini().interactBuilding('newsstand'));
+  await expect(panel).toHaveClass(/open/);
+  await page.evaluate(() => {
+    const button = Array.from(document.querySelectorAll<HTMLElement>('.np-issue')).find((b) => b.textContent?.includes('2024.7.7'));
+    button?.click();
+  });
+  await expect(reader).toHaveClass(/open/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  await page.evaluate(() => document.getElementById('newspaperClose')?.click());
+  await expect(reader).not.toHaveClass(/open/);
+  await page.evaluate(() => document.getElementById('newsstandClose')?.click());
   await expect(panel).not.toHaveClass(/open/);
 });
