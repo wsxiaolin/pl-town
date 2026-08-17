@@ -37,8 +37,13 @@ const globalPublicMutationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
-const npcChangeRequestRate = new FixedWindowRateLimiter(3, 60_000);
+const npcChangeRequestRate = new FixedWindowRateLimiter(5, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
+// Token restores (edit-page load with a stored token) are throttled per IP
+// separately so a burst of page loads cannot drain the shared global auth
+// budget used by WebSocket `hello` logins. Password sign-ins still use the
+// global limiter to stay consistent with the game login path.
+const npcEditTokenRestoreRate = new FixedWindowRateLimiter(20, 60_000);
 // The edit page only needs the identity fields for its dropdown; the full
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
@@ -329,14 +334,19 @@ const http = createServer(async (request, response) => {
   }
   if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
     try {
-      if (!npcEditLoginRate.consume(requestIp).allowed || !globalAuthenticationRate.consume('global').allowed) {
+      const body = await readJson(request, 2_048);
+      const isRestore = typeof body.token === 'string' && body.token;
+      const limiter = isRestore ? npcEditTokenRestoreRate : npcEditLoginRate;
+      // Password sign-ins keep using the global auth budget (the game does
+      // too); token restores use only the per-IP restore limiter so a burst
+      // of edit-page loads cannot starve WebSocket `hello` logins.
+      if (!limiter.consume(requestIp).allowed || (!isRestore && !globalAuthenticationRate.consume('global').allowed)) {
         response.writeHead(429, { ...headers, 'retry-after': '60' });
         response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
         return;
       }
-      const body = await readJson(request, 2_048);
-      const result = typeof body.token === 'string' && body.token
-        ? await authenticate({ token: body.token })
+      const result = isRestore
+        ? await authenticate({ token: body.token as string })
         : await authenticate({
             nickname: typeof body.nickname === 'string' ? body.nickname : '',
             password: typeof body.password === 'string' ? body.password : '',
@@ -375,7 +385,26 @@ const http = createServer(async (request, response) => {
       if (!title || title.length > 120) throw new HttpBodyError('A title (1-120 chars) is required', 400);
       if (!summary || summary.length > 2_000) throw new HttpBodyError('A summary (1-2000 chars) is required', 400);
       if (!getNpcCatalogEntry(npcId) && kind !== 'add') throw new HttpBodyError('Unknown NPC', 400);
-      const change = body.change && typeof body.change === 'object' && !Array.isArray(body.change) ? body.change as Record<string, unknown> : {};
+      const rawChange = body.change && typeof body.change === 'object' && !Array.isArray(body.change) ? body.change as Record<string, unknown> : {};
+      // Validate the public `change` payload server-side: only the known
+      // string fields are accepted, with bounded length.
+      const change: Record<string, string> = {};
+      if (typeof rawChange.proposal === 'string') {
+        const proposal = rawChange.proposal.trim();
+        if (proposal.length > 4_000) throw new HttpBodyError('修改内容最多 4000 个字符', 400);
+        if (proposal) change.proposal = proposal;
+      } else if (rawChange.proposal !== undefined) {
+        throw new HttpBodyError('修改内容格式不正确', 400);
+      }
+      if (typeof rawChange.proposedName === 'string') {
+        const proposedName = rawChange.proposedName.trim();
+        if (proposedName.length > 40) throw new HttpBodyError('拟用名称最多 40 个字符', 400);
+        if (proposedName) change.proposedName = proposedName;
+      } else if (rawChange.proposedName !== undefined) {
+        throw new HttpBodyError('拟用名称格式不正确', 400);
+      }
+      // A new NPC needs a name to identify it in the review queue.
+      if (kind === 'add' && !change.proposedName) throw new HttpBodyError('新增 NPC 需要填写拟用名称', 400);
       const created = db.createNpcChangeRequest({ requesterId: user.id, requesterNickname: user.nickname, npcId, kind, title, summary, change });
       response.writeHead(201, headers);
       response.end(JSON.stringify({ ok: true, id: created.id }));

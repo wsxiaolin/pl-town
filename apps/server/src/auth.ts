@@ -42,29 +42,29 @@ export function validateNickname(nickname: string): string | null {
 
 export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number } }): Promise<{ user: User; token: string; registered: boolean }> {
   if (input.token) {
-    if (input.token.length > 128) throw new Error('Session is invalid');
+    if (input.token.length > 128) throw new Error('会话无效');
     const user = getUserByToken(hash(input.token));
     if (user) return { user, token: input.token, registered: false };
-    throw new Error('Session expired; sign in again');
+    throw new Error('会话已过期，请重新登录');
   }
 
   const nickname = (input.nickname ?? '').normalize('NFKC').trim();
   const nicknameError = validateNickname(nickname);
   if (nicknameError) throw new Error(nicknameError);
   const password = input.password ?? '';
-  if (!password) throw new Error('Password is required');
-  if (password.length > 128) throw new Error('Password is too long');
+  if (!password) throw new Error('请输入密码');
+  if (password.length > 128) throw new Error('密码过长');
 
   const existing = getUserByNickname(nickname);
   if (existing) {
     if (existing.disabled || !existing.passwordHash || !await verifyPassword(password, existing.passwordHash)) {
-      throw new Error('Nickname or password is incorrect');
+      throw new Error('昵称或密码不正确');
     }
     const newToken = randomBytes(32).toString('base64url');
     updateUserToken(existing.id, hash(newToken), sessionExpiry());
     return { user: getUserByToken(hash(newToken))!, token: newToken, registered: false };
   }
-  if (password.length < 10) throw new Error('New passwords must contain at least 10 characters');
+  if (password.length < 10) throw new Error('新密码至少需要 10 个字符');
 
   const newToken = randomBytes(32).toString('base64url');
   const tokenHash = hash(newToken);

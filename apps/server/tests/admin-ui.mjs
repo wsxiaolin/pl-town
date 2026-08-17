@@ -108,6 +108,10 @@ try {
   const npcDialogWidth = await page.locator('#npcDetailDialog').evaluate((element) => element.getBoundingClientRect().width);
   if (npcDialogWidth < 600) throw new Error('NPC detail dialog must provide a wide editing workspace');
   await page.locator('#npcRequestRows').waitFor();
+  // The modal's top-layer ::backdrop intercepts clicks outside the dialog, so
+  // close it before navigating to another admin view.
+  await page.locator('#npcDetailDialog').evaluate((dialog) => dialog.close());
+  if (await page.locator('#npcDetailDialog[open]').count()) throw new Error('NPC detail dialog must close before navigating away');
 
   await page.locator('[data-view="telemetry"]').click();
   await page.locator('#telemetryMetrics .metric').first().waitFor();

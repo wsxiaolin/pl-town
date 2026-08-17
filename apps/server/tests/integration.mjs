@@ -445,6 +445,25 @@ try {
     body: JSON.stringify({ token: requesterToken, npcId: 'does_not_exist', kind: 'edit', title: 'Unknown NPC', summary: 'should fail' }),
   });
   if (unknownNpc.status !== 400) throw new Error('NPC change request submission must reject unknown NPC for non-add kinds');
+  // Reuse the NPC editor session (no new registration, which would hit the
+  // per-IP registration cap) for the add/change-validation cases below.
+  const addEditorToken = npcEditLoginPayload.token;
+  const addWithoutName = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: addEditorToken, npcId: 'proposal-new', kind: 'add', title: '新增 NPC', summary: '忘记填名称。' }),
+  });
+  if (addWithoutName.status !== 400) throw new Error('NPC change request submission must require a proposed name for the add kind');
+  const badChangeType = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: addEditorToken, npcId: 'linche', kind: 'edit', title: '坏 change', summary: 'should fail', change: { proposal: 123 } }),
+  });
+  if (badChangeType.status !== 400) throw new Error('NPC change request submission must reject a non-string change field');
+  const addSubmission = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: addEditorToken, npcId: 'proposal-new', kind: 'add', title: '新增报刊亭老板', summary: '希望增加一个常驻 NPC。', change: { proposedName: '报刊亭老板' } }),
+  });
+  const addPayload = await addSubmission.json();
+  if (addSubmission.status !== 201 || !addPayload.ok) throw new Error('NPC change request submission must accept an add kind with a proposed name');
   const submitted = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
     body: JSON.stringify({ token: requesterToken, npcId: 'linche', kind: 'dialog', title: '润色林澈开场白', summary: '建议把第一句改得更柔和。' }),

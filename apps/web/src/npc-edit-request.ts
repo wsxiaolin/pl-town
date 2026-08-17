@@ -75,6 +75,7 @@ async function login(event: SubmitEvent): Promise<void> {
 
 async function submitRequest(event: SubmitEvent): Promise<void> {
   event.preventDefault();
+  setStatus(requestStatus, '');
   if (!session) return;
   const submit = $('requestSubmit') as HTMLButtonElement;
   const npcId = ($('requestNpc') as HTMLSelectElement).value;
@@ -85,9 +86,10 @@ async function submitRequest(event: SubmitEvent): Promise<void> {
   const proposedName = ($('requestNpcName') as HTMLInputElement).value.trim();
   if (!npcId && kind !== 'add') return setStatus(requestStatus, '请选择目标 NPC');
   if (!title || !summary) return setStatus(requestStatus, '请填写标题和详细说明');
+  if (kind === 'add' && !proposedName) return setStatus(requestStatus, '新增 NPC 需要填写拟用名称');
   const change: Record<string, string> = {};
   if (changeText) change.proposal = changeText;
-  if (kind === 'add' && proposedName) change.proposedName = proposedName;
+  if (proposedName) change.proposedName = proposedName;
   submit.disabled = true;
   try {
     const response = await fetch('/town-api/npc-change-requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: session.token, npcId: kind === 'add' ? ADD_PLACEHOLDER_NPC_ID : npcId, kind, title, summary, change }) });

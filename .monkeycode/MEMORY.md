@@ -42,13 +42,6 @@ Entries discovered by the Agent during task execution should follow this format:
 
 [Project Knowledge Summary]
 - Date: 2026-08-17
-- Context: Discovered by Agent while validating the NPC edit request workflow
-- Category: Environment Configuration
-- Instructions:
-  - This checkout currently has no `node_modules`; run the dependency installation matching the committed lockfile before `npm run typecheck`, Vite builds, server builds, or Playwright tests. Without dependencies, typechecking stops with `tsc: not found`.
-
-[Project Knowledge Summary]
-- Date: 2026-08-17
 - Context: Discovered by Agent while reworking the NPC edit-request page into the frontend multi-page app per review feedback
 - Category: Operations & Deployment
 - Instructions:
