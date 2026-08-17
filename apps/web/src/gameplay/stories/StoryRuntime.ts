@@ -82,6 +82,10 @@ export function createInitialStoryState(definition: StoryDefinition, now = Date.
 
 export class StoryRuntime {
   private readonly listeners = new Set<(event: StoryRuntimeEvent) => void>();
+  // The live node the player is currently viewing. It may diverge from the
+  // persisted state when traversing non-savepoint beats: persistence keeps the
+  // last savepoint so reload resumes there, while the live node drives display.
+  private liveNodeId: string | null = null;
 
   constructor(
     private readonly definition: StoryDefinition,
@@ -89,11 +93,14 @@ export class StoryRuntime {
   ) {}
 
   state(): StoryState {
-    return this.repository.get(this.definition.id) ?? createInitialStoryState(this.definition);
+    const persisted = this.repository.get(this.definition.id) ?? createInitialStoryState(this.definition);
+    const nodeId = this.liveNodeId ?? persisted.nodeId;
+    return this.definition.nodes[nodeId] ? { ...persisted, nodeId } : persisted;
   }
 
   node(): StoryDefinition['nodes'][string] {
-    const node = this.definition.nodes[this.state().nodeId] ?? this.definition.nodes[this.definition.startNode];
+    const state = this.state();
+    const node = this.definition.nodes[state.nodeId] ?? this.definition.nodes[this.definition.startNode];
     if (!node) throw new Error(`Story ${this.definition.id} has no start node`);
     return node;
   }
@@ -130,25 +137,58 @@ export class StoryRuntime {
     const effects = [...legacyEffects, ...(choice.effects ?? [])];
     const applied = applyEffects(state, effects, now);
     const flags = applied.flags;
-    const declaredGuide = this.definition.nodes[choice.next]!.guide;
+    const targetNode = this.definition.nodes[choice.next]!;
+    const isSavepoint = targetNode.savepoint !== false;
+    const declaredGuide = targetNode.guide;
     const activeGuide = declaredGuide === null ? null : declaredGuide ?? state.activeGuide;
-    const next = this.repository.update(this.definition.id, {
-      nodeId: choice.next,
-      flags,
-      ending: choice.ending,
-      visit: choice.visit,
-      nodeEnteredGameDay: context.gameDay,
-      activeGuide,
-    }) ?? {
-      ...state,
-      nodeId: choice.next,
-      flags,
-      ending: choice.ending ?? state.ending,
-      visitCount: state.visitCount + (choice.visit ? 1 : 0),
-      nodeEnteredGameDay: context.gameDay,
-      activeGuide: activeGuide ?? undefined,
-      updatedAt: now,
-    };
+    let next: StoryState;
+    if (isSavepoint) {
+      const persisted = this.repository.update(this.definition.id, {
+        nodeId: choice.next,
+        flags,
+        ending: choice.ending,
+        visit: choice.visit,
+        nodeEnteredGameDay: context.gameDay,
+        activeGuide,
+      }) ?? {
+        ...state,
+        nodeId: choice.next,
+        flags,
+        ending: choice.ending ?? state.ending,
+        visitCount: state.visitCount + (choice.visit ? 1 : 0),
+        nodeEnteredGameDay: context.gameDay,
+        activeGuide: activeGuide ?? undefined,
+        updatedAt: now,
+      };
+      this.liveNodeId = null;
+      next = persisted;
+    } else {
+      // Transient beat: persist flags (so condition-gated progress survives
+      // reload) but keep the last savepoint as the resumption node. The live
+      // node still advances so the player sees the beat immediately. We persist
+      // the repository's current savepoint nodeId (not the live node) so a
+      // chain of transient beats never drifts the resumption point forward.
+      const persistedNodeId = this.repository.get(this.definition.id)?.nodeId ?? state.nodeId;
+      const persisted = this.repository.update(this.definition.id, {
+        nodeId: persistedNodeId,
+        flags,
+        ending: choice.ending,
+        visit: choice.visit,
+        nodeEnteredGameDay: context.gameDay,
+        activeGuide,
+      }) ?? {
+        ...state,
+        nodeId: persistedNodeId,
+        flags,
+        ending: choice.ending ?? state.ending,
+        visitCount: state.visitCount + (choice.visit ? 1 : 0),
+        nodeEnteredGameDay: context.gameDay,
+        activeGuide: activeGuide ?? undefined,
+        updatedAt: now,
+      };
+      this.liveNodeId = choice.next;
+      next = { ...persisted, nodeId: choice.next };
+    }
     const transition = { state: next, node: this.definition.nodes[next.nodeId]!, choice, events: applied.events, effects };
     this.emit({ type: 'story.choice', transition });
     return transition;
@@ -157,7 +197,8 @@ export class StoryRuntime {
   publish(eventType: string, payload?: StoryEventPayload, now = Date.now()): StoryEvent {
     const state = this.state();
     const applied = applyEffects(state, [{ type: 'event.publish', eventType, payload }], now);
-    const next = this.repository.update(this.definition.id, { nodeId: state.nodeId, flags: applied.flags }) ?? {
+    const persistedNodeId = this.repository.get(this.definition.id)?.nodeId ?? state.nodeId;
+    const next = this.repository.update(this.definition.id, { nodeId: persistedNodeId, flags: applied.flags }) ?? {
       ...state,
       flags: applied.flags,
       updatedAt: now,

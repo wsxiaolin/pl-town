@@ -460,7 +460,8 @@ test('an expired session can log in again from the header', async ({ page }) => 
   ).toBeNull();
   await expect(loginEntry).toHaveText('Login');
 
-  await loginEntry.click();
+  // The login screen stays open with the failure message so the resident can
+  // sign in again directly; the header entry must not be needed.
   await expect(page.locator('#loginOverlay')).toBeVisible();
   await expect(page.locator('#loginError')).toHaveText('登录已过期，请重新登录');
   await expect(page.locator('#loginInput')).toHaveValue('tester');
@@ -469,6 +470,92 @@ test('an expired session can log in again from the header', async ({ page }) => 
   await page.locator('#loginBtn').click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBe('renewed-token');
   await expect(loginEntry).toHaveText('- tester');
+});
+
+test('wrong credentials keep the login screen open with a clear error', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityCGSeenV3', 'true');
+    localStorage.setItem('minicityUser', 'tester');
+    localStorage.setItem('minicityRenderSettings', JSON.stringify({
+      resolution: 1,
+      antialias: false,
+      anisotropy: 1,
+      shadows: false,
+      exposure: 1.18,
+    }));
+
+    const NativeWebSocket = window.WebSocket;
+    class FakeGameWebSocket extends EventTarget {
+      readyState = 0;
+
+      constructor() {
+        super();
+        queueMicrotask(() => {
+          this.readyState = NativeWebSocket.OPEN;
+          this.dispatchEvent(new Event('open'));
+        });
+      }
+
+      send(raw: string) {
+        const request = JSON.parse(raw);
+        if (request.type !== 'hello') return;
+        const response = !request.password
+          ? { type: 'error', message: 'Password is required' }
+          : request.password === 'wrong-pass'
+            ? { type: 'error', message: 'Nickname or password is incorrect' }
+            : {
+                type: 'hello',
+                token: 'fresh-token',
+                user: { id: 'user-1', nickname: request.nickname, email: null, position: { x: 0, y: 0, z: -6 } },
+                players: [],
+                houses: [],
+                requests: [],
+                progress: { currency: 1200, inventory: {}, achievements: ['citizen'], unlockedBuildings: [], visitedBuildings: [] },
+                catalog: { initialCurrency: 1200, buildingPrices: {}, achievementRewards: { citizen: 20 }, products: {} },
+              };
+        queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+      }
+
+      close() {
+        if (this.readyState === 3) return;
+        this.readyState = 3;
+        this.dispatchEvent(new Event('close'));
+      }
+    }
+
+    const RoutedWebSocket = new Proxy(NativeWebSocket, {
+      construct(Target, args) {
+        if (String(args[0]).includes(':8787')) return new FakeGameWebSocket();
+        return Reflect.construct(Target, args);
+      },
+    });
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: RoutedWebSocket });
+  });
+
+  await page.goto('/');
+  const loginEntry = page.locator('#logoUser');
+
+  // A stored nickname without a usable session cannot be restored; the login
+  // screen must stay open and prompt for credentials instead of dismissing.
+  await expect(page.locator('#loginOverlay')).toBeVisible();
+  await expect(page.locator('#loginError')).toHaveText('Password is required');
+  await expect(page.locator('#loginInput')).toHaveValue('tester');
+
+  // Wrong password: the overlay stays open, keeps the nickname, clears the
+  // password field, and reports the failure.
+  await page.locator('#loginPassword').fill('wrong-pass');
+  await page.locator('#loginBtn').click();
+  await expect(page.locator('#loginOverlay')).toBeVisible();
+  await expect(page.locator('#loginError')).toHaveText('Nickname or password is incorrect');
+  await expect(page.locator('#loginInput')).toHaveValue('tester');
+  await expect(page.locator('#loginPassword')).toHaveValue('');
+
+  // Correct password: login succeeds and the overlay closes.
+  await page.locator('#loginPassword').fill('correct-pass');
+  await page.locator('#loginBtn').click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBe('fresh-token');
+  await expect(loginEntry).toHaveText('- tester');
+  await expect(page.locator('#loginOverlay')).toBeHidden();
 });
 
 test('culture hall opens the writer catalog drawer from the right', async ({ page }) => {
