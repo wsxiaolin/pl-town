@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
-import { authenticate, tokenHash } from './auth.js';
+import { authenticate, RegistrationLimitError, tokenHash } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import * as db from './db.js';
@@ -39,6 +39,9 @@ const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(3, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
+// The edit page only needs the identity fields for its dropdown; the full
+// catalog carries hundreds of KB of dialog text that the page never shows.
+const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
@@ -320,11 +323,8 @@ const http = createServer(async (request, response) => {
   }
   if (await handleTelemetryCollection(request, response)) return;
   if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
-    // The edit page only needs the identity fields for its dropdown; the full
-    // catalog carries hundreds of KB of dialog text that the page never shows.
-    const items = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ items }));
+    response.end(JSON.stringify({ items: npcEditCatalogItems }));
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
@@ -344,11 +344,11 @@ const http = createServer(async (request, response) => {
             registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
           });
       response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
-      response.end(JSON.stringify({ token: result.token, user: result.user, registered: result.registered }));
+      response.end(JSON.stringify({ token: result.token, user: result.user }));
     } catch (error) {
       if (respondHttpBodyError(response, error)) return;
       const message = error instanceof Error ? error.message : '登录失败';
-      const status = message.includes('注册数量已达上限') ? 429 : 401;
+      const status = error instanceof RegistrationLimitError ? 429 : 401;
       response.writeHead(status, { ...headers, 'cache-control': 'no-store' });
       response.end(JSON.stringify({ error: message }));
     }

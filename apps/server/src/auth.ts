@@ -25,6 +25,14 @@ const verifyPassword = async (password: string, stored: string): Promise<boolean
 };
 const sessionExpiry = () => new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000).toISOString();
 
+/** Thrown when a per-IP registration cap rejects a new account. */
+export class RegistrationLimitError extends Error {
+  constructor() {
+    super('该 IP 的注册数量已达上限，请稍后再试');
+    this.name = 'RegistrationLimitError';
+  }
+}
+
 export const NICKNAME_PATTERN = /^[\p{L}\p{N}]{2,40}$/u;
 export function validateNickname(nickname: string): string | null {
   if (!nickname || nickname.length < 2) return 'Nickname must contain at least two characters';
@@ -66,7 +74,7 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   if (input.ip && input.registrationLimit) {
     const { sinceIso, max } = input.registrationLimit;
     const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max);
-    if (!result.allowed) throw new Error('该 IP 的注册数量已达上限，请稍后再试');
+    if (!result.allowed) throw new RegistrationLimitError();
   } else {
     createUser(userId, tokenHash, nickname, passwordHash, expiresAt);
   }
