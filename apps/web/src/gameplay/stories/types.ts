@@ -78,6 +78,13 @@ export interface StoryNode {
   terminal?: boolean;
   /** Interaction gate that closes the current dialogue when entered. */
   interactionOnly?: boolean;
+  /**
+   * Whether reaching this node persists as a resumption (save) point. Defaults
+   * to `true`. Mark linear/transitionary beats `false` so progress only saves
+   * at meaningful checkpoints; the live node still displays normally in-game,
+   * and on reload the player resumes at the last savepoint node.
+   */
+  savepoint?: boolean;
   /** Number of game-day changes required before this node can be interacted with. */
   unlockAfterGameDays?: number;
   /** Omit to inherit, provide a value to replace, or use null to clear. */
