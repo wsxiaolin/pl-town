@@ -9,6 +9,7 @@ import {
 } from './adminAuth.js';
 import { createBackup, listBackups, streamBackup, verifyStoredBackup } from './backup.js';
 import { verifyBackup } from './backupVerification.js';
+import { deleteOffsiteBackup, listOffsiteBackups, offsiteBackupEnabled, streamOffsiteBackup, uploadOffsiteBackup } from './offsiteBackup.js';
 import { ADMIN_ENABLED, AUTO_BACKUP_ENABLED, BACKUP_DIR, BACKUP_INTERVAL_MINUTES, BACKUP_RETENTION_DAYS, DATABASE_PATH, IS_PRODUCTION } from './config.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
@@ -131,6 +132,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       summary: db.getAdminSummary(databaseBytes), online: context.online(), uptimeSeconds: Math.floor((Date.now() - context.startedAt) / 1_000),
       integrity: db.verifyDatabase(), backups: listBackups().slice(0, 5),
       backupPolicy: { enabled: AUTO_BACKUP_ENABLED, intervalMinutes: BACKUP_INTERVAL_MINUTES, retentionDays: BACKUP_RETENTION_DAYS },
+      offsite: { enabled: offsiteBackupEnabled() },
     }); return true;
   }
   if (request.method === 'GET' && path === '/admin/api/users') {
@@ -221,6 +223,50 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const backup = await verifyStoredBackup(verify[1]!);
     db.recordAdminAudit(principal.actor, 'database.backup.verify', verify[1], { bytes: backup.bytes });
     respond(response, 200, { backup }); return true;
+  }
+
+  // Off-site (Alibaba Cloud OSS) backups: manual upload/download/delete from the
+  // admin console. Uploads only accept local verified backups, keeping the
+  // "every remote backup has a local original" invariant.
+  if (request.method === 'GET' && path === '/admin/api/offsite/backups') {
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    const items = await listOffsiteBackups();
+    respond(response, 200, { items, local: listBackups().map((backup) => ({ name: backup.name, sha256: backup.sha256 })) }); return true;
+  }
+  const offsiteUpload = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)\/upload$/);
+  if (request.method === 'POST' && offsiteUpload) {
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    try {
+      const backup = await uploadOffsiteBackup(offsiteUpload[1]!);
+      db.recordAdminAudit(principal.actor, 'database.backup.offsite.upload', offsiteUpload[1], { bytes: backup.bytes });
+      respond(response, 201, { backup }); return true;
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      if (message === 'Backup was not found' || message === 'Backup was not found locally') { error(response, 404, 'BACKUP_NOT_FOUND', message); return true; }
+      if (message === 'Backup is not verified; re-verify it before uploading') { error(response, 422, 'BACKUP_UNVERIFIED', message); return true; }
+      logger.error('Off-site backup upload failed', { name: offsiteUpload[1], error: message });
+      error(response, 502, 'OFFSITE_UPLOAD_FAILED', 'Uploading the backup to the object store failed'); return true;
+    }
+  }
+  const offsiteDownload = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)$/);
+  if (request.method === 'GET' && offsiteDownload) {
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    if (!await streamOffsiteBackup(offsiteDownload[1]!, response)) { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', 'Off-site backup was not found'); return true; }
+    db.recordAdminAudit(principal.actor, 'database.backup.offsite.download', offsiteDownload[1]);
+    return true;
+  }
+  if (request.method === 'DELETE' && offsiteDownload) {
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    try {
+      await deleteOffsiteBackup(offsiteDownload[1]!);
+      db.recordAdminAudit(principal.actor, 'database.backup.offsite.delete', offsiteDownload[1]);
+      respond(response, 200, { ok: true }); return true;
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', message); return true; }
+      logger.error('Off-site backup delete failed', { name: offsiteDownload[1], error: message });
+      error(response, 502, 'OFFSITE_DELETE_FAILED', 'Deleting the backup from the object store failed'); return true;
+    }
   }
   if (request.method === 'POST' && path === '/admin/api/database/checkpoint') {
     db.checkpointDatabase();

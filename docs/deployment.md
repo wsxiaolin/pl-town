@@ -816,6 +816,51 @@ sudo journalctl -u minicity-backup-sync.service -n 100 --no-pager
 
 只看到本机备份不算完成灾备。至少每季度从远端下载一份，在隔离环境做恢复演练。
 
+### 20.4 通过管理后台手动同步到阿里云 OSS
+
+服务端内置了直接对接阿里云 OSS 的异地备份能力：管理员登录后台后，在「备份」页可以为每个本地已校验备份执行「上传异地」，也可以从 OSS 下载或删除异地备份。异地始终是本地的子集——上传只接受本地已校验备份，从异地下载不会在本地产生新备份；若某个本地备份被保留策略清理，后台会把 OSS 上的对应文件标记为「本地缺失」并允许删除。
+
+在 `/etc/minicity/minicity.env` 中追加（其余备份配置不变）：
+
+```dotenv
+OSS_ENABLED=true
+OSS_REGION=oss-cn-shanghai
+OSS_BUCKET=你的存储桶名称
+OSS_ACCESS_KEY_ID=你的AccessKeyId
+OSS_ACCESS_KEY_SECRET=你的AccessKeySecret
+OSS_ENDPOINT=oss-cn-shanghai-internal.aliyuncs.com
+OSS_PREFIX=minicity/backups/
+OSS_SECURE=true
+```
+
+- `OSS_REGION` 与 `OSS_ENDPOINT` 至少配置一个；后端运行在阿里云 ECS 时建议配置 `OSS_ENDPOINT` 为内网地址（`oss-<region>-internal.aliyuncs.com`），备份流量不经过公网、不产生外网下行流量费。
+- `OSS_ENDPOINT` 不能与 `OSS_REGION` 指向不同的地域。
+- 不要使用主账号 AccessKey。在 RAM 控制台创建一个只读控制台登录用户或程序用户，仅授予该备份桶权限：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetObject",
+        "oss:PutObject",
+        "oss:DeleteObject",
+        "oss:ListObjects",
+        "oss:GetObjectAcl"
+      ],
+      "Resource": [
+        "acs:oss:*:*:你的存储桶名称",
+        "acs:oss:*:*:你的存储桶名称/*"
+      ]
+    }
+  ]
+}
+```
+
+应用后校验：`sudo -u minicity systemctl restart minicity`，登录后台进入「备份」页，确认出现「异地备份（阿里云 OSS）」面板，并在面板能看到已存在的远端备份或「尚无异地备份」提示。
+
 ## 21. 恢复数据库
 
 恢复会把当前数据库回滚到某个备份时刻。所有备份之后产生的数据都会丢失，因此先确认文件名和时间。
