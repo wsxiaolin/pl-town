@@ -205,7 +205,12 @@ test('eternal retirement monument shows the memorial roster overlay on the eleva
   const overlay = page.locator('#memorialOverlay');
   await expect(overlay).toHaveClass(/open/);
   await expect(page.locator('#memorialTitle')).toHaveText('物实永退用户纪念碑');
+  await expect(page.locator('#memorialSubtitle p').first()).toHaveText('他们曾经是小镇的居民，如今已经离开我们了');
+  await expect(page.locator('#memorialSubtitle p').nth(1)).toHaveText('不完全统计数据来自于胡桃');
   await expect(page.locator('#memorialScroll')).toHaveCount(0);
+  await expect(page.locator('.memorial-name')).toHaveCount(30);
+  await expect(page.locator('#memorialPager')).toHaveText('1 / 4');
+  await expect(page.locator('#memorialPrev')).toBeDisabled();
   await page.mouse.click(20, 20);
   await expect(overlay).not.toHaveClass(/open/);
 });
