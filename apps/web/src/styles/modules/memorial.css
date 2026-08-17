@@ -20,3 +20,103 @@
   color: #f0d9b0;
   text-shadow: 0 0 24px rgba(240,217,176,0.3);
 }
+
+.memorial-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(224,188,138,0.35);
+  border-radius: 50%;
+  background: rgba(20,16,12,0.6);
+  color: #e8c89a;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.memorial-close:hover {
+  background: rgba(60,44,28,0.8);
+  border-color: rgba(224,188,138,0.6);
+}
+
+.memorial-header {
+  padding-right: 38px;
+}
+
+.memorial-subtitle {
+  margin-top: 10px;
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+}
+.memorial-subtitle-line {
+  margin: 2px 0;
+  font-size: 13px;
+  color: #cbb288;
+  letter-spacing: 0.04em;
+}
+
+.memorial-body {
+  position: relative;
+  z-index: 1;
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 18px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.memorial-name {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e6d2ad;
+  text-align: left;
+}
+
+.memorial-nav {
+  position: relative;
+  z-index: 1;
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.memorial-nav-btn {
+  padding: 7px 16px;
+  border: 1px solid rgba(224,188,138,0.35);
+  border-radius: 14px;
+  background: rgba(20,16,12,0.5);
+  color: #e8c89a;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.memorial-nav-btn:hover:not(:disabled) {
+  background: rgba(60,44,28,0.8);
+  border-color: rgba(224,188,138,0.6);
+}
+.memorial-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.memorial-pager {
+  min-width: 64px;
+  text-align: center;
+  font-size: 13px;
+  color: #b89c6c;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 680px) {
+  .memorial-body {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 12px;
+    max-height: 44vh;
+  }
+  .memorial-name { font-size: 13px; }
+  .memorial-subtitle-line { font-size: 12px; }
+}

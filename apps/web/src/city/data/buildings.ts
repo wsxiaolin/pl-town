@@ -136,7 +136,7 @@ export const BUILDING_DEFS = [
   {
     id: "elevator",
     num: "13",
-    label: "电梯",
+    label: "纪念碑",
     x: 9,
     z: -9,
     shape: "shaft",
@@ -782,7 +782,7 @@ export const BUILDING_CONTENT = {
     ],
   },
   elevator: {
-    name: "电梯",
+    name: "纪念碑",
     slogan: "我们会尽快修复其他按钮。",
     dialog: [
       "你拆下了大屏幕，却发现它后面藏着一架电梯。",

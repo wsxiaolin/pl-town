@@ -67,19 +67,10 @@ export interface MusicHallLyricsLike {
   lines: readonly LyricsLineLike[];
 }
 
-export interface MemorialEntryLike {
-  name: string;
-  note?: string;
-}
-
 export interface MemorialRosterLike {
   title: string;
-  subtitle: string;
-  dedication: string;
-  intro: readonly string[];
-  main: readonly MemorialEntryLike[];
-  comments: readonly string[];
-  footer: string;
+  subtitle: readonly string[];
+  names: readonly string[];
 }
 
 export interface CityDialogControllerOptions {
@@ -229,10 +220,42 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.add('open');
   };
 
+  const MEMORIAL_NAMES_PER_PAGE = 30;
+  let memorialIndex = 0;
+  let memorialPageCount = 1;
+
+  const renderMemorialPage = (roster: MemorialRosterLike): void => {
+    const body = getElement<HTMLDivElement>(document, 'memorialBody');
+    const start = memorialIndex * MEMORIAL_NAMES_PER_PAGE;
+    const slice = roster.names.slice(start, start + MEMORIAL_NAMES_PER_PAGE);
+    body.replaceChildren(
+      ...slice.map((name) => {
+        const entry = document.createElement('p');
+        entry.className = 'memorial-name';
+        entry.textContent = name;
+        return entry;
+      }),
+    );
+    getElement<HTMLButtonElement>(document, 'memorialPrev').disabled = memorialIndex <= 0;
+    getElement<HTMLButtonElement>(document, 'memorialNext').disabled = memorialIndex >= memorialPageCount - 1;
+    getElement<HTMLSpanElement>(document, 'memorialPager').textContent = `${memorialIndex + 1} / ${memorialPageCount}`;
+  };
+
   const openMemorial = (): void => {
     const roster = options.memorialRoster;
     if (!roster) return;
+    memorialPageCount = Math.max(1, Math.ceil(roster.names.length / MEMORIAL_NAMES_PER_PAGE));
+    memorialIndex = 0;
     setIdentityField(document, 'memorialTitle', roster.title);
+    getElement<HTMLDivElement>(document, 'memorialSubtitle').replaceChildren(
+      ...roster.subtitle.map((line) => {
+        const node = document.createElement('p');
+        node.className = 'memorial-subtitle-line';
+        node.textContent = line;
+        return node;
+      }),
+    );
+    renderMemorialPage(roster);
     getElement<HTMLDivElement>(document, 'memorialOverlay').classList.add('open');
   };
 
@@ -247,6 +270,19 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       }, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'memorialOverlay').addEventListener('click', (event) => {
         if (event.target === getElement<HTMLDivElement>(document, 'memorialOverlay')) controller.closeMemorial();
+      }, { signal: options.signal });
+      getElement<HTMLButtonElement>(document, 'memorialClose').addEventListener('click', controller.closeMemorial, { signal: options.signal });
+      getElement<HTMLButtonElement>(document, 'memorialPrev').addEventListener('click', () => {
+        const roster = options.memorialRoster;
+        if (!roster || memorialIndex <= 0) return;
+        memorialIndex -= 1;
+        renderMemorialPage(roster);
+      }, { signal: options.signal });
+      getElement<HTMLButtonElement>(document, 'memorialNext').addEventListener('click', () => {
+        const roster = options.memorialRoster;
+        if (!roster || memorialIndex >= memorialPageCount - 1) return;
+        memorialIndex += 1;
+        renderMemorialPage(roster);
       }, { signal: options.signal });
       getElement<HTMLButtonElement>(document, 'npcClose').addEventListener('click', controller.closeNpc, { signal: options.signal });
       getElement<HTMLDivElement>(document, 'npcOverlay').addEventListener('click', (event) => {

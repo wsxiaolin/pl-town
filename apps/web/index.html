@@ -378,8 +378,16 @@
   <!-- Memorial Roster Modal -->
   <div class="lyrics-overlay memorial-overlay" id="memorialOverlay">
     <div class="lyrics-stage memorial-stage" id="memorialStage">
-      <div class="lyrics-header">
+      <button class="memorial-close" id="memorialClose" type="button" aria-label="合上纪念碑">✕</button>
+      <div class="lyrics-header memorial-header">
         <h2 class="lyrics-title memorial-title" id="memorialTitle"></h2>
+        <div class="memorial-subtitle" id="memorialSubtitle"></div>
+      </div>
+      <div class="memorial-body" id="memorialBody"></div>
+      <div class="memorial-nav">
+        <button class="memorial-nav-btn" id="memorialPrev" type="button" aria-label="上一页">‹ 上一页</button>
+        <span class="memorial-pager" id="memorialPager"></span>
+        <button class="memorial-nav-btn" id="memorialNext" type="button" aria-label="下一页">下一页 ›</button>
       </div>
     </div>
   </div>
