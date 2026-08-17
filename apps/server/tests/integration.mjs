@@ -26,6 +26,30 @@ const multiAdminConfigCheck = spawnSync(process.execPath, ['--input-type=module'
 if (multiAdminConfigCheck.status !== 0 || !multiAdminConfigCheck.stdout.includes('true:2')) {
   throw new Error(`Production configuration must support JSON-only administrator accounts:\n${multiAdminConfigCheck.stderr}`);
 }
+const ossIncompleteConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai',
+    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: '',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (ossIncompleteConfigCheck.status === 0 || !`${ossIncompleteConfigCheck.stdout}${ossIncompleteConfigCheck.stderr}`.includes('OSS_ENABLED requires')) {
+  throw new Error('Production configuration must fail closed when OSS is enabled with incomplete credentials');
+}
+const ossEnabledConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js').then((config) => console.log(`${config.OFFSITE_BACKUP_ENABLED}`))"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai',
+    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: 'key-secret',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (ossEnabledConfigCheck.status !== 0 || !ossEnabledConfigCheck.stdout.includes('true')) {
+  throw new Error(`Production configuration must enable off-site backups with complete OSS credentials:\n${ossEnabledConfigCheck.stderr}`);
+}
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
@@ -183,6 +207,18 @@ try {
   });
   const backupVerifyPayload = await backupVerify.json();
   if (!backupVerify.ok || !backupVerifyPayload.backup?.verified || backupVerifyPayload.backup.sha256 !== backupPayload.backup.sha256) throw new Error('Admin API must re-verify backup integrity and checksum');
+
+  // Off-site OSS backups: without OSS_ENABLED the endpoints must fail closed,
+  // while the authenticated overview must report the feature as disabled.
+  const offsiteDisabled = await fetch(`${adminBase}/offsite/backups`, { headers: { cookie } });
+  if (offsiteDisabled.status !== 503) throw new Error('Off-site backup endpoints must return 503 when OSS is not configured');
+  const offsiteUploadDisabled = await fetch(`${adminBase}/offsite/backups/${backupPayload.backup.name}/upload`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
+  });
+  if (offsiteUploadDisabled.status !== 503) throw new Error('Off-site backup upload must return 503 when OSS is not configured');
+  const overviewWithOffsite = await fetch(`${adminBase}/overview`, { headers: { cookie } });
+  const overviewWithOffsitePayload = await overviewWithOffsite.json();
+  if (!overviewWithOffsite.ok || overviewWithOffsitePayload.offsite?.enabled !== false) throw new Error('Admin overview must report off-site backups as disabled when OSS is not configured');
 
   if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
