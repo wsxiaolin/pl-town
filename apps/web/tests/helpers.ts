@@ -48,3 +48,45 @@ export async function waitForCityReady(page: Page, user = 'tester'): Promise<voi
   await waitForCityBooted(page);
 }
 
+/**
+ * Stub the game WebSocket for newsstand tests: answers `hello` with a resident
+ * who has already visited the 报摊, so `interactBuilding('newsstand')` opens
+ * the catalog without any server round-trips.
+ */
+export function stubNewsstandWebSocket(page: Page, user = 'news-tester'): void {
+  void page.addInitScript(({ u }) => {
+    const NativeWebSocket = window.WebSocket;
+    class NewsGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      progress = {
+        currency: 0,
+        inventory: {},
+        achievements: ['citizen'],
+        unlockedBuildings: ['newsstand'],
+        visitedBuildings: ['activity', 'library', 'newsstand'],
+      };
+      catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      send(raw: string) {
+        const request = JSON.parse(raw);
+        let response: Record<string, unknown> | null = null;
+        if (request.type === 'hello') {
+          response = {
+            type: 'hello', token: 'news-token',
+            user: { id: 'news-user', nickname: u, email: null, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog,
+          };
+        } else if (request.type === 'progress.building.visit') {
+          response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
+        }
+        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+      }
+      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new NewsGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+  }, { u: user });
+}
+
+
