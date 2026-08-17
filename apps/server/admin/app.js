@@ -217,7 +217,7 @@ function renderBackupRows(items) {
       group.append(offsite);
     }
     actions.append(group);
-    row.append(node('td', backup.name), node('td', formatDate(backup.createdAt)), node('td', backup.verified ? formatDate(backup.verifiedAt) : '待校验'), node('td', formatBytes(backup.bytes)), actions); return row;
+    row.append(node('td', backup.name), node('td', formatDate(backup.createdAt)), node('td', backup.verified ? formatDate(backup.verifiedAt) : '待校验', 'nowrap'), node('td', formatBytes(backup.bytes)), actions); return row;
   });
   $('#backupRows').replaceChildren(...(rows.length ? rows : [emptyRow(5, '尚无数据库备份')]));
 }
@@ -233,14 +233,14 @@ async function loadOffsiteBackups() {
   state.offsiteEnabled = true; $('#offsitePanel').hidden = false;
   const rows = data.items.map((backup) => {
     const row = node('tr');
-    const status = backup.orphan ? '本地缺失' : backup.inSync ? '本地一致' : '校验不一致';
-    const statusCell = node('td'); const badge = node('span', status, `status${backup.orphan || !backup.inSync ? ' bad' : ''}`); statusCell.append(badge);
+    const status = backup.orphan ? '本地缺失' : backup.inSync ? '已知' : '校验不一致';
+    const statusCell = node('td'); const badge = node('span', status, `status nowrap${backup.orphan || !backup.inSync ? ' bad' : ''}`); statusCell.append(badge);
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const link = node('a', '下载', 'download'); link.href = `/admin/api/offsite/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
     const del = node('button', '删除', 'warning'); del.type = 'button';
     del.addEventListener('click', () => confirmAction('删除异地备份', `将从阿里云 OSS 删除 ${backup.name}，本机备份不受影响。确定继续？`, () => deleteOffsite(backup.name)));
     group.append(link, del); actions.append(group);
-    row.append(node('td', backup.name), node('td', formatDate(backup.uploadedAt)), node('td', backup.sha256 ? '已校验' : '—'), node('td', formatBytes(backup.bytes)), statusCell, actions); return row;
+    row.append(node('td', backup.name), node('td', formatDate(backup.uploadedAt)), node('td', backup.sha256 ? '已校验' : '—', 'nowrap'), node('td', formatBytes(backup.bytes)), statusCell, actions); return row;
   });
   $('#offsiteRows').replaceChildren(...(rows.length ? rows : [emptyRow(6, '尚无异地备份，请在上方备份列表点击“上传异地”')]));
   if (changed) renderBackupRows(state.localBackups ?? []);
