@@ -138,7 +138,7 @@ void main(){
 }
 `;
 
-export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverlay & { trigger: () => boolean; dispose: () => void } {
+export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverlay & { trigger: (onDone?: () => void) => boolean; dispose: () => void } {
   let active = false;
   let disposed = false;
   let overlayScene: THREE.Scene | null = null;
@@ -266,7 +266,7 @@ export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverla
     overlayOpacity = 0;
   }
 
-  function trigger(): boolean {
+  function trigger(onDone?: () => void): boolean {
     if (active || disposed) return false;
     const texture = captureCityPhoto();
     if (!texture) return false;
@@ -285,6 +285,7 @@ export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverla
       onComplete: () => {
         active = false;
         dispose();
+        onDone?.();
       },
     });
     // overlay 淡入覆盖城市，火线推进，烧尽后再淡出露出主画布。
