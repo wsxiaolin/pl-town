@@ -213,7 +213,6 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "food-delivery": {
-      savepoint: false,
       id: "food-delivery",
       title: "林澈",
       role: "气象观测站守望人",
@@ -553,6 +552,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "photo-wall-investigation": {
+      savepoint: false,
       id: "photo-wall-investigation",
       title: "照片墙",
       role: "调查线索",
@@ -575,6 +575,7 @@ export const ECHO_STORY: StoryDefinition = {
       ],
     },
     "diary-investigation": {
+      savepoint: false,
       id: "diary-investigation",
       title: "日记 · 第50页",
       role: "木屋里的日记",
