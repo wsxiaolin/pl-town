@@ -63,12 +63,8 @@
         <div class="toolbar"><p>NPC 列表与对话层级（只读镜像），以及玩家提交的变更申请审批队列。</p><span id="npcCount"></span></div>
         <div class="npc-layout">
           <section class="panel npc-list-panel">
-            <header><div><p class="eyebrow">CATALOG</p><h2>NPC 列表</h2></div></header>
+            <header><div><p class="eyebrow">CATALOG</p><h2>NPC 列表</h2></div><a class="topology-link" href="/npc-edit-request.html" target="_blank" rel="noopener">用户申请入口</a></header>
             <div class="table-wrap npc-table-wrap"><table><thead><tr><th>名称</th><th>身份</th><th>类型</th></tr></thead><tbody id="npcRows"></tbody></table></div>
-          </section>
-          <section class="panel npc-detail-panel">
-            <header><div><p class="eyebrow">DIALOG TREE</p><h2 id="npcDetailTitle">选择左侧 NPC</h2></div><span id="npcMeta"></span></header>
-            <div class="npc-dialog" id="npcDialog"></div>
           </section>
         </div>
         <section class="panel">
@@ -150,6 +146,16 @@
       <small id="houseDialogMemberHint"></small>
       <input id="houseDialogId" type="hidden" />
       <div class="dialog-actions"><button class="secondary" value="cancel">取消</button><button class="primary" id="houseDialogSubmit" type="button" value="save">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="npcDetailDialog" class="npc-detail-dialog">
+    <form method="dialog" class="npc-detail-form">
+      <header class="npc-detail-header">
+        <div><p class="eyebrow">DIALOG TREE</p><h2 id="npcDetailTitle">选择 NPC</h2><span id="npcMeta"></span></div>
+        <button class="dialog-close" value="cancel" type="submit" aria-label="关闭 NPC 详情">关闭</button>
+      </header>
+      <div class="npc-dialog" id="npcDialog"></div>
     </form>
   </dialog>
 

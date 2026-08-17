@@ -8,7 +8,7 @@ import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
-import { getNpcCatalogEntry } from './npcCatalog.js';
+import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
@@ -38,6 +38,7 @@ const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(3, 60_000);
+const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
@@ -318,6 +319,31 @@ const http = createServer(async (request, response) => {
     }
   }
   if (await handleTelemetryCollection(request, response)) return;
+  if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
+    response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ items: NPC_CATALOG }));
+    return;
+  }
+  if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
+    try {
+      if (!npcEditLoginRate.consume(requestIp).allowed || !globalAuthenticationRate.consume('global').allowed) {
+        response.writeHead(429, { ...headers, 'retry-after': '60' });
+        response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
+        return;
+      }
+      const body = await readJson(request, 2_048);
+      const nickname = typeof body.nickname === 'string' ? body.nickname : '';
+      const password = typeof body.password === 'string' ? body.password : '';
+      const result = await authenticate({ nickname, password, ip: requestIp, registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP } });
+      response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ token: result.token, user: result.user, registered: result.registered }));
+    } catch (error) {
+      if (respondHttpBodyError(response, error)) return;
+      response.writeHead(401, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : '登录失败' }));
+    }
+    return;
+  }
   if (request.method === 'POST' && request.url === '/town-api/npc-change-requests') {
     try {
       const body = await readJson(request, 32_000);

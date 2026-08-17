@@ -174,11 +174,11 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 /* NPC 管理 */
 .topology-link { font-size: 12px; font-weight: 650; color: #324039; text-decoration: none; }
 .topology-link:hover { text-decoration: underline; }
-.npc-layout { display: grid; grid-template-columns: 1.2fr 1.4fr; gap: 18px; margin-bottom: 18px; }
+.npc-layout { display: block; margin-bottom: 18px; }
 .npc-table-wrap { max-height: 520px; overflow: auto; }
 .npc-table-wrap tr { cursor: pointer; }
 .npc-table-wrap tr:hover { background: #f0f4f2; }
-.npc-dialog { max-height: 520px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.npc-dialog { max-height: min(70vh, 720px); overflow: auto; display: flex; flex-direction: column; gap: 12px; }
 .npc-dialog-node { border-left: 3px solid #176b4a; padding: 8px 12px; background: #f6faf8; border-radius: 0 5px 5px 0; }
 .npc-dialog-text { font-size: 13px; line-height: 1.5; word-break: break-word; }
 .npc-dialog-options { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -191,5 +191,26 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .npc-request-card p { margin: 8px 0; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .npc-request-card footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
 .npc-request-meta { color: #718078; font-size: 12px; }
-@media (max-width: 860px) { .npc-layout { grid-template-columns: 1fr; } }
+.npc-request-page { min-height: 100vh; background: linear-gradient(135deg, #eef5f1, #f8faf9); }
+.npc-request-shell { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 46px 0 64px; }
+.npc-request-shell h1 { margin: 18px 0 10px; font-size: clamp(28px, 5vw, 44px); }
+.npc-request-intro { max-width: 600px; color: #65716b; line-height: 1.7; }
+.npc-request-shell .panel { margin-top: 28px; }
+.npc-request-shell textarea { width: 100%; min-height: 140px; padding: 10px 12px; border: 1px solid #cfd7d3; border-radius: 5px; resize: vertical; font: inherit; }
+.npc-request-userbar { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 28px; color: #5f6c65; font-size: 12px; }
+.npc-request-status { margin-top: 18px; padding: 10px 12px; color: #8c2727; background: #fff1f1; border: 1px solid #efcccc; border-radius: 5px; font-size: 13px; }
+.npc-request-status.success { color: #155d3f; background: #ecf8f2; border-color: #bfe5d1; }
+@media (max-width: 560px) { .npc-request-shell { width: calc(100% - 20px); padding-top: 28px; } }
 @media (max-width: 720px) { .story-node-grid { grid-template-columns: 1fr; } }
+.npc-detail-dialog { width: min(980px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; }
+.npc-detail-form { min-height: min(680px, calc(100vh - 32px)); display: flex; flex-direction: column; padding: 26px; }
+.npc-detail-header { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid #e4e9e6; }
+.npc-detail-header h2 { margin: 0 0 7px; font-size: 22px; }
+.npc-detail-header #npcMeta { color: #718078; font-size: 12px; }
+.npc-detail-form .npc-dialog { flex: 1; max-height: none; padding: 20px 4px 4px 0; }
+.dialog-close { min-height: 34px; padding: 0 12px; color: #324039; background: #fff; border: 1px solid #cbd4cf; border-radius: 5px; font-size: 12px; }
+@media (max-width: 560px) {
+  .npc-detail-dialog { width: calc(100% - 16px); max-height: calc(100% - 16px); }
+  .npc-detail-form { min-height: calc(100vh - 16px); padding: 18px; }
+  .npc-detail-header h2 { font-size: 18px; }
+}

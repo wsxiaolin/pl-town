@@ -430,6 +430,8 @@ function renderNpcDialog(npc) {
     container.append(block);
   });
   if (!npc.dialogNodes.length) container.append(node('p', '该 NPC 没有对话数据。', 'empty'));
+  const dialog = $('#npcDetailDialog');
+  if (dialog && !dialog.open) dialog.showModal();
 }
 async function loadNpcRequests() {
   const status = state.npcRequestFilter;

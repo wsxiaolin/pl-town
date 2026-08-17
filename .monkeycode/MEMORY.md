@@ -39,3 +39,10 @@ Entries discovered by the Agent during task execution should follow this format:
   - In `apps/web/src/city/MiniCityApp.ts` (a `@ts-nocheck` monolith), module-top-level `const roadNavigation = createRoadNavigationSystem({...})` and its destructured helpers (`clamp`, `buildRoadPath`, `nearestRoadCoord`, `FOUNTAIN_CLEAR`, etc.) MUST be declared BEFORE any module-top-level call that references them in an object literal (e.g. `createEventBindings({..., clamp, ...})`), otherwise a TDZ `Cannot access ... before initialization` error is thrown at load and the whole city fails to boot.
   - This ordering was wrong on `origin/main`; the fix moved the `roadNavigation` block above `createBuildingInteraction`/`createEventBindings`.
   - Headless Playwright (chromium headless shell) needs `npx playwright install chromium --with-deps`; without it, `browserType.launch` fails on the missing headless shell binary.
+
+[Project Knowledge Summary]
+- Date: 2026-08-17
+- Context: Discovered by Agent while validating the NPC edit request workflow
+- Category: Environment Configuration
+- Instructions:
+  - This checkout currently has no `node_modules`; run the dependency installation matching the committed lockfile before `npm run typecheck`, Vite builds, server builds, or Playwright tests. Without dependencies, typechecking stops with `tsc: not found`.

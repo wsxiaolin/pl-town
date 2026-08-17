@@ -402,6 +402,24 @@ try {
   if (!clearTelemetry.ok) throw new Error('Admin telemetry clear must require CSRF and succeed');
 
   // NPC change requests: player submits a ticket, admin reviews the queue.
+  const npcEditPage = await fetch(`${adminOrigin}/npc-edit-request.html`);
+  const npcEditPageHtml = await npcEditPage.text();
+  if (!npcEditPage.ok || npcEditPage.headers.get('cache-control') !== 'no-store' || !npcEditPageHtml.includes('/npc-edit-request.js?v=')) throw new Error('NPC edit request page must be served as a no-store standalone page');
+  const publicNpcCatalog = await fetch(`${adminOrigin}/town-api/npc-edit-catalog`);
+  const publicNpcCatalogPayload = await publicNpcCatalog.json();
+  if (!publicNpcCatalog.ok || !Array.isArray(publicNpcCatalogPayload.items) || !publicNpcCatalogPayload.items.some((npc) => npc.id === 'linche')) throw new Error('NPC edit request page must load the public NPC catalog');
+  const npcEditLogin = await fetch(`${adminOrigin}/town-api/npc-edit-login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ nickname: 'NpcEditor', password: 'npc-edit-test-password' }),
+  });
+  const npcEditLoginPayload = await npcEditLogin.json();
+  if (!npcEditLogin.ok || !npcEditLoginPayload.token || npcEditLoginPayload.user?.nickname !== 'NpcEditor') throw new Error('NPC edit request page must support independent resident sign-in');
+  const npcEditSubmission = await fetch(`${adminOrigin}/town-api/npc-change-requests`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: npcEditLoginPayload.token, npcId: 'linche', kind: 'edit', title: '补充林澈资料', summary: '建议补充工作时间。', change: { proposal: '增加工作时间字段。' } }),
+  });
+  if (npcEditSubmission.status !== 201) throw new Error('Independent NPC edit sign-in must submit to the review queue');
+
   // Reconnect a resident here to obtain a fresh, valid session token (earlier
   // reconnects invalidate previously issued tokens).
   requester = await connect('Dana');
