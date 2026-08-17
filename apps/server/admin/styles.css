@@ -191,16 +191,6 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .npc-request-card p { margin: 8px 0; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .npc-request-card footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
 .npc-request-meta { color: #718078; font-size: 12px; }
-.npc-request-page { min-height: 100vh; background: linear-gradient(135deg, #eef5f1, #f8faf9); }
-.npc-request-shell { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 46px 0 64px; }
-.npc-request-shell h1 { margin: 18px 0 10px; font-size: clamp(28px, 5vw, 44px); }
-.npc-request-intro { max-width: 600px; color: #65716b; line-height: 1.7; }
-.npc-request-shell .panel { margin-top: 28px; }
-.npc-request-shell textarea { width: 100%; min-height: 140px; padding: 10px 12px; border: 1px solid #cfd7d3; border-radius: 5px; resize: vertical; font: inherit; }
-.npc-request-userbar { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 28px; color: #5f6c65; font-size: 12px; }
-.npc-request-status { margin-top: 18px; padding: 10px 12px; color: #8c2727; background: #fff1f1; border: 1px solid #efcccc; border-radius: 5px; font-size: 13px; }
-.npc-request-status.success { color: #155d3f; background: #ecf8f2; border-color: #bfe5d1; }
-@media (max-width: 560px) { .npc-request-shell { width: calc(100% - 20px); padding-top: 28px; } }
 @media (max-width: 720px) { .story-node-grid { grid-template-columns: 1fr; } }
 .npc-detail-dialog { width: min(980px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; }
 .npc-detail-form { min-height: min(680px, calc(100vh - 32px)); display: flex; flex-direction: column; padding: 26px; }

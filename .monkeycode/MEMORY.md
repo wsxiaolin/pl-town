@@ -46,3 +46,11 @@ Entries discovered by the Agent during task execution should follow this format:
 - Category: Environment Configuration
 - Instructions:
   - This checkout currently has no `node_modules`; run the dependency installation matching the committed lockfile before `npm run typecheck`, Vite builds, server builds, or Playwright tests. Without dependencies, typechecking stops with `tsc: not found`.
+
+[Project Knowledge Summary]
+- Date: 2026-08-17
+- Context: Discovered by Agent while reworking the NPC edit-request page into the frontend multi-page app per review feedback
+- Category: Operations & Deployment
+- Instructions:
+  - The web app and server are intended to be deployed on the same server eventually; GitHub Pages / `BASE_PATH` is not the production target to design around.
+  - The NPC edit-request page lives in `apps/web` as a Vite MPA entry (`index.html` + `npc-edit-request.html` built together); the server exposes only the `/town-api` endpoints and the admin console, with no hand-written duplicate of the page.

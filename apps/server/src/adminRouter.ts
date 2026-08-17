@@ -42,7 +42,6 @@ const staticAssets: ReadonlyArray<[string, AdminAsset]> = [
   ['/admin/app.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/app.js') }],
   ['/admin/story-topology.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/story-topology.js') }],
   ['/admin/story-topology.css', { type: 'text/css; charset=utf-8', body: readAsset('../admin/story-topology.css') }],
-  ['/npc-edit-request.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/npc-edit-request.js') }],
 ];
 const assetVersions = new Map(staticAssets.map(([path, asset]) => [path, fingerprint(asset.body)]));
 const assets = new Map<string, AdminAsset>(staticAssets);
@@ -56,11 +55,6 @@ const topologyHtml = readAsset('../admin/story-topology.html')
   .replace('/admin/story-topology.css', `/admin/story-topology.css?v=${assetVersions.get('/admin/story-topology.css')}`)
   .replace('/admin/story-topology.js', `/admin/story-topology.js?v=${assetVersions.get('/admin/story-topology.js')}`);
 assets.set('/admin/story-topology', { type: 'text/html; charset=utf-8', body: Buffer.from(topologyHtml, 'utf8') });
-const npcEditRequestHtml = readAsset('../admin/npc-edit-request.html')
-  .toString('utf8')
-  .replace('/admin/styles.css', `/admin/styles.css?v=${assetVersions.get('/admin/styles.css')}`)
-  .replace('/npc-edit-request.js', `/npc-edit-request.js?v=${assetVersions.get('/npc-edit-request.js')}`);
-assets.set('/npc-edit-request.html', { type: 'text/html; charset=utf-8', body: Buffer.from(npcEditRequestHtml, 'utf8') });
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 const respond = (response: ServerResponse, status: number, payload: unknown, extra: Record<string, string> = {}) => {
@@ -93,7 +87,7 @@ async function login(request: IncomingMessage, response: ServerResponse): Promis
 
 export async function handleAdminRequest(request: IncomingMessage, response: ServerResponse, context: Context): Promise<boolean> {
   const path = pathOf(request);
-  if (path !== '/admin' && !path.startsWith('/admin/') && path !== '/npc-edit-request.html' && path !== '/npc-edit-request.js') return false;
+  if (path !== '/admin' && !path.startsWith('/admin/')) return false;
 
   const assetPath = path === '/admin' ? '/admin/' : path;
   const asset = assets.get(assetPath);

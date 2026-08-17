@@ -320,8 +320,11 @@ const http = createServer(async (request, response) => {
   }
   if (await handleTelemetryCollection(request, response)) return;
   if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
+    // The edit page only needs the identity fields for its dropdown; the full
+    // catalog carries hundreds of KB of dialog text that the page never shows.
+    const items = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ items: NPC_CATALOG }));
+    response.end(JSON.stringify({ items }));
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
@@ -332,15 +335,22 @@ const http = createServer(async (request, response) => {
         return;
       }
       const body = await readJson(request, 2_048);
-      const nickname = typeof body.nickname === 'string' ? body.nickname : '';
-      const password = typeof body.password === 'string' ? body.password : '';
-      const result = await authenticate({ nickname, password, ip: requestIp, registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP } });
+      const result = typeof body.token === 'string' && body.token
+        ? await authenticate({ token: body.token })
+        : await authenticate({
+            nickname: typeof body.nickname === 'string' ? body.nickname : '',
+            password: typeof body.password === 'string' ? body.password : '',
+            ip: requestIp,
+            registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
+          });
       response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
       response.end(JSON.stringify({ token: result.token, user: result.user, registered: result.registered }));
     } catch (error) {
       if (respondHttpBodyError(response, error)) return;
-      response.writeHead(401, { ...headers, 'cache-control': 'no-store' });
-      response.end(JSON.stringify({ error: error instanceof Error ? error.message : '登录失败' }));
+      const message = error instanceof Error ? error.message : '登录失败';
+      const status = message.includes('注册数量已达上限') ? 429 : 401;
+      response.writeHead(status, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: message }));
     }
     return;
   }
