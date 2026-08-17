@@ -9,6 +9,15 @@ export type LoginControllerOptions = {
 };
 
 export function createLoginController(options: LoginControllerOptions) {
+  let nicknameFeedbackTimer = 0;
+
+  function setError(message: string): void {
+    const error = document.getElementById('loginError');
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = !message;
+  }
+
   function applyUsername(name: string): void {
     const element = document.getElementById('logoUser');
     if (!element) return;
@@ -49,17 +58,11 @@ export function createLoginController(options: LoginControllerOptions) {
   function login(): void {
     const input = document.getElementById('loginInput') as HTMLInputElement | null;
     const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
-    const error = document.getElementById('loginError');
     const name = input?.value.trim() ?? '';
     const password = passwordInput?.value ?? '';
-    const showError = (message: string) => {
-      if (!error) return;
-      error.textContent = message;
-      error.hidden = !message;
-    };
-    if (name.length < 2) return showError('Nickname must contain at least two characters.');
-    if (!/^[\p{L}\p{N}]{2,40}$/u.test(name)) return showError('Use only letters or numbers in your nickname.');
-    if (!password) return showError('Enter a password.');
+    if (name.length < 2) return setError('Nickname must contain at least two characters.');
+    if (!/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
+    if (!password) return setError('Enter a password.');
     localStorage.setItem('minicityUser', name);
     const stats = options.getStats();
     if (!stats.joinDate) {
@@ -77,5 +80,21 @@ export function createLoginController(options: LoginControllerOptions) {
     }, 550);
   }
 
-  return { checkLogin, showLogin, showLoginEntry, login };
+  function validateInput(): void {
+    const input = document.getElementById('loginInput') as HTMLInputElement | null;
+    if (!input) return;
+    const name = input.value.trim();
+    window.clearTimeout(nicknameFeedbackTimer);
+    if (name && !/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
+    if (name.length === 1) {
+      nicknameFeedbackTimer = window.setTimeout(() => {
+        const current = (document.getElementById('loginInput') as HTMLInputElement | null)?.value.trim() ?? '';
+        if (current === name && current.length < 2) setError('Nickname must contain at least two characters.');
+      }, 700);
+      return;
+    }
+    setError('');
+  }
+
+  return { checkLogin, showLogin, showLoginEntry, login, validateInput };
 }

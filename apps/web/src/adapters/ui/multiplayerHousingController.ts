@@ -7,7 +7,7 @@ import { createCloudProgressionController } from './cloudProgressionController';
 export function createMultiplayerHousingController(options) {
   const {
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
-    showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
+    showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
     getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
     getLegacyAchievements = () => [],
     isResidenceUnavailable = () => false,
@@ -199,6 +199,7 @@ export function createMultiplayerHousingController(options) {
         if (passwordInput) passwordInput.value = '';
         if (error) { error.textContent = message; error.hidden = false; }
         showLoginEntry();
+        showLoginOverlay();
         showUnlockToast(message);
       },
       error: (message) => {

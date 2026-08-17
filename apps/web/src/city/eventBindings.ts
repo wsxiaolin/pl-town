@@ -30,7 +30,7 @@ export type EventBindingsOptions = {
   toggleMapMode: () => void;
   closeModal: () => void;
   closeNpcDialog: () => void;
-  getLoginController: () => { login: () => void; showLogin: () => void } | null;
+  getLoginController: () => { login: () => void; validateInput: () => void; showLogin: () => void } | null;
 };
 
 export function createEventBindings(options: EventBindingsOptions) {
@@ -109,6 +109,7 @@ export function createEventBindings(options: EventBindingsOptions) {
       closeModal: options.closeModal,
       closeNpcDialog: options.closeNpcDialog,
       login: () => options.getLoginController()?.login(),
+      loginFeedback: () => options.getLoginController()?.validateInput(),
       showLogin: () => options.getLoginController()?.showLogin(),
       resize: () => {
         options.getRenderer().setSize(window.innerWidth, window.innerHeight);
