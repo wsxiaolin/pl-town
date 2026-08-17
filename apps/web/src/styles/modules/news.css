@@ -1,6 +1,6 @@
 /* Newsstand: catalog drawer + newspaper reader */
 
-/* Catalog drawer shares the civic-archive drawer layout. */
+/* ── 目录抽屉 ── */
 .newsstand-panel {
   position: fixed; inset: 0 0 0 auto; z-index: 215; width: min(420px, 100vw); height: 100dvh;
   display: flex; flex-direction: column; background: #f7f7f4; color: #20242a;
@@ -26,7 +26,7 @@
 .np-issue span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #737873; font-size: 10px; }
 .np-issue i { padding: 3px 7px; border: 1px solid #d9dad6; color: #8a8e89; font-size: 9px; font-style: normal; }
 
-/* Reader overlay */
+/* ── 报纸阅读器覆层 ── */
 .newspaper-overlay {
   position: fixed; inset: 0; z-index: 230; display: grid; place-items: center;
   background: rgba(23, 29, 41, .72); backdrop-filter: blur(3px);
@@ -34,7 +34,7 @@
 }
 .newspaper-overlay.open { opacity: 1; visibility: visible; }
 .newspaper-viewport {
-  width: min(880px, calc(100vw - 28px)); height: min(720px, calc(100dvh - 28px));
+  width: min(960px, calc(100vw - 28px)); height: min(800px, calc(100dvh - 28px));
   display: flex; flex-direction: column; border-radius: 6px; overflow: hidden;
   background: #f4f0e4; color: #26201a; box-shadow: 0 30px 90px rgba(0,0,0,.45);
 }
@@ -61,31 +61,113 @@
 .np-page-indicator { color: #7c715c; font-size: 11px; letter-spacing: .05em; }
 .np-page-indicator b { color: #2a2419; }
 
-/* The paper sheet itself */
-.np-sheet { max-width: 720px; margin: 0 auto; padding: 30px 34px 40px; background: #fbf8ef; }
-.np-masthead { text-align: center; padding-bottom: 14px; border-bottom: 2px solid #26201a; }
-.np-kicker { display: block; color: #9a4b2d; font-size: 10px; font-weight: 800; letter-spacing: .22em; }
-.np-issue-title { margin: 8px 0 4px; font-family: Georgia, 'Songti SC', 'STSong', serif; font-size: 28px; font-weight: 700; letter-spacing: .05em; }
+/* ── 报纸正文（sheet） ── */
+.np-sheet {
+  max-width: 720px; margin: 0 auto; padding: 30px 34px 40px; background: #fbf8ef;
+}
+
+/* 报头：刊名 + 期数 + 版名 */
+.np-masthead {
+  text-align: center; padding-bottom: 14px; border-bottom: 2px solid #26201a;
+}
+.np-kicker {
+  display: block; color: #9a4b2d; font-size: 10px; font-weight: 800; letter-spacing: .22em;
+}
+.np-issue-title {
+  margin: 8px 0 4px; font-family: Georgia, 'Songti SC', 'STSong', serif;
+  font-size: 28px; font-weight: 700; letter-spacing: .05em;
+}
 .np-page-caption { margin: 0; color: #8a8068; font-size: 11px; letter-spacing: .18em; }
-.np-body { padding-top: 18px; }
-.np-motto { margin: 2px 0 14px; color: #9a6a14; font-family: Georgia, 'Songti SC', serif; font-size: 17px; font-style: italic; text-align: center; }
-.np-separator { margin: 18px 0 12px; color: #9a6a14; font-size: 12px; letter-spacing: .12em; text-align: center; }
+
+/* ── 正文区域 ── */
+.np-body {
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* 头条跨栏（motto + separator + 精知优选正文） */
+.np-headline {
+  padding-bottom: 16px;
+  border-bottom: 2px solid #cfc6b0;
+  margin-bottom: 16px;
+}
+
+/* 多栏网格 */
+.np-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  border-top: 1px solid #d9d2c0;
+}
+
+/* 单栏（多栏网格的子项） */
+.np-col {
+  padding: 14px 16px;
+  border-bottom: 1px solid #d9d2c0;
+}
+/* 奇数栏（左侧）右边框作栏线 */
+.np-col:nth-child(odd) {
+  border-right: 1px solid #d9d2c0;
+}
+
+/* 头条跨栏板块 */
+.np-col-lead {
+  padding: 0 0 16px;
+  border-bottom: 1px solid #cfc6b0;
+  margin-bottom: 0;
+}
+
+/* ── 元素样式 ── */
+.np-motto {
+  margin: 2px 0 14px; color: #9a6a14;
+  font-family: Georgia, 'Songti SC', serif; font-size: 17px; font-style: italic;
+  text-align: center;
+}
+.np-separator {
+  margin: 18px 0 12px; color: #9a6a14;
+  font-size: 12px; letter-spacing: .12em; text-align: center;
+}
 .np-section {
-  margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #cfc6b0;
-  color: #26201a; font-family: Georgia, 'Songti SC', serif; font-size: 19px; font-weight: 700; letter-spacing: .04em;
+  margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #cfc6b0;
+  color: #26201a; font-family: Georgia, 'Songti SC', serif;
+  font-size: 17px; font-weight: 700; letter-spacing: .04em;
 }
-.np-label { margin: 14px 0 4px; color: #9a4b2d; font-size: 12px; font-weight: 750; letter-spacing: .1em; }
-.np-text { margin: 6px 0; color: #3a3329; font-size: 14px; line-height: 1.85; }
+/* 头条板块的标题放大 */
+.np-col-lead .np-section {
+  font-size: 19px;
+}
+.np-label {
+  margin: 12px 0 3px; color: #9a4b2d; font-size: 11px; font-weight: 750;
+  letter-spacing: .1em;
+}
+.np-text {
+  margin: 4px 0; color: #3a3329; font-size: 13px; line-height: 1.75;
+}
 .np-text:first-child { margin-top: 0; }
-.np-editor { margin: 10px 0 2px; color: #8a8068; font-size: 11px; letter-spacing: .06em; }
-.np-link {
-  display: inline-block; margin: 5px 6px 5px 0; padding: 5px 10px 5px 6px;
-  border: 1px solid #cfc6b0; border-radius: 3px; background: #f1ecdf; color: #3a3329; font-size: 12px;
+.np-editor {
+  margin: 8px 0 2px; color: #8a8068; font-size: 11px; letter-spacing: .06em;
 }
-.np-link i { display: inline-block; margin-right: 7px; padding: 2px 4px; border-radius: 2px; background: #9a4b2d; color: #fbf8ef; font-size: 9px; font-style: normal; }
+.np-link {
+  display: inline-block; margin: 4px 5px 4px 0; padding: 4px 9px 4px 5px;
+  border: 1px solid #cfc6b0; border-radius: 3px; background: #f1ecdf;
+  color: #3a3329; font-size: 11.5px;
+}
+.np-link i {
+  display: inline-block; margin-right: 6px; padding: 2px 4px; border-radius: 2px;
+  background: #9a4b2d; color: #fbf8ef; font-size: 9px; font-style: normal;
+}
 .np-link-experiment i { background: #2d5a7a; }
 .np-link b { font-weight: 600; }
 
+/* ── 无内容态 ── */
+.np-unavailable {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 300px; text-align: center;
+}
+
+/* ── 响应式 ── */
 @media (max-width: 680px) {
   .newsstand-panel { width: 100vw; }
   .newsstand-list { padding: 0 18px 22px; }
@@ -96,6 +178,8 @@
   .np-sheet { padding: 20px 18px 30px; }
   .np-issue-title { font-size: 22px; }
   .np-motto { font-size: 15px; }
-  .np-text { font-size: 13.5px; line-height: 1.8; }
-  .np-section { font-size: 17px; }
+  .np-text { font-size: 12.5px; line-height: 1.7; }
+  .np-section { font-size: 15px; }
+  .np-grid { grid-template-columns: 1fr; }
+  .np-col { border-right: 0 !important; }
 }

@@ -99,10 +99,86 @@ function renderBlock(document: Document, block: NewspaperBlock): HTMLElement {
   }
 }
 
+// ── 报纸排版引擎 ──────────────────────────────────────────
+
+/** 一个版面的语义板块（由 section block 切分） */
+interface NewsSection {
+  /** 板块标题，取自 kind=section 的 text；头版前的引导内容为 '' */
+  title: string;
+  /** 该板块的所有 blocks（含 section 标题本身） */
+  blocks: NewspaperBlock[];
+}
+
+/** 按版面内容大小评估板块权重，用于决定栏宽 */
+function estimateSectionWeight(blocks: readonly NewspaperBlock[]): number {
+  let weight = 0;
+  for (const b of blocks) {
+    if (b.kind === 'link') weight += 2;
+    else if (b.kind === 'text') weight += b.text.length > 40 ? 2 : 1;
+    else if (b.kind === 'section') weight += 0;
+    else weight += 1;
+  }
+  return weight;
+}
+
+/** 判断板块是否为"无实质内容"，需过滤 */
+const EMPTY_PATTERNS = [
+  /^无$/, /^暂无$/, /^本周暂无/,
+  /不予收录/, /没有.*冲精.*作品/, /目前没有发现/,
+  /没有支持未满/, /好吧，忘记写了/,
+];
+
+function sectionHasContent(section: NewsSection): boolean {
+  const meaningful = section.blocks.filter(
+    (b) => b.kind !== 'section' && b.kind !== 'separator' && b.kind !== 'motto',
+  );
+  // 含 link 的板块一定保留
+  if (meaningful.some((b) => b.kind === 'link')) return true;
+  // 含非空且非说明性括号文字的板块保留
+  const substantive = meaningful.filter(
+    (b) =>
+      b.kind === 'text' &&
+      b.text.trim() !== '' &&
+      !b.text.startsWith('（') &&
+      !EMPTY_PATTERNS.some((re) => re.test(b.text.trim())),
+  );
+  // 有 label 也算有结构
+  if (meaningful.some((b) => b.kind === 'label')) return substantive.length > 0;
+  return substantive.length > 0;
+}
+
+/** 将扁平 blocks 切分为语义板块 */
+function splitSections(blocks: readonly NewspaperBlock[]): NewsSection[] {
+  const sections: NewsSection[] = [];
+  let current: NewsSection = { title: '', blocks: [] };
+  for (const block of blocks) {
+    if (block.kind === 'section') {
+      if (current.blocks.length > 0) sections.push(current);
+      current = { title: block.text, blocks: [block] };
+    } else {
+      current.blocks.push(block);
+    }
+  }
+  if (current.blocks.length > 0) sections.push(current);
+  return sections;
+}
+
+/** 渲染单个板块容器 */
+function renderSectionColumn(document: Document, section: NewsSection): HTMLElement {
+  const col = document.createElement('div');
+  col.className = 'np-col';
+  for (const block of section.blocks) {
+    col.appendChild(renderBlock(document, block));
+  }
+  return col;
+}
+
 function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number): HTMLElement {
   const page = issue.pages[pageIndex] ?? { title: '头版', blocks: [] };
   const sheet = document.createElement('article');
   sheet.className = 'np-sheet';
+
+  // ── 报头 ──
   const masthead = document.createElement('header');
   masthead.className = 'np-masthead';
   const kicker = document.createElement('span');
@@ -115,9 +191,73 @@ function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number
   pageLine.className = 'np-page-caption';
   pageLine.textContent = page.title;
   masthead.append(kicker, heading, pageLine);
+
+  // ── 正文排版 ──
   const body = document.createElement('div');
   body.className = 'np-body';
-  body.append(...page.blocks.map((block) => renderBlock(document, block)));
+
+  const allSections = splitSections(page.blocks);
+
+  // 分离头版引导区（motto / separator 等，在第一个 section 之前的内容）
+  const firstSectionIdx = allSections.findIndex((s) => s.title !== '');
+  const preamble = firstSectionIdx > 0 ? allSections.slice(0, firstSectionIdx) : [];
+  const namedSections = firstSectionIdx >= 0 ? allSections.slice(firstSectionIdx) : allSections;
+
+  // 过滤无实质内容的板块
+  const contentSections = namedSections.filter(sectionHasContent);
+
+  // 引导区（motto + separator + 精知优选的 intro text）渲染为跨栏头条
+  if (preamble.length > 0) {
+    const headline = document.createElement('div');
+    headline.className = 'np-headline';
+    for (const sec of preamble) {
+      for (const block of sec.blocks) {
+        headline.appendChild(renderBlock(document, block));
+      }
+    }
+    body.appendChild(headline);
+  }
+
+  // 按权重排序：最大的板块放头条跨栏，其余按多栏排版
+  if (contentSections.length > 0) {
+    const weighted = contentSections.map((s) => ({
+      section: s,
+      weight: estimateSectionWeight(s.blocks),
+    }));
+
+    // 权重最大的板块做跨栏头条（如果有多个板块且权重差距明显）
+    const maxWeight = Math.max(...weighted.map((w) => w.weight));
+    const leadCandidates = weighted.filter((w) => w.weight >= maxWeight * 0.6);
+    const hasLead = leadCandidates.length < weighted.length && contentSections.length >= 3;
+
+    if (hasLead) {
+      // 头条跨栏
+      const lead = weighted.reduce((best, w) => (w.weight > best.weight ? w : best));
+      const leadCol = renderSectionColumn(document, lead.section);
+      leadCol.classList.add('np-col-lead');
+      body.appendChild(leadCol);
+
+      // 其余板块多栏排列
+      const rest = contentSections.filter((s) => s !== lead.section);
+      if (rest.length > 0) {
+        const grid = document.createElement('div');
+        grid.className = 'np-grid';
+        for (const sec of rest) {
+          grid.appendChild(renderSectionColumn(document, sec));
+        }
+        body.appendChild(grid);
+      }
+    } else {
+      // 板块不多时全部多栏
+      const grid = document.createElement('div');
+      grid.className = 'np-grid';
+      for (const sec of contentSections) {
+        grid.appendChild(renderSectionColumn(document, sec));
+      }
+      body.appendChild(grid);
+    }
+  }
+
   sheet.append(masthead, body);
   return sheet;
 }
