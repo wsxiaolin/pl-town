@@ -28,7 +28,7 @@ async function waitForEntranceSettled(page: import('@playwright/test').Page) {
   expect(settled).toBe(0);
 }
 
-test('clicking a building plot lifts it up (no hover required)', async ({ page }) => {
+test('clicking a building plot keeps it grounded (no hover required)', async ({ page }) => {
   test.setTimeout(90_000);
   await seedCityStorage(page, 'click-lift-tester');
   await waitForCityBooted(page);
@@ -55,14 +55,14 @@ test('clicking a building plot lifts it up (no hover required)', async ({ page }
     bubbles: true,
   });
 
-  await expect.poll(() => page.evaluate(readActivityStateInPage).then((s: any) => s.groupY), { timeout: 15_000, intervals: [250, 500] }).toBe(0.22);
+  await expect.poll(() => page.evaluate(readActivityStateInPage).then((s: any) => s.groupY), { timeout: 15_000, intervals: [250, 500] }).toBe(0);
   const after = await readState(page);
   console.log('CLICK-ONLY', JSON.stringify({ point, after }));
-  expect(after.groupY).toBe(0.22);
+  expect(after.groupY).toBe(0);
   expect(after.hoveredLabels).toContain('活动区');
 });
 
-test('clicking a building label lifts it up', async ({ page }) => {
+test('clicking a building label keeps it grounded', async ({ page }) => {
   test.setTimeout(90_000);
   await seedCityStorage(page, 'label-lift-tester');
   await waitForCityBooted(page);
@@ -74,10 +74,10 @@ test('clicking a building label lifts it up', async ({ page }) => {
   await page.waitForTimeout(300);
   expect((await readState(page)).groupY).toBe(0);
   await label.click();
-  await expect.poll(() => page.evaluate(readActivityStateInPage).then((s: any) => s.groupY), { timeout: 15_000, intervals: [250, 500] }).toBe(0.22);
+  await expect.poll(() => page.evaluate(readActivityStateInPage).then((s: any) => s.groupY), { timeout: 15_000, intervals: [250, 500] }).toBe(0);
   const after = await readState(page);
   console.log('LABEL-CLICK', JSON.stringify({ after }));
-  expect(after.groupY).toBe(0.22);
+  expect(after.groupY).toBe(0);
 });
 
 test('destroyed buildings persist across reload and can be restored globally', async ({ page }) => {

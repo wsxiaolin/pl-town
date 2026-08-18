@@ -117,7 +117,12 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     document.getElementById('phoneBindForm')?.addEventListener('submit',bindPhysicsLabAccount,{signal:signal});
     updatePhoneBindingState();
     document.getElementById('phoneOpenWorks')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('all');},{signal:signal});
-    document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>loadPhoneSocial(((button as HTMLElement).dataset.plSocial ?? '') as SocialKind),{signal:signal}));
+    document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>{
+      const socialKind = button.dataset.plSocial;
+      if (socialKind && ['profile', 'mine', 'favorites', 'following', 'volunteers'].includes(socialKind)) {
+        loadPhoneSocial(socialKind as SocialKind);
+      }
+    },{signal:signal}));
     claimClose?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimCancel?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimSubmit?.addEventListener('click', () => {

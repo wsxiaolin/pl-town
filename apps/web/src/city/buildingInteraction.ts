@@ -3,6 +3,8 @@ import type { BuildingEntity } from './buildingEntity';
 import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 
+type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
+
 export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
