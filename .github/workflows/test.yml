@@ -40,20 +40,26 @@ jobs:
   # The Playwright suite renders a Three.js city with WebGL, which headless
   # Chromium cannot create. We shard the suite across a matrix and run each
   # shard under Xvfb with the SwiftShader software-GL driver (via the shared
-  # scripts/run-web-tests.sh wrapper). Shards cut wall-clock time roughly
-  # linearly; bump SHARD_TOTAL if the suite grows past ~6 min per shard.
+  # scripts/run-web-tests.sh wrapper).
+  #
+  # The suite is small (~30 tests across 4 files), so we keep only 2 shards.
+  # Each shard pays a heavy, non-cacheable setup cost (apt for Xvfb + GL libs,
+  # plus a ~170MB Chromium download with its apt deps), and GitHub-hosted
+  # 2-core runners bottleneck hard on apt/network when several shards do that
+  # in parallel — which was making the trailing shard stall for minutes at the
+  # install step. Halving the shards halves that redundant setup work and
+  # balances the load (the heaviest smoke tests no longer pile onto one shard).
+  # Bump total back up only if a shard grows past ~10 min.
   web:
     name: Web (Playwright) shard ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        # 4 shards keeps each ~3-4 min on a 2-core runner while still leaving
-        # headroom for the WebGL frame loop under software rendering.
-        shard: [1, 2, 3, 4]
-        total: [4]
+        shard: [1, 2]
+        total: [2]
     steps:
       - uses: actions/checkout@v4
 
@@ -82,6 +88,10 @@ jobs:
         env:
           CI: 'true'
           PLAYWRIGHT_WORKERS: '2'
+          # Chromium is already installed by the step above; skip the redundant
+          # `playwright install --with-deps` (a second apt pass) inside
+          # run-web-tests.sh so each shard sets up only once.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
       - name: Upload shard report
         if: ${{ !cancelled() }}

@@ -47,7 +47,7 @@ npm test                 # 前端 Playwright + 服务端集成测试
 ```bash
 scripts/run-web-tests.sh                 # 整套，默认单 worker
 PLAYWRIGHT_WORKERS=4 scripts/run-web-tests.sh
-scripts/run-web-tests.sh --shard=1/4     # 分片，配合 CI matrix
+scripts/run-web-tests.sh --shard=1/2     # 分片，配合 CI matrix
 ```
 
 为避免在 GitHub CI 和不同 agent 机器上反复踩安装坑（Node 依赖、Playwright Chromium、xvfb、Vulkan/SwiftShader 系统库），所有依赖已打包进 `docker/test.Dockerfile`。镜像只预装稳定依赖、不拷贝源码，运行时挂载仓库即可复用：
@@ -57,7 +57,7 @@ docker build -f docker/test.Dockerfile -t pl-town-test .
 docker run --rm -v "$PWD":/work -w /work pl-town-test scripts/run-web-tests.sh
 ```
 
-CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）/ 服务端测试在 runner 上直接跑；Web Playwright 套件按 4 分片矩阵并发执行，每个分片在 Xvfb + SwiftShader 下运行并上传报告产物。分片数通过 matrix `shard/total` 控制，套件变长时调大 `total`。
+CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）/ 服务端测试在 runner 上直接跑；Web Playwright 套件按 2 分片矩阵并发执行，每个分片在 Xvfb + SwiftShader 下运行并上传报告产物。套件目前只有约 30 个用例，分片过密会让每个分片重复承担一次 apt + Chromium 下载的安装成本，在 2 核 runner 上互相争抢资源、尾部分片卡在安装步；分片数通过 matrix `shard/total` 控制，套件变长、单分片超过约 10 分钟时再调大 `total`。
 
 新增或修改浏览器交互、布局、WebGL、端到端流程的测试时，注意：软件渲染下帧率偏低，涉及动画/位移的断言应使用 `expect.poll` 轮询而非固定 `waitForTimeout`；点击顶栏控件前必须经过 `waitForCityBooted`（等待启动屏淡出）；被画布拦截点击的控件使用 `click({ force: true })`。
 
