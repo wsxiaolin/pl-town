@@ -81,7 +81,7 @@ jobs:
         run: scripts/run-web-tests.sh --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           CI: 'true'
-          PLAYWRIGHT_WORKERS: '1'
+          PLAYWRIGHT_WORKERS: '2'
 
       - name: Upload shard report
         if: ${{ !cancelled() }}
