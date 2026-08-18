@@ -9,6 +9,10 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   const restaurant = BUILDING_DEFS.find((building) => building.id === 'wushi_restaurant');
   assert.ok(restaurant);
   assert.equal(restaurant.shape, 'restaurant');
+  const wildMushroomRestaurant = BUILDING_DEFS.find((building) => building.id === 'writingclub_outer');
+  assert.ok(wildMushroomRestaurant);
+  assert.equal(wildMushroomRestaurant.shape, 'wild_mushroom_restaurant');
+  assert.notEqual(wildMushroomRestaurant.shape, restaurant.shape);
   assert.equal(BUILDING_DEFS.filter((building) => building.x === restaurant.x && building.z === restaurant.z).length, 1);
 
   const southwestPond = { x: -24, z: -24, radius: 3 };
