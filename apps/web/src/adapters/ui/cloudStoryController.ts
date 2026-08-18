@@ -120,7 +120,9 @@ export function createCloudStoryController(options: Options) {
     }
     // The server remains authoritative, but rendering the deterministic next
     // node immediately keeps a choice responsive while its snapshot is in flight.
-    snapshot = state;
+    // Keep the server snapshot at the savepoint while the runtime renders the
+    // live transient node immediately.
+    snapshot = { ...state, nodeId: resumptionNodeId };
     render();
   };
 

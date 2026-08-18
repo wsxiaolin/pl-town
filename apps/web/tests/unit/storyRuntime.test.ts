@@ -1,4 +1,6 @@
 import { StoryRuntime, createInitialStoryState, getStoryBuildingState, getStoryEventCount } from '../../src/gameplay/stories/StoryRuntime';
+import { createCloudStoryController } from '../../src/adapters/ui/cloudStoryController';
+import type { StoryDialogModel } from '../../src/adapters/ui/cityDialogController';
 import type { StoryDefinition, StoryState } from '../../src/gameplay/stories/types';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -228,3 +230,50 @@ assert(chainRuntime.state().nodeId === 't3', 'the live node should be the latest
 assert(equals(chainPersisted, 'anchor'), 'a transient chain must keep the resumption node pinned to the last savepoint');
 assert(chainRuntime.choose('a4', 9), 'reaching the final savepoint should advance');
 assert(equals(chainPersisted, 'final'), 'reaching a savepoint at the end of a transient chain should update the resumption node');
+
+// The cloud controller must preserve the same savepoint semantics when its
+// snapshot is used as the runtime repository between choices.
+const sentNodeIds: string[] = [];
+const cloudDefinition: StoryDefinition = {
+  schemaVersion: 1,
+  definitionVersion: 1,
+  id: 'main.cloud-chain',
+  title: 'Cloud chain',
+  startNode: 'anchor',
+  nodes: {
+    anchor: { id: 'anchor', text: 'Anchor.', choices: [{ id: 'a1', label: 'Go', next: 't1' }] },
+    t1: { id: 't1', savepoint: false, text: 'T1.', choices: [{ id: 'a2', label: 'Go', next: 't2' }] },
+    t2: { id: 't2', savepoint: false, text: 'T2.', choices: [{ id: 'a3', label: 'Go', next: 'final' }] },
+    final: { id: 'final', terminal: true, text: 'Final.' },
+  },
+};
+const cloudDialogModels: StoryDialogModel[] = [];
+const cloudController = createCloudStoryController({
+  definition: cloudDefinition,
+  send: (command) => {
+    if (command.type === 'story.update') sentNodeIds.push(command.nodeId);
+    return true;
+  },
+  isOnline: () => true,
+  showToast: () => undefined,
+  awardAchievement: () => true,
+});
+cloudController.open({
+  openStory: (model: StoryDialogModel) => cloudDialogModels.push(model),
+} as never);
+cloudController.applyServerState({
+  storyId: cloudDefinition.id,
+  definitionVersion: 1,
+  nodeId: 'anchor',
+  flags: {},
+  ending: null,
+  visitCount: 0,
+  updatedAt: new Date(1).toISOString(),
+});
+const chooseCloudOption = (index: number): void => {
+  cloudDialogModels.at(-1)?.options?.[index]?.onPick();
+};
+chooseCloudOption(0);
+chooseCloudOption(0);
+chooseCloudOption(0);
+assert(sentNodeIds.join(',') === 'anchor,anchor,final', 'cloud persistence must keep transient chains pinned to the savepoint');

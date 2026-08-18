@@ -496,7 +496,7 @@ try {
   const topology = await fetch(`${adminBase}/story-topology?storyId=${encodeURIComponent('main.echo.act-one')}`, { headers: { cookie } });
   const topologyPayload = await topology.json();
   if (!topology.ok || !topologyPayload.summary || !Array.isArray(topologyPayload.summary.nodes) || !Array.isArray(topologyPayload.summary.edges) || topologyPayload.summary.nodes.length === 0) throw new Error('Admin story topology must return populated nodes and edges for the echo story');
-  if (topologyPayload.summary.nodes.length > 20) throw new Error(`Admin story topology should list only savepoint nodes (<=20), got ${topologyPayload.summary.nodes.length}`);
+  if (topologyPayload.summary.nodes.length !== 18) throw new Error(`Admin story topology should list exactly 18 savepoint nodes, got ${topologyPayload.summary.nodes.length}`);
   if (topologyPayload.summary.definitionVersion !== 13) throw new Error(`Admin story topology should report definitionVersion 13, got ${topologyPayload.summary.definitionVersion}`);
   const storyCatalog = await fetch(`${adminBase}/stories`, { headers: { cookie } });
   const storyCatalogPayload = await storyCatalog.json();
