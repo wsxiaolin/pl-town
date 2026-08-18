@@ -275,7 +275,13 @@ async function loadChat() {
     const row = node('tr');
     const identity = node('td'); identity.append(node('strong', message.nickname), node('small', message.userId));
     const meta = node('td'); meta.append(node('div', message.text), node('small', formatDate(message.createdAt)));
-    const status = node('td', message.hiddenAt ? '已隐藏' : message.flaggedAt ? '已标记' : '正常');
+    const moderationLabels = { pending: '审核中', approved: '审核通过', rejected: '自动拦截', error: '审核异常', unreviewed: '未审核' };
+    const baseStatus = message.hiddenAt ? '已隐藏' : message.flaggedAt ? '已标记' : '正常';
+    const moderationStatus = moderationLabels[message.moderationStatus] || '未审核';
+    const risks = Array.isArray(message.moderationRiskTypes) && message.moderationRiskTypes.length ? `：${message.moderationRiskTypes.join('、')}` : '';
+    const status = node('td', `${baseStatus} · ${moderationStatus}${risks}`);
+    if (message.moderationRequestId) status.title = `智谱请求号：${message.moderationRequestId}`;
+    else if (message.moderationError) status.title = message.moderationError;
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const hide = node('button', message.hiddenAt ? '显示' : '隐藏', message.hiddenAt ? '' : 'warning'); hide.type = 'button'; hide.addEventListener('click', () => mutateChat(message.id, message.hiddenAt ? 'show' : 'hide'));
     const flagBtn = node('button', '标记'); flagBtn.type = 'button'; flagBtn.addEventListener('click', () => mutateChat(message.id, 'flag'));

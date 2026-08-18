@@ -68,6 +68,11 @@ export type ChatMessageRow = {
   flagged_at: string | null;
   hidden_at: string | null;
   hidden_by: string | null;
+  moderation_status: 'unreviewed' | 'pending' | 'approved' | 'rejected' | 'error';
+  moderation_request_id: string | null;
+  moderation_risk_types_json: string;
+  moderation_error: string | null;
+  moderated_at: string | null;
   created_at: string;
 };
 

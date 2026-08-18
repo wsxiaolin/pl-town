@@ -5,6 +5,7 @@ import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate, RegistrationLimitError, tokenHash } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
+import { ChatModerationService } from './chatModerationService.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
@@ -50,6 +51,8 @@ const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ 
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
+const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
+chatModeration.start();
 let housingBroadcastTimer: NodeJS.Timeout | undefined;
 function broadcastHousingState() {
   if (housingBroadcastTimer) return;
@@ -156,7 +159,14 @@ async function handle(client: Client, raw: string) {
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); bumpMetric('chatMessages'); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
+      const text = message.text.trim().slice(0, 500);
+      if (text) {
+        const messageId = db.recordChatMessage(userId, client.user.nickname, text, chatModeration.enabled);
+        bumpMetric('chatMessages');
+        broadcast({ type: 'chat', messageId, userId, nickname: client.user.nickname, text }, undefined);
+        chatModeration.enqueue(messageId, text);
+      }
+      return;
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
@@ -574,12 +584,14 @@ const shutdown = async (signal: string) => {
   stopping = true;
   logger.info('Graceful shutdown started', { signal, clients: clients.size });
   stopAutomaticBackups();
+  const moderationStopped = chatModeration.stop();
   if (housingBroadcastTimer) clearTimeout(housingBroadcastTimer);
   pendingPositions.forEach((_position, userId) => flushPosition(userId));
   for (const socket of sockets) socket.close(1001, 'Server shutting down');
   wss.close();
   try { await waitForBackup(); } catch (error) { logger.error('Backup did not finish during shutdown', { error: String(error) }); }
   http.close(async () => {
+    await moderationStopped;
     db.closeDatabase();
     logger.info('Graceful shutdown complete');
     await closeLogger();
