@@ -31,26 +31,76 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
 
 test('wild mushroom restaurant uses the standard unlock flow', () => {
   let interacted = false;
-  let progressionCalled = false;
+  let modalOpened = false;
+  let trackCount = 0;
   const interaction = createBuildingInteraction({
     isBuildingUnavailable: () => false,
     getMultiplayerHousing: () => ({ progression: {
-      interactBuilding: () => { progressionCalled = true; },
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
       openShop: () => {},
     } }),
-    getCityDialogs: () => null,
+    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
     getEchoStoryController: () => null,
     getStatsPanelController: () => null,
     getCommunityPanels: () => null,
     getWriterCatalogController: () => null,
     getNewsstandController: () => null,
-    trackInteraction: () => {},
-    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; return true; } }),
+    trackInteraction: () => { trackCount += 1; },
+    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; return 'opened'; } }),
   });
 
   interaction.navigateTo({ id: 'writingclub_outer' });
-  assert.equal(interacted, false);
-  assert.equal(progressionCalled, true);
+  assert.equal(interacted, true);
+  assert.equal(modalOpened, false);
+  assert.equal(trackCount, 1);
+});
+
+test('wild mushroom restaurant falls back to the building modal once exhausted', () => {
+  let modalOpened = false;
+  let trackCount = 0;
+  const interaction = createBuildingInteraction({
+    isBuildingUnavailable: () => false,
+    getMultiplayerHousing: () => ({ progression: {
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      openShop: () => {},
+    } }),
+    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getEchoStoryController: () => null,
+    getStatsPanelController: () => null,
+    getCommunityPanels: () => null,
+    getWriterCatalogController: () => null,
+    getNewsstandController: () => null,
+    trackInteraction: () => { trackCount += 1; },
+    getWildMushroomRestaurant: () => ({ interact: () => 'exhausted' }),
+  });
+
+  interaction.navigateTo({ id: 'writingclub_outer' });
+  assert.equal(modalOpened, true);
+  assert.equal(trackCount, 1);
+});
+
+test('wild mushroom restaurant falls back to the building modal when dialogs are unavailable', () => {
+  let modalOpened = false;
+  let trackCount = 0;
+  const interaction = createBuildingInteraction({
+    isBuildingUnavailable: () => false,
+    getMultiplayerHousing: () => ({ progression: {
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      openShop: () => {},
+    } }),
+    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getEchoStoryController: () => null,
+    getStatsPanelController: () => null,
+    getCommunityPanels: () => null,
+    getWriterCatalogController: () => null,
+    getNewsstandController: () => null,
+    trackInteraction: () => { trackCount += 1; },
+    getWildMushroomRestaurant: () => ({ interact: () => 'no-dialog' }),
+  });
+
+  interaction.navigateTo({ id: 'writingclub_outer' });
+  assert.equal(modalOpened, true);
+  assert.equal(trackCount, 1);
 });
 
 test('wild mushroom restaurant story stops after three visits', () => {
@@ -69,10 +119,10 @@ test('wild mushroom restaurant story stops after three visits', () => {
     }),
   });
 
-  assert.equal(restaurant.interact(), true);
-  assert.equal(restaurant.interact(), true);
-  assert.equal(restaurant.interact(), true);
-  assert.equal(restaurant.interact(), false);
+  assert.equal(restaurant.interact(), 'opened');
+  assert.equal(restaurant.interact(), 'opened');
+  assert.equal(restaurant.interact(), 'opened');
+  assert.equal(restaurant.interact(), 'exhausted');
   assert.equal(values.get('minicityWildMushroomVisits'), '3');
   assert.ok(openedStories > 0);
 });

@@ -14,8 +14,10 @@ export interface WildMushroomRestaurantOptions {
   getStorage?: () => Pick<Storage, 'getItem' | 'setItem'>;
 }
 
+export type WildMushroomInteractResult = 'opened' | 'no-dialog' | 'exhausted';
+
 export interface WildMushroomRestaurant {
-  interact(): boolean;
+  interact(): WildMushroomInteractResult;
 }
 
 export function createWildMushroomRestaurant(options: WildMushroomRestaurantOptions): WildMushroomRestaurant {
@@ -126,15 +128,15 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
     advance(0);
   };
 
-  function interact(): boolean {
-    if (!options.getDialogs()) return false;
+  function interact(): WildMushroomInteractResult {
+    if (!options.getDialogs()) return 'no-dialog';
     const visits = readVisits();
-    if (visits >= 3) return false;
+    if (visits >= 3) return 'exhausted';
     writeVisits(visits + 1);
     if (visits === 0) firstVisit();
     else if (visits === 1) secondVisit();
     else thirdVisit();
-    return true;
+    return 'opened';
   }
 
   return { interact };

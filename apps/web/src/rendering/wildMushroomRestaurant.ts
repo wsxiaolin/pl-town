@@ -28,8 +28,8 @@ export function buildWildMushroomRestaurant(options: {
   group.add(body);
 
   const frontZ = depth / 2 + 0.04;
-  addPart(group, new THREE.BoxGeometry(width + 0.3, 0.28, depth + 0.3), roof, [0, floorTop + height + 0.14, 0]);
-  addPart(group, new THREE.ConeGeometry(3.8, 1.05, 4), roof, [0, floorTop + height + 0.72, 0]);
+  addPart(group, new THREE.BoxGeometry(width + 0.3, 0.28, depth + 0.3), roof, [0, floorTop + height + 0.152, 0]);
+  addPart(group, new THREE.ConeGeometry(3.8, 1.05, 4), roof, [0, floorTop + height + 0.74, 0]);
   addPart(group, new THREE.BoxGeometry(2.2, 1.25, 0.08), { color: 0x2b211d, roughness: 0.3, metalness: 0.05 }, [0, floorTop + 1.02, frontZ], false);
   addPart(group, new THREE.BoxGeometry(0.12, 1.45, 0.16), timber, [-1.18, floorTop + 1.02, frontZ + 0.03], false);
   addPart(group, new THREE.BoxGeometry(0.12, 1.45, 0.16), timber, [1.18, floorTop + 1.02, frontZ + 0.03], false);
@@ -50,5 +50,5 @@ export function buildWildMushroomRestaurant(options: {
   group.position.set(definition.x, 0, definition.z);
   group.userData.navigationFootprint = { width: width + 0.2, depth: depth + 0.2 };
   group.traverse((child) => { if ((child as THREE.Mesh).isMesh) child.userData.buildingId = definition.id; });
-  return { ...definition, group, body, bodyMat: wall, labelEl: null, labelY: base + height + 1.2 };
+  return { ...definition, group, body, bodyMat: wall, labelEl: null, labelY: base + height + 1.9 };
 }
