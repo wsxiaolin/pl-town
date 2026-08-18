@@ -118,7 +118,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     updatePhoneBindingState();
     document.getElementById('phoneOpenWorks')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('all');},{signal:signal});
     document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>{
-      const socialKind = button.dataset.plSocial;
+      const socialKind = (button as HTMLElement).dataset.plSocial;
       if (socialKind && ['profile', 'mine', 'favorites', 'following', 'volunteers'].includes(socialKind)) {
         loadPhoneSocial(socialKind as SocialKind);
       }
