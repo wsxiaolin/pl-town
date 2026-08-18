@@ -3,7 +3,7 @@ import * as THREE from 'three';
 export type DamageableBuilding = {
   id: string;
   group: THREE.Group;
-  body?: THREE.Mesh;
+  body?: THREE.Mesh | null;
   labelEl?: HTMLElement | null;
 };
 

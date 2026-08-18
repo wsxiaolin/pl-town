@@ -3,10 +3,10 @@ export const NPC_TYPES = ['resident', 'story'] as const;
 export type NpcType = (typeof NPC_TYPES)[number];
 
 export interface NpcTypeLike {
-  npcType?: NpcType;
-  type?: NpcType;
+  npcType?: string;
+  type?: string;
 }
 
 export function getNpcType(profile: NpcTypeLike): NpcType {
-  return profile.npcType ?? profile.type ?? 'resident';
+  return (profile.npcType ?? profile.type ?? 'resident') as NpcType;
 }

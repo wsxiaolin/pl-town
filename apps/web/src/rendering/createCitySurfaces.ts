@@ -1,12 +1,7 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
-
-type MaterialOptions = THREE.MeshStandardMaterialParameters & {
-  tex?: string;
-  rx?: number;
-  ry?: number;
-};
+import type { MaterialParameters } from './meshFactory';
 
 type ThemeMaterial = {
   mat: THREE.MeshStandardMaterial;
@@ -24,10 +19,10 @@ type CitySurfaceOptions = {
     dayPath: number;
     nightPath: number;
   };
-  createMaterial: (options: MaterialOptions) => THREE.MeshStandardMaterial;
+  createMaterial: (parameters: MaterialParameters) => THREE.MeshStandardMaterial;
   pathMaterials: THREE.MeshStandardMaterial[];
   groundMaterials: ThemeMaterial[];
-  addLamps: (positions: number[][]) => void;
+  addLamps: (positions: [number, number, number][]) => void;
 };
 
 export function createCitySurfaces(options: CitySurfaceOptions): void {
@@ -45,7 +40,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
   // Surface overlays are painter-ordered. They still test against buildings,
   // but do not compete with one another in the depth buffer.
-  const createLayerMaterial = (parameters: MaterialOptions): THREE.MeshStandardMaterial => {
+  const createLayerMaterial = (parameters: MaterialParameters): THREE.MeshStandardMaterial => {
     const material = createMaterial(parameters);
     material.depthWrite = false;
     return material;

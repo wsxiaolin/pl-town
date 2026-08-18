@@ -1,5 +1,7 @@
 import type * as THREE from 'three';
 
+import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
+
 export type DebugApiOptions = {
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
@@ -23,7 +25,7 @@ export type DebugApiOptions = {
   restoreAll: () => number;
   openModal: (building: any) => void;
   interactWithSceneInterestPoint: (id: any) => void;
-  getSceneInterestPoints: () => { entities: Map<string, any> } | null;
+  getSceneInterestPoints: () => SceneInterestPoints | null;
   burnCity: () => boolean;
   burnCityActive: () => boolean;
   burnCityProgress: () => number;

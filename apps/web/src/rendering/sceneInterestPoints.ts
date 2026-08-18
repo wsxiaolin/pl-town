@@ -21,11 +21,11 @@ interface SceneInterestPointOptions extends SceneInterestPointOptionsInput {
 
 export interface SceneInterestPoints {
   entities: ReadonlyMap<SceneInterestPointId, SceneInterestPointEntity>;
-  raycastTargets: readonly THREE.Object3D[];
+  raycastTargets: THREE.Object3D[];
   update(elapsedSeconds: number): void;
   setWellPhase(phase: 'idle' | 'focus' | 'engulf' | 'recede'): void;
   setBeachEncounterPhase(phase: 'hidden' | 'revealed' | 'reward'): void;
-  setActiveStoryPoints(ids: readonly SceneInterestPointId[]): void;
+  setActiveStoryPoints(ids: readonly string[]): void;
   dispose(): void;
 }
 

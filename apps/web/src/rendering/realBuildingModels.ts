@@ -9,7 +9,7 @@ export type ReplaceableBuilding = {
   id: string;
   group: THREE.Group;
   bodyMat?: THREE.MeshStandardMaterial;
-  body?: THREE.Mesh;
+  body?: THREE.Mesh | null;
 };
 
 const loader = new GLTFLoader();

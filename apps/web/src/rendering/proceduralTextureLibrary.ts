@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as THREE from 'three';
 import type { ResourcePool } from '../core/ResourcePool';
 
@@ -7,17 +6,18 @@ export function createProceduralTextureLibrary(
   getRenderer: () => THREE.WebGLRenderer | null | undefined,
   getAnisotropy: () => number,
 ) {
-  const _texCanvases = {};
-  function _canvas(key, size, drawFn) {
-    if (!_texCanvases[key]) {
-      const c = document.createElement('canvas');
+  const _texCanvases: Record<string, HTMLCanvasElement> = {};
+  function _canvas(key: string, size: number, drawFn: (ctx: CanvasRenderingContext2D, s: number) => void): HTMLCanvasElement {
+    let c = _texCanvases[key];
+    if (!c) {
+      c = document.createElement('canvas');
       c.width = c.height = size;
-      drawFn(c.getContext('2d'), size);
+      drawFn(c.getContext('2d')!, size);
       _texCanvases[key] = c;
     }
-    return _texCanvases[key];
+    return c;
   }
-  function _tex(key, rx, ry) {
+  function _tex(key: string, rx?: number, ry?: number): THREE.Texture | null {
     const c = _texCanvases[key];
     if (!c) return null;
     const repeatX = rx || 1, repeatY = ry || 1;
@@ -33,7 +33,7 @@ export function createProceduralTextureLibrary(
       return t;
     });
   }
-  function _texClamp(key) {
+  function _texClamp(key: string): THREE.Texture | null {
     const c = _texCanvases[key];
     if (!c) return null;
     return resources.texture(`clamp:${key}`, () => {
@@ -46,7 +46,7 @@ export function createProceduralTextureLibrary(
       return t;
     });
   }
-  function addFacade(g, texKey, w, h, y, zOffset, rotY) {
+  function addFacade(g: THREE.Object3D, texKey: string, w: number, h: number, y: number, zOffset: number, rotY?: number): THREE.Mesh | null {
     const t = _texClamp(texKey);
     if (!t) return null;
     const mat = resources.material({ kind:'facade', texKey }, () =>
@@ -59,20 +59,22 @@ export function createProceduralTextureLibrary(
     g.add(facade);
     return facade;
   }
-  function _noise(ctx, size, amount) {
+  function _noise(ctx: CanvasRenderingContext2D, size: number, amount: number): void {
     const img = ctx.getImageData(0, 0, size, size);
-    for (let i = 0; i < img.data.length; i += 4) {
+    const data = img.data;
+    for (let i = 0; i < data.length; i += 4) {
       const n = (Math.random() - 0.5) * amount * 255;
-      img.data[i]   = Math.max(0, Math.min(255, img.data[i]   + n));
-      img.data[i+1] = Math.max(0, Math.min(255, img.data[i+1] + n));
-      img.data[i+2] = Math.max(0, Math.min(255, img.data[i+2] + n));
+      const r = data[i]!, g = data[i+1]!, b = data[i+2]!;
+      data[i]   = Math.max(0, Math.min(255, r + n));
+      data[i+1] = Math.max(0, Math.min(255, g + n));
+      data[i+2] = Math.max(0, Math.min(255, b + n));
     }
     ctx.putImageData(img, 0, 0);
   }
-  function _shade(base, s) {
+  function _shade(base: [number, number, number], s: number): string {
     return `rgb(${Math.floor(base[0]*s)},${Math.floor(base[1]*s)},${Math.floor(base[2]*s)})`;
   }
-  const TEX = {};
+  const TEX: { skyDay: THREE.Texture; skyNight: THREE.Texture } = { skyDay: undefined!, skyNight: undefined! };
   function initTextures() {
     // --- Wall: cream facade with window grid ---
     _canvas('wall', 512, (ctx, s) => {
@@ -267,7 +269,7 @@ export function createProceduralTextureLibrary(
       }
       for (let i = 0; i < 20; i++) {
         const x = Math.random()*s, y = Math.random()*s;
-        ctx.fillStyle = ['rgba(200,180,200,0.4)','rgba(220,200,160,0.4)','rgba(180,200,220,0.3)'][i%3];
+        ctx.fillStyle = ['rgba(200,180,200,0.4)','rgba(220,200,160,0.4)','rgba(180,200,220,0.3)'][i%3]!;
         ctx.fillRect(x, y, 1.5, 1.5);
       }
       _noise(ctx, s, 0.025);
@@ -301,7 +303,7 @@ export function createProceduralTextureLibrary(
     });
   
     // --- Sky day ---
-    _canvas('skyDay', 256, (ctx, s) => {
+    const skyDayCanvas = _canvas('skyDay', 256, (ctx, s) => {
       const g = ctx.createLinearGradient(0, 0, 0, s);
       g.addColorStop(0, '#F9F8F6'); g.addColorStop(0.6, '#F5F4F0'); g.addColorStop(1, '#ECEBE6');
       ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
@@ -314,7 +316,7 @@ export function createProceduralTextureLibrary(
     });
   
     // --- Sky night ---
-    _canvas('skyNight', 256, (ctx, s) => {
+    const skyNightCanvas = _canvas('skyNight', 256, (ctx, s) => {
       const g = ctx.createLinearGradient(0, 0, 0, s);
       g.addColorStop(0, '#D4D3CE'); g.addColorStop(0.6, '#C8C7C2'); g.addColorStop(1, '#BCBBB6');
       ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
@@ -322,12 +324,12 @@ export function createProceduralTextureLibrary(
     });
   
     TEX.skyDay = resources.texture('sky:day', () => {
-      const texture = new THREE.CanvasTexture(_texCanvases.skyDay);
+      const texture = new THREE.CanvasTexture(skyDayCanvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       return texture;
     });
     TEX.skyNight = resources.texture('sky:night', () => {
-      const texture = new THREE.CanvasTexture(_texCanvases.skyNight);
+      const texture = new THREE.CanvasTexture(skyNightCanvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       return texture;
     });
@@ -343,7 +345,7 @@ export function createProceduralTextureLibrary(
       }
       for (let i = 0; i < 15; i++) {
         const x = Math.random()*s, y = Math.random()*s;
-        ctx.fillStyle = ['rgba(232,88,88,0.5)','rgba(232,168,56,0.5)','rgba(168,88,232,0.4)'][i%3];
+        ctx.fillStyle = ['rgba(232,88,88,0.5)','rgba(232,168,56,0.5)','rgba(168,88,232,0.4)'][i%3]!;
         ctx.fillRect(x, y, 2, 2);
       }
       _noise(ctx, s, 0.03);
@@ -477,14 +479,14 @@ export function createProceduralTextureLibrary(
         ctx.fillStyle = '#A8C8E8'; ctx.fillRect(0, y, s, 2);  // floor dividers
         for (let p = 0; p < panels; p++) {
           const x = p*pw, tone = (f*3 + p*7) % 5;
-          const palettes = [
+          const palettes: [string, string][] = [
             ['#B8D4F0', '#90B8DC'],
             ['#A0C0E8', '#7CA0C8'],
             ['#C0DCF8', '#A0C4E0'],
             ['#88A8CC', '#6088B0'],
             ['#A8C4E4', '#80A4C8']
           ];
-          const pal = palettes[tone];
+          const pal = palettes[tone]!;
           const g = ctx.createLinearGradient(x, y+2, x, y+fh-2);
           g.addColorStop(0, pal[0]); g.addColorStop(0.5, pal[1]); g.addColorStop(1, pal[0]);
           ctx.fillStyle = g; ctx.fillRect(x+2, y+2, pw-4, fh-4);
@@ -563,7 +565,7 @@ export function createProceduralTextureLibrary(
       for (let r = 0; r < rows; r++) {
         const y = r*rh, tone = (r%3);
         const colors = ['#A8B880', '#C8D8A0', '#9AB078'];
-        ctx.fillStyle = colors[tone];
+        ctx.fillStyle = colors[tone]!;
         ctx.fillRect(0, y, s, rh-1);
         ctx.fillStyle = 'rgba(60,80,40,0.4)';
         for (let x = 0; x < s; x += 6) ctx.fillRect(x, y, 1, rh-1);
@@ -571,7 +573,7 @@ export function createProceduralTextureLibrary(
       // sparse wildflowers
       for (let i = 0; i < 30; i++) {
         const x = Math.random()*s, y = Math.random()*s;
-        ctx.fillStyle = ['rgba(232,168,56,0.6)','rgba(232,88,88,0.5)','rgba(168,88,232,0.4)'][i%3];
+        ctx.fillStyle = ['rgba(232,168,56,0.6)','rgba(232,88,88,0.5)','rgba(168,88,232,0.4)'][i%3]!;
         ctx.fillRect(x, y, 2, 2);
       }
       _noise(ctx, s, 0.03);
@@ -719,10 +721,10 @@ export function createProceduralTextureLibrary(
     });
   
     // ══ 建筑立面贴图（完整立面，非重复）══
-    function _win(ctx,x,y,w,h,frame,glass){ctx.fillStyle=frame;ctx.fillRect(x-2,y-2,w+4,h+4);const gr=ctx.createLinearGradient(x,y,x+w,y+h);gr.addColorStop(0,glass[0]);gr.addColorStop(0.5,glass[1]);gr.addColorStop(1,glass[2]);ctx.fillStyle=gr;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(255,255,255,0.25)';ctx.fillRect(x,y,w*0.35,h*0.35);ctx.fillStyle='rgba(60,70,90,0.15)';ctx.fillRect(x+w/2-0.5,y,1,h);ctx.fillRect(x,y+h/2-0.5,w,1);}
-    function _door(ctx,x,y,w,h,frame,panel){ctx.fillStyle=frame;ctx.fillRect(x-3,y-3,w+6,h+6);ctx.fillStyle=panel;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(0,0,0,0.1)';ctx.fillRect(x,y,w/2,h);ctx.fillStyle='rgba(255,255,255,0.08)';ctx.fillRect(x+w/2,y,w/2,h);ctx.fillStyle='rgba(218,165,32,0.6)';ctx.beginPath();ctx.arc(x+w*0.7,y+h*0.5,2,0,Math.PI*2);ctx.fill();}
-    function _cornice(ctx,y,color){ctx.fillStyle=color;ctx.fillRect(0,y,512,8);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(0,y+8,512,3);}
-    function _awning(ctx,y,a,b){const sw=512/8;for(let i=0;i<8;i++){ctx.fillStyle=i%2===0?a:b;ctx.fillRect(i*sw,y,sw,12);}ctx.fillStyle='rgba(0,0,0,0.1)';ctx.fillRect(0,y+12,512,3);}
+    function _win(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, frame: string, glass: [string, string, string]): void {ctx.fillStyle=frame;ctx.fillRect(x-2,y-2,w+4,h+4);const gr=ctx.createLinearGradient(x,y,x+w,y+h);gr.addColorStop(0,glass[0]);gr.addColorStop(0.5,glass[1]);gr.addColorStop(1,glass[2]);ctx.fillStyle=gr;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(255,255,255,0.25)';ctx.fillRect(x,y,w*0.35,h*0.35);ctx.fillStyle='rgba(60,70,90,0.15)';ctx.fillRect(x+w/2-0.5,y,1,h);ctx.fillRect(x,y+h/2-0.5,w,1);}
+    function _door(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, frame: string, panel: string): void {ctx.fillStyle=frame;ctx.fillRect(x-3,y-3,w+6,h+6);ctx.fillStyle=panel;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(0,0,0,0.1)';ctx.fillRect(x,y,w/2,h);ctx.fillStyle='rgba(255,255,255,0.08)';ctx.fillRect(x+w/2,y,w/2,h);ctx.fillStyle='rgba(218,165,32,0.6)';ctx.beginPath();ctx.arc(x+w*0.7,y+h*0.5,2,0,Math.PI*2);ctx.fill();}
+    function _cornice(ctx: CanvasRenderingContext2D, y: number, color: string): void {ctx.fillStyle=color;ctx.fillRect(0,y,512,8);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(0,y+8,512,3);}
+    function _awning(ctx: CanvasRenderingContext2D, y: number, a: string, b: string): void {const sw=512/8;for(let i=0;i<8;i++){ctx.fillStyle=i%2===0?a:b;ctx.fillRect(i*sw,y,sw,12);}ctx.fillStyle='rgba(0,0,0,0.1)';ctx.fillRect(0,y+12,512,3);}
   
     _canvas('facade_bank',512,(ctx,s)=>{ctx.fillStyle='#F0EFEC';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#E8E7E2');ctx.fillStyle='#F5F4F1';ctx.beginPath();ctx.moveTo(0,8);ctx.lineTo(s/2,50);ctx.lineTo(s,8);ctx.fill();ctx.fillStyle='rgba(0,0,0,0.04)';ctx.fillRect(0,8,s,4);ctx.fillStyle='#EAE9E4';ctx.fillRect(0,50,s,20);ctx.fillStyle='#D8D7D2';ctx.fillRect(0,64,s,6);const colW=40,gap=(s-5*colW)/4;for(let i=0;i<5;i++){const cx=i*(colW+gap);ctx.fillStyle='#F8F7F5';ctx.fillRect(cx,70,colW,s-100);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(cx,70,4,s-100);ctx.fillRect(cx+colW-4,70,4,s-100);ctx.fillStyle='#E8E7E2';ctx.fillRect(cx-4,68,colW+8,6);ctx.fillRect(cx-4,s-36,colW+8,6);}_door(ctx,s/2-30,s-90,60,50,'#C8A86D','#4A3A2A');ctx.fillStyle='#E0DFDC';ctx.fillRect(s/2-50,s-30,100,6);ctx.fillStyle='#D4D3D0';ctx.fillRect(s/2-40,s-20,80,6);_noise(ctx,s,0.02);});
     _canvas('facade_tower',512,(ctx,s)=>{ctx.fillStyle='#D5DDED';ctx.fillRect(0,0,s,s);const floors=12,fh=s/floors;for(let f=0;f<floors;f++){const y=f*fh;ctx.fillStyle='#C8C8C0';ctx.fillRect(0,y,s,3);const panels=5,pw=s/panels;for(let p=0;p<panels;p++){const x=p*pw,t=(f+p)%3;const gr=ctx.createLinearGradient(x,y,x+pw,y+fh);if(t===0){gr.addColorStop(0,'#B0C8E8');gr.addColorStop(0.5,'#90B0D0');gr.addColorStop(1,'#7898B8');}else if(t===1){gr.addColorStop(0,'#C0D8F0');gr.addColorStop(0.5,'#A0C0E0');gr.addColorStop(1,'#88A8C8');}else{gr.addColorStop(0,'#A8C0E0');gr.addColorStop(0.5,'#88A8C8');gr.addColorStop(1,'#7090B0');}ctx.fillStyle=gr;ctx.fillRect(x+1,y+4,pw-2,fh-7);ctx.fillStyle='rgba(255,255,255,0.18)';ctx.fillRect(x+1,y+4,pw-2,(fh-7)*0.3);}}ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.3,s-fh,s*0.4,fh-4);ctx.fillStyle='rgba(200,220,250,0.4)';ctx.fillRect(s*0.32,s-fh+2,s*0.36,fh-8);_noise(ctx,s,0.012);});
@@ -759,7 +761,7 @@ export function createProceduralTextureLibrary(
     _canvas('facade_kiosk',512,(ctx,s)=>{ctx.fillStyle='#E8E0D5';ctx.fillRect(0,0,s,s);ctx.fillStyle='#D8C8A0';ctx.fillRect(0,0,s,s*0.35);for(let c=0;c<3;c++){_win(ctx,20+c*(s/3),15,(s/3)-30,s*0.3-20,'#C8B8A0',['#D5E8F8','#A8C8E0','#90B0C8']);}_awning(ctx,s*0.35,'#E8A838','#F5F4F1');ctx.fillStyle='#4A6FA8';ctx.fillRect(20,s*0.4,s-40,s*0.25);ctx.fillStyle='#C4A86D';ctx.fillRect(0,s*0.65,s,s*0.35);ctx.fillStyle='#3B6FE0';ctx.fillRect(s*0.2,s*0.35-2,s*0.6,8);_noise(ctx,s,0.02);});
     _canvas('facade_observatory',512,(ctx,s)=>{ctx.fillStyle='#EAE9E6';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D8D7D2');_cornice(ctx,s-10,'#D8D7D2');for(let c=0;c<4;c++){_win(ctx,20+c*(s/4),20,(s/4)-30,s*0.4-20,'#C8C7C2',['#D0E8F8','#A8C8E0','#90B0C8']);}_cornice(ctx,s*0.45,'#D8D7D2');_door(ctx,s/2-25,s*0.55,50,s*0.35,'#B8A06D','#5A4A3A');const gr=ctx.createRadialGradient(s/2,s*0.2,0,s/2,s*0.2,40);gr.addColorStop(0,'rgba(59,111,224,0.15)');gr.addColorStop(1,'rgba(59,111,224,0)');ctx.fillStyle=gr;ctx.fillRect(s*0.2,0,s*0.6,s*0.4);_noise(ctx,s,0.02);});
     _canvas('facade_altar',512,(ctx,s)=>{ctx.fillStyle='#E4E3E0';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#D0CFCC');ctx.fillStyle='#F0EFEC';ctx.fillRect(0,10,s,15);const nP=5;for(let i=0;i<nP;i++){const px=20+i*(s-40)/(nP-1)-12;ctx.fillStyle='#D8D7D2';ctx.fillRect(px,25,24,s-55);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(px,25,4,s-55);ctx.fillRect(px+20,25,4,s-55);ctx.fillStyle='#C8C7C2';ctx.fillRect(px-3,23,30,5);ctx.fillRect(px-3,s-32,30,5);}ctx.fillStyle='#D0CFCC';ctx.fillRect(0,s-30,s,12);ctx.fillStyle='#F8F4E8';ctx.fillRect(s/2-50,s-35,100,12);ctx.fillStyle='#E8A838';ctx.beginPath();ctx.arc(s/2,s-29,5,0,Math.PI*2);ctx.fill();_noise(ctx,s,0.02);});
-    _canvas('facade_board',512,(ctx,s)=>{ctx.fillStyle='#C4A86D';ctx.fillRect(0,0,s,s);ctx.fillStyle='#A88858';ctx.fillRect(0,0,s,20);ctx.fillRect(0,s-20,s,20);ctx.fillRect(0,0,20,s);ctx.fillRect(s-20,0,20,s);ctx.fillStyle='#D8C8A0';ctx.fillRect(20,20,s-40,s-40);const papers=[[40,35,80,60,'#F8F4E8'],[150,30,70,50,'#F5F0E0'],[250,40,90,55,'#F0EBD8'],[370,35,75,60,'#F8F4E8'],[50,120,85,65,'#F5F0E0'],[160,110,70,55,'#F0EBD8'],[260,125,80,60,'#F8F4E8'],[370,120,70,50,'#F5F0E0'],[60,220,75,55,'#F0EBD8'],[170,210,85,65,'#F8F4E8'],[290,220,70,50,'#F5F0E0'],[380,215,65,55,'#F0EBD8'],[50,310,80,60,'#F5F0E0'],[160,300,70,55,'#F8F4E8'],[260,310,85,60,'#F5F0E0'],[375,305,65,50,'#F8F4E8']];papers.forEach(p=>{ctx.fillStyle=p.c;ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(p.x,p.y+p.h,p.w,3);ctx.fillStyle='rgba(60,50,40,0.3)';for(let i=0;i<4;i++)ctx.fillRect(p.x+5,p.y+5+i*8,p.w-10-Math.random()*20,1);ctx.fillStyle='#E85858';ctx.beginPath();ctx.arc(p.x+p.w/2,p.y+5,2,0,Math.PI*2);ctx.fill();});_noise(ctx,s,0.03);});
+    _canvas('facade_board',512,(ctx,s)=>{ctx.fillStyle='#C4A86D';ctx.fillRect(0,0,s,s);ctx.fillStyle='#A88858';ctx.fillRect(0,0,s,20);ctx.fillRect(0,s-20,s,20);ctx.fillRect(0,0,20,s);ctx.fillRect(s-20,0,20,s);ctx.fillStyle='#D8C8A0';ctx.fillRect(20,20,s-40,s-40);const papers: [number, number, number, number, string][] = [[40,35,80,60,'#F8F4E8'],[150,30,70,50,'#F5F0E0'],[250,40,90,55,'#F0EBD8'],[370,35,75,60,'#F8F4E8'],[50,120,85,65,'#F5F0E0'],[160,110,70,55,'#F0EBD8'],[260,125,80,60,'#F8F4E8'],[370,120,70,50,'#F5F0E0'],[60,220,75,55,'#F0EBD8'],[170,210,85,65,'#F8F4E8'],[290,220,70,50,'#F5F0E0'],[380,215,65,55,'#F0EBD8'],[50,310,80,60,'#F5F0E0'],[160,300,70,55,'#F8F4E8'],[260,310,85,60,'#F5F0E0'],[375,305,65,50,'#F8F4E8']];papers.forEach(([x,y,w,h,c])=>{ctx.fillStyle=c;ctx.fillRect(x,y,w,h);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(x,y+h,w,3);ctx.fillStyle='rgba(60,50,40,0.3)';for(let i=0;i<4;i++)ctx.fillRect(x+5,y+5+i*8,w-10-Math.random()*20,1);ctx.fillStyle='#E85858';ctx.beginPath();ctx.arc(x+w/2,y+5,2,0,Math.PI*2);ctx.fill();});_noise(ctx,s,0.03);});
     _canvas('facade_shaft',512,(ctx,s)=>{ctx.fillStyle='#D8D7D2';ctx.fillRect(0,0,s,s);const ps=s/4;for(let y=0;y<s;y+=ps)for(let x=0;x<s;x+=ps){const sh=0.9+Math.random()*0.15;ctx.fillStyle=_shade([216,215,210],sh);ctx.fillRect(x+2,y+2,ps-4,ps-4);ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(x+ps-4,y,4,ps);ctx.fillRect(x,y+ps-4,ps,4);}ctx.fillStyle='#2A2A30';ctx.fillRect(s*0.2,s*0.4,s*0.6,s*0.55);ctx.fillStyle='#4A6FA8';ctx.fillRect(s*0.22,s*0.42,s*0.56,s*0.51);ctx.fillStyle='#2A2A30';ctx.fillRect(s/2-1,s*0.42,2,s*0.51);ctx.fillStyle='#1A1A1E';ctx.fillRect(s*0.8,s*0.5,30,50);ctx.fillStyle='#A8C8F8';for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(s*0.8+15,s*0.52+i*10,3,0,Math.PI*2);ctx.fill();}ctx.fillStyle='#2A2A30';ctx.fillRect(s*0.4,s*0.15,s*0.2,25);ctx.fillStyle='#A8C8F8';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillText('1F',s/2,s*0.15+17);_noise(ctx,s,0.018);});
     _canvas('facade_mall',512,(ctx,s)=>{ctx.fillStyle='#D8E0E8';ctx.fillRect(0,0,s,s);const floors=5,fh=s/floors;for(let f=0;f<floors;f++){const y=f*fh;ctx.fillStyle='#B8C0C8';ctx.fillRect(0,y,s,3);const panels=6,pw=s/panels;for(let p=0;p<panels;p++){const x=p*pw,t=(f+p)%3;const gr=ctx.createLinearGradient(x,y,x+pw,y+fh);if(t===0){gr.addColorStop(0,'#C0D8F0');gr.addColorStop(0.5,'#A0C0E0');gr.addColorStop(1,'#88A8C8');}else if(t===1){gr.addColorStop(0,'#B8D0E8');gr.addColorStop(0.5,'#98B8D0');gr.addColorStop(1,'#8098B0');}else{gr.addColorStop(0,'#D0E0F0');gr.addColorStop(0.5,'#B0C8E0');gr.addColorStop(1,'#98B0C8');}ctx.fillStyle=gr;ctx.fillRect(x+1,y+4,pw-2,fh-7);ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fillRect(x+1,y+4,pw-2,(fh-7)*0.25);}}ctx.fillStyle='#E8A838';ctx.fillRect(s*0.25,s*0.9,s*0.5,8);_noise(ctx,s,0.012);});
     _canvas('facade_school',512,(ctx,s)=>{ctx.fillStyle='#F0EDE5';ctx.fillRect(0,0,s,s);_cornice(ctx,0,'#E0DFDC');_cornice(ctx,s-10,'#E0DFDC');const floors=4,fh=(s-20)/floors;for(let f=0;f<floors;f++){const y=10+f*fh;ctx.fillStyle='#D8D7D2';ctx.fillRect(0,y,s,3);for(let c=0;c<6;c++){const x=15+c*((s-30)/6),ww=(s-30)/6-8;_win(ctx,x,y+5,ww,fh-10,'#C8C7C2',['#C5DBF5','#A0BCDF','#88A5CF']);}}_door(ctx,s/2-25,s-55,50,45,'#B8A06D','#5A4A3A');_noise(ctx,s,0.02);});

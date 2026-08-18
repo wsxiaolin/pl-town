@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { updateCityLabels } from './labelController';
+import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { SceneInterestPointController } from './sceneInterestPointController';
 
 export type FrameLoopOptions = {
-  getRenderer: () => THREE.Renderer;
+  getRenderer: () => THREE.WebGLRenderer;
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
   getBuildings: () => any[];
@@ -11,10 +13,10 @@ export type FrameLoopOptions = {
   getNpcList: () => any[];
   getPlayerController: () => { updateMovement: (delta: number) => void; updateCamera: () => void } | null;
   getMultiplayerHousing: () => { updateRemotePlayers: (delta: number) => void } | null;
-  getSceneInterestPoints: () => { update: (time: number) => void; entities: Map<string, any> } | null;
-  getSceneInterestPointController: () => { interact: (id: string) => Promise<void> | void } | null;
+  getSceneInterestPoints: () => SceneInterestPoints | null;
+  getSceneInterestPointController: () => SceneInterestPointController | null;
   getMapController: () => { isOpen: () => boolean; updateMarker: () => void } | null;
-  getBurnOverlay: () => { render: (renderer: THREE.Renderer) => void; isActive: () => boolean } | null;
+  getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getLastFrameTime: () => number;

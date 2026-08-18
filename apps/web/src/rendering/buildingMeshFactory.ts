@@ -1,11 +1,43 @@
 // Building meshes are intentionally kept together as a visual catalog.
 // This module has no scene, DOM, storage, or gameplay responsibilities.
-// @ts-nocheck
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
 import { RENDER_ORDER } from './layers';
+import type { MaterialParameters, MeshHelpers } from './meshFactory';
 
-export function createBuildingMeshFactory(options) {
+export type BuildingConfig = { id: string; x: number; z: number; storyLocked?: boolean };
+
+export type BuiltBuilding = BuildingConfig & {
+  group: THREE.Group;
+  body: THREE.Mesh | null;
+  bodyMat: THREE.MeshStandardMaterial;
+  labelEl: HTMLElement | null;
+  labelY: number;
+  glowMat?: THREE.MeshStandardMaterial;
+};
+
+type BuildingMeshFactoryOptions = {
+  palette: {
+    readonly BUILDING_WHITE: number;
+    readonly BUILDING_BASE: number;
+    readonly ROOF_RIM: number;
+    readonly BLUE: number;
+    readonly GOLD: number;
+    readonly PARCHMENT: number;
+    readonly DARK_TOWER: number;
+    readonly RUIN_GREY: number;
+    readonly MALL_FRAME: number;
+    readonly MALL_SIGN: number;
+    readonly SCHOOL_BRICK: number;
+    readonly SCHOOL_ROOF: number;
+  };
+  platformHeight: number;
+  makeMaterial: (params?: MaterialParameters | null) => THREE.MeshStandardMaterial;
+  makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
+  addPart: MeshHelpers['part'];
+};
+
+export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
   const {
     palette: P,
     platformHeight: PLH,
@@ -14,17 +46,17 @@ export function createBuildingMeshFactory(options) {
     addPart: part,
   } = options;
 
-  function tagMeshes(g, id) {
-    g.traverse(c => { if (c.isMesh) c.userData.buildingId = id; });
+  function tagMeshes(g: THREE.Group, id: string): void {
+    g.traverse(c => { if ((c as THREE.Mesh).isMesh) c.userData.buildingId = id; });
   }
-  function mkBodyMat(texKey, rx, ry) {
+  function mkBodyMat(texKey: string, rx: number, ry: number): THREE.MeshStandardMaterial {
     const m = stdMat({color:P.BUILDING_WHITE,roughness:0.08, tex:texKey, rx:rx, ry:ry});
     m.emissive = new THREE.Color(P.BLUE); m.emissiveIntensity = 0;
     return m;
   }
   
   // 01 ACTIVITY — treasury / bank with columns and gold dome
-  function buildBank(cfg) {
+  function buildBank(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=2.2, bh=1.8;
     part(g, new THREE.BoxGeometry(2.8,PLH,2.4), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
@@ -49,7 +81,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 02 BULLETIN — board with two posts and small roof
-  function buildBoard(cfg) {
+  function buildBoard(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     part(g, new THREE.BoxGeometry(2.0,0.15,0.7), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.075,0]);
     const boardMat = stdMat({color:P.PARCHMENT,roughness:0.85,tex:'wood',rx:1,ry:1});
@@ -70,7 +102,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 03 TECHHALF — tall elegant tower (reuse existing tower design)
-  function buildTower(cfg) {
+  function buildTower(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=1.85, bh=4.6;
     part(g, new THREE.BoxGeometry(2.55,PLH,2.55), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
@@ -93,7 +125,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 04 BLACKHOLE — dark tower with swirling aura
-  function buildDarkTower(cfg) {
+  function buildDarkTower(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=1.7, bh=4.0;
     part(g, new THREE.BoxGeometry(2.4,PLH,2.4), {color:0x3A3A3E,roughness:0.8,tex:'darkwall',rx:1,ry:1}, [0,PLH/2,0]);
@@ -116,7 +148,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 05 LAWS — pavilion with cone roof (reuse existing pavilion)
-  function buildPavilion(cfg) {
+  function buildPavilion(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=2.4, bh=2.3;
     part(g, new THREE.BoxGeometry(3.1,0.25,3.1), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
@@ -134,7 +166,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 06 LIBRARY — wide classical building with pediment and columns
-  function buildLibrary(cfg) {
+  function buildLibrary(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=3.0, bh=2.0;
     part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
@@ -160,7 +192,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 07 LITREVIEW — abandoned ruins with broken top
-  function buildRuins(cfg) {
+  function buildRuins(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=2.2, bh=1.6;
     part(g, new THREE.BoxGeometry(2.7,0.22,2.3), {color:0x9A988E,roughness:0.9,tex:'ruin',rx:2,ry:2}, [0,0.11,0]);
@@ -187,7 +219,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 08 CATCAFE — very tall thin skyscraper with banded floors
-  function buildSkyscraper(cfg) {
+  function buildSkyscraper(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=1.3, bh=6.5;
     part(g, new THREE.BoxGeometry(2.0,PLH,2.0), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
@@ -216,7 +248,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 09 ACADEMY — wide campus with annex (reuse existing campus)
-  function buildCampus(cfg) {
+  function buildCampus(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const mw=2.9, mh=2.1, md=2.1;
     part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
@@ -229,7 +261,8 @@ export function createBuildingMeshFactory(options) {
     const aX = -(mw/2-aw/2), aZ = md/2+ad/2;
     part(g, new THREE.BoxGeometry(aw,ah,ad), {color:0xFDFCFA,roughness:0.1,tex:'wall',rx:1,ry:1}, [aX,0.25+ah/2,aZ]);
     part(g, new THREE.BoxGeometry(aw+0.14,0.08,ad+0.14), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:2,ry:2}, [aX,0.25+ah+0.04,aZ]);
-    [[-0.7,0.22],[0,0.18],[0.75,0.26]].forEach(([rx,rh]) => {
+    const towerPillars: readonly [number, number][] = [[-0.7,0.22],[0,0.18],[0.75,0.26]];
+    towerPillars.forEach(([rx,rh]) => {
       part(g, new THREE.BoxGeometry(0.32,rh,0.32), {color:0xF0EFEC,roughness:0.3,tex:'stone',rx:1,ry:1}, [rx,mainTop+0.1+rh/2,-0.5]);
     });
     part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.25+0.05,0], false);
@@ -238,7 +271,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 10/11 KIOSK — small square structure with awning (for news & mutualaid)
-  function buildKiosk(cfg) {
+  function buildKiosk(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=1.6, bh=1.5;
     const accentColor = cfg.id === 'news' ? 0xD4A838 : 0x6B8FE8;
@@ -267,7 +300,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 12 SCREEN — wall structure with glowing blue screen
-  function buildScreen(cfg) {
+  function buildScreen(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=2.8, bh=3.2;
     part(g, new THREE.BoxGeometry(3.4,0.25,1.0), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.125,0]);
@@ -299,7 +332,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 13 ELEVATOR — tall narrow shaft with door and button panel
-  function buildShaft(cfg) {
+  function buildShaft(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=1.3, bh=3.8;
     part(g, new THREE.BoxGeometry(2.0,PLH,1.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
@@ -326,7 +359,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 14 RESIDENTID — stone altar with paper on top
-  function buildAltar(cfg) {
+  function buildAltar(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw=2.0, bh=1.2;
     part(g, new THREE.BoxGeometry(2.6,0.2,1.8), {color:0xD4D3D0,roughness:0.85,tex:'stone',rx:2,ry:2}, [0,0.1,0]);
@@ -342,7 +375,8 @@ export function createBuildingMeshFactory(options) {
     // Wax seal (gold dot)
     part(g, new THREE.CylinderGeometry(0.08,0.08,0.03,12), {color:P.GOLD,emissive:P.GOLD,emissiveIntensity:0.2}, [0,top+0.12+0.04,0], false);
     // Pillars at corners
-    [[-0.8,-0.8],[-0.8,0.8],[0.8,-0.8],[0.8,0.8]].forEach(([cx,cz]) =>
+    const cornerPillars: readonly [number, number][] = [[-0.8,-0.8],[-0.8,0.8],[0.8,-0.8],[0.8,0.8]];
+    cornerPillars.forEach(([cx,cz]) =>
       part(g, new THREE.CylinderGeometry(0.07,0.08,bh,8), {color:0xDEDDE0,roughness:0.5}, [cx,0.2+bh/2,cz]));
     // Decorative arch
     part(g, new THREE.BoxGeometry(1.6,0.08,0.1), {color:0xE8E7E4,roughness:0.5}, [0,top+0.5,0]);
@@ -356,7 +390,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 15 STATS — octagonal observatory with pulsing glow ring
-  function buildObservatory(cfg) {
+  function buildObservatory(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     part(g, new THREE.CylinderGeometry(1.65,1.65,0.22,8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.11,0]);
     const bodyMat = mkBodyMat('stone', 2, 1);
@@ -376,14 +410,14 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 16 PAGODA — multi-tiered Asian tower
-  function buildPagoda(cfg) {
+  function buildPagoda(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const tiers = 3, bw = 1.6, tierH = 0.6;
     let y = PLH;
     // Keep the facade on the actual closed wall meshes. A detached facade plane
     // leaves visible gaps around the stepped tiers and can be mistaken for a wall.
     const bodyMat = mkBodyMat('facade_pagoda', 1, 1);
-    let body = null;
+    let body: THREE.Mesh | null = null;
     for (let i = 0; i < tiers; i++) {
       const w = bw * (1 - i * 0.18);
       const tierBody = mk(new THREE.BoxGeometry(w, tierH, w), bodyMat);
@@ -401,7 +435,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 17 MARKET — open-air stalls with striped awning
-  function buildMarket(cfg) {
+  function buildMarket(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 2.6, bh = 1.6;
     part(g, new THREE.BoxGeometry(3.2,0.2,2.2), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.1,0]);
@@ -428,7 +462,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 18 GREENHOUSE — glass dome with plants
-  function buildGreenhouse(cfg) {
+  function buildGreenhouse(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 2.4, bh = 1.8;
     part(g, new THREE.BoxGeometry(3.0,0.2,2.4), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:1}, [0,0.1,0]);
@@ -449,7 +483,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 19 CLOCKTOWER — tall brick tower with clock faces
-  function buildClockTower(cfg) {
+  function buildClockTower(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 1.5, bh = 4.0;
     part(g, new THREE.BoxGeometry(2.2,PLH,2.2), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,PLH/2,0]);
@@ -458,7 +492,7 @@ export function createBuildingMeshFactory(options) {
     body.position.y = PLH+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
     const top = PLH+bh;
     // Clock face (4 sides)
-    const clockFaces = [
+    const clockFaces: { position: [number, number, number]; rotation: number }[] = [
       { position: [0, top-0.6, bw/2+0.04], rotation: 0 },
       { position: [0, top-0.6, -bw/2-0.04], rotation: Math.PI },
       { position: [bw/2+0.04, top-0.6, 0], rotation: Math.PI/2 },
@@ -482,7 +516,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 20 TEMPLE — classical Greek-style temple
-  function buildTemple(cfg) {
+  function buildTemple(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 2.8, bh = 1.8;
     part(g, new THREE.BoxGeometry(3.6,0.25,2.8), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:2,ry:2}, [0,0.125,0]);
@@ -510,7 +544,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 21 FACTORY — industrial building with chimney
-  function buildFactory(cfg) {
+  function buildFactory(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 3.0, bh = 1.8;
     part(g, new THREE.BoxGeometry(3.6,0.2,2.6), {color:P.BUILDING_BASE,roughness:0.85,tex:'stone',rx:2,ry:2}, [0,0.1,0]);
@@ -541,7 +575,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 22 MALL — large shopping center with glass facade, billboard, entrance awning
-  function buildMall(cfg) {
+  function buildMall(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 3.6, bd = 2.8, bh = 2.4;
     part(g, new THREE.BoxGeometry(bw+0.6, 0.25, bd+0.6), {color:P.BUILDING_BASE,roughness:0.85,tex:'pavement',rx:2,ry:1}, [0,0.125,0]);
@@ -586,7 +620,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 23 SCHOOL — multi-building campus with playground, flagpole
-  function buildSchool(cfg) {
+  function buildSchool(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     // Main building
     const bw = 3.0, bh = 1.6;
@@ -635,13 +669,13 @@ export function createBuildingMeshFactory(options) {
   }
   
   // helper: small window cross bars for school
-  function ctx2d_windows(g, x, y, z) {
+  function ctx2d_windows(g: THREE.Group, x: number, y: number, z: number): void {
     part(g, new THREE.BoxGeometry(0.45,0.02,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y+0.21, z+0.005], false);
     part(g, new THREE.BoxGeometry(0.02,0.45,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y, z+0.005], false);
   }
   
   // 30 KINGICE — crown-shaped golden building with "King Ice" text
-  function buildCrown(cfg) {
+  function buildCrown(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     // Stone base
     part(g, new THREE.CylinderGeometry(1.8, 2.0, 0.3, 32), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.15,0]);
@@ -688,7 +722,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 30 BANANA PALACE — 布拿拉宫
-  function buildBanana(cfg) {
+  function buildBanana(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 4.0, bh = 3.5, bd = 4.0;
     part(g, new THREE.BoxGeometry(bw+0.8, PLH, bd+0.8), {color:0xD4C020, roughness:0.7, tex:'stone', rx:1, ry:1}, [0, PLH/2, 0]);
@@ -718,7 +752,7 @@ export function createBuildingMeshFactory(options) {
   }
   
   // 31 QIPAI — 棋气派 grand chess-themed building
-  function buildQipai(cfg) {
+  function buildQipai(cfg: BuildingConfig): BuiltBuilding {
     const g = new THREE.Group();
     const bw = 6.0, bh = 4.5, bd = 6.0;
     part(g, new THREE.BoxGeometry(bw+1.0, PLH, bd+1.0), {color:P.BUILDING_BASE, roughness:0.8, tex:'stone', rx:2, ry:2}, [0, PLH/2, 0]);
@@ -739,7 +773,7 @@ export function createBuildingMeshFactory(options) {
     part(kingG, new THREE.CylinderGeometry(0.18, 0.2, 0.35, 16), {color:0x2A2A2E, roughness:0.3, metalness:0.4}, [0, 0.15+1.2+0.12+0.175, 0]);
     part(kingG, new THREE.SphereGeometry(0.15, 12, 8), {color:0xE8A838, roughness:0.2, metalness:0.5, emissive:0xE8A838, emissiveIntensity:0.1}, [0, 0.15+1.2+0.12+0.35+0.15, 0], false);
     kingG.position.set(-bw/2-0.8, 0, bd/2+0.3);
-    kingG.traverse(c => { if (c.isMesh) c.castShadow = true; });
+    kingG.traverse(c => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; });
     g.add(kingG);
     // Queen statue
     const queenG = new THREE.Group();
@@ -751,7 +785,7 @@ export function createBuildingMeshFactory(options) {
       part(queenG, new THREE.ConeGeometry(0.06, 0.2, 6), {color:0xF8F7F5, roughness:0.3, metalness:0.4}, [Math.cos(a)*0.18, 0.15+1.2+0.12+0.1, Math.sin(a)*0.18], false);
     }
     queenG.position.set(bw/2+0.8, 0, bd/2+0.3);
-    queenG.traverse(c => { if (c.isMesh) c.castShadow = true; });
+    queenG.traverse(c => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; });
     g.add(queenG);
     // Grand entrance
     part(g, new THREE.BoxGeometry(1.8, 0.1, 0.1), {color:P.ROOF_RIM, roughness:0.4, tex:'stone', rx:1, ry:1}, [0, PLH+1.8, bd/2+0.02], false);
@@ -767,7 +801,7 @@ export function createBuildingMeshFactory(options) {
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: top+0.3+0.25+0.5};
   }
 
-  const builders = {
+  const builders: Record<string, (cfg: BuildingConfig) => BuiltBuilding> = {
     bank: buildBank, board: buildBoard, tower: buildTower, darktower: buildDarkTower,
     pavilion: buildPavilion, library: buildLibrary, ruins: buildRuins,
     skyscraper: buildSkyscraper, campus: buildCampus, kiosk: buildKiosk,

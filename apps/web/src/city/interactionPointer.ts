@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
+import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 
 export type InteractionPointerOptions = {
   getCamera: () => THREE.Camera;
@@ -10,7 +12,7 @@ export type InteractionPointerOptions = {
   getRaycastBuildingGroups: () => THREE.Object3D[];
   getCursorChar: () => THREE.Object3D | null;
   getBuildings: () => any[];
-  getSceneInterestPoints: () => { entities: Map<string, any>; raycastTargets: THREE.Object3D[] } | null;
+  getSceneInterestPoints: () => SceneInterestPoints | null;
   getEchoStoryController: () => any;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getConfig: () => { npcTalkRadius: number; buildingInteractRadius: number };
@@ -180,7 +182,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
     if (pendingSceneInterestPoint && cursorChar) {
       const id = pendingSceneInterestPoint;
-      const entity = options.getSceneInterestPoints()?.entities.get(id);
+      const entity = options.getSceneInterestPoints()?.entities.get(id as SceneInterestPointId);
       if (entity) {
         const distance = Math.hypot(cursorChar.position.x - entity.interactionPosition.x, cursorChar.position.z - entity.interactionPosition.z);
         if (distance <= 3.5) { pendingSceneInterestPoint = null; void options.interactWithInterestPointController(id); }

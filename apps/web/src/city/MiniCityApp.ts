@@ -1,11 +1,10 @@
-// @ts-nocheck
 import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { ResourcePool } from '../core/ResourcePool';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { createRenderer, readRenderSettings } from '../rendering/createRenderer';
 import { createProceduralTextureLibrary } from '../rendering/proceduralTextureLibrary';
-import { createBuildingMeshFactory } from '../rendering/buildingMeshFactory';
+import { createBuildingMeshFactory, type BuiltBuilding } from '../rendering/buildingMeshFactory';
 import { createWorldDecorations } from '../rendering/worldDecorations';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
 import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
@@ -26,7 +25,7 @@ import { createWriterCatalogController } from '../adapters/ui/writerCatalogContr
 import { createNewsstandController } from '../adapters/ui/newsstandController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
-import { createNpcSystem } from './npcSystem';
+import { createNpcSystem, type NpcLike } from './npcSystem';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
@@ -60,11 +59,12 @@ import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
+import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
-let eventController = new AbortController(), raycastBuildingGroups = [];
-const buildingPlotTargets = [];
+let eventController = new AbortController(), raycastBuildingGroups: THREE.Object3D[] = [];
+const buildingPlotTargets: THREE.Mesh[] = [];
 const labelWorldPosition = new THREE.Vector3();
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
@@ -79,12 +79,12 @@ const _tex = proceduralTextures.repeat;
 const addFacade = proceduralTextures.addFacade;
 const { stdMat, mk, part }: MeshHelpers = createMeshHelpers(resources, _tex);
 
-let renderer, scene, camera;
-const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
-let cursorChar = null;
-let playerPath = [];
-let playerMarker = null; // 玩家头顶的三角标记，用于高亮
-let cameraZoom; // 当前视野宽度，由滚轮/双指缩放调整
+let renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera;
+const pathMats: THREE.MeshStandardMaterial[] = [], groundMats: { mat: THREE.MeshStandardMaterial; day: number; night: number }[] = [], lampGlobes: THREE.MeshStandardMaterial[] = [], buildings: BuiltBuilding[] = [], npcList: NpcLike[] = [];
+let cursorChar: THREE.Group | null = null;
+let playerPath: THREE.Vector3[] = [];
+let playerMarker: THREE.Group | null = null; // 玩家头顶的三角标记，用于高亮
+let cameraZoom: number = CITY_CONFIG.cameraNearSize; // 当前视野宽度，由滚轮/双指缩放调整
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
@@ -94,26 +94,33 @@ const cameraTarget = new THREE.Vector3(0,0,0);
 // The roof is hidden while inside, so this avoids a near-wall/roof clip while
 // still letting the camera look down into the complete room.
 let cityDialogs: CityDialogController | null = null;
-let echoStoryController;
-let mapController;
-let loginController;
-let statsPanelController;
-let playerController, movementInputController;
-let cameraController;
-let progressionController;
-let buildingSceneController;
-let buildingLabelController;
-let communityPanels, writerCatalogController, newsstandController;
-let multiplayerHousing;
-let worldDecorations;
-let npcSystem;
-let sceneInterestPoints;
-let sceneInterestPointController;
-let buildingDamageController;
+let echoStoryController: ReturnType<typeof createEchoStoryController> | null = null;
+let mapController: ReturnType<typeof createMapController> | null = null;
+let loginController: ReturnType<typeof createLoginController> | null = null;
+let statsPanelController: ReturnType<typeof createStatsPanelController> | null = null;
+let playerController: ReturnType<typeof createPlayerController> | null = null, movementInputController: ReturnType<typeof createMovementInputController> | null = null;
+let cameraController: ReturnType<typeof createCameraController> | null = null;
+let progressionController: ReturnType<typeof createProgressionController> | null = null;
+let buildingSceneController: ReturnType<typeof createBuildingSceneController> | null = null;
+let buildingLabelController: ReturnType<typeof createBuildingLabelController> | null = null;
+let communityPanels: ReturnType<typeof createCommunityPanelController> | null = null, writerCatalogController: ReturnType<typeof createWriterCatalogController> | null = null, newsstandController: ReturnType<typeof createNewsstandController> | null = null;
+let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController> | null = null;
+let worldDecorations: ReturnType<typeof createWorldDecorations> | null = null;
+let npcSystem: ReturnType<typeof createNpcSystem> | null = null;
+let sceneInterestPoints: ReturnType<typeof createSceneInterestPoints> | null = null;
+let sceneInterestPointController: ReturnType<typeof createSceneInterestPointController> | null = null;
+let buildingDamageController: ReturnType<typeof createBuildingDamageController> | null = null;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
-const residences = [];
+const residences: {
+  id: string;
+  label: string;
+  group: THREE.Group;
+  body: THREE.Mesh | null;
+  labelEl: HTMLButtonElement | null;
+  styleId: number;
+}[] = [];
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -167,7 +174,7 @@ const interactionPointer = createInteractionPointer({
   movePlayerTo,
   navigateTo,
   interactWithSceneInterestPoint,
-  interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
+  interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id as SceneInterestPointId),
 });
 
 const interactionTracker = createInteractionTracker({
@@ -254,7 +261,7 @@ const buildingInteraction = createBuildingInteraction({
 });
 
 const eventBindings = createEventBindings({
-  getCanvas: () => document.getElementById('c'),
+  getCanvas: () => document.getElementById('c') as HTMLElement,
   getSignal: () => eventController.signal,
   getRenderer: () => renderer,
   onMouseMove,
@@ -284,7 +291,7 @@ let UNLOCK_TIERS = createUnlockTiers(
   (x, y, z, rotY) => worldDecorations?.addBench(x, y, z, rotY),
 );
 
-function awardDirectAchievement(id, name) { progressionController?.awardDirectAchievement(id, name); }
+function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
 function init() {
   setupRenderer();
@@ -414,9 +421,9 @@ function init() {
     getCursor: () => cursorChar,
     getStats,
     getCamera: () => camera,
-    getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
+    getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId as keyof typeof BUILDING_CONTENT],
     isStoryLocked: isBuildingUnavailable,
-    getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
+    getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position) ?? null,
     setCameraTarget,
     movePlayerTo,
     clearPlayerPath: () => { playerPath = []; },
@@ -484,15 +491,16 @@ function init() {
   sceneInterestPointController=createSceneInterestPointController({
     dialogs: cityDialogs,
     inventory: {
-      isOnline: () => multiplayerHousing.progression.isOnline(),
-      hasItem: (itemId, count=1) => multiplayerHousing.progression.isOnline()
-        && (multiplayerHousing.progression.getProgress().inventory[itemId] ?? 0) >= count,
-      consumeItem: (itemId, count) => multiplayerHousing.progression.consumeItem(itemId, count),
-      claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId), hasAchievement: (achievementId) => multiplayerHousing.progression.getProgress().achievements.includes(achievementId),
+      isOnline: () => multiplayerHousing?.progression.isOnline() ?? false,
+      hasItem: (itemId, count = 1) => (multiplayerHousing?.progression.isOnline() ?? false)
+        && (multiplayerHousing?.progression.getProgress().inventory[itemId] ?? 0) >= count,
+      consumeItem: (itemId, count) => multiplayerHousing?.progression.consumeItem(itemId, count) ?? false,
+      claimReward: (rewardId) => multiplayerHousing?.progression.claimReward(rewardId) ?? false,
+      hasAchievement: (achievementId) => multiplayerHousing?.progression.getProgress().achievements.includes(achievementId) ?? false,
     },
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
-    interactWithStory: (id) => cityDialogs ? echoStoryController.interactInterestPoint(id, cityDialogs) : false,
+    interactWithStory: (id) => cityDialogs ? echoStoryController?.interactInterestPoint(id, cityDialogs) ?? false : false,
     setWellPhase: (phase) => {
       sceneInterestPoints?.setWellPhase(phase);
       if (!camera) return;
@@ -513,7 +521,7 @@ function init() {
   initAnimations();
   clockInterval = window.setInterval(syncTimeAndTheme, 1000);
   syncTimeAndTheme();
-  document.getElementById('labelsWrap').classList.add('hidden');
+  document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
   updateWelcome();
 
@@ -523,7 +531,7 @@ function init() {
 
 function setupRenderer() {
   const canvas = document.getElementById('c');
-  renderer = createRenderer(canvas);
+  renderer = createRenderer(canvas as HTMLCanvasElement);
 }
 function setupCamera() {
   cameraZoom=CONFIG.cameraNearSize;
@@ -579,27 +587,27 @@ const buildingMeshFactory = createBuildingMeshFactory({
 const PLOT_MAP = BUILDING_PLOT_MAP;
 const SHAPE_FNS = buildingMeshFactory.builders;
 
-function addDecorations() { worldDecorations.addDecorations(); }
-function addTrees(positions) { worldDecorations.addTrees(positions); }
-function addLamps(positions) { worldDecorations.addLamps(positions); }
-function addArch(x, y, z, rotY) { worldDecorations.addArch(x, y, z, rotY); }
-function addBench(x, y, z, rotY) { worldDecorations.addBench(x, y, z, rotY); }
+function addDecorations() { worldDecorations?.addDecorations(); }
+function addTrees(positions: [number, number, number][]) { worldDecorations?.addTrees(positions); }
+function addLamps(positions: [number, number, number][]) { worldDecorations?.addLamps(positions); }
+function addArch(x: number, y: number, z: number, rotY: number) { worldDecorations?.addArch(x, y, z, rotY); }
+function addBench(x: number, y: number, z: number, rotY: number) { worldDecorations?.addBench(x, y, z, rotY); }
 
-function makeCharacter(headHex, bodyHex) { return npcSystem.makeCharacter(headHex, bodyHex); }
-function addCharacters() { npcSystem.addCharacters(); }
-function onYouClick() { npcSystem.onYouClick(); }
-function updateNpcSchedules() { npcSystem.updateNpcSchedules(); }
-function npcYieldToPlayer(npc) { npcSystem.npcYieldToPlayer(npc); }
-function pauseNpcs() { npcSystem.pauseNpcs(); }
-function resumeNpcs() { npcSystem.resumeNpcs(); }
-function nearestNpcTo(position, radius) { return npcSystem.nearestNpcTo(position, radius); }
-function npcForRaycast() { return npcSystem.npcForRaycast(); }
+function makeCharacter(headHex: number, bodyHex: number) { return npcSystem!.makeCharacter(headHex, bodyHex); }
+function addCharacters() { npcSystem!.addCharacters(); }
+function onYouClick() { npcSystem!.onYouClick(); }
+function updateNpcSchedules() { npcSystem!.updateNpcSchedules(); }
+function npcYieldToPlayer(npc: NpcLike) { npcSystem!.npcYieldToPlayer(npc); }
+function pauseNpcs() { npcSystem!.pauseNpcs(); }
+function resumeNpcs() { npcSystem!.resumeNpcs(); }
+function nearestNpcTo(position: THREE.Vector3, radius: number) { return npcSystem!.nearestNpcTo(position, radius); }
+function npcForRaycast() { return npcSystem!.npcForRaycast(); }
 
 function setupEvents() { eventBindings.setupEvents(); }
 
-function isStoryLockedBuilding(building) { return STORY_LOCKED_BUILDINGS.has(building.id); }
+function isStoryLockedBuilding(building: { id: string }) { return STORY_LOCKED_BUILDINGS.has(building.id); }
 
-function isBuildingUnavailable(building) {
+function isBuildingUnavailable(building: { id: string; group: THREE.Object3D }) {
   return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
 }
 
@@ -634,33 +642,33 @@ function isResidenceUnavailable(residenceId: string): boolean {
 
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
 
-function onMouseMove(e) { interactionPointer.onMouseMove(e); }
+function onMouseMove(e: MouseEvent) { interactionPointer.onMouseMove(e); }
 
-function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
-function setupMultiplayer(nickname, password) { multiplayerHousing.connect(nickname, password); }
+function setupMultiplayerUI() { multiplayerHousing!.setupUI(); }
+function setupMultiplayer(nickname: string, password?: string) { multiplayerHousing!.connect(nickname, password); }
 function showLoginEntry() { loginController?.showLoginEntry(); }
 function showLoginOverlay() { loginController?.showLogin(); }
-function updateRemotePlayers(delta) { multiplayerHousing.updateRemotePlayers(delta); }
-function setPhoneOpen(open) { multiplayerHousing?.setPhoneOpen(open); }
-function renderMapHouseTags() { multiplayerHousing.renderMapHouseTags(); }
-function openResidence(residenceId) { multiplayerHousing.openResidence(residenceId); }
-function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
-function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
-function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
-function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
-function onCanvasClick(event) { interactionPointer.onCanvasClick(event); }
+function updateRemotePlayers(delta: number) { multiplayerHousing!.updateRemotePlayers(delta); }
+function setPhoneOpen(open: boolean) { multiplayerHousing?.setPhoneOpen(open); }
+function renderMapHouseTags() { multiplayerHousing!.renderMapHouseTags(); }
+function openResidence(residenceId: string) { multiplayerHousing!.openResidence(residenceId); }
+function closeResidencePanel() { multiplayerHousing!.closeResidencePanel(); }
+function navigateToResidence(residenceId: string) { multiplayerHousing!.navigateToResidence(residenceId); }
+function raycastUserData(object: THREE.Object3D, key: string) { return multiplayerHousing!.raycastUserData(object, key); }
+function findRaycastBuilding(hits: THREE.Intersection[]) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
+function onCanvasClick(event: MouseEvent) { interactionPointer.onCanvasClick(event); }
 
-function talkToOrWalk(npc) { interactionPointer.talkToOrWalk(npc); }
+function talkToOrWalk(npc: NpcLike) { interactionPointer.talkToOrWalk(npc); }
 
-function interactOrWalk(b) { interactionPointer.interactOrWalk(b); }
+function interactOrWalk(b: BuiltBuilding) { interactionPointer.interactOrWalk(b); }
 
-function navigateTo(b) { buildingInteraction.navigateTo(b); }
-function openModal(building) { buildingInteraction.openModal(building); }
+function navigateTo(b: BuiltBuilding) { buildingInteraction.navigateTo(b); }
+function openModal(building: BuiltBuilding) { buildingInteraction.openModal(building); }
 function closeModal() { buildingInteraction.closeModal(); }
 
 function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionPointer.interactWithSceneInterestPoint(id); }
 
-function applyTheme(night, instant) { themeClock.applyTheme(night, instant); }
+function applyTheme(night: boolean, instant: boolean) { themeClock.applyTheme(night, instant); }
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
 
 function entranceAnimation() { sceneAnimations.entranceAnimation(); }
@@ -671,23 +679,23 @@ function toggleMapMode() {
   mapController?.toggle();
 }
 
-function updateCameraProjection(vs) {
+function updateCameraProjection(vs: number) {
   cameraController?.updateProjection(vs);
 }
 
-function setCameraTarget(x,z,instant) { cameraController?.setTarget(x,z,instant); }
+function setCameraTarget(x: number, z: number, instant: boolean) { cameraController?.setTarget(x, z, instant); }
 
-function movePlayerTo(target) { playerController?.moveTo(target); }
+function movePlayerTo(target: THREE.Vector3) { playerController?.moveTo(target); }
 
 function handlePlayerIdle() { interactionPointer.handlePlayerIdle(); }
 
-function flushDistance(amount) { interactionTracker.flushDistance(amount); }
+function flushDistance(amount: number) { interactionTracker.flushDistance(amount); }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STATS / PROGRESSION SYSTEM
 // ══════════════════════════════════════════════════════════════════════════════
 
-function trackInteraction(buildingId) { interactionTracker.trackInteraction(buildingId); }
+function trackInteraction(buildingId: string) { interactionTracker.trackInteraction(buildingId); }
 
 function updateWelcome() {
   // Cloud progression owns the unique-building threshold and inventory entry.
@@ -716,13 +724,13 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
 
 function setupFilter() {
   document.querySelectorAll('.pf-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>setFilter(btn.dataset.filter));
+    btn.addEventListener('click',()=>setFilter((btn as HTMLElement).dataset.filter ?? 'all'));
   });
 }
 
-function setFilter(filter) {
+function setFilter(filter: string) {
   currentFilter=filter;
-  document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
+  document.querySelectorAll('.pf-btn').forEach(b=>(b as HTMLElement).classList.toggle('active',(b as HTMLElement).dataset.filter===filter));
   if(filter==='friends'){
     npcList.forEach(npc=>{ if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } } });
     showUnlockToast('no friends online yet — invite someone!');
@@ -745,14 +753,14 @@ function getQuestProgressView() {
   };
 }
 
-function recordNpcInteraction(npcId) { interactionTracker.recordNpcInteraction(npcId); }
+function recordNpcInteraction(npcId: string) { interactionTracker.recordNpcInteraction(npcId); }
 
-function openNpcDialog(npc) {
+function openNpcDialog(npc: NpcLike) {
   if (cityDialogs && echoStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
     recordNpcInteraction(npc.profile.id);
     return;
   }
-  cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
+  cityDialogs?.openNpc(npc as unknown as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
 }
 function closeNpcDialog() { cityDialogs?.closeNpc(); }
 
