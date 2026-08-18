@@ -233,6 +233,12 @@ const burnCityEffect = createBurnCityEffect({
   reduced: REDUCED,
 });
 
+const wildMushroomRestaurant = createWildMushroomRestaurant({
+  getDialogs: () => cityDialogs,
+  burnCity: (onDone) => burnCityEffect.trigger(onDone),
+  awardAchievement: awardDirectAchievement,
+});
+
 const buildingInteraction = createBuildingInteraction({
   isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
@@ -245,12 +251,6 @@ const buildingInteraction = createBuildingInteraction({
   trackInteraction,
   burnCity: (onDone) => burnCityEffect.trigger(onDone),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
-});
-
-const wildMushroomRestaurant = createWildMushroomRestaurant({
-  getDialogs: () => cityDialogs,
-  burnCity: (onDone) => burnCityEffect.trigger(onDone),
-  awardAchievement: awardDirectAchievement,
 });
 
 const eventBindings = createEventBindings({

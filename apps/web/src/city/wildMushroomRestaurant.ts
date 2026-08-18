@@ -37,7 +37,7 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
   const leaveOption = (text = '离开') => ({ text, onPick: () => close() });
 
   const burnThen = (after: () => void): void => {
-    options.burnCity(() => after());
+    options.burnCity(after);
   };
 
   // 第一次：点「一年总要吃两次野生菌火锅」→ 3 个感叹号选项 → 火烧小城 → 镜子幻觉吐槽。
@@ -103,34 +103,31 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
         options: [leaveOption()],
       });
     };
-    const serve = (): void => burnThen(afterBurn);
-    const step4 = (): void => open({
-      title: '野生菌餐馆',
-      role: '免责声明 · 第三项',
-      text: '（你勾选了第二项）',
-      options: [{ text: '如果出现任何问题，本人及家属不得追究', onPick: () => open({ title: '野生菌餐馆', role: '免责声明 · 上菜', text: '（你勾选了第三项）', options: [{ text: '老板上菜', onPick: serve }] }) }],
-    });
-    const step3 = (): void => open({
-      title: '野生菌餐馆',
-      role: '免责声明 · 第二项',
-      text: '（你勾选了第一项）',
-      options: [{ text: '本人已知晓其风险和后果', onPick: step4 }],
-    });
-    const step2 = (): void => open({
-      title: '野生菌餐馆',
-      role: '免责声明',
-      text: '再吃餐馆都要赔倒闭了。',
-      options: [{ text: '我自愿食用野生菌', onPick: step3 }],
-    });
-    open({
-      title: '野生菌餐馆',
-      role: '老板的忠告',
-      text: '不要再来吃了。',
-      options: [{ text: '……', onPick: step2 }],
-    });
+    const steps = [
+      { role: '老板的忠告', text: '不要再来吃了。', pick: '……' },
+      { role: '免责声明', text: '再吃餐馆都要赔倒闭了。', pick: '我自愿食用野生菌' },
+      { role: '免责声明 · 第二项', text: '（你勾选了第一项）', pick: '本人已知晓其风险和后果' },
+      { role: '免责声明 · 第三项', text: '（你勾选了第二项）', pick: '如果出现任何问题，本人及家属不得追究' },
+      { role: '免责声明 · 上菜', text: '（你勾选了第三项）', pick: '老板上菜' },
+    ] as const;
+    const advance = (index: number): void => {
+      const step = steps[index];
+      if (!step) {
+        burnThen(afterBurn);
+        return;
+      }
+      open({
+        title: '野生菌餐馆',
+        role: step.role,
+        text: step.text,
+        options: [{ text: step.pick, onPick: () => advance(index + 1) }],
+      });
+    };
+    advance(0);
   };
 
   function interact(): void {
+    if (!options.getDialogs()) return;
     const visits = readVisits();
     writeVisits(visits + 1);
     if (visits === 0) firstVisit();
