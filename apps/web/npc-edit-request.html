@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NPC 编辑申请 · MiniCity</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; color: #18201c; background: #eef2f0; }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #eef5f1, #f8faf9); }
+    main { width: min(760px, calc(100% - 32px)); margin: 0 auto; padding: 46px 0 64px; }
+    .brand { color: #176b4a; font-size: 12px; font-weight: 800; letter-spacing: .16em; }
+    h1 { margin: 18px 0 10px; font-size: clamp(28px, 5vw, 44px); line-height: 1.1; }
+    .intro { max-width: 600px; color: #65716b; line-height: 1.7; }
+    .panel { margin-top: 28px; padding: clamp(20px, 5vw, 34px); background: #fff; border: 1px solid #dce2df; border-radius: 8px; box-shadow: 0 18px 55px rgba(22, 37, 29, .08); }
+    .panel[hidden] { display: none; }
+    h2 { margin: 0 0 20px; font-size: 20px; }
+    label { display: grid; gap: 7px; margin-top: 16px; color: #4e5a54; font-size: 13px; font-weight: 650; }
+    input, select, textarea { width: 100%; padding: 11px 12px; color: #18201c; background: #fff; border: 1px solid #cfd7d3; border-radius: 5px; font: inherit; font-size: 14px; outline: none; }
+    textarea { min-height: 150px; resize: vertical; line-height: 1.6; }
+    input:focus, select:focus, textarea:focus { border-color: #176b4a; box-shadow: 0 0 0 3px rgba(23, 107, 74, .1); }
+    .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+    button { min-height: 38px; padding: 0 16px; border-radius: 5px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .primary { color: #fff; background: #176b4a; border: 1px solid #176b4a; }
+    .primary:hover { background: #10583c; }
+    .secondary { color: #324039; background: #fff; border: 1px solid #cbd4cf; }
+    .hint { margin: 8px 0 0; color: #718078; font-size: 12px; line-height: 1.6; }
+    .status { margin-top: 18px; padding: 10px 12px; color: #8c2727; background: #fff1f1; border: 1px solid #efcccc; border-radius: 5px; font-size: 13px; line-height: 1.5; }
+    .status.success { color: #155d3f; background: #ecf8f2; border-color: #bfe5d1; }
+    .userbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #5f6c65; font-size: 12px; }
+    @media (max-width: 560px) { main { width: min(100% - 20px, 760px); padding-top: 28px; } .actions { flex-direction: column-reverse; } button { width: 100%; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">MINICITY · COMMUNITY EDITS</div>
+    <h1>申请修改 NPC</h1>
+    <p class="intro">这是独立的居民申请页面。登录后可以提交 NPC 资料、设定或对话修改建议，申请会进入开发者审批队列。</p>
+
+    <section class="panel" id="loginPanel">
+      <h2>申请者登录</h2>
+      <p class="hint">使用小城居民账号登录。新账号密码至少需要 10 个字符。</p>
+      <form id="loginForm">
+        <label>居民昵称<input id="loginNickname" autocomplete="username" maxlength="40" required /></label>
+        <label>密码<input id="loginPassword" type="password" autocomplete="current-password" maxlength="128" required /></label>
+        <div class="actions"><button class="primary" type="submit" id="loginButton">登录并继续</button></div>
+      </form>
+      <div class="status" id="loginStatus" hidden></div>
+    </section>
+
+    <section class="panel" id="requestPanel" hidden>
+      <div class="userbar"><span id="signedInAs"></span><button class="secondary" id="logoutButton" type="button">退出登录</button></div>
+      <p class="hint">本页面与小城共用同一个登录会话：在这里登录或退出会同时影响小城里的同一居民，登录为其他账号也会切换小城身份。</p>
+      <h2 style="margin-top: 28px">新建修改申请</h2>
+      <form id="requestForm">
+        <label>申请类型
+          <select id="requestKind"><option value="edit">修改 NPC 资料</option><option value="dialog">修改 NPC 对话</option><option value="add">申请新增 NPC</option></select>
+        </label>
+        <label>目标 NPC
+          <select id="requestNpc"><option value="">正在加载 NPC 列表…</option></select>
+        </label>
+        <p class="hint">新增 NPC 可以填写自定义名称，现有 NPC 会显示名称、身份和 ID。</p>
+        <label>拟用名称<input id="requestNpcName" maxlength="40" placeholder="新增 NPC 时填写，修改现有 NPC 可留空" /></label>
+        <label>申请标题<input id="requestTitle" maxlength="120" placeholder="例如：补充 M250 的夜间对话" required /></label>
+        <label>详细说明<textarea id="requestSummary" maxlength="2000" placeholder="描述希望修改的内容、原因和预期效果。" required></textarea></label>
+        <label>修改内容（可选）<textarea id="requestChange" maxlength="4000" placeholder="可以填写字段、文案或结构化建议。"></textarea></label>
+        <div class="actions"><button class="primary" type="submit" id="requestSubmit">提交申请</button></div>
+      </form>
+      <div class="status" id="requestStatus" hidden></div>
+    </section>
+  </main>
+  <script type="module" src="/src/npc-edit-request.ts"></script>
+</body>
+</html>

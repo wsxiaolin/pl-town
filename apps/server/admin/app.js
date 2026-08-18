@@ -390,7 +390,7 @@ async function loadNpcs() {
   const rows = data.items.map((npc) => {
     const row = node('tr');
     row.append(node('td', npc.name), node('td', npc.role), node('td', npc.npcType === 'story' ? '剧情' : '居民'));
-    row.addEventListener('click', () => renderNpcDialog(npc));
+    row.addEventListener('click', () => openNpcDialog(npc));
     row.style.cursor = 'pointer';
     return row;
   });
@@ -431,15 +431,28 @@ function renderNpcDialog(npc) {
   });
   if (!npc.dialogNodes.length) container.append(node('p', '该 NPC 没有对话数据。', 'empty'));
 }
+function openNpcDialog(npc) {
+  renderNpcDialog(npc);
+  const dialog = $('#npcDetailDialog');
+  if (dialog && !dialog.open) dialog.showModal();
+}
 async function loadNpcRequests() {
   const status = state.npcRequestFilter;
   const data = await api(`/npc-change-requests?status=${encodeURIComponent(status)}&limit=100`);
   const rows = data.items.map((request) => {
     const card = node('article', undefined, 'npc-request-card');
     const header = node('header');
-    header.append(node('strong', request.title), node('span', `${request.kind === 'add' ? '新增' : request.kind === 'edit' ? '编辑' : '对话'} · ${request.npcId} · ${request.status}`, 'npc-request-meta'));
+    const isAdd = request.kind === 'add';
+    // `add` submissions use the stable `proposal-new` placeholder NPC id; the
+    // queue surface should read as a brand-new character, so render it as 新增.
+    const metaNpcId = isAdd && request.npcId === 'proposal-new' ? '新增' : request.npcId;
+    header.append(node('strong', request.title), node('span', `${isAdd ? '新增' : request.kind === 'edit' ? '编辑' : '对话'} · ${metaNpcId} · ${request.status}`, 'npc-request-meta'));
     card.append(header);
     card.append(node('p', request.summary));
+    const changeLines = [];
+    if (request.change?.proposedName) changeLines.push(`拟用名称：${request.change.proposedName}`);
+    if (request.change?.proposal) changeLines.push(`修改内容：${request.change.proposal}`);
+    if (changeLines.length) card.append(node('p', changeLines.join('\n'), 'npc-request-change'));
     const foot = node('footer');
     foot.append(node('small', `提交人：${request.requesterNickname} · ${formatDate(request.createdAt)}${request.reviewedAt ? ` · 已处理 ${formatDate(request.reviewedAt)}` : ''}`));
     if (request.status === 'pending') {

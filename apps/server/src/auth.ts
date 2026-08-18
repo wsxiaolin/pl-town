@@ -25,38 +25,46 @@ const verifyPassword = async (password: string, stored: string): Promise<boolean
 };
 const sessionExpiry = () => new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000).toISOString();
 
+/** Thrown when a per-IP registration cap rejects a new account. */
+export class RegistrationLimitError extends Error {
+  constructor() {
+    super('该 IP 的注册数量已达上限，请稍后再试');
+    this.name = 'RegistrationLimitError';
+  }
+}
+
 export const NICKNAME_PATTERN = /^[\p{L}\p{N}]{2,40}$/u;
 export function validateNickname(nickname: string): string | null {
-  if (!nickname || nickname.length < 2) return 'Nickname must contain at least two characters';
-  if (!NICKNAME_PATTERN.test(nickname)) return 'Nickname may only contain letters and numbers';
+  if (!nickname || nickname.length < 2) return '昵称至少需要两个字符';
+  if (!NICKNAME_PATTERN.test(nickname)) return '昵称只能包含字母和数字';
   return null;
 }
 
 export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number } }): Promise<{ user: User; token: string; registered: boolean }> {
   if (input.token) {
-    if (input.token.length > 128) throw new Error('Session is invalid');
+    if (input.token.length > 128) throw new Error('会话无效');
     const user = getUserByToken(hash(input.token));
     if (user) return { user, token: input.token, registered: false };
-    throw new Error('Session expired; sign in again');
+    throw new Error('会话已过期，请重新登录');
   }
 
   const nickname = (input.nickname ?? '').normalize('NFKC').trim();
   const nicknameError = validateNickname(nickname);
   if (nicknameError) throw new Error(nicknameError);
   const password = input.password ?? '';
-  if (!password) throw new Error('Password is required');
-  if (password.length > 128) throw new Error('Password is too long');
+  if (!password) throw new Error('请输入密码');
+  if (password.length > 128) throw new Error('密码过长');
 
   const existing = getUserByNickname(nickname);
   if (existing) {
     if (existing.disabled || !existing.passwordHash || !await verifyPassword(password, existing.passwordHash)) {
-      throw new Error('Nickname or password is incorrect');
+      throw new Error('昵称或密码不正确');
     }
     const newToken = randomBytes(32).toString('base64url');
     updateUserToken(existing.id, hash(newToken), sessionExpiry());
     return { user: getUserByToken(hash(newToken))!, token: newToken, registered: false };
   }
-  if (password.length < 10) throw new Error('New passwords must contain at least 10 characters');
+  if (password.length < 10) throw new Error('新密码至少需要 10 个字符');
 
   const newToken = randomBytes(32).toString('base64url');
   const tokenHash = hash(newToken);
@@ -66,7 +74,7 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   if (input.ip && input.registrationLimit) {
     const { sinceIso, max } = input.registrationLimit;
     const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max);
-    if (!result.allowed) throw new Error('该 IP 的注册数量已达上限，请稍后再试');
+    if (!result.allowed) throw new RegistrationLimitError();
   } else {
     createUser(userId, tokenHash, nickname, passwordHash, expiresAt);
   }
