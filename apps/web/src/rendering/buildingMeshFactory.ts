@@ -3,6 +3,7 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
+import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { RENDER_ORDER } from './layers';
 
 export function createBuildingMeshFactory(options) {
@@ -777,6 +778,7 @@ export function createBuildingMeshFactory(options) {
     mall: buildMall, school: buildSchool, crown: buildCrown,
     banana: buildBanana, qipai: buildQipai,
     restaurant: cfg => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    wild_mushroom_restaurant: cfg => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };
