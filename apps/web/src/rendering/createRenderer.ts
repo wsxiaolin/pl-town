@@ -11,28 +11,52 @@ export type RenderSettings = {
 export const RENDER_SETTINGS_KEY = 'minicityRenderSettings';
 export const MAX_RENDER_RESOLUTION = 4;
 
-const DEFAULT_RENDER_SETTINGS: RenderSettings = {
-  resolution: matchMedia('(max-width: 680px)').matches ? 1.5 : 2,
-  antialias: !matchMedia('(max-width: 680px)').matches,
-  anisotropy: 16,
-  shadows: false,
-  exposure: 1.18,
+export type RenderDeviceProfile = {
+  viewportWidth: number;
+  pixelRatio: number;
+  deviceMemory?: number;
+  hardwareConcurrency?: number;
 };
 
+export function selectDefaultRenderSettings(profile: RenderDeviceProfile): RenderSettings {
+  const constrained = profile.viewportWidth <= 680
+    || (profile.deviceMemory !== undefined && profile.deviceMemory <= 4)
+    || (profile.hardwareConcurrency !== undefined && profile.hardwareConcurrency <= 4);
+  const nativePixelRatio = Math.max(1, Number(profile.pixelRatio) || 1);
+  return {
+    resolution: Math.min(constrained ? 1 : 1.5, nativePixelRatio),
+    antialias: !constrained,
+    anisotropy: constrained ? 4 : 8,
+    shadows: false,
+    exposure: 1.18,
+  };
+}
+
+function currentDefaultRenderSettings(): RenderSettings {
+  const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+  return selectDefaultRenderSettings({
+    viewportWidth: window.innerWidth,
+    pixelRatio: window.devicePixelRatio,
+    deviceMemory: navigatorWithMemory.deviceMemory,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+  });
+}
+
 export function readRenderSettings(): RenderSettings {
+  const defaults = currentDefaultRenderSettings();
   try {
     const saved = JSON.parse(localStorage.getItem(RENDER_SETTINGS_KEY) || 'null');
     if (saved && typeof saved === 'object') {
       return {
-        resolution: Math.max(0.5, Math.min(MAX_RENDER_RESOLUTION, Number(saved.resolution) || DEFAULT_RENDER_SETTINGS.resolution)),
+        resolution: Math.max(0.5, Math.min(MAX_RENDER_RESOLUTION, Number(saved.resolution) || defaults.resolution)),
         antialias: Boolean(saved.antialias),
-        anisotropy: [1, 4, 8, 16].includes(Number(saved.anisotropy)) ? Number(saved.anisotropy) : 16,
+        anisotropy: [1, 4, 8, 16].includes(Number(saved.anisotropy)) ? Number(saved.anisotropy) : defaults.anisotropy,
         shadows: Boolean(saved.shadows),
-        exposure: Math.max(0.8, Math.min(1.5, Number(saved.exposure) || 1.18)),
+        exposure: Math.max(0.8, Math.min(1.5, Number(saved.exposure) || defaults.exposure)),
       };
     }
   } catch { /* Use defaults when storage contains invalid data. */ }
-  return { ...DEFAULT_RENDER_SETTINGS };
+  return defaults;
 }
 
 export function getRenderResolutionLimit(maxTextureSize: number, viewportWidth: number, viewportHeight: number): number {

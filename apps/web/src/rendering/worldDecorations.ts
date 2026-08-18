@@ -13,6 +13,7 @@ export function createWorldDecorations(options) {
     addObstacleGroup,
   } = options;
   let treeTrunks, treeCrowns, lampPosts, lampLights;
+  let decorationObstacleBounds = null;
   const orangeGroveCenter={x:-15,z:-3};
   const roadWidth=(position)=>position===0?2.4:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
 
@@ -152,6 +153,7 @@ export function createWorldDecorations(options) {
   
   function addDistrictBuildings() {
     const centers=[-33,-27,-21,-15,-9,-3,3,9,15,21,27,33], lots=[];
+    const buildingBounds=buildings.map((building)=>new THREE.Box3().setFromObject(building.group));
     centers.forEach(x=>centers.forEach(z=>{
       if(Math.hypot(x,z)<4.8)return;
       const dist=Math.max(Math.abs(x),Math.abs(z));
@@ -163,8 +165,7 @@ export function createWorldDecorations(options) {
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
-        const blocked=buildings.some(b=>{
-          const box=new THREE.Box3().setFromObject(b.group);
+        const blocked=buildingBounds.some(box=>{
           return lx>=box.min.x-1.35&&lx<=box.max.x+1.35
             &&lz>=box.min.z-1.35&&lz<=box.max.z+1.35;
         });
@@ -172,6 +173,7 @@ export function createWorldDecorations(options) {
       });
     }));
     lots.forEach(([x,z,t],i)=>addSmallBlock(x,0,z,t,i));
+    decorationObstacleBounds=null;
   }
   
   function addSmallBlock(x,y,z,type,i) {
@@ -219,9 +221,12 @@ export function createWorldDecorations(options) {
       lampLights = new InstancedBatch(scene,resources.geometry(new THREE.SphereGeometry(0.13,14,14)),globeMaterial,384,false);
       lampGlobes.push(globeMaterial);
     }
+    if (!decorationObstacleBounds) {
+      decorationObstacleBounds=[...buildings,...residences]
+        .map((entry)=>new THREE.Box3().setFromObject(entry.group));
+    }
     positions.forEach(([x,,z]) => {
-      const blocked=[...buildings.map(b=>b.group),...residences.map(r=>r.group)].some(group=>{
-        const box=new THREE.Box3().setFromObject(group);
+      const blocked=decorationObstacleBounds.some(box=>{
         return x>=box.min.x-0.8&&x<=box.max.x+0.8&&z>=box.min.z-0.8&&z<=box.max.z+0.8;
       });
       if(blocked)return;

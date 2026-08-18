@@ -23,8 +23,28 @@ export type FrameLoopOptions = {
   isStoryLockedBuilding: (building: any) => boolean;
 };
 
+export const FRAME_TASK_INTERVALS = Object.freeze({
+  labels: 1000 / 30,
+  npcAvoidance: 1000 / 20,
+  mapMarker: 1000 / 15,
+});
+
+export function createFrameIntervalGate(intervalMs: number) {
+  let nextRunAt = Number.NEGATIVE_INFINITY;
+  return {
+    isDue(now: number): boolean {
+      if (now < nextRunAt) return false;
+      nextRunAt = now + intervalMs;
+      return true;
+    },
+  };
+}
+
 export function createFrameLoop(options: FrameLoopOptions) {
   let animationFrame = 0;
+  const labelGate = createFrameIntervalGate(FRAME_TASK_INTERVALS.labels);
+  const npcAvoidanceGate = createFrameIntervalGate(FRAME_TASK_INTERVALS.npcAvoidance);
+  const mapMarkerGate = createFrameIntervalGate(FRAME_TASK_INTERVALS.mapMarker);
 
   function updateLabels() {
     updateCityLabels({
@@ -41,27 +61,32 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const now = performance.now();
     const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
     options.setLastFrameTime(now);
-    options.getPlayerController()?.updateMovement(delta);
+    const playerController = options.getPlayerController();
+    playerController?.updateMovement(delta);
     options.getMultiplayerHousing()?.updateRemotePlayers(delta);
-    options.getNpcList().forEach(npc => {
-      if (!npc.mesh.visible || npc.walking === false) return;
-      options.npcYieldToPlayer(npc);
-    });
-    options.getPlayerController()?.updateCamera();
-    options.getSceneInterestPoints()?.update(now / 1000);
+    if (npcAvoidanceGate.isDue(now)) {
+      options.getNpcList().forEach(npc => {
+        if (!npc.mesh.visible || npc.walking === false) return;
+        options.npcYieldToPlayer(npc);
+      });
+    }
+    playerController?.updateCamera();
+    const sceneInterestPoints = options.getSceneInterestPoints();
+    sceneInterestPoints?.update(now / 1000);
     const cursorChar = options.getCursorChar();
     const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen()
-      ? options.getSceneInterestPoints()?.entities.get('west-beach')
+      ? sceneInterestPoints?.entities.get('west-beach')
       : null;
-    if (beach && cursorChar && cursorChar.position.distanceTo(beach.interactionPosition) <= 3.2) {
+    if (beach && cursorChar && cursorChar.position.distanceToSquared(beach.interactionPosition) <= 3.2 ** 2) {
       void options.getSceneInterestPointController()?.interact('west-beach');
     }
-    updateLabels();
+    if (labelGate.isDue(now)) updateLabels();
     const renderer = options.getRenderer();
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);
-    if (options.getMapController()?.isOpen()) options.getMapController()?.updateMarker();
+    const mapController = options.getMapController();
+    if (mapController?.isOpen() && mapMarkerGate.isDue(now)) mapController.updateMarker();
   }
 
   function start() { animationFrame = requestAnimationFrame(loop); }
