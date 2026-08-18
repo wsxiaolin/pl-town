@@ -92,6 +92,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateTo(b: any) {
     if (options.isBuildingUnavailable(b)) return;
+    // The wild mushroom restaurant is a local story venue, so proximity opens it directly.
+    if (b.id === 'writingclub_outer') {
+      navigateUnlocked(b);
+      return;
+    }
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }
 

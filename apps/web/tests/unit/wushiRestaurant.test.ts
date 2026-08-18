@@ -3,6 +3,7 @@ import test from 'node:test';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { isNpcHiddenAtHour } from '../../src/city/npcSystem';
+import { createBuildingInteraction } from '../../src/city/buildingInteraction';
 
 test('Wushi restaurant is a fixed unique building with a complete dialogue tree', () => {
   const restaurant = BUILDING_DEFS.find((building) => building.id === 'wushi_restaurant');
@@ -21,6 +22,30 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   }));
   assert.match(tree[15]?.text ?? '', /冰冻罗非鱼/);
   assert.match(tree[16]?.text ?? '', /9072000/);
+});
+
+test('wild mushroom restaurant opens from proximity without progression unlock', () => {
+  let interacted = false;
+  let progressionCalled = false;
+  const interaction = createBuildingInteraction({
+    isBuildingUnavailable: () => false,
+    getMultiplayerHousing: () => ({ progression: {
+      interactBuilding: () => { progressionCalled = true; },
+      openShop: () => {},
+    } }),
+    getCityDialogs: () => null,
+    getEchoStoryController: () => null,
+    getStatsPanelController: () => null,
+    getCommunityPanels: () => null,
+    getWriterCatalogController: () => null,
+    getNewsstandController: () => null,
+    trackInteraction: () => {},
+    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; } }),
+  });
+
+  interaction.navigateTo({ id: 'writingclub_outer' });
+  assert.equal(interacted, true);
+  assert.equal(progressionCalled, false);
 });
 
 test('Shinian Mengyanyu follows the noon pause and exposes both teleports', () => {

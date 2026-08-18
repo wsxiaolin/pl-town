@@ -402,10 +402,9 @@ export const BUILDING_DEFS = [
     label: "野生菌餐馆",
     x: -33,
     z: 33,
-    shape: "factory",
-    facade: "facade_library",
+    shape: "restaurant",
     icon: I(
-      `<path d="M4 20l4-1 10-10a3 3 0 0 0-4-4L4 15z"/><path d="M13 6l5 5"/>`,
+      `<path d="M4 10h16v10H4z"/><path d="M3 10h18"/><path d="M6 6v4M12 6v4M18 6v4"/><path d="M8 14h8v6H8z"/>`,
     ),
   },
   {

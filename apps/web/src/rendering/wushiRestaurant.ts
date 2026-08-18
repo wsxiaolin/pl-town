@@ -38,7 +38,7 @@ export function buildWushiRestaurant(options: {
   addPart(group, new THREE.BoxGeometry(width, 0.1, 0.08), frame, [0, base + 1.98, depth / 2 + 0.06], false);
 
   const sign = addPart(group, new THREE.BoxGeometry(2.6, 0.55, 0.13), { color: 0x8c3e24, roughness: 0.55, emissive: 0x5a1e0c, emissiveIntensity: 0.18 }, [0, base + 2.43, depth / 2 + 0.1], false);
-  sign.userData.restaurantPart = '物实饭店招牌';
+  sign.userData.restaurantPart = definition.label ?? '野生菌餐馆';
   [-0.78, -0.26, 0.26, 0.78].forEach((x) => addPart(group, new THREE.BoxGeometry(0.3, 0.08, 0.03), warm, [x, base + 2.43, depth / 2 + 0.185], false));
 
   addPart(group, new THREE.BoxGeometry(0.92, 1.72, 0.08), glass, [0, base + 0.92, depth / 2 + 0.095], false);
@@ -56,6 +56,13 @@ export function buildWushiRestaurant(options: {
   [-0.45, 0, 0.45].forEach((offset) => addPart(group, new THREE.BoxGeometry(0.34, 0.13, 0.22), warm, [1.65 + offset, base + 0.9, depth / 2 + 0.15], false));
 
   [-1.5, 0, 1.5].forEach((x) => addPart(group, new THREE.BoxGeometry(0.72, 0.06, 0.35), warm, [x, base + height - 0.16, 0], false));
+  [-1.9, -1.35, 1.35, 1.9].forEach((x, index) => {
+    const stem = addPart(group, new THREE.CylinderGeometry(0.07, 0.1, 0.28, 10), { color: 0xe8d8b5, roughness: 0.78 }, [x, floorTop + 0.14, depth / 2 + 0.28], false);
+    const cap = addPart(group, new THREE.SphereGeometry(0.18, 12, 8), { color: index % 2 ? 0x9a5a32 : 0xc47a3c, roughness: 0.7 }, [x, floorTop + 0.34, depth / 2 + 0.28], false);
+    cap.scale.set(1.2, 0.55, 1.2);
+    stem.userData.restaurantPart = 'mushroom-decoration';
+    cap.userData.restaurantPart = 'mushroom-decoration';
+  });
   addPart(group, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), { color: 0x3b6fe0, emissive: 0x3b6fe0, emissiveIntensity: 0.28 }, [0, floorTop + 0.05, 0], false);
 
   group.position.set(definition.x, 0, definition.z);
