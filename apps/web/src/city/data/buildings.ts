@@ -399,7 +399,7 @@ export const BUILDING_DEFS = [
   {
     id: "writingclub_outer",
     num: "36",
-    label: "文训社（外环）",
+    label: "野生菌餐馆",
     x: -33,
     z: 33,
     shape: "factory",
@@ -1185,8 +1185,8 @@ export const BUILDING_CONTENT = {
     ],
   },
   writingclub_outer: {
-    name: "文训社（外环）",
-    slogan: "字是城的声音，写下来才不散。",
-    dialog: ["木桌木椅，墨迹未干。", "「别怕写不好。先写下来，再改。」"],
+    name: "野生菌餐馆",
+    slogan: "一年总要吃两次野生菌火锅。",
+    dialog: ["门头挂着几串风干的菌子，锅底翻滚着奶白色的汤。", "老板笑眯眯地说：「吃完保准看见点新东西。」"],
   },
 };

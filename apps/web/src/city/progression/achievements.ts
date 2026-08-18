@@ -25,6 +25,8 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   { id:'echo_eternal_lie',name:'永恒的谎言',desc:'让故事继续循环',check:()=>false,directOnly:true },
   { id:'echo_real_echo',name:'真正的回声',desc:'以真实回应林澈',check:()=>false,directOnly:true },
   { id:'echo_true_dawn',name:'真正的黎明',desc:'完成回声的全部后日谈',check:()=>false,directOnly:true },
+  { id:'wild_mushroom_stubborn',name:'吃一堑再吃一堑',desc:'明知会被放倒，还是又吃了一顿野生菌',check:()=>false,directOnly:true },
+  { id:'wild_mushroom_local',name:'真正的云南人',desc:'签完免责声明，把餐馆吃到赔本',check:()=>false,directOnly:true },
 ];
 
 export function createUnlockTiers(addLamps: (positions: [number, number, number][]) => void,
