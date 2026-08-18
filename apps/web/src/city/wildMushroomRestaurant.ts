@@ -53,9 +53,9 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
       role: '老板把一大盘见手青倒进锅里',
       text: '「熟了再吃，没熟可要看见小人的。」',
       options: [
-        { text: '我要吃 1 个感叹号！', onPick: () => burnThen(afterBurn) },
-        { text: '我要吃 2 个感叹号！！', onPick: () => burnThen(afterBurn) },
-        { text: '我要吃 3 个感叹号！！！', onPick: () => burnThen(afterBurn) },
+        { text: '我要吃！', onPick: () => burnThen(afterBurn) },
+        { text: '我要吃！！', onPick: () => burnThen(afterBurn) },
+        { text: '我要吃！！！', onPick: () => burnThen(afterBurn) },
       ],
     });
     open({
