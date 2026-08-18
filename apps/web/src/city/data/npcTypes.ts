@@ -10,3 +10,14 @@ export interface NpcTypeLike {
 export function getNpcType(profile: NpcTypeLike): NpcType {
   return profile.npcType ?? profile.type ?? 'resident';
 }
+
+import type { CommunityNpcProfile } from './communityNpcs';
+
+export interface NpcProfile extends CommunityNpcProfile {
+  npcType?: NpcType;
+  type?: NpcType;
+  storyOnly?: boolean;
+  hiddenHours?: [number, number] | null;
+  spawnArea?: [number, number, number];
+  guaranteedSpawn?: boolean;
+}

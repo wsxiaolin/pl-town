@@ -44,10 +44,10 @@ export const WEST_BEACH = Object.freeze({
 export const ECHO_OBSERVATORY_AREA = Object.freeze({
   roadNodes: Object.freeze([
     [38, 0], [48, 0], [58, 0], [68, 0],
-  ]),
+  ] as const),
   roadSegments: Object.freeze([
     [38, 0, 48, 0], [48, 0, 58, 0], [58, 0, 68, 0],
-  ]),
+  ] as const),
   center: Object.freeze([68, 0] as const),
   observatory: Object.freeze([72, -4.55] as const),
   observatoryScale: 0.9,

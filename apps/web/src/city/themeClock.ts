@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { townGameHour } from '../gameplay/time/townClock';
+import type { LegacyStats } from './progression/legacyStats';
 
 export type ThemeClockOptions = {
   getSkyTextures: () => { skyDay: THREE.Texture | null; skyNight: THREE.Texture | null };
@@ -16,8 +17,8 @@ export type ThemeClockOptions = {
   announceGuide: () => void;
   invalidateMapShot: () => void;
   updateNpcSchedules: () => void;
-  getStats: () => any;
-  saveStats: (stats: any) => void;
+  getStats: () => LegacyStats;
+  saveStats: (stats: LegacyStats) => void;
   checkAchievements: () => void;
 };
 

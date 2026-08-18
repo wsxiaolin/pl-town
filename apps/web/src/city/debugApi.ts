@@ -1,4 +1,9 @@
 import type * as THREE from 'three';
+import type { NpcEntity } from './npcSystem';
+import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
+
+type DebugBuilding = { id: string; group: THREE.Object3D };
+type DebugResidence = { id: string };
 
 export type DebugApiOptions = {
   getScene: () => THREE.Scene;
@@ -6,24 +11,24 @@ export type DebugApiOptions = {
   getRenderer: () => THREE.Renderer;
   getCameraZoom: () => number;
   getThree: () => typeof THREE;
-  getNpcList: () => any[];
+  getNpcList: () => readonly NpcEntity[];
   getCursorChar: () => THREE.Object3D | null;
-  getNavigation: () => any;
+  getNavigation: () => unknown;
   getPlayerPath: () => THREE.Vector3[];
-  getBuildings: () => any[];
-  getResidences: () => any[];
-  openNpcDialog: (npc: any) => void;
-  navigateTo: (building: any) => void;
-  isBuildingUnavailable: (building: any) => boolean;
+  getBuildings: () => readonly DebugBuilding[];
+  getResidences: () => readonly DebugResidence[];
+  openNpcDialog: (npc: NpcEntity) => void;
+  navigateTo: (building: DebugBuilding) => void;
+  isBuildingUnavailable: (building: DebugBuilding) => boolean;
   destroyBuilding: (buildingId: string) => boolean;
   destroyResidence: (residenceId: string) => boolean;
   destroyAll: () => number;
   restoreBuilding: (buildingId: string) => boolean;
   restoreResidence: (residenceId: string) => boolean;
   restoreAll: () => number;
-  openModal: (building: any) => void;
-  interactWithSceneInterestPoint: (id: any) => void;
-  getSceneInterestPoints: () => { entities: Map<string, any> } | null;
+  openModal: (building: DebugBuilding) => void;
+  interactWithSceneInterestPoint: (id: SceneInterestPointId) => void;
+  getSceneInterestPoints: () => { entities: ReadonlyMap<string, { interactionPosition: THREE.Vector3 }> } | null;
   burnCity: () => boolean;
   burnCityActive: () => boolean;
   burnCityProgress: () => number;
@@ -48,7 +53,7 @@ export function installDebugApi(options: DebugApiOptions) {
       return true;
     },
     interactBuilding: (buildingId: string) => {
-      const building = options.getBuildings().find((item: any) => item.id === buildingId);
+      const building = options.getBuildings().find(item => item.id === buildingId);
       if (!building || options.isBuildingUnavailable(building)) return false;
       options.navigateTo(building);
       return true;
@@ -60,7 +65,7 @@ export function installDebugApi(options: DebugApiOptions) {
     restoreResidence: (residenceId: string) => options.restoreResidence(residenceId),
     restoreAll: () => options.restoreAll(),
     openBuildingDialog: (buildingId: string) => {
-      const building = options.getBuildings().find((item: any) => item.id === buildingId);
+      const building = options.getBuildings().find(item => item.id === buildingId);
       if (!building || options.isBuildingUnavailable(building)) return false;
       options.openModal(building);
       return true;
@@ -71,7 +76,7 @@ export function installDebugApi(options: DebugApiOptions) {
       const cursor = options.getCursorChar();
       if (!cursor) return false;
       cursor.position.set(entity.interactionPosition.x + 0.5, 0, entity.interactionPosition.z);
-      options.interactWithSceneInterestPoint(id);
+      options.interactWithSceneInterestPoint(id as SceneInterestPointId);
       return true;
     },
     burnCity: () => options.burnCity(),

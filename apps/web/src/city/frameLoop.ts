@@ -1,26 +1,31 @@
 import * as THREE from 'three';
 import { updateCityLabels } from './labelController';
+import type { BuiltBuilding } from '../rendering/buildingMeshFactory';
+import type { NpcEntity } from './npcSystem';
+
+type Residence = { id: string; group: THREE.Object3D; labelEl?: HTMLElement | null };
+type LabelledBuilding = { id: string; group: THREE.Object3D };
 
 export type FrameLoopOptions = {
-  getRenderer: () => THREE.Renderer;
+  getRenderer: () => THREE.WebGLRenderer;
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
-  getBuildings: () => any[];
-  getResidences: () => any[];
+  getBuildings: () => readonly BuiltBuilding[];
+  getResidences: () => readonly Residence[];
   getLabelWorldPosition: () => THREE.Vector3;
-  getNpcList: () => any[];
+  getNpcList: () => readonly NpcEntity[];
   getPlayerController: () => { updateMovement: (delta: number) => void; updateCamera: () => void } | null;
   getMultiplayerHousing: () => { updateRemotePlayers: (delta: number) => void } | null;
-  getSceneInterestPoints: () => { update: (time: number) => void; entities: Map<string, any> } | null;
-  getSceneInterestPointController: () => { interact: (id: string) => Promise<void> | void } | null;
+  getSceneInterestPoints: () => { update: (time: number) => void; entities: ReadonlyMap<string, { interactionPosition: THREE.Vector3 }> } | null;
+  getSceneInterestPointController: () => { interact(id: string): Promise<void> | void } | null;
   getMapController: () => { isOpen: () => boolean; updateMarker: () => void } | null;
-  getBurnOverlay: () => { render: (renderer: THREE.Renderer) => void; isActive: () => boolean } | null;
+  getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
-  npcYieldToPlayer: (npc: any) => void;
-  isStoryLockedBuilding: (building: any) => boolean;
+  npcYieldToPlayer: (npc: NpcEntity) => void;
+  isStoryLockedBuilding: (building: LabelledBuilding) => boolean;
 };
 
 export function createFrameLoop(options: FrameLoopOptions) {
@@ -31,7 +36,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
       camera: options.getCamera(),
       buildings: options.getBuildings(),
       residences: options.getResidences(),
-      isStoryLocked: options.isStoryLockedBuilding,
+      isStoryLocked: (building) => options.isStoryLockedBuilding(building as LabelledBuilding),
       worldPosition: options.getLabelWorldPosition(),
     });
   }

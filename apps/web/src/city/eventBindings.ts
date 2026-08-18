@@ -2,7 +2,7 @@ import { setupRenderSettingsController } from '../adapters/ui/renderSettingsCont
 import { bindCityUiEvents } from '../adapters/ui/cityEventBindings';
 
 export type EventBindingsOptions = {
-  getCanvas: () => HTMLElement;
+  getCanvas: () => HTMLElement | null;
   getSignal: () => AbortSignal;
   getRenderer: () => { capabilities: { getMaxAnisotropy: () => number; maxTextureSize: number }; setSize: (w: number, h: number) => void };
   onMouseMove: (e: MouseEvent) => void;
@@ -54,6 +54,7 @@ export function createEventBindings(options: EventBindingsOptions) {
   function setupEvents() {
     const canvas = options.getCanvas();
     const signal = options.getSignal();
+    if (!canvas) return;
     canvas.addEventListener('mousemove', options.onMouseMove, { signal });
     canvas.addEventListener('click', options.onCanvasClick, { signal });
     canvas.addEventListener('mouseenter', () => {}, { signal });

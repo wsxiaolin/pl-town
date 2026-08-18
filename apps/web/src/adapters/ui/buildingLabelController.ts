@@ -1,4 +1,7 @@
-type Building = { id: string; label: string; icon: string; isStats?: boolean; labelEl?: HTMLElement };
+import * as THREE from 'three';
+import type { BuiltBuilding } from '../../rendering/buildingMeshFactory';
+
+type Building = BuiltBuilding;
 
 export function createBuildingLabelController(options: {
   getBuildings: () => readonly Building[];

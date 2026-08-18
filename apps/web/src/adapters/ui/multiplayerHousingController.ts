@@ -1,10 +1,59 @@
 // Multiplayer presence, chat, and housing UI state.
-// @ts-nocheck
 import * as THREE from 'three';
 import { MultiplayerClient } from '../../network/MultiplayerClient';
+import type { House, HousingRequest, NetPosition, NetUser } from '../../network/MultiplayerClient';
+import type { ProgressionEvent } from '../../gameplay/progression/playerProgress';
 import { createCloudProgressionController } from './cloudProgressionController';
 
-export function createMultiplayerHousingController(options) {
+type PhoneTab = 'chat' | 'houses' | 'inventory' | 'npc' | 'archive' | 'social';
+type HousePanelMode = 'rename' | 'invite' | 'members' | 'release' | 'leave';
+
+interface ResidenceLike {
+  id: string;
+  label?: string;
+  group: { position: { x: number; z: number; clone: () => THREE.Vector3 } };
+  labelEl?: HTMLElement | null;
+}
+
+interface RemotePlayer {
+  mesh: THREE.Group;
+  target: THREE.Vector3;
+  rotation: number;
+  nickname: string;
+}
+
+interface CommunityPanelsLike {
+  openPhoneApp: (tab: string, kind?: string) => void;
+  loadPhoneMessages: (append?: boolean) => void;
+  openWorksPanel: (context: string, queryOverride?: string | null) => void;
+  openPhoneBinding: () => void;
+  bindPhysicsLabAccount: (event: SubmitEvent) => void;
+  updatePhoneBindingState: () => void;
+  loadPhoneSocial: (kind?: string) => void;
+}
+
+interface MultiplayerHousingOptions {
+  scene: THREE.Scene;
+  signal: AbortSignal;
+  residences: ResidenceLike[];
+  getCursorChar: () => THREE.Object3D | null;
+  makeCharacter: (primary: number, secondary: number) => THREE.Group;
+  showLoginEntry: () => void;
+  showLoginOverlay: () => void;
+  showUnlockToast: (message: string) => void;
+  movePlayerTo: (position: THREE.Vector3) => void;
+  pointInAnyBuilding: (x: number, z: number) => boolean;
+  fountainClear: number;
+  getMapIconsBuilt: () => boolean;
+  mapShotSpan: number;
+  getMapMode: () => boolean;
+  toggleMapMode: () => void;
+  communityPanels: CommunityPanelsLike;
+  getLegacyAchievements?: () => readonly string[];
+  isResidenceUnavailable?: (id: string) => boolean;
+}
+
+export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
   const {
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
     showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
@@ -16,17 +65,17 @@ export function createMultiplayerHousingController(options) {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
     updatePhoneBindingState, loadPhoneSocial,
   } = communityPanels;
-  let multiplayer = null;
-  const remotePlayers = new Map();
+  let multiplayer: MultiplayerClient | null = null;
+  const remotePlayers = new Map<string, RemotePlayer>();
   let lastNetworkPosition = 0;
-  let onlinePlayers = [];
-  let currentHouses = [];
-  let currentHousingRequests = [];
-  let selectedResidenceId = null;
+  let onlinePlayers: NetUser[] = [];
+  let currentHouses: House[] = [];
+  let currentHousingRequests: HousingRequest[] = [];
+  let selectedResidenceId: string | null = null;
   let unreadChats = 0;
   let pendingHousingRequests = 0;
-  let residenceClaimId = null;
-  let housePanelState = { houseId: null, mode: null };
+  let residenceClaimId: string | null = null;
+  let housePanelState: { houseId: string | null; mode: HousePanelMode | null } = { houseId: null, mode: null };
   const progression = createCloudProgressionController({
     document,
     signal,
@@ -45,21 +94,21 @@ export function createMultiplayerHousingController(options) {
     const panel = document.getElementById('onlinePanel');
     const closeBtn = document.getElementById('phoneClose');
     const form = document.getElementById('chatForm');
-    const input = document.getElementById('chatInput');
+    const input = document.getElementById('chatInput') as HTMLInputElement | null;
     if (!toggle || !panel || !form || !input) return;
-    const claimClose = document.getElementById('residenceClaimClose');
-    const claimCancel = document.getElementById('residenceClaimCancel');
-    const claimSubmit = document.getElementById('residenceClaimSubmit');
-    const applyButton = document.getElementById('residenceApply');
-    const navigateButton = document.getElementById('residenceNavigate');
-    const claimInput = document.getElementById('residenceNameInput');
+    const claimClose = document.getElementById('residenceClaimClose') as HTMLButtonElement | null;
+    const claimCancel = document.getElementById('residenceClaimCancel') as HTMLButtonElement | null;
+    const claimSubmit = document.getElementById('residenceClaimSubmit') as HTMLButtonElement | null;
+    const applyButton = document.getElementById('residenceApply') as HTMLButtonElement | null;
+    const navigateButton = document.getElementById('residenceNavigate') as HTMLButtonElement | null;
+    const claimInput = document.getElementById('residenceNameInput') as HTMLInputElement | null;
     toggle.addEventListener('click', (event) => {
       event.stopPropagation();
       setPhoneOpen(!panel.classList.contains('open'));
     }, { signal: signal });
     closeBtn?.addEventListener('click', () => setPhoneOpen(false), { signal: signal });
     document.addEventListener('click', (event) => {
-      if (panel.classList.contains('open') && !panel.contains(event.target) && !toggle.contains(event.target)) setPhoneOpen(false);
+      if (panel.classList.contains('open') && !panel.contains(event.target as Node | null) && !toggle.contains(event.target as Node | null)) setPhoneOpen(false);
     }, { signal: signal });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -68,9 +117,9 @@ export function createMultiplayerHousingController(options) {
       multiplayer?.chat(text);
       input.value = '';
     }, { signal: signal });
-    document.querySelectorAll('[data-online-tab]').forEach((tab) => tab.addEventListener('click', () => {
+    document.querySelectorAll<HTMLElement>('[data-online-tab]').forEach((tab) => tab.addEventListener('click', () => {
       const target = tab.dataset.onlineTab;
-      activatePhoneTab(target);
+      activatePhoneTab(target as PhoneTab);
       if (target === 'inventory') progression.openInventory();
       if (target === 'chat') clearUnreadChats();
     }, { signal: signal }));
@@ -81,7 +130,7 @@ export function createMultiplayerHousingController(options) {
     document.getElementById('phoneBindForm')?.addEventListener('submit',bindPhysicsLabAccount,{signal:signal});
     updatePhoneBindingState();
     document.getElementById('phoneOpenWorks')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('all');},{signal:signal});
-    document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>loadPhoneSocial(button.dataset.plSocial),{signal:signal}));
+    document.querySelectorAll<HTMLElement>('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>loadPhoneSocial(button.dataset.plSocial),{signal:signal}));
     claimClose?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimCancel?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimSubmit?.addEventListener('click', () => {
@@ -111,7 +160,7 @@ export function createMultiplayerHousingController(options) {
   }
   
   // 打开/收起“居民手机”，并同步悬浮按钮状态与未读角标
-  function setPhoneOpen(open) {
+  function setPhoneOpen(open: boolean) {
     const panel = document.getElementById('onlinePanel');
     const toggle = document.getElementById('onlinePanelToggle');
     if (!panel || !toggle) return;
@@ -139,7 +188,7 @@ export function createMultiplayerHousingController(options) {
     updatePhoneBadge();
   }
   
-  function setupMultiplayer(nickname, password) {
+  function setupMultiplayer(nickname: string, password?: string) {
     if (multiplayer) return;
     multiplayer = new MultiplayerClient({
       connection: (state) => {
@@ -155,14 +204,15 @@ export function createMultiplayerHousingController(options) {
         onlinePlayers = players.filter((player) => player.id !== user.id);
         const owner = document.getElementById('phoneOwner');
         if (owner) owner.textContent = `${user.nickname} 的手机`;
-        if (getCursorChar()) {
+        const cursor = getCursorChar();
+        if (cursor) {
           const unsafe = Math.hypot(user.position.x, user.position.z) < FOUNTAIN_CLEAR || pointInAnyBuilding(user.position.x, user.position.z);
           if (unsafe) {
-            getCursorChar().position.set(0, 0, -6);
+            cursor.position.set(0, 0, -6);
             multiplayer?.position({ x: 0, y: 0, z: -6, rotation: 0 });
           } else {
-            getCursorChar().position.set(user.position.x, 0, user.position.z);
-            getCursorChar().rotation.y = user.position.rotation ?? 0;
+            cursor.position.set(user.position.x, 0, user.position.z);
+            cursor.rotation.y = user.position.rotation ?? 0;
           }
         }
         players.forEach(addRemotePlayer);
@@ -184,7 +234,7 @@ export function createMultiplayerHousingController(options) {
         renderHouseList(currentHouses);
       },
       progress: (progress, catalog, event) => {
-        progression.applySnapshot(progress, catalog, event);
+        progression.applySnapshot(progress, catalog, event as ProgressionEvent | undefined);
         if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       authenticationFailed: (message) => {
@@ -212,12 +262,12 @@ export function createMultiplayerHousingController(options) {
     multiplayer.connect(nickname, password);
   }
   
-  function updateOnlineCount(count) {
+  function updateOnlineCount(count: number) {
     const el = document.getElementById('onlineCount');
     if (el) el.textContent = `${Math.max(0, count)} 人在线`;
   }
   
-  function addRemotePlayer(player) {
+  function addRemotePlayer(player: NetUser) {
     if (!player?.id || player.id === multiplayer?.user?.id || remotePlayers.has(player.id)) return;
     const mesh = makeCharacter(0xF0C18A, 0xC45A4A);
     mesh.position.set(player.position.x, player.position.y, player.position.z);
@@ -227,22 +277,27 @@ export function createMultiplayerHousingController(options) {
     remotePlayers.set(player.id, { mesh, target: new THREE.Vector3(player.position.x, player.position.y, player.position.z), rotation: player.position.rotation ?? 0, nickname: player.nickname });
   }
   
-  function removeRemotePlayer(id) {
+  function removeRemotePlayer(id: string) {
     const remote = remotePlayers.get(id);
     if (!remote) return;
     scene.remove(remote.mesh);
-    remote.mesh.traverse((object) => { if (object.geometry) object.geometry.dispose(); if (object.material?.dispose) object.material.dispose(); });
+    remote.mesh.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const material = mesh.material;
+      if (material && !Array.isArray(material)) material.dispose();
+    });
     remotePlayers.delete(id);
   }
   
-  function updateRemotePlayers(delta) {
+  function updateRemotePlayers(delta: number) {
     remotePlayers.forEach((remote) => {
       remote.mesh.position.lerp(remote.target, Math.min(1, delta * 12));
       remote.mesh.rotation.y += Math.atan2(Math.sin(remote.rotation - remote.mesh.rotation.y), Math.cos(remote.rotation - remote.mesh.rotation.y)) * Math.min(1, delta * 12);
     });
   }
   
-  function appendChat(nickname, text, own) {
+  function appendChat(nickname: string, text: string, own: boolean) {
     const log = document.getElementById('chatLog');
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
@@ -257,7 +312,7 @@ export function createMultiplayerHousingController(options) {
     if (!own && (!panel?.classList.contains('open') || !chatActive)) bumpUnreadChats();
   }
   
-  function renderHouseList(houses) {
+  function renderHouseList(houses: House[]) {
     const list = document.getElementById('houseList');
     if (!list) return;
     currentHouses = houses;
@@ -281,7 +336,7 @@ export function createMultiplayerHousingController(options) {
     }
   }
   
-  function renderHousingRequests(list, mine) {
+  function renderHousingRequests(list: HTMLElement, mine: string | undefined) {
     if (!mine || !currentHousingRequests.length) return;
     const section = document.createElement('section'); section.className = 'house-requests';
     const heading = document.createElement('strong'); heading.className = 'house-requests-title'; heading.textContent = '待处理请求'; section.appendChild(heading);
@@ -308,7 +363,7 @@ export function createMultiplayerHousingController(options) {
   }
   
   // 当前在地图上选中的住宅：未认领时给入口，已认领时显示入住进度
-  function buildHouseFocus(houses) {
+  function buildHouseFocus(houses: House[]) {
     const residence = residences.find((item) => item.id === selectedResidenceId);
     const house = houses.find((item) => item.buildingId === selectedResidenceId);
     const focus = document.createElement('article'); focus.className = 'house-focus';
@@ -337,7 +392,7 @@ export function createMultiplayerHousingController(options) {
     return focus;
   }
   
-  function houseActionButton(label, active, onClick, variant) {
+  function houseActionButton(label: string, active: boolean, onClick: (event: MouseEvent) => void, variant?: string) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `hc-btn${variant ? ` ${variant}` : ''}${active ? ' active' : ''}`;
@@ -352,37 +407,37 @@ export function createMultiplayerHousingController(options) {
     return button;
   }
 
-  function activatePhoneTab(target) {
-    const views={chat:'onlineChatView',houses:'onlineHousesView',inventory:'onlineInventoryView',npc:'onlineNpcView',archive:'onlineArchiveView',social:'onlineSocialView'};
-    document.querySelectorAll('[data-online-tab]').forEach((item) => item.classList.toggle('active', item.dataset.onlineTab === target));
+  function activatePhoneTab(target: PhoneTab) {
+    const views: { chat: string; houses: string; inventory: string; npc: string; archive: string; social: string } = { chat: 'onlineChatView', houses: 'onlineHousesView', inventory: 'onlineInventoryView', npc: 'onlineNpcView', archive: 'onlineArchiveView', social: 'onlineSocialView' };
+    document.querySelectorAll<HTMLElement>('[data-online-tab]').forEach((item) => item.classList.toggle('active', item.dataset.onlineTab === target));
     document.querySelectorAll('.online-view').forEach((view) => view.classList.toggle('active', view.id === views[target]));
   }
   
   // Raycasts often hit a facade/decoration child that was added after the
   // building was tagged. Walk up the hierarchy so every visible part remains
   // interactive.
-  function raycastUserData(object, key) {
-    let node=object;
+  function raycastUserData(object: THREE.Object3D, key: string) {
+    let node: THREE.Object3D | null = object;
     while(node){
-      const value=node.userData?.[key];
+      const value = node.userData?.[key];
       if(value) return value;
-      node=node.parent;
+      node = node.parent;
     }
     return null;
   }
   
-  function setHousePanel(houseId, mode) {
+  function setHousePanel(houseId: string, mode: HousePanelMode) {
     if (housePanelState.houseId === houseId && housePanelState.mode === mode) housePanelState = { houseId: null, mode: null };
     else housePanelState = { houseId, mode };
     renderHouseList(currentHouses);
   }
   
-  function buildHouseCard(house, houses, mine) {
+  function buildHouseCard(house: House, houses: House[], mine: string | undefined) {
     const isOwner = house.ownerId === mine;
     const isMember = house.members.some((member) => member.userId === mine);
     const card = document.createElement('article');
     card.className = `house-card${isOwner ? ' mine' : ''}${house.buildingId === selectedResidenceId ? ' selected' : ''}`;
-  
+
     const head = document.createElement('div'); head.className = 'hc-head';
     const titleBox = document.createElement('div'); titleBox.className = 'hc-title';
     const name = document.createElement('strong'); name.className = 'hc-name'; name.textContent = house.name || '未命名住宅';
@@ -390,11 +445,11 @@ export function createMultiplayerHousingController(options) {
     titleBox.append(name, owner);
     const occ = document.createElement('span'); occ.className = 'hc-occ'; occ.textContent = `${house.members.length}/10`;
     head.append(titleBox, occ);
-  
+
     const bar = document.createElement('div'); bar.className = 'hc-bar';
     const fill = document.createElement('i'); fill.style.width = `${Math.min(100, house.members.length * 10)}%`;
     bar.appendChild(fill);
-  
+
     const members = document.createElement('div'); members.className = 'hc-members';
     house.members.forEach((member) => {
       const chip = document.createElement('span');
@@ -403,7 +458,7 @@ export function createMultiplayerHousingController(options) {
       members.appendChild(chip);
     });
     card.append(head, bar, members);
-  
+
     const panelMode = housePanelState.houseId === house.buildingId ? housePanelState.mode : null;
     const actions = document.createElement('div'); actions.className = 'hc-actions';
     if (isOwner) {
@@ -434,9 +489,9 @@ export function createMultiplayerHousingController(options) {
   }
   
   // 卡片内的内联操作区：改名表单 / 邀请选择器 / 成员管理 / 两步骤确认
-  function buildHousePanel(house, houses, mine, mode) {
+  function buildHousePanel(house: House, houses: House[], mine: string | undefined, mode: HousePanelMode) {
     const panel = document.createElement('div'); panel.className = 'hc-panel';
-    const panelTitle = (text) => { const el = document.createElement('span'); el.className = 'hc-panel-title'; el.textContent = text; return el; };
+    const panelTitle = (text: string) => { const el = document.createElement('span'); el.className = 'hc-panel-title'; el.textContent = text; return el; };
     if (mode === 'rename') {
       const form = document.createElement('div'); form.className = 'hc-form';
       const input = document.createElement('input');
@@ -534,7 +589,7 @@ export function createMultiplayerHousingController(options) {
         wrap.appendChild(el);
         residence.labelEl = el;
       }
-      residence.labelEl.querySelector('.hml-name').textContent = name;
+      residence.labelEl!.querySelector('.hml-name')!.textContent = name;
     });
   }
   
@@ -558,7 +613,7 @@ export function createMultiplayerHousingController(options) {
     });
   }
   
-  function openResidence(residenceId) {
+  function openResidence(residenceId: string) {
     const residence = residences.find((item) => item.id === residenceId);
     if (!residence || isResidenceUnavailable(residenceId)) return;
     selectedResidenceId = residenceId;
@@ -575,13 +630,13 @@ export function createMultiplayerHousingController(options) {
     const address = document.getElementById('residenceClaimAddress');
     const status = document.getElementById('residenceClaimStatus');
     const field = document.getElementById('residenceNameField');
-    const input = document.getElementById('residenceNameInput');
+    const input = document.getElementById('residenceNameInput') as HTMLInputElement | null;
     const submit = document.getElementById('residenceClaimSubmit');
     const apply = document.getElementById('residenceApply');
     const navigate = document.getElementById('residenceNavigate');
     if (!panel || !title || !address || !status || !field || !submit || !apply || !navigate) return;
     title.textContent = house?.name || '未命名住宅';
-    address.textContent = residence.label;
+    address.textContent = residence.label ?? '';
     status.textContent = house
       ? `已认领 · 房主 ${house.ownerNickname} · ${house.members.length}/10 名成员`
       : '这栋住宅尚未被认领。';
@@ -607,14 +662,14 @@ export function createMultiplayerHousingController(options) {
     residenceClaimId = null;
   }
   
-  function navigateToResidence(residenceId) {
+  function navigateToResidence(residenceId: string) {
     const residence = residences.find((item) => item.id === residenceId);
     if (!residence || isResidenceUnavailable(residenceId)) return;
     closeResidencePanel();
     movePlayerTo(residence.group.position.clone());
   }
 
-  function sendLocalPosition(position, now) {
+  function sendLocalPosition(position: NetPosition, now: number) {
     if (!multiplayer || now - lastNetworkPosition < 80) return;
     multiplayer.position(position);
     lastNetworkPosition = now;

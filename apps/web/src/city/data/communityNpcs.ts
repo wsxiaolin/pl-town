@@ -3,11 +3,16 @@
 // 已删除：台词重复/无价值的NPC、同名重复条目（各保留一份）、
 //         以及「选项与对话毫无关联、逻辑跳跃」的NPC（物理灯/坏坏鱼一号/璃安夏）。
 // spawnChance 已缩放至 0.02-0.055，避免大量社区NPC同屏出现。
+export interface CommunityNpcDialogOption {
+  text: string;
+  next: number | null;
+  action?: string;
+}
 export interface CommunityNpcProfile {
   id:string; name:string; role:string; core:boolean; spawnChance:number;
-  behavior:string; workHours:number[]|null; head:number; body:number;
-  home:number[]; work:number[]|null; patrolRadius:number;
-  dialog:{text:string; options:{text:string; next:number|null}[]}[];
+  behavior:string; workHours:[number,number]|null; head:number; body:number;
+  home:[number,number]; work:[number,number]|null; patrolRadius:number;
+  dialog:{text:string; options:CommunityNpcDialogOption[]}[];
 }
 export const COMMUNITY_NPCS: CommunityNpcProfile[] = [
   {

@@ -16,7 +16,7 @@ export type MeshHelpers = {
     group: THREE.Group | null,
     geo: THREE.BufferGeometry,
     matOrParams: THREE.Material | MaterialParameters,
-    pos?: [number, number, number],
+    pos?: readonly [number, number, number],
     shadow?: boolean,
   ) => THREE.Mesh;
 };
@@ -46,7 +46,7 @@ export function createMeshHelpers(
     group: THREE.Group | null,
     geo: THREE.BufferGeometry,
     matOrParams: THREE.Material | MaterialParameters,
-    pos?: [number, number, number],
+    pos?: readonly [number, number, number],
     shadow = true,
   ): THREE.Mesh {
     const mat = matOrParams instanceof THREE.Material

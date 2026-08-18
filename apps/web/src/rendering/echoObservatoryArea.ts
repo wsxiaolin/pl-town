@@ -3,7 +3,7 @@ import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 
 type Vec3 = readonly [number, number, number];
 
-type MaterialOptions = THREE.MeshStandardMaterialParameters & {
+type MaterialOptions = Record<string, unknown> & {
   tex?: string;
   rx?: number;
   ry?: number;

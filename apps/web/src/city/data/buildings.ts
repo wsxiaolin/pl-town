@@ -634,7 +634,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
 
 // Materialize the optional query on every matching building definition so the
 // renderer can treat this as ordinary building data instead of a hardcoded switch.
-BUILDING_DEFS.forEach((building: any) => {
+BUILDING_DEFS.forEach((building: { id: string; contentQuery?: unknown }) => {
   const query =
     BUILDING_API_QUERIES[building.id as keyof typeof BUILDING_API_QUERIES];
   if (query) building.contentQuery = query;

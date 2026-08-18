@@ -1,10 +1,47 @@
 // NPC rendering, schedules, patrols, and player avoidance.
-// @ts-nocheck
 import * as THREE from 'three';
 import { gsap } from 'gsap';
-import { getNpcType } from './data/npcTypes';
+import { getNpcType, type NpcProfile } from './data/npcTypes';
+import type { MaterialParameters } from '../rendering/meshFactory';
 
-export function hoursInRange(h, wh) {
+export interface NpcEntity {
+  profile: NpcProfile;
+  mesh: THREE.Group;
+  tween: gsap.core.Tween | null;
+  spawnTimer: number;
+  idleTimer: number;
+  walking?: boolean;
+  yielding?: boolean;
+}
+
+export type NpcSystemOptions = {
+  scene: THREE.Scene;
+  profiles: NpcProfile[];
+  npcList: NpcEntity[];
+  actors: {
+    cursorChar: THREE.Object3D | null;
+    playerMarker: THREE.Object3D | null;
+  };
+  raycaster: THREE.Raycaster;
+  roadCoords: readonly number[];
+  reduced: boolean;
+  isMobile: () => boolean;
+  getGameClock: () => number;
+  getCurrentFilter: () => string;
+  nearestRoadCoord: (value: number) => number;
+  buildRoadPath: (from: THREE.Vector3, to: THREE.Vector3) => THREE.Vector3[];
+  makeMaterial: (params?: MaterialParameters | null) => THREE.MeshStandardMaterial;
+  makeMesh: (geo: THREE.BufferGeometry, mat: THREE.Material) => THREE.Mesh;
+  view: {
+    mapMode: boolean;
+    dialogOpen: boolean;
+    cameraZoom: number;
+  };
+  updateCameraProjection: (zoom: number) => void;
+  getActiveStoryActorIds: () => Set<string>;
+};
+
+export function hoursInRange(h: number, wh: [number, number] | null | undefined): boolean {
   if(!wh) return false;
   const [s,e]=wh;
   if(s===e) return true;
@@ -12,11 +49,11 @@ export function hoursInRange(h, wh) {
   return h>=s || h<e;
 }
 
-export function isNpcHiddenAtHour(profile, hour) {
+export function isNpcHiddenAtHour(profile: NpcProfile, hour: number): boolean {
   return hoursInRange(hour, profile.hiddenHours);
 }
 
-export function createNpcSystem(options) {
+export function createNpcSystem(options: NpcSystemOptions) {
   const {
     scene, profiles: NPC_PROFILES, npcList, actors, raycaster, roadCoords: ROAD_COORDS,
     reduced: REDUCED, isMobile: MOBILE, getGameClock, getCurrentFilter,
@@ -25,7 +62,7 @@ export function createNpcSystem(options) {
     getActiveStoryActorIds,
   } = options;
 
-  function makeCharacter(headHex, bodyHex) {
+  function makeCharacter(headHex: number, bodyHex: number): THREE.Group {
     const g=new THREE.Group();
     const shadow=mk(new THREE.CircleGeometry(0.17,16),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.11,depthWrite:false}));
     shadow.rotation.x=-Math.PI/2; shadow.position.y=0.012; g.add(shadow);
@@ -35,7 +72,7 @@ export function createNpcSystem(options) {
     head.position.y=0.43; head.castShadow=true; g.add(head);
     return g;
   }
-  function makePlayerMarker() {
+  function makePlayerMarker(): THREE.Group {
     const g=new THREE.Group();
     const cone=new THREE.Mesh(
       new THREE.ConeGeometry(0.13,0.26,3),
@@ -60,7 +97,7 @@ export function createNpcSystem(options) {
   }
   
   function highlightPlayerMarker() {
-    const cone=actors.playerMarker&&actors.playerMarker.children[0];
+    const cone=(actors.playerMarker&&actors.playerMarker.children[0]) as THREE.Mesh|undefined;
     if(!cone)return;
     gsap.killTweensOf(cone.scale); gsap.killTweensOf(cone.material);
     gsap.timeline()
@@ -73,10 +110,10 @@ export function createNpcSystem(options) {
     if (REDUCED) return;
     NPC_PROFILES.forEach(profile=>{
       const g=makeCharacter(profile.head,profile.body);
-      g.traverse(c=>{ if(c.isMesh) { c.userData.npcId=profile.id; c.userData.npcType=getNpcType(profile); } });
+      g.traverse(c=>{ if((c as THREE.Mesh).isMesh) { c.userData.npcId=profile.id; c.userData.npcType=getNpcType(profile); } });
       const start=randomSpawnPosition(profile) ?? new THREE.Vector3(profile.home[0],0,profile.home[1]);
       g.position.copy(start); scene.add(g);
-      const npc={profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0};
+      const npc: NpcEntity={profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0};
       npcList.push(npc);
       if(profile.behavior==='rare') g.visible=false;
       if(isNpcHiddenAtHour(profile, getGameClock())) g.visible=false;
@@ -91,7 +128,7 @@ export function createNpcSystem(options) {
     actors.playerMarker.position.y=0.95; actors.cursorChar.add(actors.playerMarker);
   }
 
-  function randomSpawnPosition(profile) {
+  function randomSpawnPosition(profile: NpcProfile): THREE.Vector3|null {
     if (!profile.spawnArea) return null;
     const [x,z,radius]=profile.spawnArea;
     const angle=Math.random()*Math.PI*2;
@@ -99,16 +136,16 @@ export function createNpcSystem(options) {
     return new THREE.Vector3(x+Math.cos(angle)*distance,0,z+Math.sin(angle)*distance);
   }
   
-  function npcDesiredTarget(npc) {
+  function npcDesiredTarget(npc: NpcEntity): THREE.Vector3 {
     const dest = hoursInRange(getGameClock(), npc.profile.workHours)
       ? (npc.profile.work || npc.profile.home) : npc.profile.home;
     return new THREE.Vector3(dest[0],0,dest[1]);
   }
   
-  function pickPatrolSpot(npc) {
+  function pickPatrolSpot(npc: NpcEntity): THREE.Vector3|null {
     const radius = npc.profile.patrolRadius ?? (hoursInRange(getGameClock(), npc.profile.workHours) ? 3.5 : 2.5);
     const center = npcDesiredTarget(npc);
-    const pool=[];
+    const pool: THREE.Vector3[]=[];
     ROAD_COORDS.forEach(x=>ROAD_COORDS.forEach(z=>{
       const p=new THREE.Vector3(x,0,z);
       if(p.distanceTo(center)<=radius && p.distanceTo(center)>0.5) pool.push(p);
@@ -121,11 +158,11 @@ export function createNpcSystem(options) {
       if(p.distanceTo(center)<=radius && p.distanceTo(center)>0.5) pool.push(p);
     });
     if(!pool.length) return null;
-    return pool[Math.floor(Math.random()*pool.length)];
+    return pool[Math.floor(Math.random()*pool.length)] ?? null;
   }
   
   // NPCs step aside when the player walks into them instead of blocking the road.
-  function npcYieldToPlayer(npc) {
+  function npcYieldToPlayer(npc: NpcEntity) {
     if (!actors.cursorChar || !actors.cursorChar.visible) return;
     const dx=npc.mesh.position.x-actors.cursorChar.position.x;
     const dz=npc.mesh.position.z-actors.cursorChar.position.z;
@@ -148,7 +185,7 @@ export function createNpcSystem(options) {
     }
   }
   
-  function npcRoutine(npc) {
+  function npcRoutine(npc: NpcEntity) {
     if (npc.walking===false) return;
     if (npc.yielding) return;
     if (!npc.mesh.visible) return;
@@ -218,13 +255,14 @@ export function createNpcSystem(options) {
     });
   }
   
-  function walkAlongPath(npc, path) {
+  function walkAlongPath(npc: NpcEntity, path: THREE.Vector3[]) {
     if (npc.walking===false) return;
     if (!path.length) {
       npc.tween=null;
       return;
     }
     const target=path.shift();
+    if (!target) return;
     const from=npc.mesh.position.clone();
     const dur=Math.max(0.6,from.distanceTo(target)/1.4);
     gsap.to(npc.mesh.rotation,{y:Math.atan2(target.x-from.x,target.z-from.z),duration:0.3,ease:'power1.out'});
@@ -246,8 +284,8 @@ export function createNpcSystem(options) {
     });
   }
   
-  function nearestNpcTo(p, radius) {
-    let best=null, bestD=radius;
+  function nearestNpcTo(p: THREE.Vector3, radius: number): NpcEntity|null {
+    let best: NpcEntity|null=null, bestD=radius;
     npcList.forEach(npc=>{
       if(!npc.mesh.visible)return;
       const d=npc.mesh.position.distanceTo(p);
@@ -256,11 +294,14 @@ export function createNpcSystem(options) {
     return best;
   }
   
-  function npcForRaycast() {
+  function npcForRaycast(): NpcEntity|null {
     const visible=npcList.filter(n=>n.mesh.visible);
     const hits=raycaster.intersectObjects(visible.map(n=>n.mesh),true);
     if(!hits.length)return null;
-    const id=hits[0].object.userData.npcId;
+    const first=hits[0];
+    if (!first) return null;
+    const id=first.object.userData.npcId as string|undefined;
+    if (!id) return null;
     return npcList.find(n=>n.profile.id===id)||null;
   }
   

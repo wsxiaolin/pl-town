@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export function applyStoryLockedBuildingPresentation(buildings: readonly { group: THREE.Object3D; labelEl?: HTMLElement }[]): void {
+export function applyStoryLockedBuildingPresentation(buildings: readonly { group: THREE.Object3D; labelEl?: HTMLElement | null }[]): void {
   buildings.forEach((building) => {
     building.group.userData.storyLocked = true;
     if (building.labelEl) { building.labelEl.hidden = true; building.labelEl.tabIndex = -1; }

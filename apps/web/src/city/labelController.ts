@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-type Labelled = { group: THREE.Object3D; labelEl?: HTMLElement; labelY?: number };
+type Labelled = { group: THREE.Object3D; labelEl?: HTMLElement | null; labelY?: number };
 
 export function updateCityLabels(options: {
   camera: THREE.Camera;

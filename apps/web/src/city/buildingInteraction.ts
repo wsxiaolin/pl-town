@@ -1,23 +1,16 @@
+import type * as THREE from 'three';
 import { BUILDING_API_QUERIES } from './data/buildings';
+import type { CommunityPanelController } from '../adapters/ui/communityPanelController';
+
+type BuildingRef = { id: string; group: THREE.Object3D; isStats?: boolean };
 
 export type BuildingInteractionOptions = {
-  isBuildingUnavailable: (building: any) => boolean;
+  isBuildingUnavailable: (building: BuildingRef) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
-  getCityDialogs: () => { openBuilding: (building: any) => void; closeBuilding: () => void } | null;
-  getEchoStoryController: () => { interactBuilding: (id: string, dialogs: any) => boolean } | null;
+  getCityDialogs: () => { openBuilding: (building: { id: string }) => void; closeBuilding: () => void } | null;
+  getEchoStoryController: () => { interactBuilding: (id: string, dialogs: unknown) => boolean } | null;
   getStatsPanelController: () => { open: () => void } | null;
-  getCommunityPanels: () => {
-    openPhoneApp: (tab: string, kind: string) => void;
-    openWorksPanel: (context: string, queryOverride: any) => void;
-    closeWorkDetail: () => void;
-    loadWorkComments: () => any;
-    postWorkComment: (event: any) => any;
-    loadWorkDerivatives: () => any;
-    loadWorkSupporters: () => any;
-    toggleWorkSupport: () => any;
-    toggleWorkStar: () => any;
-    closeWorksPanel: () => void;
-  } | null;
+  getCommunityPanels: () => CommunityPanelController | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
@@ -33,7 +26,7 @@ const PHONE_BUILDINGS: Record<string, [string, string?]> = {
 };
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
-  function openModal(building: any) {
+  function openModal(building: BuildingRef) {
     options.getCityDialogs()?.openBuilding(building);
   }
 
@@ -41,7 +34,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     options.getCityDialogs()?.closeBuilding();
   }
 
-  function navigateUnlocked(b: any) {
+  function navigateUnlocked(b: BuildingRef) {
     if (options.isBuildingUnavailable(b)) return;
     // 点击「野生菌餐馆」（原文训社外环）触发野生菌小剧情：每次进店都会被放倒、烧一次城。
     if (b.id === 'writingclub_outer') {
@@ -66,7 +59,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     const phoneEntry = PHONE_BUILDINGS[b.id];
     if (phoneEntry) {
-      options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1] as any);
+      options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1]);
       options.trackInteraction(b.id);
       return;
     }
@@ -80,7 +73,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       options.trackInteraction(b.id);
       return;
     }
-    const configuredQuery = (BUILDING_API_QUERIES as Record<string, any>)[b.id];
+    const configuredQuery = (BUILDING_API_QUERIES as Record<string, unknown>)[b.id];
     if (configuredQuery) {
       options.getCommunityPanels()?.openWorksPanel(b.id, configuredQuery);
       options.trackInteraction(b.id);
@@ -90,7 +83,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     openModal(b);
   }
 
-  function navigateTo(b: any) {
+  function navigateTo(b: BuildingRef) {
     if (options.isBuildingUnavailable(b)) return;
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }

@@ -1,15 +1,18 @@
+import type * as THREE from 'three';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
+import type { QuestChange, QuestEvent, QuestTransition } from '../gameplay/quests/types';
+import type { LegacyStats } from './progression/legacyStats';
 import { showUnlockToast } from './toast';
 
 export type InteractionTrackerOptions = {
-  getStats: () => any;
-  saveStats: (stats: any) => void;
+  getStats: () => LegacyStats;
+  saveStats: (stats: LegacyStats) => void;
   checkAchievements: () => void;
   updateWelcome: () => void;
-  getProgressionController: () => { checkUnlocks: (stats: any) => void } | null;
-  getQuestRuntime: () => { dispatch: (event: any) => { changes: any[] } };
-  getEchoStoryController: () => { updateGuide: (camera: any) => void } | null;
-  getCamera: () => any;
+  getProgressionController: () => { checkUnlocks: (stats: LegacyStats) => void } | null;
+  getQuestRuntime: () => { dispatch: (event: QuestEvent) => QuestTransition };
+  getEchoStoryController: () => { updateGuide: (camera: THREE.Camera) => void } | null;
+  getCamera: () => THREE.Camera;
   getQuestEventSequence: () => number;
   incrementQuestEventSequence: () => void;
   getCursorChar: () => { visible?: boolean } | null;
@@ -32,7 +35,7 @@ export function createInteractionTracker(options: InteractionTrackerOptions) {
     });
     options.incrementQuestEventSequence();
     options.getEchoStoryController()?.updateGuide(options.getCamera());
-    const ready = transition.changes.find((change: any) => change.type === 'quest.ready');
+    const ready = transition.changes.find((change: QuestChange) => change.type === 'quest.ready');
     if (ready) {
       const quest = SIDE_QUESTS.find(item => item.id === ready.questId);
       if (quest) showUnlockToast(`任务可交付 · ${quest.title}`);

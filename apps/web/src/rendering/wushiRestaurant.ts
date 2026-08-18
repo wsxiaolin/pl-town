@@ -1,12 +1,32 @@
 import * as THREE from 'three';
+import type { MaterialParameters } from './meshFactory';
 
-type RestaurantDefinition = { id: string; x: number; z: number } & Record<string, unknown>;
+type RestaurantDefinition = {
+  id: string;
+  num: string;
+  label: string;
+  icon: string;
+  shape: string;
+  x: number;
+  z: number;
+  isStats?: boolean;
+  disabled?: boolean;
+  facade?: string;
+  storyLocked?: boolean;
+  contentQuery?: unknown;
+};
 
 export function buildWushiRestaurant(options: {
   platformHeight: number;
-  makeMaterial: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
+  makeMaterial: (parameters: MaterialParameters) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
-  addPart: (...args: any[]) => THREE.Mesh;
+  addPart: (
+    group: THREE.Group | null,
+    geo: THREE.BufferGeometry,
+    matOrParams: THREE.Material | MaterialParameters,
+    pos?: readonly [number, number, number],
+    shadow?: boolean,
+  ) => THREE.Mesh;
 }, definition: RestaurantDefinition) {
   const { platformHeight: base, makeMaterial, makeMesh, addPart } = options;
   const group = new THREE.Group();
