@@ -249,7 +249,6 @@ const buildingInteraction = createBuildingInteraction({
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
   trackInteraction,
-  burnCity: (onDone) => burnCityEffect.trigger(onDone),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
 });
 

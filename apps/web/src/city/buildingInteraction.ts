@@ -1,4 +1,5 @@
 import { BUILDING_API_QUERIES } from './data/buildings';
+import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 
 export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: any) => boolean;
@@ -21,8 +22,7 @@ export type BuildingInteractionOptions = {
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
-  burnCity?: (onDone?: () => void) => boolean;
-  getWildMushroomRestaurant?: () => { interact: () => void } | null;
+  getWildMushroomRestaurant?: () => { interact: () => WildMushroomInteractResult } | null;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, string?]> = {
@@ -47,12 +47,14 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     if (b.id === 'writingclub_outer') {
       const restaurant = options.getWildMushroomRestaurant?.();
       if (restaurant) {
-        options.trackInteraction(b.id);
-        restaurant.interact();
-        return;
+        // 'opened'：小剧情已展开，仅记录互动；'no-dialog' / 'exhausted' 均回退到普通建筑弹窗。
+        if (restaurant.interact() === 'opened') {
+          options.trackInteraction(b.id);
+          return;
+        }
       }
       options.trackInteraction(b.id);
-      options.burnCity?.();
+      openModal(b);
       return;
     }
     const dialogs = options.getCityDialogs();

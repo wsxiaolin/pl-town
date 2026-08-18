@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const webRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -24,6 +25,12 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // Multi-page application: the city game shell and the standalone NPC
+      // edit-request page are built as separate HTML entries from one source.
+      input: {
+        main: resolve(webRoot, 'index.html'),
+        'npc-edit-request': resolve(webRoot, 'npc-edit-request.html'),
+      },
       output: {
         manualChunks: {
           three: ['three'],

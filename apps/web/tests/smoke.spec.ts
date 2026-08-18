@@ -777,7 +777,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await expect(page.locator('#npcLine')).toHaveText('老板招呼你坐下，锅里的汤咕嘟咕嘟地响。');
   await pick('一年总要吃两次野生菌火锅');
   await expect(page.locator('.npc-opt')).toHaveCount(3);
-  await pick('我要吃 1 个感叹号！');
+  await page.locator('.npc-opt').filter({ hasText: /^我要吃！$/ }).click();
   // 烧城动画约 6s（GSAP timeline），软件渲染下轮询等待 onDone 后的下一段对话。
   await expect(page.locator('#npcLine')).toContainText('这镜子一看就是真的', { timeout: 30_000 });
   await page.locator('#npcClose').click();
@@ -807,4 +807,15 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await page.locator('.npc-opt').first().click();
   await expect(page.locator('#npcLine')).toContainText('真正的云南人，佩服佩服', { timeout: 30_000 });
   await expect.poll(() => unlocked(), { timeout: 10_000 }).toContain('wild_mushroom_local');
+  await page.locator('#npcClose').click();
+
+  // 四访：预置三次访问（剧情已用尽）→ 不再进入小剧情，回退到普通建筑弹窗。
+  await page.evaluate(() => localStorage.setItem('minicityWildMushroomVisits', '3'));
+  await interact();
+  await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
+  await expect(page.locator('#modalTitle')).toHaveText('野生菌餐馆');
+  await expect(page.locator('#modalBody')).toContainText('门头挂着几串风干的菌子');
+  await expect(page.locator('#npcOverlay')).not.toHaveClass(/open/);
+  await page.locator('#modalClose').click();
+  await expect(page.locator('#modalOverlay')).not.toHaveClass(/open/);
 });

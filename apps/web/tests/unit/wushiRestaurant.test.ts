@@ -3,11 +3,17 @@ import test from 'node:test';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { isNpcHiddenAtHour } from '../../src/city/npcSystem';
+import { createBuildingInteraction } from '../../src/city/buildingInteraction';
+import { createWildMushroomRestaurant } from '../../src/city/wildMushroomRestaurant';
 
 test('Wushi restaurant is a fixed unique building with a complete dialogue tree', () => {
   const restaurant = BUILDING_DEFS.find((building) => building.id === 'wushi_restaurant');
   assert.ok(restaurant);
   assert.equal(restaurant.shape, 'restaurant');
+  const wildMushroomRestaurant = BUILDING_DEFS.find((building) => building.id === 'writingclub_outer');
+  assert.ok(wildMushroomRestaurant);
+  assert.equal(wildMushroomRestaurant.shape, 'wild_mushroom_restaurant');
+  assert.notEqual(wildMushroomRestaurant.shape, restaurant.shape);
   assert.equal(BUILDING_DEFS.filter((building) => building.x === restaurant.x && building.z === restaurant.z).length, 1);
 
   const southwestPond = { x: -24, z: -24, radius: 3 };
@@ -21,6 +27,104 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   }));
   assert.match(tree[15]?.text ?? '', /冰冻罗非鱼/);
   assert.match(tree[16]?.text ?? '', /9072000/);
+});
+
+test('wild mushroom restaurant uses the standard unlock flow', () => {
+  let interacted = false;
+  let modalOpened = false;
+  let trackCount = 0;
+  const interaction = createBuildingInteraction({
+    isBuildingUnavailable: () => false,
+    getMultiplayerHousing: () => ({ progression: {
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      openShop: () => {},
+    } }),
+    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getEchoStoryController: () => null,
+    getStatsPanelController: () => null,
+    getCommunityPanels: () => null,
+    getWriterCatalogController: () => null,
+    getNewsstandController: () => null,
+    trackInteraction: () => { trackCount += 1; },
+    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; return 'opened'; } }),
+  });
+
+  interaction.navigateTo({ id: 'writingclub_outer' });
+  assert.equal(interacted, true);
+  assert.equal(modalOpened, false);
+  assert.equal(trackCount, 1);
+});
+
+test('wild mushroom restaurant falls back to the building modal once exhausted', () => {
+  let modalOpened = false;
+  let trackCount = 0;
+  const interaction = createBuildingInteraction({
+    isBuildingUnavailable: () => false,
+    getMultiplayerHousing: () => ({ progression: {
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      openShop: () => {},
+    } }),
+    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getEchoStoryController: () => null,
+    getStatsPanelController: () => null,
+    getCommunityPanels: () => null,
+    getWriterCatalogController: () => null,
+    getNewsstandController: () => null,
+    trackInteraction: () => { trackCount += 1; },
+    getWildMushroomRestaurant: () => ({ interact: () => 'exhausted' }),
+  });
+
+  interaction.navigateTo({ id: 'writingclub_outer' });
+  assert.equal(modalOpened, true);
+  assert.equal(trackCount, 1);
+});
+
+test('wild mushroom restaurant falls back to the building modal when dialogs are unavailable', () => {
+  let modalOpened = false;
+  let trackCount = 0;
+  const interaction = createBuildingInteraction({
+    isBuildingUnavailable: () => false,
+    getMultiplayerHousing: () => ({ progression: {
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      openShop: () => {},
+    } }),
+    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getEchoStoryController: () => null,
+    getStatsPanelController: () => null,
+    getCommunityPanels: () => null,
+    getWriterCatalogController: () => null,
+    getNewsstandController: () => null,
+    trackInteraction: () => { trackCount += 1; },
+    getWildMushroomRestaurant: () => ({ interact: () => 'no-dialog' }),
+  });
+
+  interaction.navigateTo({ id: 'writingclub_outer' });
+  assert.equal(modalOpened, true);
+  assert.equal(trackCount, 1);
+});
+
+test('wild mushroom restaurant story stops after three visits', () => {
+  let openedStories = 0;
+  const values = new Map<string, string>();
+  const restaurant = createWildMushroomRestaurant({
+    getDialogs: () => ({
+      openStory: () => { openedStories += 1; },
+      closeNpc: () => {},
+    }),
+    burnCity: (onDone) => { onDone?.(); return true; },
+    awardAchievement: () => {},
+    getStorage: () => ({
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+    }),
+  });
+
+  assert.equal(restaurant.interact(), 'opened');
+  assert.equal(restaurant.interact(), 'opened');
+  assert.equal(restaurant.interact(), 'opened');
+  assert.equal(restaurant.interact(), 'exhausted');
+  assert.equal(values.get('minicityWildMushroomVisits'), '3');
+  assert.ok(openedStories > 0);
 });
 
 test('Shinian Mengyanyu follows the noon pause and exposes both teleports', () => {

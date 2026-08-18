@@ -51,3 +51,18 @@ Entries discovered by the Agent during task execution should follow this format:
   - In `apps/web/src/city/MiniCityApp.ts` (a `@ts-nocheck` monolith), module-top-level `const roadNavigation = createRoadNavigationSystem({...})` and its destructured helpers (`clamp`, `buildRoadPath`, `nearestRoadCoord`, `FOUNTAIN_CLEAR`, etc.) MUST be declared BEFORE any module-top-level call that references them in an object literal (e.g. `createEventBindings({..., clamp, ...})`), otherwise a TDZ `Cannot access ... before initialization` error is thrown at load and the whole city fails to boot.
   - This ordering was wrong on `origin/main`; the fix moved the `roadNavigation` block above `createBuildingInteraction`/`createEventBindings`.
   - Headless Playwright (chromium headless shell) needs `npx playwright install chromium --with-deps`; without it, `browserType.launch` fails on the missing headless shell binary.
+
+[Project Knowledge Summary]
+- Date: 2026-08-17
+- Context: Discovered by Agent while reworking the NPC edit-request page into the frontend multi-page app per review feedback
+- Category: Operations & Deployment
+- Instructions:
+  - The web app and server are intended to be deployed on the same server eventually; GitHub Pages / `BASE_PATH` is not the production target to design around.
+  - The NPC edit-request page lives in `apps/web` as a Vite MPA entry (`index.html` + `npc-edit-request.html` built together); the server exposes only the `/town-api` endpoints and the admin console, with no hand-written duplicate of the page.
+
+[User Instruction Summary]
+- Date: 2026-08-18
+- Context: Debugging CI and building interaction behavior
+- Instructions:
+  - Before changing workflow or application behavior, inspect the actual failure logs and confirm the root cause.
+  - Keep unrelated configuration unchanged and avoid speculative fixes.
