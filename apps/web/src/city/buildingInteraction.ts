@@ -22,7 +22,7 @@ export type BuildingInteractionOptions = {
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   burnCity?: (onDone?: () => void) => boolean;
-  getWildMushroomRestaurant?: () => { interact: () => void } | null;
+  getWildMushroomRestaurant?: () => { interact: () => boolean } | null;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, string?]> = {
@@ -47,12 +47,13 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     if (b.id === 'writingclub_outer') {
       const restaurant = options.getWildMushroomRestaurant?.();
       if (restaurant) {
-        options.trackInteraction(b.id);
-        restaurant.interact();
-        return;
+        if (restaurant.interact()) {
+          options.trackInteraction(b.id);
+          return;
+        }
       }
       options.trackInteraction(b.id);
-      options.burnCity?.();
+      openModal(b);
       return;
     }
     const dialogs = options.getCityDialogs();
@@ -92,11 +93,6 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateTo(b: any) {
     if (options.isBuildingUnavailable(b)) return;
-    // The wild mushroom restaurant is a local story venue, so proximity opens it directly.
-    if (b.id === 'writingclub_outer') {
-      navigateUnlocked(b);
-      return;
-    }
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }
 

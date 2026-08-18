@@ -4,6 +4,7 @@ import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { isNpcHiddenAtHour } from '../../src/city/npcSystem';
 import { createBuildingInteraction } from '../../src/city/buildingInteraction';
+import { createWildMushroomRestaurant } from '../../src/city/wildMushroomRestaurant';
 
 test('Wushi restaurant is a fixed unique building with a complete dialogue tree', () => {
   const restaurant = BUILDING_DEFS.find((building) => building.id === 'wushi_restaurant');
@@ -28,7 +29,7 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   assert.match(tree[16]?.text ?? '', /9072000/);
 });
 
-test('wild mushroom restaurant opens from proximity without progression unlock', () => {
+test('wild mushroom restaurant uses the standard unlock flow', () => {
   let interacted = false;
   let progressionCalled = false;
   const interaction = createBuildingInteraction({
@@ -44,12 +45,36 @@ test('wild mushroom restaurant opens from proximity without progression unlock',
     getWriterCatalogController: () => null,
     getNewsstandController: () => null,
     trackInteraction: () => {},
-    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; } }),
+    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; return true; } }),
   });
 
   interaction.navigateTo({ id: 'writingclub_outer' });
-  assert.equal(interacted, true);
-  assert.equal(progressionCalled, false);
+  assert.equal(interacted, false);
+  assert.equal(progressionCalled, true);
+});
+
+test('wild mushroom restaurant story stops after three visits', () => {
+  let openedStories = 0;
+  const values = new Map<string, string>();
+  const restaurant = createWildMushroomRestaurant({
+    getDialogs: () => ({
+      openStory: () => { openedStories += 1; },
+      closeNpc: () => {},
+    }),
+    burnCity: (onDone) => { onDone?.(); return true; },
+    awardAchievement: () => {},
+    getStorage: () => ({
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+    }),
+  });
+
+  assert.equal(restaurant.interact(), true);
+  assert.equal(restaurant.interact(), true);
+  assert.equal(restaurant.interact(), true);
+  assert.equal(restaurant.interact(), false);
+  assert.equal(values.get('minicityWildMushroomVisits'), '3');
+  assert.ok(openedStories > 0);
 });
 
 test('Shinian Mengyanyu follows the noon pause and exposes both teleports', () => {

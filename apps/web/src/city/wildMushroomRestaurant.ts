@@ -15,7 +15,7 @@ export interface WildMushroomRestaurantOptions {
 }
 
 export interface WildMushroomRestaurant {
-  interact(): void;
+  interact(): boolean;
 }
 
 export function createWildMushroomRestaurant(options: WildMushroomRestaurantOptions): WildMushroomRestaurant {
@@ -126,13 +126,15 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
     advance(0);
   };
 
-  function interact(): void {
-    if (!options.getDialogs()) return;
+  function interact(): boolean {
+    if (!options.getDialogs()) return false;
     const visits = readVisits();
+    if (visits >= 3) return false;
     writeVisits(visits + 1);
     if (visits === 0) firstVisit();
     else if (visits === 1) secondVisit();
     else thirdVisit();
+    return true;
   }
 
   return { interact };
