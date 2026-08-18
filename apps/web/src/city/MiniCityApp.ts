@@ -56,6 +56,7 @@ import { createInteractionTracker } from './interactionTracker';
 import { createSceneAnimations } from './sceneAnimations';
 import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
+import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
@@ -232,6 +233,12 @@ const burnCityEffect = createBurnCityEffect({
   reduced: REDUCED,
 });
 
+const wildMushroomRestaurant = createWildMushroomRestaurant({
+  getDialogs: () => cityDialogs,
+  burnCity: (onDone) => burnCityEffect.trigger(onDone),
+  awardAchievement: awardDirectAchievement,
+});
+
 const buildingInteraction = createBuildingInteraction({
   isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
@@ -242,7 +249,8 @@ const buildingInteraction = createBuildingInteraction({
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
   trackInteraction,
-  burnCity: () => burnCityEffect.trigger(),
+  burnCity: (onDone) => burnCityEffect.trigger(onDone),
+  getWildMushroomRestaurant: () => wildMushroomRestaurant,
 });
 
 const eventBindings = createEventBindings({
