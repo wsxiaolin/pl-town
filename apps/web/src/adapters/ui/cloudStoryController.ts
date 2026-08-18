@@ -104,12 +104,12 @@ export function createCloudStoryController(options: Options) {
     }
     const transition = runtime.choose(choiceId);
     if (!transition) return;
-    const { choice, state } = transition;
+    const { choice, state, resumptionNodeId } = transition;
     const sent = options.send({
       type: 'story.update',
       storyId: options.definition.id,
       definitionVersion: options.definition.definitionVersion,
-      nodeId: choice.next,
+      nodeId: resumptionNodeId,
       flags: { ...state.flags },
       ...(choice.ending ? { ending: choice.ending } : {}),
       ...(choice.visit ? { visit: true } : {}),

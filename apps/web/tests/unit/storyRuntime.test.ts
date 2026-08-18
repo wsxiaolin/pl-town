@@ -176,12 +176,16 @@ const checkpointRuntime = new StoryRuntime(checkpointDefinition, {
   },
 });
 const equals = (a: string, b: string): boolean => a === b;
-assert(checkpointRuntime.choose('go', 4), 'choosing into a transient beat should still advance the live node');
+const goTransition = checkpointRuntime.choose('go', 4);
+assert(goTransition, 'choosing into a transient beat should still advance the live node');
+assert(goTransition!.resumptionNodeId === 'hub', 'a transient beat transition must expose the savepoint as resumptionNodeId');
 assert(checkpointRuntime.state().nodeId === 'transient', 'the live node should reflect the transient beat');
 assert(equals(persistedNodeId, 'hub'), 'a transient beat must not overwrite the persisted savepoint node');
 assert(getStoryEventCount(checkpointState!, 'hubSeen') === 0, 'flags use flag.set, not event counts');
 assert(checkpointState!.flags['hubSeen'] === true, 'flags set before entering a transient beat should persist');
-assert(checkpointRuntime.choose('mark', 5), 'choosing out of a transient beat into a savepoint should persist');
+const markTransition = checkpointRuntime.choose('mark', 5);
+assert(markTransition, 'choosing out of a transient beat into a savepoint should persist');
+assert(markTransition!.resumptionNodeId === 'rest', 'a savepoint transition must expose the savepoint as resumptionNodeId');
 assert(equals(persistedNodeId, 'rest'), 'reaching a savepoint node should update the persisted resumption node');
 assert(checkpointRuntime.state().nodeId === 'rest', 'the live node should follow the savepoint after it is reached');
 assert(checkpointState!.flags['transientSeen'] === true, 'flags set on a transient beat should still persist');
