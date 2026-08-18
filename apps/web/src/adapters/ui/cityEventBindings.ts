@@ -12,7 +12,7 @@ export function bindCityUiEvents(options: {
   loadWorkDerivatives: () => void;
   loadWorkSupporters: () => void;
   toggleWorkSupport: () => void;
-  postWorkComment: (event: Event) => void;
+  postWorkComment: (event: SubmitEvent) => void;
   isMapOpen: () => boolean;
   toggleMap: () => void;
   closeModal: () => void;

@@ -1,9 +1,17 @@
-// @ts-nocheck
 import * as THREE from 'three';
+
+type Coord2 = [number, number];
+type RoadSegment4 = [number, number, number, number];
+type RoadNode = THREE.Vector3 & { i: number; adj: RoadNode[] };
+type BuildingBox = { minX: number; maxX: number; minZ: number; maxZ: number };
+type RoadGraph = { nodes: RoadNode[]; nodeIdx: Map<string, number> };
+type ObstacleGroup = THREE.Object3D & {
+  userData: THREE.Object3D['userData'] & { navigationFootprint?: { width: number; depth: number } };
+};
 
 export interface RoadNavigationOptions {
   roadCoords: readonly number[];
-  echoObservatoryArea?: any;
+  echoObservatoryArea?: { roadNodes: readonly Coord2[]; roadSegments: readonly RoadSegment4[] };
   westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
@@ -11,11 +19,11 @@ export interface RoadNavigationOptions {
 
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const ROAD_COORDS = [...options.roadCoords];
-  const ECHO_OBSERVATORY_AREA = options.echoObservatoryArea || { roadNodes: [], roadSegments: [] };
+  const ECHO_OBSERVATORY_AREA = { roadNodes: [...(options.echoObservatoryArea?.roadNodes ?? [])] as Coord2[], roadSegments: [...(options.echoObservatoryArea?.roadSegments ?? [])] as RoadSegment4[] };
   const CITY_LIMIT = options.cityLimit;
   const PLAYER_CLEARANCE = 0.2;
   const WEST_BEACH = options.westBeach;
-  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes];
+  const allExtraNodes = ECHO_OBSERVATORY_AREA.roadNodes;
   const WORLD_BOUNDS = {
     minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
     maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
@@ -23,16 +31,16 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     maxZ: Math.max(CITY_LIMIT, ...allExtraNodes.map(([,z]) => z)) + 8,
   };
   const buildings = options.getBuildings();
-  const buildingBoxes = [];
-  const obstacleGroups = [];
-  function registerObstacleGroup(group) {
-    if (!group || obstacleGroups.includes(group)) return;
-    obstacleGroups.push(group);
+  const buildingBoxes: BuildingBox[] = [];
+  const obstacleGroups: ObstacleGroup[] = [];
+  function registerObstacleGroup(group: THREE.Object3D | null) {
+    if (!group || obstacleGroups.includes(group as ObstacleGroup)) return;
+    obstacleGroups.push(group as ObstacleGroup);
     cacheBuildingBoxes();
     roadGraph = null;
   }
 
-  function buildRoadPath(from, rawTarget) {
+  function buildRoadPath(from: THREE.Vector3, rawTarget: THREE.Vector3): THREE.Vector3[] {
     const start=roadEntry(from);
     const end=roadEntry(rawTarget);
     const graph=getRoadGraph();
@@ -41,28 +49,32 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     if(sNode&&eNode){
       const gridPath=aStarRoad(sNode,eNode,graph);
       if(gridPath&&gridPath.length){
-        const pts=[start];
-        for(let i=1;i<gridPath.length;i++) pts.push(new THREE.Vector3(gridPath[i].x,0,gridPath[i].z));
+        const pts: THREE.Vector3[]=[start];
+        for(let i=1;i<gridPath.length;i++){ const n=gridPath[i]; if(n) pts.push(new THREE.Vector3(n.x,0,n.z)); }
         // Never end a leg inside a building footprint, and never strike the final
         // approach across a building: stop on the road instead.
+        const last=pts[pts.length-1];
+        if(!last) return [];
         const approachClear=!pointInAnyBuilding(end.x,end.z)
-          && !segHitsBuilding(pts[pts.length-1].x,pts[pts.length-1].z,end.x,end.z)
-          && !pathBlocked(pts[pts.length-1].x,pts[pts.length-1].z,end.x,end.z);
+          && !segHitsBuilding(last.x,last.z,end.x,end.z)
+          && !pathBlocked(last.x,last.z,end.x,end.z);
         if(approachClear) pts.push(end);
         // Straighten collinear runs along the SAME road line only — never cut
         // diagonally across building blocks or open ground.
-        const out=[];
+        const out: THREE.Vector3[]=[];
         for(const p of pts){
           if(out.length>=2){
             const a=out[out.length-2], b=out[out.length-1];
-            const sameLine=(a.x===b.x&&b.x===p.x)||(a.z===b.z&&b.z===p.z);
-            if(sameLine&&!segHitsBuilding(a.x,a.z,p.x,p.z)&&!pathBlocked(a.x,a.z,p.x,p.z)){
-              out.pop();
+            if(a && b){
+              const sameLine=(a.x===b.x&&b.x===p.x)||(a.z===b.z&&b.z===p.z);
+              if(sameLine&&!segHitsBuilding(a.x,a.z,p.x,p.z)&&!pathBlocked(a.x,a.z,p.x,p.z)){
+                out.pop();
+              }
             }
           }
           out.push(p);
         }
-        const filtered=out.filter((p,i,arr)=>i===0||p.distanceTo(arr[i-1])>0.05);
+        const filtered=out.filter((p,i,arr)=>i===0|| (arr[i-1]!==undefined && p.distanceTo(arr[i-1] as THREE.Vector3)>0.05));
         if(filtered.length>1) return filtered;
       }
     }
@@ -77,68 +89,74 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   // Walkable ring around the fountain plaza (radius 2.7) — also used by roadEntry
   // so a player standing in the plaza snaps onto the closest plaza point instead
   // of being pushed toward a far grid corner.
-  const PLAZA_POINTS = Array.from({length:8},(_,i)=>{
+  const PLAZA_POINTS: Coord2[] = Array.from({length:8},(_,i)=>{
     const a=i/8*Math.PI*2;
-    return [Number((Math.cos(a)*2.7).toFixed(3)), Number((Math.sin(a)*2.7).toFixed(3))];
+    return [Number((Math.cos(a)*2.7).toFixed(3)), Number((Math.sin(a)*2.7).toFixed(3))] as Coord2;
   });
-  let roadGraph=null;
+  let roadGraph: RoadGraph | null = null;
   
-  function getRoadGraph() {
+  function getRoadGraph(): RoadGraph {
     if(roadGraph) return roadGraph;
     const coords=ROAD_COORDS;
-    const nodeIdx=new Map();
-    const nodes=[];
-    const addNode=(x,z)=>{
+    const nodeIdx=new Map<string, number>();
+    const nodes: RoadNode[]=[];
+    const addNode=(x: number,z: number): RoadNode=>{
       const key=x+','+z;
-      if(nodeIdx.has(key)) return nodes[nodeIdx.get(key)];
-      const node=new THREE.Vector3(x,0,z);
+      const existing=nodeIdx.get(key);
+      if(existing!==undefined) return nodes[existing]!;
+      const node=new THREE.Vector3(x,0,z) as RoadNode;
       node.i=nodes.length;
       node.adj=[];
       nodeIdx.set(key,nodes.length);
       nodes.push(node);
       return node;
     };
-    coords.forEach(x=>coords.forEach(z=>addNode(x,z)));
+    coords.forEach((x:number)=>coords.forEach((z:number)=>addNode(x,z)));
     nodes.forEach((n,i)=>{ n.i=i; n.adj=[]; });
-    const addEdge=(a,b)=>{
+    const addEdge=(a: RoadNode,b: RoadNode)=>{
       if(pathBlocked(a.x,a.z,b.x,b.z)) return;
       a.adj.push(b); b.adj.push(a);
     };
     coords.forEach((x,i)=>coords.forEach((z,j)=>{
-      const a=nodes[nodeIdx.get(x+','+z)];
-      if(i+1<coords.length) addEdge(a,nodes[nodeIdx.get(coords[i+1]+','+z)]);
-      if(j+1<coords.length) addEdge(a,nodes[nodeIdx.get(x+','+coords[j+1])]);
+      const key=x+','+z;
+      const aIdx=nodeIdx.get(key);
+      const a=aIdx!==undefined?nodes[aIdx]:undefined;
+      if(!a) return;
+      if(i+1<coords.length) { const bIdx=nodeIdx.get(coords[i+1]+','+z); if(bIdx!==undefined) addEdge(a,nodes[bIdx]!); }
+      if(j+1<coords.length) { const bIdx=nodeIdx.get(x+','+coords[j+1]); if(bIdx!==undefined) addEdge(a,nodes[bIdx]!); }
     }));
   
     // The visible outer ring is a real escape route around the fountain and
     // blocked building edges. Connect it to the four arterial endpoints.
-    const ringNodes=[];
+    const ringNodes: RoadNode[]=[];
     const ringR=38;
     const ringCount=24;
     for(let i=0;i<ringCount;i++){
       const a=i/ringCount*Math.PI*2;
       ringNodes.push(addNode(Number((Math.cos(a)*ringR).toFixed(3)),Number((Math.sin(a)*ringR).toFixed(3))));
     }
-    ringNodes.forEach((n,i)=>addEdge(n,ringNodes[(i+1)%ringCount]));
-    [[0,-36,0,-38],[36,0,38,0],[0,36,0,38],[-36,0,-38,0]].forEach(([x1,z1,x2,z2])=>{
-      const a=nodes[nodeIdx.get(x1+','+z1)];
-      const b=nodes[nodeIdx.get(x2+','+z2)];
-      if(a&&b) addEdge(a,b);
+    ringNodes.forEach((n,i)=>addEdge(n,ringNodes[(i+1)%ringCount]!));
+    ([[0,-36,0,-38],[36,0,38,0],[0,36,0,38],[-36,0,-38,0]] as const).forEach(([x1,z1,x2,z2])=>{
+      const aIdx=nodeIdx.get(x1+','+z1);
+      const bIdx=nodeIdx.get(x2+','+z2);
+      if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
     });
   
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
     ECHO_OBSERVATORY_AREA.roadSegments.forEach(([x1,z1,x2,z2])=>{
-      addEdge(nodes[nodeIdx.get(x1+','+z1)],nodes[nodeIdx.get(x2+','+z2)]);
+      const aIdx=nodeIdx.get(x1+','+z1);
+      const bIdx=nodeIdx.get(x2+','+z2);
+      if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
     });
   
     // Inner plaza loop: the walkable counterpart of the central ring mesh added
     // in addPaths(). It connects to each arterial without entering the fountain.
     const plazaNodes=PLAZA_POINTS.map(([x,z])=>addNode(x,z));
-    plazaNodes.forEach((n,i)=>addEdge(n,plazaNodes[(i+1)%plazaNodes.length]));
-    [[0,-6,0,-2.7],[6,0,2.7,0],[0,6,0,2.7],[-6,0,-2.7,0]].forEach(([x1,z1,x2,z2])=>{
-      const a=nodes[nodeIdx.get(x1+','+z1)];
-      const b=nodes[nodeIdx.get(x2+','+z2)];
-      if(a&&b) addEdge(a,b);
+    plazaNodes.forEach((n,i)=>addEdge(n,plazaNodes[(i+1)%plazaNodes.length]!));
+    ([[0,-6,0,-2.7],[6,0,2.7,0],[0,6,0,2.7],[-6,0,-2.7,0]] as const).forEach(([x1,z1,x2,z2])=>{
+      const aIdx=nodeIdx.get(x1+','+z1);
+      const bIdx=nodeIdx.get(x2+','+z2);
+      if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
     });
     roadGraph={nodes,nodeIdx};
     return roadGraph;
@@ -146,7 +164,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   
   // A straight segment is unusable if it crosses a building footprint or the
   // fountain plaza (the arterial roads are cut there and no mesh exists).
-  function pathBlocked(x1,z1,x2,z2) {
+  function pathBlocked(x1: number,z1: number,x2: number,z2: number): boolean {
     if(segHitsBuilding(x1,z1,x2,z2)) return true;
     const dx=x2-x1, dz=z2-z1;
     const len2=dx*dx+dz*dz;
@@ -155,14 +173,14 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     return cx*cx+cz*cz < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR;
   }
 
-  function positionBlocked(x,z) {
+  function positionBlocked(x: number,z: number): boolean {
     if(x<WORLD_BOUNDS.minX||x>WORLD_BOUNDS.maxX||z<WORLD_BOUNDS.minZ||z>WORLD_BOUNDS.maxZ) return true;
     if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
     if(WEST_BEACH && x<WEST_BEACH.deepWaterX && z>=WEST_BEACH.minZ && z<=WEST_BEACH.maxZ) return true;
     return pointInAnyBuilding(x,z);
   }
 
-  function resolveMovement(from,target) {
+  function resolveMovement(from: THREE.Vector3, target: THREE.Vector3): THREE.Vector3 {
     const desired = new THREE.Vector3(
       clamp(target.x,WORLD_BOUNDS.minX,WORLD_BOUNDS.maxX),
       0,
@@ -177,23 +195,24 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const alongZ=new THREE.Vector3(from.x,0,desired.z);
     const candidates=[alongX,alongZ].filter(p=>!positionBlocked(p.x,p.z)&&!pathBlocked(from.x,from.z,p.x,p.z));
     candidates.sort((a,b)=>a.distanceToSquared(desired)-b.distanceToSquared(desired));
-    return candidates[0] || from.clone();
+    return candidates[0] ?? from.clone();
   }
   
-  function aStarRoad(sNode,eNode,graph) {
+  function aStarRoad(sNode: RoadNode, eNode: RoadNode, _graph: RoadGraph): RoadNode[] | null {
     if(sNode===eNode) return [sNode];
-    const gScore=new Map([[sNode.i,0]]);
-    const cameFrom=new Map();
-    const closed=new Set();
-    const open=[{n:sNode,f:0,g:0}];
-    const h=n=>Math.abs(n.x-eNode.x)+Math.abs(n.z-eNode.z);
+    const gScore=new Map<number, number>([[sNode.i,0]]);
+    const cameFrom=new Map<number, RoadNode>();
+    const closed=new Set<number>();
+    const open: Array<{n: RoadNode; f: number; g: number}>=[{n:sNode,f:0,g:0}];
+    const h=(n: RoadNode)=>Math.abs(n.x-eNode.x)+Math.abs(n.z-eNode.z);
     while(open.length){
       let bi=0;
-      for(let i=1;i<open.length;i++) if(open[i].f<open[bi].f) bi=i;
+      for(let i=1;i<open.length;i++){ const cur_i=open[i], cur_bi=open[bi]; if(cur_i && cur_bi && cur_i.f<cur_bi.f) bi=i; }
       const cur=open.splice(bi,1)[0];
-      if(closed.has(cur.n.i)) continue;
+      if(cur && closed.has(cur.n.i)) continue;
+      if(!cur) continue;
       if(cur.n.i===eNode.i){
-        const path=[]; let c=cur.n;
+        const path: RoadNode[]=[]; let c: RoadNode | undefined=cur.n;
         while(c!==undefined){ path.unshift(c); c=cameFrom.get(c.i); }
         return path;
       }
@@ -214,23 +233,26 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   
   // Snap a road-line point to the nearest reachable intersection on the network
   // (grid, central plaza ring, outer ring or dedicated area roads).
-  function connectToGrid(p,graph) {
+  function connectToGrid(p: THREE.Vector3, graph: RoadGraph): RoadNode | null {
     const key=p.x+','+p.z;
     if(graph.nodeIdx.has(key)) {
-      const node=graph.nodes[graph.nodeIdx.get(key)];
-      if(node.adj.length) return node;
+      const idx=graph.nodeIdx.get(key);
+      const node=idx!==undefined?graph.nodes[idx]:undefined;
+      if(node && node.adj.length) return node;
     }
     if(ROAD_COORDS.includes(p.x)){
       const zs=ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-p.z)-Math.abs(b-p.z));
       for(const z of zs) {
-        const node=graph.nodes[graph.nodeIdx.get(p.x+','+z)];
+        const idx=graph.nodeIdx.get(p.x+','+z);
+        const node=idx!==undefined?graph.nodes[idx]:undefined;
         if(node&&node.adj.length&&!pathBlocked(p.x,p.z,p.x,z)) return node;
       }
     }
     if(ROAD_COORDS.includes(p.z)){
       const xs=ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-p.x)-Math.abs(b-p.x));
       for(const x of xs) {
-        const node=graph.nodes[graph.nodeIdx.get(x+','+p.z)];
+        const idx=graph.nodeIdx.get(x+','+p.z);
+        const node=idx!==undefined?graph.nodes[idx]:undefined;
         if(node&&node.adj.length&&!pathBlocked(p.x,p.z,x,p.z)) return node;
       }
     }
@@ -238,11 +260,11 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     // fountain plaza and corner off-grid spots: the player is
     // snapped to the CLOSEST clear node so it never gets pushed the wrong way.
     const echoNode = ECHO_OBSERVATORY_AREA.roadNodes
-      .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z)])
-      .filter(node=>node && node.adj.length)
+      .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z) ?? -1])
+      .filter((node): node is RoadNode => Boolean(node && node.adj.length))
       .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
     if(echoNode && p.x>=44 && !pathBlocked(p.x,p.z,echoNode.x,echoNode.z)) return echoNode;
-    let best=null, bestD=Infinity;
+    let best: RoadNode | null=null, bestD=Infinity;
     for(const node of graph.nodes){
       if(!node.adj.length) continue;
       const d=Math.hypot(node.x-p.x,node.z-p.z);
@@ -255,7 +277,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   // Malls/schools sit ON the outer arterial lines; a road-line target that lands
   // in their footprint is moved just outside the base, along the road, toward
   // the city center — so the player never walks through the building.
-  function snapToRoadClear(p) {
+  function snapToRoadClear(p: THREE.Vector3): THREE.Vector3 {
     const q=p.clone();
     const lineX=ROAD_COORDS.includes(q.x);
     const lineZ=ROAD_COORDS.includes(q.z);
@@ -277,20 +299,20 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   // Building clicks start inside the building footprint. Find the closest road
   // centerline outside that footprint instead of testing a segment whose first
   // point is already inside the obstacle.
-  function buildingRoadEntry(p) {
-    let owner=null;
+  function buildingRoadEntry(p: THREE.Vector3): THREE.Vector3 | null {
+    let owner: BuildingBox | null=null;
     for(const bx of buildingBoxes){
       if(p.x>=bx.minX&&p.x<=bx.maxX&&p.z>=bx.minZ&&p.z<=bx.maxZ){ owner=bx; break; }
     }
     if(!owner) return null;
-    const candidates=[];
-    ROAD_COORDS.forEach(x=>{
+    const candidates: THREE.Vector3[]=[];
+    ROAD_COORDS.forEach((x:number)=>{
       const z = x>=owner.minX&&x<=owner.maxX
         ? (Math.abs(owner.minZ-0.6)<Math.abs(owner.maxZ+0.6) ? owner.minZ-0.6 : owner.maxZ+0.6)
         : p.z;
       candidates.push(new THREE.Vector3(x,0,z));
     });
-    ROAD_COORDS.forEach(z=>{
+    ROAD_COORDS.forEach((z:number)=>{
       const x = z>=owner.minZ&&z<=owner.maxZ
         ? (Math.abs(owner.minX-0.6)<Math.abs(owner.maxX+0.6) ? owner.minX-0.6 : owner.maxX+0.6)
         : p.x;
@@ -318,18 +340,18 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const da=a.distanceTo(p), db=b.distanceTo(p);
       return da-db || Math.abs(a.x)+Math.abs(a.z)-Math.abs(b.x)-Math.abs(b.z);
     });
-    const clear=q=>{
+    const clear=(q: THREE.Vector3): boolean=>{
       if(q.x>=owner.minX&&q.x<=owner.maxX&&q.z>=owner.minZ&&q.z<=owner.maxZ) return false;
       return !pointInAnyBuilding(q.x,q.z);
     };
-    return candidates.find(clear) || candidates.find(q=>{
+    return candidates.find(clear) || candidates.find((q: THREE.Vector3)=>{
       return q.x<owner.minX||q.x>owner.maxX||q.z<owner.minZ||q.z>owner.maxZ;
-    }) || candidates[0];
+    }) || candidates[0] || null;
   }
   
   // True when (x,z) falls inside any cached building footprint (used to stop the
   // player from being told to walk through or stand inside a building).
-  function pointInAnyBuilding(x,z) {
+  function pointInAnyBuilding(x: number,z: number): boolean {
     for(const bx of buildingBoxes){
       if(x>=bx.minX&&x<=bx.maxX&&z>=bx.minZ&&z<=bx.maxZ) return true;
     }
@@ -362,12 +384,12 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     });
   }
   
-  function segHitsBuilding(x1,z1,x2,z2) {
+  function segHitsBuilding(x1: number,z1: number,x2: number,z2: number): boolean {
     const dx=x2-x1, dz=z2-z1;
     if(Math.abs(dx)<1e-8&&Math.abs(dz)<1e-8) return pointInAnyBuilding(x1,z1);
     for(const bx of buildingBoxes){
       let near=0, far=1;
-      const clip=(origin,delta,min,max)=>{
+      const clip=(origin: number,delta: number,min: number,max: number): boolean=>{
         if(Math.abs(delta)<1e-8) return origin>=min&&origin<=max;
         let a=(min-origin)/delta, b=(max-origin)/delta;
         if(a>b){const t=a;a=b;b=t;}
@@ -380,7 +402,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   }
   
   // 找一个「从 p 直达且不穿建筑/喷泉」的路点；p 已在路上则原样返回
-  function roadEntry(p) {
+  function roadEntry(p: THREE.Vector3): THREE.Vector3 {
     const buildingEntry=buildingRoadEntry(p);
     if(buildingEntry) return buildingEntry;
     if(isRoadPoint(p)) return snapToRoadClear(p);
@@ -398,40 +420,41 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     // straight clear hop — for the fountain plaza this is the closest plaza
     // node, so the player never gets pushed toward a far corner first.
     let best=new THREE.Vector3(0,0,0), bestD=Infinity;
-    const tryPoint=(cx,cz)=>{
+    const tryPoint=(cx: number,cz: number)=>{
       const q=new THREE.Vector3(cx,0,cz);
       const d=q.distanceTo(p);
       if(d<bestD&&!pathBlocked(p.x,p.z,cx,cz)&&!pointInAnyBuilding(cx,cz)){
         best=q; bestD=d;
       }
     };
-    ROAD_COORDS.forEach(x=>{ tryPoint(x,p.z); tryPoint(x,nearestRoadCoord(p.z)); });
-    ROAD_COORDS.forEach(z=>{ tryPoint(p.x,z); tryPoint(nearestRoadCoord(p.x),z); });
+    ROAD_COORDS.forEach((x:number)=>{ tryPoint(x,p.z); tryPoint(x,nearestRoadCoord(p.z)); });
+    ROAD_COORDS.forEach((z:number)=>{ tryPoint(p.x,z); tryPoint(nearestRoadCoord(p.x),z); });
     PLAZA_POINTS.forEach(([x,z])=>tryPoint(x,z));
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
     if(bestD<Infinity) return best;
     return nearestRoadPoint(p);
   }
   
-  function nearestRoadPoint(p) {
+  function nearestRoadPoint(p: THREE.Vector3): THREE.Vector3 {
     const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
     const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
     return Math.abs(x-rx)<Math.abs(z-rz) ? new THREE.Vector3(rx,0,z) : new THREE.Vector3(x,0,rz);
   }
   
-  function nearestRoadCoord(v) {
+  function nearestRoadCoord(v: number): number {
     return nearestCoord(v,ROAD_COORDS);
   }
   
-  function nearestCoord(v,coords) {
-    return coords.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,coords[0]);
+  function nearestCoord(v: number, coords: readonly number[]): number {
+    const start=coords[0] ?? v;
+    return coords.reduce((best,c)=>Math.abs(v-c)<Math.abs(v-best)?c:best,start);
   }
   
-  function isRoadPoint(p) {
+  function isRoadPoint(p: THREE.Vector3): boolean {
     return ROAD_COORDS.some(c=>Math.abs(p.x-c)<0.01)||ROAD_COORDS.some(c=>Math.abs(p.z-c)<0.01);
   }
   
-  function clamp(v,min,max) { return Math.max(min,Math.min(max,v)); }
+  function clamp(v: number,min: number,max: number): number { return Math.max(min,Math.min(max,v)); }
 
   return {
     fountainClear: FOUNTAIN_CLEAR,

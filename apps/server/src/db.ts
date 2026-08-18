@@ -4,6 +4,18 @@ import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMeta
 import { INITIAL_CURRENCY } from './progression.js';
 import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
 import type { PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
+import type {
+  AdminAuditRow,
+  AdminUserRow,
+  ChatAuthorRow,
+  ChatMessageRow,
+  HouseRow,
+  HousingRequestRow,
+  NpcChangeRequestRow,
+  StoryProgressAdminRow,
+  StoryProgressDbRow,
+  UserRow,
+} from './dbRows.js';
 
 export type House = {
   buildingId: string;
@@ -221,7 +233,8 @@ db.exec('COMMIT');
 }
 
 const now = () => new Date().toISOString();
-const rowUser = (row: any): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
+
+const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
 export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string): User {
   const timestamp = now();
@@ -229,7 +242,7 @@ export function createUser(id: string, tokenHash: string, nickname: string, pass
   return getUser(id)!;
 }
 export function getUserByToken(tokenHash: string): User | null {
-  const row = db.prepare("SELECT * FROM users WHERE token_hash = ? AND disabled_at IS NULL AND session_expires_at > ?").get(tokenHash, now());
+  const row = db.prepare("SELECT * FROM users WHERE token_hash = ? AND disabled_at IS NULL AND session_expires_at > ?").get(tokenHash, now()) as UserRow | undefined;
   return row ? rowUser(row) : null;
 }
 export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null; disabled: boolean } | null {
@@ -240,7 +253,7 @@ export function updateUserToken(id: string, tokenHash: string, sessionExpiresAt:
   db.prepare('UPDATE users SET token_hash = ?, session_expires_at = ?, updated_at = ? WHERE id = ?').run(tokenHash, sessionExpiresAt, now(), id);
 }
 export function getUser(id: string): User | null {
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
   return row ? rowUser(row) : null;
 }
 export function updateUserProfile(id: string, nickname: string, email?: string): void {
@@ -365,7 +378,7 @@ const parseStoryFlags = (raw: unknown): Record<string, StoryFlagValue> => {
   } catch { return {}; }
 };
 
-const rowStoryProgress = (row: any): StoryProgress => ({
+const rowStoryProgress = (row: StoryProgressDbRow): StoryProgress => ({
   storyId: row.story_id,
   definitionVersion: row.definition_version,
   nodeId: row.node_id,
@@ -386,7 +399,7 @@ function ensureStoryProgress(userId: string, storyId: string): void {
 
 export function getStoryProgress(userId: string, storyId: string): StoryProgress {
   ensureStoryProgress(userId, storyId);
-  const row = db.prepare('SELECT story_id, definition_version, node_id, flags_json, ending, visit_count, updated_at FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId);
+  const row = db.prepare('SELECT story_id, definition_version, node_id, flags_json, ending, visit_count, updated_at FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as StoryProgressDbRow | undefined;
   if (!row) throw new Error('Story progress is unavailable');
   return rowStoryProgress(row);
 }
@@ -403,7 +416,7 @@ export type StoryProgressPatch = {
 export function updateStoryProgress(userId: string, storyId: string, patch: StoryProgressPatch): StoryProgress {
   db.transaction(() => {
     ensureStoryProgress(userId, storyId);
-    const current = db.prepare('SELECT definition_version, node_id, flags_json, ending, visit_count FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as any;
+    const current = db.prepare('SELECT definition_version, node_id, flags_json, ending, visit_count FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as StoryProgressDbRow;
     const definitionVersion = patch.definitionVersion ?? current.definition_version;
     const flags = { ...parseStoryFlags(current.flags_json), ...(patch.flags ?? {}) };
     if (Object.keys(flags).length > 128 || Buffer.byteLength(JSON.stringify(flags), 'utf8') > 16_384) throw new Error('Story flags exceed the storage limit');
@@ -417,7 +430,7 @@ export function updateStoryProgress(userId: string, storyId: string, patch: Stor
 }
 
 export function listHouses(): House[] {
-  const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as any[];
+  const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as HouseRow[];
   const memberRows = db.prepare(`
     SELECT hm.building_id, hm.user_id, u.nickname
     FROM house_members hm JOIN users u ON u.id = hm.user_id
@@ -462,7 +475,7 @@ const requestQuery = `
   WHERE r.requester_id = ? OR r.target_id = ?
   ORDER BY r.created_at DESC
 `;
-const rowRequest = (row: any): HousingRequest => ({
+const rowRequest = (row: HousingRequestRow): HousingRequest => ({
   id: row.id,
   buildingId: row.building_id,
   houseName: row.house_name,
@@ -476,10 +489,10 @@ const rowRequest = (row: any): HousingRequest => ({
   createdAt: row.created_at,
 });
 export function listHousingRequestsForUser(userId: string): HousingRequest[] {
-  return (db.prepare(requestQuery).all(userId, userId) as any[]).map(rowRequest);
+  return (db.prepare(requestQuery).all(userId, userId) as HousingRequestRow[]).map(rowRequest);
 }
 export function getHousingRequest(id: number): HousingRequest | null {
-  const row = db.prepare(`${requestQuery.replace('WHERE r.requester_id = ? OR r.target_id = ?', 'WHERE r.id = ?')}`).get(id);
+  const row = db.prepare(`${requestQuery.replace('WHERE r.requester_id = ? OR r.target_id = ?', 'WHERE r.id = ?')}`).get(id) as HousingRequestRow | undefined;
   return row ? rowRequest(row) : null;
 }
 export function createHousingRequest(buildingId: string, requesterId: string, targetId: string, kind: HousingRequest['kind']): void {
@@ -546,7 +559,7 @@ export function listAdminUsers(input: { query?: string; limit: number; offset: n
            hm.building_id AS house_id
     FROM users u LEFT JOIN house_members hm ON hm.user_id = u.id
     ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?
-  `).all(...params, input.limit, input.offset) as any[];
+  `).all(...params, input.limit, input.offset) as AdminUserRow[];
   return { total, items: rows.map((row) => ({
     id: row.id, nickname: row.nickname, email: row.email, disabled: Boolean(row.disabled_at),
     createdAt: row.created_at, updatedAt: row.updated_at, sessionExpiresAt: row.session_expires_at,
@@ -576,7 +589,7 @@ export function recordAdminAudit(actor: string, action: string, target?: string,
 }
 
 export function listAdminAudit(limit: number): AdminAuditEntry[] {
-  const rows = db.prepare('SELECT id, actor, action, target, details_json, created_at FROM admin_audit ORDER BY id DESC LIMIT ?').all(limit) as any[];
+  const rows = db.prepare('SELECT id, actor, action, target, details_json, created_at FROM admin_audit ORDER BY id DESC LIMIT ?').all(limit) as AdminAuditRow[];
   return rows.map((row) => {
     let details: Record<string, unknown> = {};
     try { details = JSON.parse(row.details_json) as Record<string, unknown>; } catch { /* retain an empty object */ }
@@ -628,7 +641,7 @@ export type ChatListFilter = { query?: string; includeHidden?: boolean; onlyHidd
 
 export function listChatMessages(input: ChatListFilter): { items: ChatMessage[]; total: number } {
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
   const query = input.query?.trim() ?? '';
   if (query) { conditions.push("(nickname LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')"); params.push(`%${query.replace(/[\\%_]/g, '\\$&')}%`, `%${query.replace(/[\\%_]/g, '\\$&')}%`); }
   if (input.userId) { conditions.push('user_id = ?'); params.push(input.userId); }
@@ -637,7 +650,7 @@ export function listChatMessages(input: ChatListFilter): { items: ChatMessage[];
   else if (!input.includeHidden) conditions.push('hidden_at IS NULL');
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM chat_messages ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`SELECT id, user_id, nickname, text, flagged_at, hidden_at, hidden_by, created_at FROM chat_messages ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
+  const rows = db.prepare(`SELECT id, user_id, nickname, text, flagged_at, hidden_at, hidden_by, created_at FROM chat_messages ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as ChatMessageRow[];
   return { total, items: rows.map((row) => ({
     id: row.id, userId: row.user_id, nickname: row.nickname, text: row.text,
     flaggedAt: row.flagged_at ?? null, hiddenAt: row.hidden_at ?? null, hiddenBy: row.hidden_by ?? null, createdAt: row.created_at,
@@ -655,7 +668,7 @@ export function listChatAuthors(limit: number): ChatAuthorSummary[] {
            MAX(CASE WHEN u.disabled_at IS NOT NULL THEN 1 ELSE 0 END) AS disabled
     FROM chat_messages cm LEFT JOIN users u ON u.id = cm.user_id
     GROUP BY cm.user_id ORDER BY last_at DESC LIMIT ?
-  `).all(limit) as any[];
+  `).all(limit) as ChatAuthorRow[];
   return rows.map((row) => ({
     userId: row.user_id, nickname: row.nickname, messages: row.messages,
     hidden: row.hidden ?? 0, flagged: row.flagged ?? 0, lastAt: row.last_at, disabled: Boolean(row.disabled),
@@ -785,7 +798,7 @@ export type StoryProgressRow = {
 
 export function listStoryProgress(input: { query?: string; storyId?: string; limit: number; offset: number }): { items: StoryProgressRow[]; total: number } {
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
   const query = input.query?.trim() ?? '';
   if (query) {
     conditions.push("(u.nickname LIKE ? ESCAPE '\\' OR sp.user_id LIKE ? ESCAPE '\\' OR sp.story_id LIKE ? ESCAPE '\\')");
@@ -799,7 +812,7 @@ export function listStoryProgress(input: { query?: string; storyId?: string; lim
     SELECT sp.user_id, u.nickname, sp.story_id, sp.definition_version, sp.node_id, sp.ending, sp.visit_count, sp.flags_json, sp.updated_at
     FROM story_progress sp LEFT JOIN users u ON u.id = sp.user_id
     ${where} ORDER BY sp.updated_at DESC LIMIT ? OFFSET ?
-  `).all(...params, input.limit, input.offset) as any[];
+  `).all(...params, input.limit, input.offset) as StoryProgressAdminRow[];
   return { total, items: rows.map((row) => ({
     userId: row.user_id, nickname: row.nickname ?? '（已删除）', storyId: row.story_id, definitionVersion: row.definition_version,
     nodeId: row.node_id, ending: row.ending ?? null, visitCount: row.visit_count, flags: parseStoryFlags(row.flags_json), updatedAt: row.updated_at,
@@ -899,18 +912,18 @@ export function createNpcChangeRequest(input: {
 }
 
 export function getNpcChangeRequest(id: number): NpcChangeRequest | null {
-  const row = db.prepare('SELECT * FROM npc_change_requests WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM npc_change_requests WHERE id = ?').get(id) as NpcChangeRequestRow | undefined;
   return row ? rowNpcChangeRequest(row) : null;
 }
 
 export function listNpcChangeRequests(input: { status?: NpcChangeStatus; npcId?: string; limit: number; offset: number }): { items: NpcChangeRequest[]; total: number } {
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
   if (input.status) { conditions.push('status = ?'); params.push(input.status); }
   if (input.npcId) { conditions.push('npc_id = ?'); params.push(input.npcId); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM npc_change_requests ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`SELECT * FROM npc_change_requests ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
+  const rows = db.prepare(`SELECT * FROM npc_change_requests ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as NpcChangeRequestRow[];
   return { total, items: rows.map(rowNpcChangeRequest) };
 }
 
@@ -935,13 +948,13 @@ export function createAdminNpcChangeRequest(input: {
   return getNpcChangeRequest(Number(result.lastInsertRowid))!;
 }
 
-function rowNpcChangeRequest(row: any): NpcChangeRequest {
+function rowNpcChangeRequest(row: NpcChangeRequestRow): NpcChangeRequest {
   let change: Record<string, unknown> = {};
   try { change = JSON.parse(row.change_json) as Record<string, unknown>; } catch { /* keep empty */ }
   return {
     id: row.id, requesterId: row.requester_id ?? null, requesterNickname: row.requester_nickname,
-    npcId: row.npc_id, kind: row.kind, title: row.title, summary: row.summary, change,
-    status: row.status, reviewer: row.reviewer ?? null, reviewNote: row.review_note ?? null,
+    npcId: row.npc_id, kind: row.kind as NpcChangeKind, title: row.title, summary: row.summary, change,
+    status: row.status as NpcChangeStatus, reviewer: row.reviewer ?? null, reviewNote: row.review_note ?? null,
     createdAt: row.created_at, reviewedAt: row.reviewed_at ?? null,
   };
 }

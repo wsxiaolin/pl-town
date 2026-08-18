@@ -6,7 +6,7 @@ export type StatsPanelControllerOptions = {
   formatTime: (seconds: number) => string;
   getBuildingCount: () => number;
   getNpcCount: () => number;
-  achievements: readonly { id: string; name: string; desc: string }[];
+  achievements: readonly { id: string; name: string; desc?: string }[];
   unlockTiers: readonly { threshold: number; label: string }[];
 };
 

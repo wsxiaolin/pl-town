@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
+import type { BuildingEntity } from './buildingEntity';
+import type { Npc } from './npcSystem';
+import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
+
+export type NpcEntity = Npc;
 
 export type InteractionPointerOptions = {
   getCamera: () => THREE.Camera;
@@ -9,45 +14,45 @@ export type InteractionPointerOptions = {
   getCursorWorld: () => THREE.Vector3;
   getRaycastBuildingGroups: () => THREE.Object3D[];
   getCursorChar: () => THREE.Object3D | null;
-  getBuildings: () => any[];
-  getSceneInterestPoints: () => { entities: Map<string, any>; raycastTargets: THREE.Object3D[] } | null;
-  getEchoStoryController: () => any;
+  getBuildings: () => BuildingEntity[];
+  getSceneInterestPoints: () => SceneInterestPoints | null;
+  getEchoStoryController: () => { tryExitCabinFromClick: (raycaster: THREE.Raycaster, object: THREE.Object3D) => boolean } | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getConfig: () => { npcTalkRadius: number; buildingInteractRadius: number };
-  isBuildingUnavailable: (building: any) => boolean;
+  isBuildingUnavailable: (building: BuildingEntity) => boolean;
   isResidenceUnavailable: (residenceId: string) => boolean;
-  findRaycastBuilding: (hits: any[]) => any;
-  raycastUserData: (object: THREE.Object3D, key: string) => any;
-  npcForRaycast: () => any;
-  nearestNpcTo: (position: THREE.Vector3, radius: number) => any;
-  openNpcDialog: (npc: any) => void;
-  openResidence: (residenceId: any) => void;
+  findRaycastBuilding: (hits: THREE.Intersection[]) => BuildingEntity | null;
+  raycastUserData: (object: THREE.Object3D, key: string) => unknown;
+  npcForRaycast: () => NpcEntity | null;
+  nearestNpcTo: (position: THREE.Vector3, radius: number) => NpcEntity | null;
+  openNpcDialog: (npc: NpcEntity) => void;
+  openResidence: (residenceId: string) => void;
   onYouClick: () => void;
   movePlayerTo: (target: THREE.Vector3) => void;
-  navigateTo: (building: any) => void;
-  interactWithSceneInterestPoint: (id: any) => void;
-  interactWithInterestPointController: (id: string) => Promise<void> | void;
+  navigateTo: (building: BuildingEntity) => void;
+  interactWithSceneInterestPoint: (id: SceneInterestPointId) => void;
+  interactWithInterestPointController: (id: SceneInterestPointId) => Promise<void> | void;
 };
 
 export function createInteractionPointer(options: InteractionPointerOptions) {
-  let hoveredB: any = null;
-  let pendingBuilding: any = null;
-  let pendingSceneInterestPoint: string | null = null;
+  let hoveredB: BuildingEntity | null = null;
+  let pendingBuilding: BuildingEntity | null = null;
+  let pendingSceneInterestPoint: SceneInterestPointId | null = null;
 
-  function hover(b: any) {
+  function hover(b: BuildingEntity) {
     hoveredB = b;
     gsap.to(b.group.position, { y: 0.22, duration: 0.28, ease: 'power2.out' });
-    gsap.to(b.bodyMat, { emissiveIntensity: 0.08, duration: 0.28 });
+    if (b.bodyMat) gsap.to(b.bodyMat, { emissiveIntensity: 0.08, duration: 0.28 });
     if (b.labelEl) b.labelEl.classList.add('hovered');
   }
 
-  function unhover(b: any) {
+  function unhover(b: BuildingEntity) {
     gsap.to(b.group.position, { y: 0, duration: 0.38, ease: 'power2.out' });
-    gsap.to(b.bodyMat, { emissiveIntensity: 0, duration: 0.38 });
+    if (b.bodyMat) gsap.to(b.bodyMat, { emissiveIntensity: 0, duration: 0.38 });
     if (b.labelEl) b.labelEl.classList.remove('hovered');
   }
 
-  function findBuildingFromHits(hits: any[]) {
+  function findBuildingFromHits(hits: THREE.Intersection[]) {
     return options.findRaycastBuilding(hits);
   }
 
@@ -68,7 +73,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     } else { if (hoveredB) { unhover(hoveredB); hoveredB = null; } }
   }
 
-  function talkToOrWalk(npc: any) {
+  function talkToOrWalk(npc: NpcEntity) {
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
     if (cursorChar && cursorChar.position.distanceTo(npc.mesh.position) <= CONFIG.npcTalkRadius) {
@@ -82,12 +87,12 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
   }
 
-  function liftForClick(b: any) {
+  function liftForClick(b: BuildingEntity) {
     if (hoveredB && hoveredB !== b) unhover(hoveredB);
     hover(b);
   }
 
-  function interactOrWalk(b: any) {
+  function interactOrWalk(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
     liftForClick(b);
     const cursorChar = options.getCursorChar();
@@ -105,7 +110,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
   }
 
-  function interactWithSceneInterestPoint(id: any) {
+  function interactWithSceneInterestPoint(id: SceneInterestPointId) {
     const points = options.getSceneInterestPoints();
     const entity = points?.entities.get(id);
     const cursorChar = options.getCursorChar();
@@ -147,12 +152,12 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
     const npcHit = options.npcForRaycast();
     if (npcHit) { talkToOrWalk(npcHit); return; }
-    const interestHits = points ? raycaster.intersectObjects(points.raycastTargets, true) : [];
+    const interestHits = points ? raycaster.intersectObjects([...points.raycastTargets], true) : [];
     if (interestHits.length) {
       const first = interestHits[0];
       if (first) {
         const id = options.raycastUserData(first.object, 'sceneInterestPointId');
-        if (id) { interactWithSceneInterestPoint(id); return; }
+        if (typeof id === 'string' && id) { interactWithSceneInterestPoint(id as SceneInterestPointId); return; }
       }
     }
     const hits = raycaster.intersectObjects(options.getRaycastBuildingGroups(), true);
@@ -160,7 +165,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
       const firstHit = hits[0];
       if (firstHit) {
         const residenceId = options.raycastUserData(firstHit.object, 'residenceId');
-        if (residenceId && !options.isResidenceUnavailable(residenceId)) { options.openResidence(residenceId); return; }
+        if (typeof residenceId === 'string' && residenceId && !options.isResidenceUnavailable(residenceId)) { options.openResidence(residenceId); return; }
       }
       const b = findBuildingFromHits(hits);
       if (b) { interactOrWalk(b); return; }

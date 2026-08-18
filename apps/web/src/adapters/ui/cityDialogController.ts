@@ -16,7 +16,7 @@ export interface NpcEntityLike {
   profile: {
     id: string;
     name: string;
-    role: string;
+    role?: string;
     head: number;
     body: number;
     dialog: readonly LegacyDialogueNode[];

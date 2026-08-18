@@ -24,7 +24,7 @@ export function createCameraController(options: CameraControllerOptions) {
     camera.updateProjectionMatrix();
   }
 
-  function setTarget(x: number, z: number, instant: boolean): void {
+  function setTarget(x: number, z: number, instant = false): void {
     const target = options.getTarget();
     const apply = () => {
       const camera = options.getCamera();
