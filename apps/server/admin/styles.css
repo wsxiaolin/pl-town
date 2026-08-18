@@ -191,6 +191,7 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .npc-request-card p { margin: 8px 0; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .npc-request-card footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
 .npc-request-meta { color: #718078; font-size: 12px; }
+.npc-request-card .npc-request-change { color: #155d3f; white-space: pre-line; }
 @media (max-width: 720px) { .story-node-grid { grid-template-columns: 1fr; } }
 .npc-detail-dialog { width: min(980px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; }
 .npc-detail-form { min-height: min(680px, calc(100vh - 32px)); display: flex; flex-direction: column; padding: 26px; }

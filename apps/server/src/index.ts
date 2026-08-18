@@ -368,23 +368,23 @@ const http = createServer(async (request, response) => {
     try {
       const body = await readJson(request, 32_000);
       const token = typeof body.token === 'string' ? body.token : '';
-      if (!token || token.length > 128) throw new HttpBodyError('Login is required', 401);
+      if (!token || token.length > 128) throw new HttpBodyError('请先登录', 401);
       const user = db.getUserByToken(tokenHash(token));
-      if (!user) throw new HttpBodyError('Login is required', 401);
+      if (!user) throw new HttpBodyError('请先登录', 401);
       if (!npcChangeRequestRate.consume(user.id).allowed) {
         response.writeHead(429, { ...headers, 'retry-after': '60' });
-        response.end(JSON.stringify({ error: 'Too many requests' }));
+        response.end(JSON.stringify({ error: '提交过于频繁，请稍后再试' }));
         return;
       }
       const npcId = typeof body.npcId === 'string' ? body.npcId.trim() : '';
       const kind = typeof body.kind === 'string' ? body.kind : '';
       const title = typeof body.title === 'string' ? body.title.trim() : '';
       const summary = typeof body.summary === 'string' ? body.summary.trim() : '';
-      if (!npcId || npcId.length > 100) throw new HttpBodyError('NPC is required', 400);
-      if (kind !== 'add' && kind !== 'edit' && kind !== 'dialog') throw new HttpBodyError('Invalid change kind', 400);
-      if (!title || title.length > 120) throw new HttpBodyError('A title (1-120 chars) is required', 400);
-      if (!summary || summary.length > 2_000) throw new HttpBodyError('A summary (1-2000 chars) is required', 400);
-      if (!getNpcCatalogEntry(npcId) && kind !== 'add') throw new HttpBodyError('Unknown NPC', 400);
+      if (!npcId || npcId.length > 100) throw new HttpBodyError('请选择目标 NPC', 400);
+      if (kind !== 'add' && kind !== 'edit' && kind !== 'dialog') throw new HttpBodyError('申请类型不正确', 400);
+      if (!title || title.length > 120) throw new HttpBodyError('标题需为 1-120 个字符', 400);
+      if (!summary || summary.length > 2_000) throw new HttpBodyError('详细说明需为 1-2000 个字符', 400);
+      if (!getNpcCatalogEntry(npcId) && kind !== 'add') throw new HttpBodyError('NPC 不存在', 400);
       const rawChange = body.change && typeof body.change === 'object' && !Array.isArray(body.change) ? body.change as Record<string, unknown> : {};
       // Validate the public `change` payload server-side: only the known
       // string fields are accepted, with bounded length.

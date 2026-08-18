@@ -65,11 +65,15 @@ async function restoreSession(): Promise<void> {
 async function login(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   setStatus(loginStatus, '');
+  const button = $('loginButton') as HTMLButtonElement;
+  if (button.disabled) return;
+  button.disabled = true;
   try {
     session = await requestSession({ nickname: ($('loginNickname') as HTMLInputElement).value.trim(), password: ($('loginPassword') as HTMLInputElement).value });
     localStorage.setItem(SESSION_KEY, session.token);
     showRequestPage();
   } catch (error) { setStatus(loginStatus, error instanceof Error ? error.message : '登录失败'); return; }
+  finally { button.disabled = false; }
   await loadCatalog().catch((error) => setStatus(requestStatus, error instanceof Error ? error.message : 'NPC 列表加载失败'));
 }
 
@@ -94,10 +98,22 @@ async function submitRequest(event: SubmitEvent): Promise<void> {
   try {
     const response = await fetch('/town-api/npc-change-requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: session.token, npcId: kind === 'add' ? ADD_PLACEHOLDER_NPC_ID : npcId, kind, title, summary, change }) });
     const payload = await response.json() as { error?: string };
-    if (!response.ok) throw new Error(payload.error || '提交失败');
+    if (!response.ok) throw Object.assign(new Error(payload.error || '提交失败'), { status: response.status });
     setStatus(requestStatus, '申请已提交，等待开发者审批。', true);
     ($('requestForm') as HTMLFormElement).reset();
-  } catch (error) { setStatus(requestStatus, error instanceof Error ? error.message : '提交失败'); }
+  } catch (error) {
+    // Mirrors restoreSession: a definitive 401 drops the shared token and
+    // returns the resident to the sign-in form so a session that was rotated
+    // elsewhere cannot strand them on a dead request panel.
+    if ((error as { status?: number }).status === 401) {
+      session = null;
+      localStorage.removeItem(SESSION_KEY);
+      showRequestPage();
+      setStatus(loginStatus, '登录已过期，请重新登录。');
+      return;
+    }
+    setStatus(requestStatus, error instanceof Error ? error.message : '提交失败');
+  }
   finally { submit.disabled = false; }
 }
 
