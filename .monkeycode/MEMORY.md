@@ -47,3 +47,10 @@ Entries discovered by the Agent during task execution should follow this format:
 - Instructions:
   - The web app and server are intended to be deployed on the same server eventually; GitHub Pages / `BASE_PATH` is not the production target to design around.
   - The NPC edit-request page lives in `apps/web` as a Vite MPA entry (`index.html` + `npc-edit-request.html` built together); the server exposes only the `/town-api` endpoints and the admin console, with no hand-written duplicate of the page.
+
+[User Instruction Summary]
+- Date: 2026-08-18
+- Context: Debugging CI and building interaction behavior
+- Instructions:
+  - Before changing workflow or application behavior, inspect the actual failure logs and confirm the root cause.
+  - Keep unrelated configuration unchanged and avoid speculative fixes.

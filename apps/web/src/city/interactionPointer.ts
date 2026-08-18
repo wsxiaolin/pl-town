@@ -36,13 +36,11 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
 
   function hover(b: any) {
     hoveredB = b;
-    gsap.to(b.group.position, { y: 0.22, duration: 0.28, ease: 'power2.out' });
     gsap.to(b.bodyMat, { emissiveIntensity: 0.08, duration: 0.28 });
     if (b.labelEl) b.labelEl.classList.add('hovered');
   }
 
   function unhover(b: any) {
-    gsap.to(b.group.position, { y: 0, duration: 0.38, ease: 'power2.out' });
     gsap.to(b.bodyMat, { emissiveIntensity: 0, duration: 0.38 });
     if (b.labelEl) b.labelEl.classList.remove('hovered');
   }
