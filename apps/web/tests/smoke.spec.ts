@@ -815,7 +815,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
   await expect(page.locator('#modalTitle')).toHaveText('野生菌餐馆');
   await expect(page.locator('#modalBody')).toContainText('门头挂着几串风干的菌子');
-  await expect(page.locator('.npc-opt')).toHaveCount(0);
+  await expect(page.locator('#npcOverlay')).not.toHaveClass(/open/);
   await page.locator('#modalClose').click();
   await expect(page.locator('#modalOverlay')).not.toHaveClass(/open/);
 });
