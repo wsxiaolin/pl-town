@@ -1,6 +1,8 @@
 import { BUILDING_API_QUERIES } from './data/buildings';
 import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 
+type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
+
 export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: any) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
@@ -8,7 +10,7 @@ export type BuildingInteractionOptions = {
   getEchoStoryController: () => { interactBuilding: (id: string, dialogs: any) => boolean } | null;
   getStatsPanelController: () => { open: () => void } | null;
   getCommunityPanels: () => {
-    openPhoneApp: (tab: string, kind: string) => void;
+    openPhoneApp: (tab: string, kind: SocialKind) => void;
     openWorksPanel: (context: string, queryOverride: any) => void;
     closeWorkDetail: () => void;
     loadWorkComments: () => any;
@@ -68,7 +70,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     const phoneEntry = PHONE_BUILDINGS[b.id];
     if (phoneEntry) {
-      options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1] as any);
+      options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1]);
       options.trackInteraction(b.id);
       return;
     }

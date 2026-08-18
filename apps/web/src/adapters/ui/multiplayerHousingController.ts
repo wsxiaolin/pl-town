@@ -4,6 +4,12 @@ import * as THREE from 'three';
 import { MultiplayerClient } from '../../network/MultiplayerClient';
 import { createCloudProgressionController } from './cloudProgressionController';
 
+type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
+
+function isValidSocialKind(value: string): value is SocialKind {
+  return ['profile', 'mine', 'favorites', 'following', 'followers', 'volunteers'].includes(value);
+}
+
 export function createMultiplayerHousingController(options) {
   const {
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
@@ -81,7 +87,12 @@ export function createMultiplayerHousingController(options) {
     document.getElementById('phoneBindForm')?.addEventListener('submit',bindPhysicsLabAccount,{signal:signal});
     updatePhoneBindingState();
     document.getElementById('phoneOpenWorks')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('all');},{signal:signal});
-    document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>loadPhoneSocial(button.dataset.plSocial),{signal:signal}));
+    document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>{
+      const socialKind = button.dataset.plSocial;
+      if (socialKind && isValidSocialKind(socialKind)) {
+        loadPhoneSocial(socialKind);
+      }
+    },{signal:signal}));
     claimClose?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimCancel?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimSubmit?.addEventListener('click', () => {
