@@ -119,6 +119,8 @@ export interface StoryTransition {
   choice: StoryChoice;
   events: readonly StoryEvent[];
   effects: readonly StoryEffect[];
+  /** The savepoint nodeId to persist for resumption. Differs from state.nodeId when the live node is a transient beat. */
+  resumptionNodeId: string;
 }
 
 export type StoryRuntimeEvent =
