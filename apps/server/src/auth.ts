@@ -35,8 +35,8 @@ export class RegistrationLimitError extends Error {
 
 export const NICKNAME_PATTERN = /^[\p{L}\p{N}]{2,40}$/u;
 export function validateNickname(nickname: string): string | null {
-  if (!nickname || nickname.length < 2) return 'Nickname must contain at least two characters';
-  if (!NICKNAME_PATTERN.test(nickname)) return 'Nickname may only contain letters and numbers';
+  if (!nickname || nickname.length < 2) return '昵称至少需要两个字符';
+  if (!NICKNAME_PATTERN.test(nickname)) return '昵称只能包含字母和数字';
   return null;
 }
 

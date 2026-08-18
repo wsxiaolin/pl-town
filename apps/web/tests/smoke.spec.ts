@@ -777,7 +777,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await expect(page.locator('#npcLine')).toHaveText('老板招呼你坐下，锅里的汤咕嘟咕嘟地响。');
   await pick('一年总要吃两次野生菌火锅');
   await expect(page.locator('.npc-opt')).toHaveCount(3);
-  await pick('我要吃 1 个感叹号！');
+  await page.locator('.npc-opt').filter({ hasText: /^我要吃！$/ }).click();
   // 烧城动画约 6s（GSAP timeline），软件渲染下轮询等待 onDone 后的下一段对话。
   await expect(page.locator('#npcLine')).toContainText('这镜子一看就是真的', { timeout: 30_000 });
   await page.locator('#npcClose').click();
