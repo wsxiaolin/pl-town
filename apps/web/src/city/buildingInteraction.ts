@@ -21,7 +21,8 @@ export type BuildingInteractionOptions = {
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
-  burnCity?: () => boolean;
+  burnCity?: (onDone?: () => void) => boolean;
+  getWildMushroomRestaurant?: () => { interact: () => void } | null;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, string?]> = {
@@ -42,8 +43,14 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateUnlocked(b: any) {
     if (options.isBuildingUnavailable(b)) return;
-    // 点击「文训社（外环）」触发火烧小城效果：城市像纸片从东侧被烧尽。
+    // 点击「野生菌餐馆」（原文训社外环）触发野生菌小剧情：每次进店都会被放倒、烧一次城。
     if (b.id === 'writingclub_outer') {
+      const restaurant = options.getWildMushroomRestaurant?.();
+      if (restaurant) {
+        options.trackInteraction(b.id);
+        restaurant.interact();
+        return;
+      }
       options.trackInteraction(b.id);
       options.burnCity?.();
       return;

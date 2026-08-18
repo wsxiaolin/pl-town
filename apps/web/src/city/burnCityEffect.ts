@@ -1,7 +1,7 @@
 /**
  * 火烧小城效果 — 城市像一张二维纸片，从东侧被火点燃，向西蔓延烧尽、卷曲成灰。
  *
- * 触发：调用 `createBurnCityEffect(...).trigger()`。当前由点击「文训社（外环）」接入。
+ * 触发：调用 `createBurnCityEffect(...).trigger()`。当前由野生菌餐馆剧情 controller 接入。
  *
  * 实现思路：
  *  1. 用一张离屏 WebGLRenderTarget，从正上方拍摄当前城市（俯视 → 城市被拍成
@@ -138,7 +138,7 @@ void main(){
 }
 `;
 
-export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverlay & { trigger: () => boolean; dispose: () => void } {
+export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverlay & { trigger: (onDone?: () => void) => boolean; dispose: () => void } {
   let active = false;
   let disposed = false;
   let overlayScene: THREE.Scene | null = null;
@@ -266,12 +266,14 @@ export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverla
     overlayOpacity = 0;
   }
 
-  function trigger(): boolean {
-    if (active || disposed) return false;
+  function trigger(onDone?: () => void): boolean {
+    // 仅以「正在烧灼」作为互斥条件；烧完一次后允许再次触发，
+    // 否则野菌餐馆的二、三次进店剧情会永久卡在选完选项处。
+    if (active) return false;
+    disposed = false;
     const texture = captureCityPhoto();
     if (!texture) return false;
     active = true;
-    disposed = false;
 
     buildOverlay(texture);
     startWallTime = performance.now();
@@ -285,6 +287,7 @@ export function createBurnCityEffect(options: BurnCityEffectOptions): BurnOverla
       onComplete: () => {
         active = false;
         dispose();
+        onDone?.();
       },
     });
     // overlay 淡入覆盖城市，火线推进，烧尽后再淡出露出主画布。
