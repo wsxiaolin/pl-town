@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MaterialParameters } from '../rendering/meshFactory';
 
 export function addCityLighting(scene: THREE.Scene, mobile: () => boolean, night: boolean): void {
   const ambient = new THREE.AmbientLight(0xFAF8F4, night ? 0.6 : 1.05);
@@ -24,7 +25,7 @@ export function addCityLighting(scene: THREE.Scene, mobile: () => boolean, night
   scene.add(fill);
 }
 
-export function addCityFountain(options: { scene: THREE.Scene; palette: Record<string, number>; part: (group: THREE.Group, geometry: THREE.BufferGeometry, material: any, position: [number, number, number], shadow?: boolean) => THREE.Mesh }): void {
+export function addCityFountain(options: { scene: THREE.Scene; palette: Record<string, number>; part: (group: THREE.Group, geometry: THREE.BufferGeometry, material: MaterialParameters, position: [number, number, number], shadow?: boolean) => THREE.Mesh }): void {
   const { scene, palette, part } = options;
   const group = new THREE.Group();
   part(group, new THREE.CylinderGeometry(1.8, 1.9, 0.36, 48), { color: palette.FOUNTAIN_RIM, roughness: 0.75, tex: 'stone', rx: 6, ry: 1 }, [0, 0.18, 0]);

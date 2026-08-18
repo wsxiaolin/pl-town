@@ -1,7 +1,8 @@
 import { ECHO_OBSERVATORY_AREA } from './cityConfig';
 import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
-export const NPC_PROFILES = [...COMMUNITY_NPCS,
+import type { NpcProfile } from "../npcSystem";
+export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
   {
     id:'yihang', name:'亦航', role:'普通居民 · 公园散步者', core:false, spawnChance:1,
     behavior:'rare', workHours:[10,22], guaranteedSpawn:true,

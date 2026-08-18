@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-
-type RestaurantDefinition = { id: string; x: number; z: number } & Record<string, unknown>;
+import type { MaterialParameters } from './meshFactory';
+import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
 
 export function buildWushiRestaurant(options: {
   platformHeight: number;
-  makeMaterial: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
+  makeMaterial: (parameters: MaterialParameters) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
-  addPart: (...args: any[]) => THREE.Mesh;
-}, definition: RestaurantDefinition) {
+  addPart: (group: THREE.Group | null, geometry: THREE.BufferGeometry, material: THREE.Material | MaterialParameters, position: [number, number, number], shadow?: boolean) => THREE.Mesh;
+}, definition: BuildingDefinition): BuildingEntity {
   const { platformHeight: base, makeMaterial, makeMesh, addPart } = options;
   const group = new THREE.Group();
   const width = 5.4;

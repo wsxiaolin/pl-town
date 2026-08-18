@@ -14,17 +14,8 @@ export type EventBindingsOptions = {
   getConfig: () => { cameraZoomMin: number; cameraZoomMax: number };
   onYouClick: () => void;
   closeRenderSettings: () => void;
-  getStatsPanelController: () => { close: () => void; setMode: (mode: any) => void } | null;
-  getCommunityPanels: () => {
-    closeWorksPanel: () => void;
-    closeWorkDetail: () => void;
-    toggleWorkStar: () => any;
-    loadWorkComments: () => any;
-    loadWorkDerivatives: () => any;
-    loadWorkSupporters: () => any;
-    toggleWorkSupport: () => any;
-    postWorkComment: (event: any) => any;
-  } | null;
+  getStatsPanelController: () => { close: () => void; setMode: (mode: 'clean' | 'raw') => void } | null;
+  getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getMapController: () => { isOpen: () => boolean; updateImage: () => void } | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   toggleMapMode: () => void;

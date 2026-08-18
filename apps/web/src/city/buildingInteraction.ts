@@ -1,33 +1,24 @@
 import { BUILDING_API_QUERIES } from './data/buildings';
+import type { BuildingEntity } from './buildingEntity';
+import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 
 type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
 
 export type BuildingInteractionOptions = {
-  isBuildingUnavailable: (building: any) => boolean;
+  isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
-  getCityDialogs: () => { openBuilding: (building: any) => void; closeBuilding: () => void } | null;
-  getEchoStoryController: () => { interactBuilding: (id: string, dialogs: any) => boolean } | null;
+  getCityDialogs: () => CityDialogController | null;
+  getEchoStoryController: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
   getStatsPanelController: () => { open: () => void } | null;
-  getCommunityPanels: () => {
-    openPhoneApp: (tab: string, kind: SocialKind) => void;
-    openWorksPanel: (context: string, queryOverride: any) => void;
-    closeWorkDetail: () => void;
-    loadWorkComments: () => any;
-    postWorkComment: (event: any) => any;
-    loadWorkDerivatives: () => any;
-    loadWorkSupporters: () => any;
-    toggleWorkSupport: () => any;
-    toggleWorkStar: () => any;
-    closeWorksPanel: () => void;
-  } | null;
+  getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: () => WildMushroomInteractResult } | null;
 };
 
-const PHONE_BUILDINGS: Record<string, [string, string?]> = {
+const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
   bulletin: ['inventory'], news: ['inventory'],
   community: ['social', 'profile'], records: ['social', 'mine'],
   tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
@@ -35,7 +26,7 @@ const PHONE_BUILDINGS: Record<string, [string, string?]> = {
 };
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
-  function openModal(building: any) {
+  function openModal(building: BuildingEntity) {
     options.getCityDialogs()?.openBuilding(building);
   }
 
@@ -43,7 +34,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     options.getCityDialogs()?.closeBuilding();
   }
 
-  function navigateUnlocked(b: any) {
+  function navigateUnlocked(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
     // 点击「野生菌餐馆」（原文训社外环）触发野生菌小剧情：每次进店都会被放倒、烧一次城。
     if (b.id === 'writingclub_outer') {
@@ -84,9 +75,9 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       options.trackInteraction(b.id);
       return;
     }
-    const configuredQuery = (BUILDING_API_QUERIES as Record<string, any>)[b.id];
+    const configuredQuery = BUILDING_API_QUERIES[b.id as keyof typeof BUILDING_API_QUERIES];
     if (configuredQuery) {
-      options.getCommunityPanels()?.openWorksPanel(b.id, configuredQuery);
+      options.getCommunityPanels()?.openWorksPanel(b.id, configuredQuery as Record<string, unknown>);
       options.trackInteraction(b.id);
       return;
     }
@@ -94,7 +85,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     openModal(b);
   }
 
-  function navigateTo(b: any) {
+  function navigateTo(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }

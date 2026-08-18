@@ -28,7 +28,7 @@ test('lab_outer is relabelled as the data center', () => {
   const building = BUILDING_DEFS.find((item) => item.id === 'lab_outer');
   assert.ok(building);
   assert.equal(building.label, '数据中心');
-  assert.equal(BUILDING_CONTENT.lab_outer.name, '数据中心');
+  assert.equal(BUILDING_CONTENT.lab_outer!.name, '数据中心');
 });
 
 test('the elevator building is relabelled as the memorial monument', () => {
@@ -36,5 +36,5 @@ test('the elevator building is relabelled as the memorial monument', () => {
   assert.ok(building);
   assert.equal(building.id, 'elevator');
   assert.equal(building.label, '纪念碑');
-  assert.equal(BUILDING_CONTENT.elevator.name, '纪念碑');
+  assert.equal(BUILDING_CONTENT.elevator!.name, '纪念碑');
 });

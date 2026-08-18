@@ -1,12 +1,9 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
+import type { MaterialParameters } from './meshFactory';
 
-type MaterialOptions = THREE.MeshStandardMaterialParameters & {
-  tex?: string;
-  rx?: number;
-  ry?: number;
-};
+type MaterialOptions = MaterialParameters;
 
 type ThemeMaterial = {
   mat: THREE.MeshStandardMaterial;
@@ -27,7 +24,7 @@ type CitySurfaceOptions = {
   createMaterial: (options: MaterialOptions) => THREE.MeshStandardMaterial;
   pathMaterials: THREE.MeshStandardMaterial[];
   groundMaterials: ThemeMaterial[];
-  addLamps: (positions: number[][]) => void;
+  addLamps: (positions: readonly (readonly [number, number, number])[]) => void;
 };
 
 export function createCitySurfaces(options: CitySurfaceOptions): void {

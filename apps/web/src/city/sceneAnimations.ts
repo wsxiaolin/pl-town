@@ -1,7 +1,8 @@
 import { gsap } from 'gsap';
+import type { BuildingEntity } from './buildingEntity';
 
 export type SceneAnimationsOptions = {
-  getBuildings: () => any[];
+  getBuildings: () => BuildingEntity[];
   reduced: boolean;
 };
 
