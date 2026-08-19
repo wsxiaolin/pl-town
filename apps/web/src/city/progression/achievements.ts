@@ -31,6 +31,9 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   { id:'overcoat.recover',name:'至少它还认得我',desc:'今晚别走那条街——找回了外套，但它已经不是原来的那件了',check:()=>false,directOnly:true },
   { id:'overcoat.witness',name:'城市回应了',desc:'今晚别走那条街——三个人的声音比一个人的沉默更有力量',check:()=>false,directOnly:true },
   { id:'overcoat.ghost',name:'今晚别走那条街',desc:'今晚别走那条街——被忽略的人用同一种方式留下了痕迹',check:()=>false,directOnly:true },
+  { id:'yesterday_witness',name:'见证者',desc:'把三十年前未说出口的故事接住',check:()=>false,directOnly:true },
+  { id:'yesterday_silence',name:'沉默是金',desc:'选择让故事停留在沉默里',check:()=>false,directOnly:true },
+  { id:'yesterday_true_dawn',name:'昨日之歌',desc:'完成昨日之歌的尾声',check:()=>false,directOnly:true },
 ];
 
 export function createUnlockTiers(addLamps: (positions: [number, number, number][]) => void,

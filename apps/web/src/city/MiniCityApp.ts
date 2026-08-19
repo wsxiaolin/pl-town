@@ -51,7 +51,7 @@ import { isBuildingDestroyed } from './buildingDamage';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
-import { townGameHour } from '../gameplay/time/townClock';
+import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
 import { BUILDING_PLOT_MAP } from './data/buildingPlots';
 import { createMeshHelpers, type MeshHelpers } from '../rendering/meshFactory';
@@ -151,7 +151,12 @@ const themeClock = createThemeClock({
   setIsNight: (value) => { isNight = value; },
   getGameClock: () => gameClock,
   setGameClock: (value) => { gameClock = value; },
-  announceGuide: () => echoStoryController?.announceGuide(),
+  announceGuide: () => {
+    echoStoryController?.announceGuide();
+    yesterdaySongController?.announceGuide();
+    magiStoryController?.announceGuide();
+    overcoatStoryController?.announceGuide();
+  },
   invalidateMapShot: () => mapController?.invalidateShot(),
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
@@ -411,7 +416,7 @@ function init() {
   });
   echoStoryController = createEchoStoryController({
     document,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
     setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
     setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
@@ -436,23 +441,29 @@ function init() {
   yesterdaySongController = createYesterdaySongController({
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     onActiveActorsChanged: (ids) => { yesterdayActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
   });
+  yesterdaySongController.announceGuide();
+  yesterdaySongController.syncActiveActors();
   // ── 麦琪的礼物 · 支线剧情 ──────────────────────────────────────
   magiStoryController = createMagiStoryController({
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     onActiveActorsChanged: (ids) => { magiActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
   });
+  magiStoryController.announceGuide();
+  magiStoryController.syncActiveActors();
   // ── 今晚别走那条街 · 支线剧情 ──────────────────────────────────
   overcoatStoryController = createOvercoatStoryController({
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     onActiveActorsChanged: (ids) => { overcoatActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
   });
+  overcoatStoryController.announceGuide();
+  overcoatStoryController.syncActiveActors();
   mapController = createMapController({
     document,
     getScene: () => scene,

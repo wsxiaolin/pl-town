@@ -23,15 +23,13 @@ export const MAGI_STORY: StoryDefinition = {
 
   interactions: [
     { actorId: "della", nodeId: "magi.start", choiceId: "talk-della" },
-    { actorId: "della", nodeId: "magi.della-waiting", choiceId: "talk-della-waiting" },
-    { actorId: "jim", nodeId: "magi.jim-meet", choiceId: "talk-jim" },
-    { actorId: "della", nodeId: "magi.eve-arrive", choiceId: "talk-della-eve" },
+    { actorId: "jim", nodeId: "magi.della-waiting", choiceId: "talk-jim" },
   ],
 
   buildingInteractions: [
-    { buildingId: "mall_west", nodeId: "magi.wig-shop-arrival", choiceId: "enter-wig-shop" },
-    { buildingId: "mall_south", nodeId: "magi.chain-shop-arrival", choiceId: "enter-chain-shop" },
-    { buildingId: "guesthouse", nodeId: "magi.eve-arrive", choiceId: "enter-guesthouse-eve" },
+    { buildingId: "mall_west", nodeId: "magi.wig-shop-arrival", choiceId: "bargain-soft" },
+    { buildingId: "mall_south", nodeId: "magi.chain-shop-arrival", choiceId: "suggest-simple" },
+    { buildingId: "guesthouse", nodeId: "magi.eve-arrive", choiceId: "stay-witness" },
   ],
 
   nodes: {

@@ -171,6 +171,7 @@ const OVERCOAT_EDGES: StoryEdgeSummary[] = [
 const YESTERDAY_NODES: StoryNodeSummary[] = [
   { id: 'diary-discovery', title: '档案馆' },
   { id: 'diary-recognized', title: '日记' },
+  { id: 'qiu-intro', title: '秋嫂' },
   { id: 'qiu-explains', title: '秋嫂' },
   { id: 'wednesday-wait', title: '报摊' },
   { id: 'painter-arrives', title: '画翁' },
@@ -183,12 +184,12 @@ const YESTERDAY_NODES: StoryNodeSummary[] = [
 // Compressed edge mirror of apps/web YESTERDAY_SONG.
 // Keep this in sync with yesterdaySong.ts (definitionVersion 1).
 const YESTERDAY_EDGES: StoryEdgeSummary[] = [
-  { from: 'diary-discovery', to: 'diary-cover', kind: 'choice', label: '翻开日记' },
+  { from: 'diary-discovery', to: 'diary-recognized', kind: 'choice', label: '翻开日记' },
   { from: 'diary-recognized', to: 'qiu-intro', kind: 'choice', label: '去报摊找秋嫂' },
-  { from: 'qiu-explains', to: 'wednesday-wait', kind: 'choice', label: '等到周三' },
+  { from: 'qiu-intro', to: 'wednesday-wait', kind: 'choice', label: '把日记给秋嫂看' },
   { from: 'wednesday-wait', to: 'painter-arrives', kind: 'choice', label: '在报摊等候' },
-  { from: 'painter-arrives', to: 'painter-reads', kind: 'choice', label: '把日记推到他面前' },
-  { from: 'painter-arrives', to: 'silent-observation', kind: 'choice', label: '什么都不做' },
+  { from: 'painter-arrives', to: 'ending-witness', kind: 'choice', label: '把日记推到他面前' },
+  { from: 'painter-arrives', to: 'ending-silence', kind: 'choice', label: '什么都不做' },
   { from: 'ending-witness', to: 'epilogue-cats', kind: 'choice', label: '继续' },
   { from: 'ending-silence', to: 'epilogue-cats', kind: 'choice', label: '继续' },
   { from: 'epilogue-cats', to: 'epilogue-complete', kind: 'choice', label: '结束' },
