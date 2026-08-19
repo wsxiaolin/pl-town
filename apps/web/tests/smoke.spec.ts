@@ -119,7 +119,8 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
       send(raw: string) {
         const request = JSON.parse(raw);
         const catalog = {
-          initialCurrency: 1200, buildingPrices: { mall_south: 0 },
+          initialCurrency: 1200, buildingPrices: { mall_south: 0, academy_library: 0 },
+          buildingUnlockable: { mall_south: true, academy_library: true },
           achievementRewards: { citizen: 20, cat_cafe_note: 30, minicity_origin: 50, dragonwell_assimilation: 80 },
           products: {
             dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
@@ -185,6 +186,15 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     await expect(product.locator('small')).toHaveText(detail);
   }
   await page.locator('[data-shop-close]').click();
+
+  await page.evaluate(() => (window as any).__mini().interactBuilding('academy_library'));
+  await expect(page.locator('#academyPanel')).toHaveClass(/open/);
+  await page.locator('.academy-work').first().click();
+  await expect(page.locator('#academyReader')).toHaveClass(/open/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#academyReader')).not.toHaveClass(/open/);
+  await expect(page.locator('#academyPanel')).toHaveClass(/open/);
+  await page.locator('#academyClose').click();
 
   const worldAudit = await page.evaluate(async () => {
     const mini = (window as any).__mini();

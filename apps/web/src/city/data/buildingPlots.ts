@@ -12,7 +12,7 @@ export const BUILDING_PLOT_MAP: Record<string, BuildingPlotSpec> = {
   greenhouse:{tex:'ground4',size:4.0,color:0xB8C888}, clocktower:{tex:'ground5',size:4.0,color:0xE4E3E0},
   temple:{tex:'ground5',size:4.5,color:0xF0EFEC}, factory:{tex:'ground2',size:5.0,color:0xC8C4B8},
   mall:{tex:'ground5',size:5.5,color:0xD8D7D2}, school:{tex:'ground4',size:4.5,color:0xB8C888},
-  crown:{tex:'ground5',size:4.5,color:0xF0EFEC}, banana:{tex:'ground2',size:6.0,color:0xE0D8A0},
+   academy:{tex:'ground4',size:4.5,color:0xD8C9A8}, crown:{tex:'ground5',size:4.5,color:0xF0EFEC}, banana:{tex:'ground2',size:6.0,color:0xE0D8A0},
   qipai:{tex:'ground5',size:8.0,color:0xE4E3E0},
   television_tower:{tex:'ground5',size:5.4,color:0xD5DFE2}, fried_chicken_shop:{tex:'ground2',size:4.6,color:0xE6D2B2}, tavern:{tex:'ground4',size:4.8,color:0xC6B18C},
 };
