@@ -16,11 +16,13 @@ interface SceneInterestPointControllerOptions {
   showToast: (message: string) => void;
   setWellPhase?: (phase: 'idle' | 'focus' | 'engulf' | 'recede') => void;
   setBeachEncounterPhase?: (phase: 'hidden' | 'revealed' | 'reward') => void;
+  focusBeachEncounter?: () => void;
   interactWithStory?: (id: SceneInterestPointId) => boolean;
 }
 
 export interface SceneInterestPointController {
   interact(id: SceneInterestPointId): Promise<void>;
+  armBeachEncounter(): void;
 }
 
 export function createSceneInterestPointController(
@@ -78,9 +80,11 @@ export function createSceneInterestPointController(
   };
   let beachSequenceStarted = false;
   let beachSequenceCompleted = false;
+  let beachTriggerArmed = true;
 
   const openBeachEncounter = async (): Promise<void> => {
     if (beachSequenceStarted || beachSequenceCompleted) return;
+    if (!beachTriggerArmed) return;
     if (options.inventory.hasAchievement(WORLD_ACHIEVEMENTS.westBeachEncounter.id)) {
       beachSequenceCompleted = true;
       options.setBeachEncounterPhase?.('reward');
@@ -88,6 +92,8 @@ export function createSceneInterestPointController(
     }
     if (!options.inventory.isOnline()) return;
     beachSequenceStarted = true;
+    beachTriggerArmed = false;
+    options.focusBeachEncounter?.();
     const interrupted = () => {
       if (beachSequenceCompleted) return;
       beachSequenceStarted = false;
@@ -156,6 +162,7 @@ export function createSceneInterestPointController(
   };
 
   return {
+    armBeachEncounter() { beachTriggerArmed = true; },
     async interact(id) {
       if (options.interactWithStory?.(id)) return;
       if (id === 'cat-cafe-note') {

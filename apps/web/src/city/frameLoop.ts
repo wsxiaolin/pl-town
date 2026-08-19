@@ -23,6 +23,7 @@ export type FrameLoopOptions = {
   getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
+  getBeachEncounterActive?: () => boolean;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
   npcYieldToPlayer: (npc: NpcEntity) => void;
@@ -57,11 +58,13 @@ export function createFrameLoop(options: FrameLoopOptions) {
     playerController?.updateCamera();
     const sceneInterestPoints = options.getSceneInterestPoints();
     sceneInterestPoints?.update(now / 1000);
-    const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen()
+    const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen() && !options.getBeachEncounterActive?.()
       ? sceneInterestPoints?.entities.get('west-beach')
       : null;
-    if (beach && cursorChar && cursorChar.position.distanceToSquared(beach.interactionPosition) <= 3.2 ** 2) {
-      void options.getSceneInterestPointController()?.interact('west-beach');
+    if (beach && cursorChar) {
+      const distanceSquared = cursorChar.position.distanceToSquared(beach.interactionPosition);
+      if (distanceSquared <= 6 ** 2) void options.getSceneInterestPointController()?.interact('west-beach');
+      else options.getSceneInterestPointController()?.armBeachEncounter();
     }
     updateLabels();
     const renderer = options.getRenderer();

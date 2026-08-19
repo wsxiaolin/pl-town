@@ -208,6 +208,7 @@ const frameLoop = createFrameLoop({
   getBurnOverlay: () => burnCityEffect,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
+  getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer,
@@ -518,6 +519,11 @@ function init() {
       }
     },
     setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
+    focusBeachEncounter: () => {
+      cameraZoom = 5.5;
+      updateCameraProjection(cameraZoom);
+      cameraController?.focus(-41.2, 11.5);
+    },
   });
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
