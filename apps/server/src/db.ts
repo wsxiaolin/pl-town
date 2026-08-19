@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { DATA_DIR, DATABASE_PATH } from './config.js';
 import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
-import { INITIAL_CURRENCY } from './progression.js';
+import { DEFAULT_UNLOCKED_BUILDING_IDS, INITIAL_CURRENCY } from './progression.js';
 import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
 import type { ChatMessage, PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
 import type {
@@ -280,6 +280,8 @@ function ensureProgress(userId: string): void {
   const timestamp = now();
   db.prepare('INSERT OR IGNORE INTO player_progress (user_id, currency, created_at, updated_at) VALUES (?, ?, ?, ?)')
     .run(userId, INITIAL_CURRENCY, timestamp, timestamp);
+  const unlockBuilding = db.prepare('INSERT OR IGNORE INTO player_building_unlocks (user_id, building_id, unlocked_at) VALUES (?, ?, ?)');
+  DEFAULT_UNLOCKED_BUILDING_IDS.forEach((buildingId) => unlockBuilding.run(userId, buildingId, timestamp));
 }
 
 function addInventory(userId: string, itemId: string, quantity: number): void {

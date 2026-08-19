@@ -2,6 +2,8 @@ import type { PlayerProgress } from './types.js';
 
 export const INITIAL_CURRENCY = 1200;
 
+export const DEFAULT_UNLOCKED_BUILDING_IDS = ['writingclub_outer'] as const;
+
 const BUILDING_IDS = [
   'activity', 'bulletin', 'techhalf', 'blackhole', 'laws', 'library', 'litreview', 'catcafe',
   'academy', 'news', 'mutualaid', 'screen', 'elevator', 'residentid', 'stats', 'knowledgebaseE',
