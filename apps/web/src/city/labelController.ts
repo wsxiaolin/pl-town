@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import type { BuildingEntity } from './buildingEntity';
 
-type Labelled = { group: THREE.Object3D; labelEl?: HTMLElement; labelY?: number };
+type Labelled = { group: THREE.Object3D; labelEl?: HTMLElement | null; labelY?: number };
 
 type LabelScreenState = { x: number; y: number; visible: boolean };
 const labelScreenStates = new WeakMap<HTMLElement, LabelScreenState>();
@@ -45,9 +46,9 @@ function projectLabel(
 
 export function updateCityLabels(options: {
   camera: THREE.Camera;
-  buildings: readonly Labelled[];
+  buildings: readonly BuildingEntity[];
   residences: readonly Labelled[];
-  isStoryLocked: (building: Labelled) => boolean;
+  isStoryLocked: (building: BuildingEntity) => boolean;
   worldPosition: THREE.Vector3;
 }): void {
   const viewportWidth = window.innerWidth;

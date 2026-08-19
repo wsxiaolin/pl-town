@@ -29,6 +29,13 @@ const origins = (raw: string | undefined): ReadonlySet<string> => {
   }));
 };
 
+const httpUrl = (name: string, raw: string): string => {
+  const value = new URL(raw);
+  if (value.protocol !== 'http:' && value.protocol !== 'https:') throw new Error(`${name} must be an HTTP(S) URL`);
+  if (value.username || value.password || value.hash) throw new Error(`${name} must not contain credentials or a fragment`);
+  return value.toString();
+};
+
 export const NODE_ENV = process.env.NODE_ENV ?? 'development';
 export const IS_PRODUCTION = NODE_ENV === 'production';
 export const PORT = integer('PORT', 8787, 1, 65_535);
@@ -44,6 +51,14 @@ export const ALLOW_ORIGINLESS_WEBSOCKET = boolean('ALLOW_ORIGINLESS_WEBSOCKET', 
 export const MAX_CONNECTIONS = integer('MAX_CONNECTIONS', 500, 1, 10_000);
 export const MAX_CONNECTIONS_PER_IP = integer('MAX_CONNECTIONS_PER_IP', 20, 1, 1_000);
 export const SESSION_TTL_DAYS = integer('SESSION_TTL_DAYS', 30, 1, 365);
+
+export const BIGMODEL_API_KEY = process.env.BIGMODEL_API_KEY?.trim() ?? '';
+export const BIGMODEL_MODERATION_URL = httpUrl(
+  'BIGMODEL_MODERATION_URL',
+  process.env.BIGMODEL_MODERATION_URL ?? 'https://open.bigmodel.cn/api/paas/v4/moderations',
+);
+export const BIGMODEL_MODERATION_TIMEOUT_MS = integer('BIGMODEL_MODERATION_TIMEOUT_MS', 8_000, 1_000, 30_000);
+export const BIGMODEL_MODERATION_CONCURRENCY = integer('BIGMODEL_MODERATION_CONCURRENCY', 4, 1, 32);
 
 export const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? '';
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
@@ -104,6 +119,8 @@ if (new Set(ADMIN_ACCOUNTS.map((account) => account.username)).size !== ADMIN_AC
 }
 if (IS_PRODUCTION && !ADMIN_ENABLED) throw new Error('Production requires at least one administrator account');
 if (IS_PRODUCTION && ALLOWED_ORIGINS.size === 0) throw new Error('Production requires at least one ALLOWED_ORIGINS entry');
+if (IS_PRODUCTION && !BIGMODEL_API_KEY) throw new Error('Production requires BIGMODEL_API_KEY for chat moderation');
+if (IS_PRODUCTION && new URL(BIGMODEL_MODERATION_URL).protocol !== 'https:') throw new Error('Production requires an HTTPS BIGMODEL_MODERATION_URL');
 if (OSS_ENABLED && !OFFSITE_BACKUP_ENABLED) throw new Error('OSS_ENABLED requires OSS_BUCKET, OSS_ACCESS_KEY_ID, and OSS_ACCESS_KEY_SECRET');
 if (OSS_ENABLED && OSS_REGION === '' && OSS_ENDPOINT === '') throw new Error('OSS_ENABLED requires OSS_REGION or OSS_ENDPOINT');
 if (OSS_ENABLED && OSS_PREFIX.startsWith('/')) throw new Error('OSS_PREFIX must not start with a slash');

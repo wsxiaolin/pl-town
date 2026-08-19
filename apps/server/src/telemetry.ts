@@ -138,14 +138,16 @@ export function getTelemetryOverview(): TelemetryOverview {
 
 export type UserEventRow = { id: number; event: string; userId: string | null; sessionId: string; properties: Record<string, unknown>; ip: string; createdAt: string };
 
+type RawUserEventRow = Omit<UserEventRow, 'userId' | 'sessionId' | 'properties' | 'createdAt'> & { user_id: string | null; session_id: string; properties_json: string; created_at: string };
+
 export function listUserEvents(input: { event?: string; limit: number; offset: number }): { items: UserEventRow[]; total: number } {
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
   if (input.event) { conditions.push('event = ?'); params.push(input.event); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM user_events ${where}`).get(...params) as { count: number }).count;
   const rows = db.prepare(`SELECT id, event, user_id, session_id, properties_json, ip, created_at FROM user_events ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(...params, input.limit, input.offset) as any[];
+    .all(...params, input.limit, input.offset) as RawUserEventRow[];
   return { total, items: rows.map((row) => {
     let properties: Record<string, unknown> = {};
     try { properties = JSON.parse(row.properties_json) as Record<string, unknown>; } catch { /* keep empty */ }
@@ -155,14 +157,16 @@ export function listUserEvents(input: { event?: string; limit: number; offset: n
 
 export type ErrorReportRow = { id: number; kind: string; message: string; stack: string | null; url: string | null; userAgent: string | null; userId: string | null; sessionId: string; ip: string; createdAt: string };
 
+type RawErrorReportRow = Omit<ErrorReportRow, 'userAgent' | 'userId' | 'sessionId' | 'ip' | 'createdAt'> & { user_agent: string | null; user_id: string | null; session_id: string; ip: string; created_at: string };
+
 export function listErrorReports(input: { kind?: string; limit: number; offset: number }): { items: ErrorReportRow[]; total: number } {
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
   if (input.kind) { conditions.push('kind = ?'); params.push(input.kind); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM error_reports ${where}`).get(...params) as { count: number }).count;
   const rows = db.prepare(`SELECT id, kind, message, stack, url, user_agent, session_id, user_id, ip, created_at FROM error_reports ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(...params, input.limit, input.offset) as any[];
+    .all(...params, input.limit, input.offset) as RawErrorReportRow[];
   return { total, items: rows.map((row) => ({
     id: row.id, kind: row.kind, message: row.message, stack: row.stack ?? null, url: row.url ?? null,
     userAgent: row.user_agent ?? null, userId: row.user_id ?? null, sessionId: row.session_id, ip: row.ip, createdAt: row.created_at,

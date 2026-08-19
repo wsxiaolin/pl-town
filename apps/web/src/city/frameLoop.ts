@@ -1,26 +1,32 @@
 import * as THREE from 'three';
 import { updateCityLabels } from './labelController';
+import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
+import type { Npc } from './npcSystem';
+import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { SceneInterestPointController } from './sceneInterestPointController';
+
+type NpcEntity = Npc;
 
 export type FrameLoopOptions = {
-  getRenderer: () => THREE.Renderer;
+  getRenderer: () => THREE.WebGLRenderer;
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
-  getBuildings: () => any[];
-  getResidences: () => any[];
+  getBuildings: () => BuildingEntity[];
+  getResidences: () => ResidenceEntity[];
   getLabelWorldPosition: () => THREE.Vector3;
-  getNpcList: () => any[];
+  getNpcList: () => NpcEntity[];
   getPlayerController: () => { updateMovement: (delta: number) => void; updateCamera: () => void } | null;
   getMultiplayerHousing: () => { updateRemotePlayers: (delta: number) => void } | null;
-  getSceneInterestPoints: () => { update: (time: number) => void; entities: Map<string, any> } | null;
-  getSceneInterestPointController: () => { interact: (id: string) => Promise<void> | void } | null;
+  getSceneInterestPoints: () => SceneInterestPoints | null;
+  getSceneInterestPointController: () => SceneInterestPointController | null;
   getMapController: () => { isOpen: () => boolean; updateMarker: () => void } | null;
-  getBurnOverlay: () => { render: (renderer: THREE.Renderer) => void; isActive: () => boolean } | null;
+  getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
-  npcYieldToPlayer: (npc: any) => void;
-  isStoryLockedBuilding: (building: any) => boolean;
+  npcYieldToPlayer: (npc: NpcEntity) => void;
+  isStoryLockedBuilding: (building: BuildingEntity) => boolean;
 };
 
 export function createFrameLoop(options: FrameLoopOptions) {

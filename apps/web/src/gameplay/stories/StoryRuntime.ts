@@ -141,6 +141,7 @@ export class StoryRuntime {
     const isSavepoint = targetNode.savepoint !== false;
     const declaredGuide = targetNode.guide;
     const activeGuide = declaredGuide === null ? null : declaredGuide ?? state.activeGuide;
+    const resumptionNodeId = isSavepoint ? choice.next : (this.repository.get(this.definition.id)?.nodeId ?? state.nodeId);
     let next: StoryState;
     if (isSavepoint) {
       const persisted = this.repository.update(this.definition.id, {
@@ -189,7 +190,7 @@ export class StoryRuntime {
       this.liveNodeId = choice.next;
       next = { ...persisted, nodeId: choice.next };
     }
-    const transition = { state: next, node: this.definition.nodes[next.nodeId]!, choice, events: applied.events, effects };
+    const transition = { state: next, node: this.definition.nodes[next.nodeId]!, choice, events: applied.events, effects, resumptionNodeId };
     this.emit({ type: 'story.choice', transition });
     return transition;
   }

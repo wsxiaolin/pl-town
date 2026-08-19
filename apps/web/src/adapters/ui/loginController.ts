@@ -1,6 +1,8 @@
+import type { LegacyStats } from '../../city/progression/legacyStats';
+
 export type LoginControllerOptions = {
-  getStats: () => { joinDate?: number };
-  saveStats: (stats: { joinDate?: number }) => void;
+  getStats: () => LegacyStats;
+  saveStats: (stats: LegacyStats) => void;
   ensureUserId: () => void;
   checkAchievements: () => void;
   shouldShowIntro: () => boolean;

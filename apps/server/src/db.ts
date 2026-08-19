@@ -1,34 +1,20 @@
 import Database from 'better-sqlite3';
 import { DATA_DIR, DATABASE_PATH } from './config.js';
 import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
-import { INITIAL_CURRENCY } from './progression.js';
+import { ensureProgress, addInventory } from './playerProgressDefaults.js';
 import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
 import type { PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
-
-export type House = {
-  buildingId: string;
-  name: string | null;
-  ownerId: string;
-  ownerNickname: string;
-  members: Array<{ userId: string; nickname: string }>;
-};
-
-export type HousingRequest = {
-  id: number;
-  buildingId: string;
-  houseName: string | null;
-  ownerId: string;
-  ownerNickname: string;
-  requesterId: string;
-  requesterNickname: string;
-  targetId: string;
-  targetNickname: string;
-  kind: 'invite' | 'application';
-  createdAt: string;
-};
+import type {
+  NpcChangeRequestRow,
+  StoryProgressDbRow,
+  UserRow,
+} from './dbRows.js';
+export * from './dbChat.js';
+export * from './dbHousing.js';
+export * from './dbAdmin.js';
 
 acquireRuntimeLock(DATA_DIR, 'server');
-const db = new Database(DATABASE_PATH);
+export const db = new Database(DATABASE_PATH);
 const existingApplicationId = Number(db.pragma('application_id', { simple: true })) || 0;
 const existingSchemaVersion = Number(db.pragma('user_version', { simple: true })) || 0;
 if (existingApplicationId !== 0 && existingApplicationId !== MINICITY_APPLICATION_ID) throw new Error('Database does not belong to MiniCity');
@@ -155,6 +141,11 @@ db.exec(`
     flagged_at TEXT,
     hidden_at TEXT,
     hidden_by TEXT,
+    moderation_status TEXT NOT NULL DEFAULT 'unreviewed',
+    moderation_request_id TEXT,
+    moderation_risk_types_json TEXT NOT NULL DEFAULT '[]',
+    moderation_error TEXT,
+    moderated_at TEXT,
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS chat_messages_created_idx ON chat_messages(created_at DESC);
@@ -195,6 +186,14 @@ db.exec(`
   const columns = db.prepare('PRAGMA table_info(story_progress)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'definition_version')) db.exec('ALTER TABLE story_progress ADD COLUMN definition_version INTEGER NOT NULL DEFAULT 1');
 }
+{
+  const columns = db.prepare('PRAGMA table_info(chat_messages)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'moderation_status')) db.exec("ALTER TABLE chat_messages ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'unreviewed'");
+  if (!columns.some((column) => column.name === 'moderation_request_id')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderation_request_id TEXT');
+  if (!columns.some((column) => column.name === 'moderation_risk_types_json')) db.exec("ALTER TABLE chat_messages ADD COLUMN moderation_risk_types_json TEXT NOT NULL DEFAULT '[]'");
+  if (!columns.some((column) => column.name === 'moderation_error')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderation_error TEXT');
+  if (!columns.some((column) => column.name === 'moderated_at')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderated_at TEXT');
+}
 // Existing achievements may already have paid their legacy reward. Recording
 // them prevents an upgrade from paying those rewards a second time.
 db.prepare(`
@@ -221,7 +220,8 @@ db.exec('COMMIT');
 }
 
 const now = () => new Date().toISOString();
-const rowUser = (row: any): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
+
+const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
 export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string): User {
   const timestamp = now();
@@ -229,7 +229,7 @@ export function createUser(id: string, tokenHash: string, nickname: string, pass
   return getUser(id)!;
 }
 export function getUserByToken(tokenHash: string): User | null {
-  const row = db.prepare("SELECT * FROM users WHERE token_hash = ? AND disabled_at IS NULL AND session_expires_at > ?").get(tokenHash, now());
+  const row = db.prepare("SELECT * FROM users WHERE token_hash = ? AND disabled_at IS NULL AND session_expires_at > ?").get(tokenHash, now()) as UserRow | undefined;
   return row ? rowUser(row) : null;
 }
 export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null; disabled: boolean } | null {
@@ -240,7 +240,7 @@ export function updateUserToken(id: string, tokenHash: string, sessionExpiresAt:
   db.prepare('UPDATE users SET token_hash = ?, session_expires_at = ?, updated_at = ? WHERE id = ?').run(tokenHash, sessionExpiresAt, now(), id);
 }
 export function getUser(id: string): User | null {
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
   return row ? rowUser(row) : null;
 }
 export function updateUserProfile(id: string, nickname: string, email?: string): void {
@@ -249,22 +249,8 @@ export function updateUserProfile(id: string, nickname: string, email?: string):
 export function savePosition(id: string, position: Position): void {
   db.prepare('UPDATE users SET position_x = ?, position_y = ?, position_z = ?, rotation = ?, updated_at = ? WHERE id = ?').run(position.x, position.y, position.z, position.rotation ?? null, now(), id);
 }
-
-function ensureProgress(userId: string): void {
-  const timestamp = now();
-  db.prepare('INSERT OR IGNORE INTO player_progress (user_id, currency, created_at, updated_at) VALUES (?, ?, ?, ?)')
-    .run(userId, INITIAL_CURRENCY, timestamp, timestamp);
-}
-
-function addInventory(userId: string, itemId: string, quantity: number): void {
-  db.prepare(`
-    INSERT INTO player_inventory (user_id, item_id, quantity, updated_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity, updated_at = excluded.updated_at
-  `).run(userId, itemId, quantity, now());
-}
-
 export function getPlayerProgress(userId: string): PlayerProgress {
-  ensureProgress(userId);
+  ensureProgress(db, userId, now());
   const currency = (db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(userId) as { currency: number }).currency;
   const inventoryRows = db.prepare('SELECT item_id, quantity FROM player_inventory WHERE user_id = ? ORDER BY item_id').all(userId) as Array<{ item_id: string; quantity: number }>;
   const inventory = Object.fromEntries(inventoryRows.map((row) => [row.item_id, row.quantity]));
@@ -277,13 +263,13 @@ export function getPlayerProgress(userId: string): PlayerProgress {
 export function recordBuildingVisit(userId: string, buildingId: string): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
   let welcomeItemsGranted = false;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const inserted = db.prepare('INSERT OR IGNORE INTO player_building_visits (user_id, building_id, first_visited_at) VALUES (?, ?, ?)').run(userId, buildingId, now());
     if (!inserted.changes) return;
     const count = (db.prepare('SELECT COUNT(*) AS count FROM player_building_visits WHERE user_id = ?').get(userId) as { count: number }).count;
     if (count === 2) {
-      addInventory(userId, 'city_guide', 1);
-      addInventory(userId, 'city_badge', 1);
+      addInventory(db, userId, 'city_guide', 1, now());
+      addInventory(db, userId, 'city_badge', 1, now());
       welcomeItemsGranted = true;
     }
   })();
@@ -294,7 +280,7 @@ export function unlockAchievement(userId: string, achievementId: string, currenc
   let unlocked = false;
   let rewardGranted = 0;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const result = db.prepare('INSERT OR IGNORE INTO player_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)').run(userId, achievementId, now());
     unlocked = result.changes > 0;
     if (currencyReward <= 0) return;
@@ -309,7 +295,7 @@ export function unlockAchievement(userId: string, achievementId: string, currenc
 export function purchaseBuilding(userId: string, buildingId: string, price: number): { progress: PlayerProgress; unlocked: boolean } {
   let unlocked = false;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     if (db.prepare('SELECT 1 FROM player_building_unlocks WHERE user_id = ? AND building_id = ?').get(userId, buildingId)) return;
     if (price > 0) {
       const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(price, now(), userId, price);
@@ -323,18 +309,18 @@ export function purchaseBuilding(userId: string, buildingId: string, price: numb
 
 export function purchaseItem(userId: string, itemId: string, quantity: number, unitPrice: number): PlayerProgress {
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const total = quantity * unitPrice;
     const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(total, now(), userId, total);
     if (!charged.changes) throw new Error('Insufficient currency');
-    addInventory(userId, itemId, quantity);
+    addInventory(db, userId, itemId, quantity, now());
   })();
   return getPlayerProgress(userId);
 }
 
 export function consumeItem(userId: string, itemId: string, quantity: number): PlayerProgress {
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const row = db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, itemId) as { quantity: number } | undefined;
     if (!row || row.quantity < quantity) throw new Error('Item is not available');
     if (row.quantity === quantity) db.prepare('DELETE FROM player_inventory WHERE user_id = ? AND item_id = ?').run(userId, itemId);
@@ -346,10 +332,10 @@ export function consumeItem(userId: string, itemId: string, quantity: number): P
 export function claimReward(userId: string, rewardId: string, claimKey: string, itemId: string, quantity: number): { progress: PlayerProgress; claimed: boolean } {
   let claimed = false;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const inserted = db.prepare('INSERT OR IGNORE INTO player_reward_claims (user_id, reward_id, claim_key, claimed_at) VALUES (?, ?, ?, ?)').run(userId, rewardId, claimKey, now());
     if (!inserted.changes) return;
-    addInventory(userId, itemId, quantity);
+    addInventory(db, userId, itemId, quantity, now());
     claimed = true;
   })();
   return { progress: getPlayerProgress(userId), claimed };
@@ -365,7 +351,7 @@ const parseStoryFlags = (raw: unknown): Record<string, StoryFlagValue> => {
   } catch { return {}; }
 };
 
-const rowStoryProgress = (row: any): StoryProgress => ({
+const rowStoryProgress = (row: StoryProgressDbRow): StoryProgress => ({
   storyId: row.story_id,
   definitionVersion: row.definition_version,
   nodeId: row.node_id,
@@ -386,7 +372,7 @@ function ensureStoryProgress(userId: string, storyId: string): void {
 
 export function getStoryProgress(userId: string, storyId: string): StoryProgress {
   ensureStoryProgress(userId, storyId);
-  const row = db.prepare('SELECT story_id, definition_version, node_id, flags_json, ending, visit_count, updated_at FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId);
+  const row = db.prepare('SELECT story_id, definition_version, node_id, flags_json, ending, visit_count, updated_at FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as StoryProgressDbRow | undefined;
   if (!row) throw new Error('Story progress is unavailable');
   return rowStoryProgress(row);
 }
@@ -403,7 +389,7 @@ export type StoryProgressPatch = {
 export function updateStoryProgress(userId: string, storyId: string, patch: StoryProgressPatch): StoryProgress {
   db.transaction(() => {
     ensureStoryProgress(userId, storyId);
-    const current = db.prepare('SELECT definition_version, node_id, flags_json, ending, visit_count FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as any;
+    const current = db.prepare('SELECT definition_version, node_id, flags_json, ending, visit_count FROM story_progress WHERE user_id = ? AND story_id = ?').get(userId, storyId) as StoryProgressDbRow;
     const definitionVersion = patch.definitionVersion ?? current.definition_version;
     const flags = { ...parseStoryFlags(current.flags_json), ...(patch.flags ?? {}) };
     if (Object.keys(flags).length > 128 || Buffer.byteLength(JSON.stringify(flags), 'utf8') > 16_384) throw new Error('Story flags exceed the storage limit');
@@ -414,174 +400,6 @@ export function updateStoryProgress(userId: string, storyId: string, patch: Stor
       .run(definitionVersion, nodeId, JSON.stringify(flags), ending ?? null, visitCount, now(), userId, storyId);
   })();
   return getStoryProgress(userId, storyId);
-}
-
-export function listHouses(): House[] {
-  const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as any[];
-  const memberRows = db.prepare(`
-    SELECT hm.building_id, hm.user_id, u.nickname
-    FROM house_members hm JOIN users u ON u.id = hm.user_id
-    ORDER BY hm.building_id, hm.joined_at
-  `).all() as Array<{ building_id: string; user_id: string; nickname: string }>;
-  const members = new Map<string, Array<{ userId: string; nickname: string }>>();
-  for (const member of memberRows) {
-    const list = members.get(member.building_id) ?? [];
-    list.push({ userId: member.user_id, nickname: member.nickname });
-    members.set(member.building_id, list);
-  }
-  return rows.map((row) => ({ buildingId: row.building_id, name: row.name, ownerId: row.owner_id, ownerNickname: row.owner_nickname, members: members.get(row.building_id) ?? [] }));
-}
-export function getHouse(buildingId: string): House | null { return listHouses().find((house) => house.buildingId === buildingId) ?? null; }
-export function claimHouse(buildingId: string, ownerId: string, name?: string): void {
-  const timestamp = now();
-  const transaction = db.transaction(() => {
-    const existingMembership = db.prepare('SELECT 1 FROM house_members WHERE user_id = ?').get(ownerId);
-    if (existingMembership) throw new Error('User already lives in a house');
-    db.prepare('INSERT INTO houses (building_id, name, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(buildingId, name?.trim() || null, ownerId, timestamp, timestamp);
-    db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, ownerId, timestamp);
-  });
-  transaction();
-}
-export function renameHouse(buildingId: string, name: string): void { db.prepare('UPDATE houses SET name = ?, updated_at = ? WHERE building_id = ?').run(name.trim(), now(), buildingId); }
-export function addMember(buildingId: string, userId: string): void { db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, userId, now()); }
-export function removeMember(buildingId: string, userId: string): void { db.prepare('DELETE FROM house_members WHERE building_id = ? AND user_id = ?').run(buildingId, userId); }
-export function transferHouse(buildingId: string, userId: string): void { db.prepare('UPDATE houses SET owner_id = ?, updated_at = ? WHERE building_id = ?').run(userId, now(), buildingId); }
-export function deleteHouse(buildingId: string): boolean {
-  return db.prepare('DELETE FROM houses WHERE building_id = ?').run(buildingId).changes > 0;
-}
-
-const requestQuery = `
-  SELECT r.id, r.building_id, r.requester_id, r.target_id, r.kind, r.created_at,
-         h.name AS house_name, h.owner_id, owner.nickname AS owner_nickname,
-         requester.nickname AS requester_nickname, target.nickname AS target_nickname
-  FROM housing_requests r
-  JOIN houses h ON h.building_id = r.building_id
-  JOIN users owner ON owner.id = h.owner_id
-  JOIN users requester ON requester.id = r.requester_id
-  JOIN users target ON target.id = r.target_id
-  WHERE r.requester_id = ? OR r.target_id = ?
-  ORDER BY r.created_at DESC
-`;
-const rowRequest = (row: any): HousingRequest => ({
-  id: row.id,
-  buildingId: row.building_id,
-  houseName: row.house_name,
-  ownerId: row.owner_id,
-  ownerNickname: row.owner_nickname,
-  requesterId: row.requester_id,
-  requesterNickname: row.requester_nickname,
-  targetId: row.target_id,
-  targetNickname: row.target_nickname,
-  kind: row.kind,
-  createdAt: row.created_at,
-});
-export function listHousingRequestsForUser(userId: string): HousingRequest[] {
-  return (db.prepare(requestQuery).all(userId, userId) as any[]).map(rowRequest);
-}
-export function getHousingRequest(id: number): HousingRequest | null {
-  const row = db.prepare(`${requestQuery.replace('WHERE r.requester_id = ? OR r.target_id = ?', 'WHERE r.id = ?')}`).get(id);
-  return row ? rowRequest(row) : null;
-}
-export function createHousingRequest(buildingId: string, requesterId: string, targetId: string, kind: HousingRequest['kind']): void {
-  db.prepare('INSERT INTO housing_requests (building_id, requester_id, target_id, kind, created_at) VALUES (?, ?, ?, ?, ?)').run(buildingId, requesterId, targetId, kind, now());
-}
-export function deleteHousingRequest(id: number): void { db.prepare('DELETE FROM housing_requests WHERE id = ?').run(id); }
-export function deleteHousingRequestsForUser(userId: string): void {
-  db.prepare('DELETE FROM housing_requests WHERE requester_id = ? OR target_id = ?').run(userId, userId);
-}
-
-export type AdminSummary = {
-  users: number;
-  disabledUsers: number;
-  houses: number;
-  housingRequests: number;
-  inventoryRows: number;
-  storyRows: number;
-  storyParticipants: number;
-  chatMessages: number;
-  hiddenChatMessages: number;
-  databaseBytes: number;
-};
-
-export type AdminUser = {
-  id: string;
-  nickname: string;
-  email: string | null;
-  disabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-  sessionExpiresAt: string | null;
-  houseId: string | null;
-};
-
-export type AdminAuditEntry = {
-  id: number;
-  actor: string;
-  action: string;
-  target: string | null;
-  details: Record<string, unknown>;
-  createdAt: string;
-};
-
-export function getAdminSummary(databaseBytes = 0): AdminSummary {
-  const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
-  const disabledUsers = (db.prepare('SELECT COUNT(*) AS count FROM users WHERE disabled_at IS NOT NULL').get() as { count: number }).count;
-  const storyParticipants = (db.prepare('SELECT COUNT(DISTINCT user_id) AS count FROM story_progress').get() as { count: number }).count;
-  const hiddenChatMessages = (db.prepare('SELECT COUNT(*) AS count FROM chat_messages WHERE hidden_at IS NOT NULL').get() as { count: number }).count;
-  return {
-    users: count('users'), disabledUsers, houses: count('houses'), housingRequests: count('housing_requests'),
-    inventoryRows: count('player_inventory'), storyRows: count('story_progress'), storyParticipants, chatMessages: count('chat_messages'),
-    hiddenChatMessages, databaseBytes,
-  };
-}
-
-export function listAdminUsers(input: { query?: string; limit: number; offset: number }): { items: AdminUser[]; total: number } {
-  const query = input.query?.trim() ?? '';
-  const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
-  const where = query ? "WHERE u.nickname LIKE ? ESCAPE '\\' OR u.id LIKE ? ESCAPE '\\'" : '';
-  const params = query ? [pattern, pattern] : [];
-  const total = (db.prepare(`SELECT COUNT(*) AS count FROM users u ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`
-    SELECT u.id, u.nickname, u.email, u.disabled_at, u.created_at, u.updated_at, u.session_expires_at,
-           hm.building_id AS house_id
-    FROM users u LEFT JOIN house_members hm ON hm.user_id = u.id
-    ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?
-  `).all(...params, input.limit, input.offset) as any[];
-  return { total, items: rows.map((row) => ({
-    id: row.id, nickname: row.nickname, email: row.email, disabled: Boolean(row.disabled_at),
-    createdAt: row.created_at, updatedAt: row.updated_at, sessionExpiresAt: row.session_expires_at,
-    houseId: row.house_id ?? null,
-  })) };
-}
-
-export function setUserDisabled(userId: string, disabled: boolean): boolean {
-  const timestamp = now();
-  const result = disabled
-    ? db.prepare('UPDATE users SET disabled_at = ?, session_expires_at = NULL, updated_at = ? WHERE id = ?').run(timestamp, timestamp, userId)
-    : db.prepare('UPDATE users SET disabled_at = NULL, updated_at = ? WHERE id = ?').run(timestamp, userId);
-  return result.changes > 0;
-}
-
-export function revokeUserSession(userId: string): boolean {
-  const result = db.prepare('UPDATE users SET session_expires_at = NULL, updated_at = ? WHERE id = ?').run(now(), userId);
-  return result.changes > 0;
-}
-
-export function recordAdminAudit(actor: string, action: string, target?: string, details: Record<string, unknown> = {}): void {
-  db.transaction(() => {
-    db.prepare('INSERT INTO admin_audit (actor, action, target, details_json, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(actor, action, target ?? null, JSON.stringify(details), now());
-    db.prepare('DELETE FROM admin_audit WHERE id NOT IN (SELECT id FROM admin_audit ORDER BY id DESC LIMIT 10000)').run();
-  })();
-}
-
-export function listAdminAudit(limit: number): AdminAuditEntry[] {
-  const rows = db.prepare('SELECT id, actor, action, target, details_json, created_at FROM admin_audit ORDER BY id DESC LIMIT ?').all(limit) as any[];
-  return rows.map((row) => {
-    let details: Record<string, unknown> = {};
-    try { details = JSON.parse(row.details_json) as Record<string, unknown>; } catch { /* retain an empty object */ }
-    return { id: row.id, actor: row.actor, action: row.action, target: row.target, details, createdAt: row.created_at };
-  });
 }
 
 export async function backupDatabase(destinationPath: string): Promise<void> {
@@ -606,73 +424,6 @@ export function databaseStatus(): { ready: boolean; applicationId: number; schem
 
 export function checkpointDatabase(): void {
   db.pragma('wal_checkpoint(PASSIVE)');
-}
-
-// ── Chat moderation ────────────────────────────────────────────────
-export type ChatMessage = {
-  id: number;
-  userId: string;
-  nickname: string;
-  text: string;
-  flaggedAt: string | null;
-  hiddenAt: string | null;
-  hiddenBy: string | null;
-  createdAt: string;
-};
-
-export function recordChatMessage(userId: string, nickname: string, text: string): void {
-  db.prepare('INSERT INTO chat_messages (user_id, nickname, text, created_at) VALUES (?, ?, ?, ?)').run(userId, nickname, text, now());
-}
-
-export type ChatListFilter = { query?: string; includeHidden?: boolean; onlyHidden?: boolean; onlyFlagged?: boolean; userId?: string; limit: number; offset: number };
-
-export function listChatMessages(input: ChatListFilter): { items: ChatMessage[]; total: number } {
-  const conditions: string[] = [];
-  const params: any[] = [];
-  const query = input.query?.trim() ?? '';
-  if (query) { conditions.push("(nickname LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')"); params.push(`%${query.replace(/[\\%_]/g, '\\$&')}%`, `%${query.replace(/[\\%_]/g, '\\$&')}%`); }
-  if (input.userId) { conditions.push('user_id = ?'); params.push(input.userId); }
-  if (input.onlyFlagged) conditions.push('flagged_at IS NOT NULL');
-  if (input.onlyHidden) conditions.push('hidden_at IS NOT NULL');
-  else if (!input.includeHidden) conditions.push('hidden_at IS NULL');
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const total = (db.prepare(`SELECT COUNT(*) AS count FROM chat_messages ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`SELECT id, user_id, nickname, text, flagged_at, hidden_at, hidden_by, created_at FROM chat_messages ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
-  return { total, items: rows.map((row) => ({
-    id: row.id, userId: row.user_id, nickname: row.nickname, text: row.text,
-    flaggedAt: row.flagged_at ?? null, hiddenAt: row.hidden_at ?? null, hiddenBy: row.hidden_by ?? null, createdAt: row.created_at,
-  })) };
-}
-
-export type ChatAuthorSummary = { userId: string; nickname: string; messages: number; hidden: number; flagged: number; lastAt: string; disabled: boolean };
-
-export function listChatAuthors(limit: number): ChatAuthorSummary[] {
-  const rows = db.prepare(`
-    SELECT cm.user_id, COALESCE(MAX(u.nickname), MAX(cm.nickname)) AS nickname, COUNT(*) AS messages,
-           SUM(CASE WHEN cm.hidden_at IS NOT NULL THEN 1 ELSE 0 END) AS hidden,
-           SUM(CASE WHEN cm.flagged_at IS NOT NULL THEN 1 ELSE 0 END) AS flagged,
-           MAX(cm.created_at) AS last_at,
-           MAX(CASE WHEN u.disabled_at IS NOT NULL THEN 1 ELSE 0 END) AS disabled
-    FROM chat_messages cm LEFT JOIN users u ON u.id = cm.user_id
-    GROUP BY cm.user_id ORDER BY last_at DESC LIMIT ?
-  `).all(limit) as any[];
-  return rows.map((row) => ({
-    userId: row.user_id, nickname: row.nickname, messages: row.messages,
-    hidden: row.hidden ?? 0, flagged: row.flagged ?? 0, lastAt: row.last_at, disabled: Boolean(row.disabled),
-  }));
-}
-
-export function setChatMessageHidden(id: number, hidden: boolean, actor: string): boolean {
-  const timestamp = now();
-  const result = hidden
-    ? db.prepare('UPDATE chat_messages SET hidden_at = ?, hidden_by = ? WHERE id = ? AND hidden_at IS NULL').run(timestamp, actor, id)
-    : db.prepare('UPDATE chat_messages SET hidden_at = NULL, hidden_by = NULL WHERE id = ?').run(id);
-  return result.changes > 0;
-}
-
-export function flagChatMessage(id: number): boolean {
-  const result = db.prepare('UPDATE chat_messages SET flagged_at = ? WHERE id = ? AND flagged_at IS NULL').run(now(), id);
-  return result.changes > 0;
 }
 
 // ── Anti-abuse: registration tracking ──────────────────────────────────
@@ -705,105 +456,6 @@ export function registerUserAtomic(
 
 export function recordRegistration(ip: string, userId: string): void {
   db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
-}
-
-// ── Admin user & housing mutations ─────────────────────────────────
-export function updateAdminUserNickname(userId: string, nickname: string): { ok: boolean; reason?: string } {
-  const trimmed = nickname.trim();
-  if (!trimmed) return { ok: false, reason: '昵称不能为空' };
-  const clash = db.prepare('SELECT id FROM users WHERE nickname = ? COLLATE NOCASE AND id <> ?').get(trimmed, userId);
-  if (clash) return { ok: false, reason: '昵称已被占用' };
-  const result = db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?').run(trimmed, now(), userId);
-  return { ok: result.changes > 0 };
-}
-
-export function moveUserToHouse(userId: string, buildingId: string | null): { ok: boolean; reason?: string } {
-  if (buildingId !== null) {
-    const house = db.prepare('SELECT building_id FROM houses WHERE building_id = ?').get(buildingId);
-    if (!house) return { ok: false, reason: '住房不存在' };
-  }
-  const transaction = db.transaction(() => {
-    // If this resident owns any house, releasing their membership would leave
-    // that house with an owner who is no longer a member. Hand each such house
-    // to another current member, or (if it has none) drop the house, so the
-    // owner-is-a-member invariant that claimHouse/setHouseRoster rely on holds.
-    const owned = db.prepare('SELECT building_id FROM houses WHERE owner_id = ?').all(userId) as Array<{ building_id: string }>;
-    for (const { building_id } of owned) {
-      const next = db.prepare('SELECT user_id FROM house_members WHERE building_id = ? AND user_id <> ? ORDER BY joined_at LIMIT 1').get(building_id, userId) as { user_id: string } | undefined;
-      if (next) {
-        db.prepare('UPDATE houses SET owner_id = ?, updated_at = ? WHERE building_id = ?').run(next.user_id, now(), building_id);
-      } else {
-        db.prepare('DELETE FROM houses WHERE building_id = ?').run(building_id);
-      }
-    }
-    db.prepare('DELETE FROM house_members WHERE user_id = ?').run(userId);
-    if (buildingId) {
-      const members = (db.prepare('SELECT COUNT(*) AS count FROM house_members WHERE building_id = ?').get(buildingId) as { count: number }).count;
-      if (members >= 10) throw new Error('该住房已满员');
-      db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, userId, now());
-    }
-  });
-  try { transaction(); return { ok: true }; }
-  catch (error) { return { ok: false, reason: error instanceof Error ? error.message : '操作失败' }; }
-}
-
-export function setHouseRoster(buildingId: string, memberIds: string[]): { ok: boolean; reason?: string } {
-  const house = db.prepare('SELECT owner_id FROM houses WHERE building_id = ?').get(buildingId) as { owner_id: string } | undefined;
-  if (!house) return { ok: false, reason: '住房不存在' };
-  const unique = [...new Set(memberIds)].filter((id) => db.prepare('SELECT 1 FROM users WHERE id = ?').get(id));
-  if (!unique.includes(house.owner_id)) unique.unshift(house.owner_id);
-  if (unique.length > 10) return { ok: false, reason: '成员数不能超过 10 人' };
-  const transaction = db.transaction(() => {
-    db.prepare('DELETE FROM house_members WHERE building_id = ?').run(buildingId);
-    for (const id of unique) {
-      db.prepare('DELETE FROM house_members WHERE user_id = ? AND building_id <> ?').run(id, buildingId);
-      db.prepare('INSERT OR IGNORE INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, id, now());
-    }
-  });
-  try { transaction(); return { ok: true }; }
-  catch (error) { return { ok: false, reason: error instanceof Error ? error.message : '操作失败' }; }
-}
-
-export type AdminHouse = House & { memberCount: number };
-
-export function listAdminHouses(): AdminHouse[] {
-  return listHouses().map((house) => ({ ...house, memberCount: house.members.length }));
-}
-
-// ── Story progress admin views ─────────────────────────────────────
-export type StoryProgressRow = {
-  userId: string;
-  nickname: string;
-  storyId: string;
-  definitionVersion: number;
-  nodeId: string;
-  ending: string | null;
-  visitCount: number;
-  flags: Record<string, StoryFlagValue>;
-  updatedAt: string;
-};
-
-export function listStoryProgress(input: { query?: string; storyId?: string; limit: number; offset: number }): { items: StoryProgressRow[]; total: number } {
-  const conditions: string[] = [];
-  const params: any[] = [];
-  const query = input.query?.trim() ?? '';
-  if (query) {
-    conditions.push("(u.nickname LIKE ? ESCAPE '\\' OR sp.user_id LIKE ? ESCAPE '\\' OR sp.story_id LIKE ? ESCAPE '\\')");
-    const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
-    params.push(pattern, pattern, pattern);
-  }
-  if (input.storyId) { conditions.push('sp.story_id = ?'); params.push(input.storyId); }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const total = (db.prepare(`SELECT COUNT(*) AS count FROM story_progress sp LEFT JOIN users u ON u.id = sp.user_id ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`
-    SELECT sp.user_id, u.nickname, sp.story_id, sp.definition_version, sp.node_id, sp.ending, sp.visit_count, sp.flags_json, sp.updated_at
-    FROM story_progress sp LEFT JOIN users u ON u.id = sp.user_id
-    ${where} ORDER BY sp.updated_at DESC LIMIT ? OFFSET ?
-  `).all(...params, input.limit, input.offset) as any[];
-  return { total, items: rows.map((row) => ({
-    userId: row.user_id, nickname: row.nickname ?? '（已删除）', storyId: row.story_id, definitionVersion: row.definition_version,
-    nodeId: row.node_id, ending: row.ending ?? null, visitCount: row.visit_count, flags: parseStoryFlags(row.flags_json), updatedAt: row.updated_at,
-  })) };
 }
 
 // ── In-process backup restore ──────────────────────────────────────
@@ -899,18 +551,18 @@ export function createNpcChangeRequest(input: {
 }
 
 export function getNpcChangeRequest(id: number): NpcChangeRequest | null {
-  const row = db.prepare('SELECT * FROM npc_change_requests WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM npc_change_requests WHERE id = ?').get(id) as NpcChangeRequestRow | undefined;
   return row ? rowNpcChangeRequest(row) : null;
 }
 
 export function listNpcChangeRequests(input: { status?: NpcChangeStatus; npcId?: string; limit: number; offset: number }): { items: NpcChangeRequest[]; total: number } {
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
   if (input.status) { conditions.push('status = ?'); params.push(input.status); }
   if (input.npcId) { conditions.push('npc_id = ?'); params.push(input.npcId); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM npc_change_requests ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`SELECT * FROM npc_change_requests ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as any[];
+  const rows = db.prepare(`SELECT * FROM npc_change_requests ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as NpcChangeRequestRow[];
   return { total, items: rows.map(rowNpcChangeRequest) };
 }
 
@@ -935,13 +587,13 @@ export function createAdminNpcChangeRequest(input: {
   return getNpcChangeRequest(Number(result.lastInsertRowid))!;
 }
 
-function rowNpcChangeRequest(row: any): NpcChangeRequest {
+function rowNpcChangeRequest(row: NpcChangeRequestRow): NpcChangeRequest {
   let change: Record<string, unknown> = {};
   try { change = JSON.parse(row.change_json) as Record<string, unknown>; } catch { /* keep empty */ }
   return {
     id: row.id, requesterId: row.requester_id ?? null, requesterNickname: row.requester_nickname,
-    npcId: row.npc_id, kind: row.kind, title: row.title, summary: row.summary, change,
-    status: row.status, reviewer: row.reviewer ?? null, reviewNote: row.review_note ?? null,
+    npcId: row.npc_id, kind: row.kind as NpcChangeKind, title: row.title, summary: row.summary, change,
+    status: row.status as NpcChangeStatus, reviewer: row.reviewer ?? null, reviewNote: row.review_note ?? null,
     createdAt: row.created_at, reviewedAt: row.reviewed_at ?? null,
   };
 }

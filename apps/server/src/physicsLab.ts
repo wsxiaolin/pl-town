@@ -48,15 +48,15 @@ export async function authenticateAccount(login: string, password: string) {
     body: JSON.stringify({ Login: login, Password: password, Version: ACCOUNT_LOGIN_VERSION, Device: { Identifier: '7db01528cf13e2199e141c402d79190e', Language: 'Chinese' } }),
     signal: AbortSignal.timeout(15_000),
   });
-  const data = await response.json().catch(() => ({})) as Record<string, any>;
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok || data.Status !== 200 || !data.AuthCode) {
-    const message = String(data.Message || '');
+    const message = typeof data.Message === 'string' ? data.Message : '';
     if (message === 'Login.Password.Invalid') throw new Error('密码不正确，请检查登录方式和密码');
     if (message === 'Login.Invalid') throw new Error('登录名或密码不正确');
     if (message === 'Login.Expired') throw new Error('登录请求已过期，请稍后重试');
     throw new Error(message || 'Physics Lab 登录失败');
   }
-  return { token: data.Token || '', authCode: data.AuthCode, user: data.Data?.User || null };
+  return { token: typeof data.Token === 'string' ? data.Token : '', authCode: data.AuthCode as string, user: (data.Data as { User?: { ID?: unknown; Nickname?: unknown } } | undefined)?.User ?? null };
 }
 
 export async function requestAccount(session: ApiSession, path: string, body: unknown) {
@@ -64,9 +64,9 @@ export async function requestAccount(session: ApiSession, path: string, body: un
     method: 'POST', headers: { 'content-type': 'application/json', 'x-API-Token': session.token, 'x-API-AuthCode': session.authCode, 'x-API-Version': String(API_VERSION) },
     body: JSON.stringify(body), signal: AbortSignal.timeout(15_000),
   });
-  const data = await response.json().catch(() => ({})) as Record<string, any>;
-  if (!response.ok || data.Status !== 200) throw new Error(data.Message || 'Physics Lab request failed');
-  return data;
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok || data.Status !== 200) throw new Error(typeof data.Message === 'string' ? data.Message : 'Physics Lab request failed');
+  return data as Record<string, unknown>;
 }
 
 function imageUrl(id: string, image = 0) {
@@ -84,9 +84,9 @@ async function authenticate() {
     signal: AbortSignal.timeout(12_000),
   });
   if (!response.ok) throw new Error(`Physics Lab authentication failed (${response.status})`);
-  const data = await response.json() as Record<string, any>;
-  if (data.Status !== 200 || !data.AuthCode) throw new Error(`Physics Lab authentication failed: ${data.Message || 'unknown response'}`);
-  session = { token: data.Token || '', authCode: data.AuthCode, expiresAt: Date.now() + 30 * 60 * 1000 };
+  const data = await response.json() as Record<string, unknown>;
+  if (data.Status !== 200 || !data.AuthCode) throw new Error(`Physics Lab authentication failed: ${typeof data.Message === 'string' ? data.Message : 'unknown response'}`);
+  session = { token: typeof data.Token === 'string' ? data.Token : '', authCode: data.AuthCode as string, expiresAt: Date.now() + 30 * 60 * 1000 };
   return session;
 }
 
@@ -111,19 +111,22 @@ export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'di
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`Physics Lab works request failed (${response.status})`);
-  const payload = await response.json() as Record<string, any>;
-  if (payload.Status !== 200) throw new Error(`Physics Lab works request failed: ${payload.Message || 'unknown response'}`);
-  const values = Array.isArray(payload.Data?.$values) ? payload.Data.$values : [];
+  const payload = await response.json() as Record<string, unknown>;
+  if (payload.Status !== 200) throw new Error(`Physics Lab works request failed: ${typeof payload.Message === 'string' ? payload.Message : 'unknown response'}`);
+  const values = Array.isArray((payload.Data as { $values?: unknown[] } | undefined)?.$values) ? (payload.Data as { $values: unknown[] }).$values : [];
   const works = values
-    .filter((item: any) => scope !== 'senate' || VOLUNTEER_ROLES.has(item.User?.Verification))
-    .map((item: any): PublicWork => ({
-      id: String(item.ID), title: String(item.Subject || 'Untitled work'), category: String(item.Category || 'Experiment'),
-      author: String(item.User?.Nickname || 'Anonymous'), authorId: String(item.User?.ID || ''),
-      verification: item.User?.Verification || null,
-      tags: Array.isArray(item.Tags) ? item.Tags.filter((tag: unknown) => typeof tag === 'string' && !String(tag).startsWith('Type-')).slice(0, 5) : [],
-      imageUrl: imageUrl(String(item.ID), Number(item.Image) || 0), createdAt: Number(item.CreationDate) || 0,
-      visits: Number(item.Visits) || 0, stars: Number(item.Stars) || 0, comments: Number(item.Comments) || 0, remixes: Number(item.Remixes) || 0,
-    }));
+    .filter((item: unknown) => scope !== 'senate' || VOLUNTEER_ROLES.has(((item as { User?: { Verification?: string } }).User ?? {}).Verification ?? ''))
+    .map((item: unknown): PublicWork => {
+      const record = item as { ID?: unknown; Subject?: unknown; Category?: unknown; User?: { Nickname?: unknown; ID?: unknown; Verification?: string | null }; Tags?: unknown; Image?: unknown; CreationDate?: unknown; Visits?: unknown; Stars?: unknown; Comments?: unknown; Remixes?: unknown };
+      return {
+      id: String(record.ID), title: String(record.Subject || 'Untitled work'), category: String(record.Category || 'Experiment'),
+      author: String(record.User?.Nickname || 'Anonymous'), authorId: String(record.User?.ID || ''),
+      verification: record.User?.Verification || null,
+      tags: Array.isArray(record.Tags) ? record.Tags.filter((tag: unknown) => typeof tag === 'string' && !String(tag).startsWith('Type-')).slice(0, 5) : [],
+      imageUrl: imageUrl(String(record.ID), Number(record.Image) || 0), createdAt: Number(record.CreationDate) || 0,
+      visits: Number(record.Visits) || 0, stars: Number(record.Stars) || 0, comments: Number(record.Comments) || 0, remixes: Number(record.Remixes) || 0,
+      };
+    });
   cacheWorks(scope, works);
   return { source: 'live' as const, cached: false, works };
 }
@@ -145,9 +148,12 @@ export async function queryPublicWorks(input: unknown) {
   if (cached && cached.expiresAt > Date.now()) return { source:'live' as const, cached:true, works:cached.works };
   const credentials = await authenticate();
   const response = await fetchUpstream(`${API_BASE}/Contents/QueryExperiments`, { method:'POST', headers:{'content-type':'application/json','x-API-Token':credentials.token,'x-API-AuthCode':credentials.authCode,'x-API-Version':String(API_VERSION)}, body:JSON.stringify({Query:query}), signal:AbortSignal.timeout(15_000) });
-  const payload = await response.json() as Record<string, any>;
-  if (!response.ok || payload.Status !== 200) throw new Error(payload.Message || `Physics Lab works request failed (${response.status})`);
-  const values = Array.isArray(payload.Data?.$values) ? payload.Data.$values : [];
-  const works = values.map((item:any):PublicWork=>({ id:String(item.ID), title:String(item.Subject||'Untitled work'), category:String(item.Category||query.Category), author:String(item.User?.Nickname||'Anonymous'), authorId:String(item.User?.ID||''), verification:item.User?.Verification||null, tags:Array.isArray(item.Tags)?item.Tags.filter((tag:unknown)=>typeof tag==='string'&&!String(tag).startsWith('Type-')).slice(0,5):[], imageUrl:imageUrl(String(item.ID),Number(item.Image)||0), createdAt:Number(item.CreationDate)||0, visits:Number(item.Visits)||0, stars:Number(item.Stars)||0, comments:Number(item.Comments)||0, remixes:Number(item.Remixes)||0 }));
+  const payload = await response.json() as Record<string, unknown>;
+  if (!response.ok || payload.Status !== 200) throw new Error(typeof payload.Message === 'string' ? payload.Message : `Physics Lab works request failed (${response.status})`);
+  const values = Array.isArray((payload.Data as { $values?: unknown[] } | undefined)?.$values) ? (payload.Data as { $values: unknown[] }).$values : [];
+  const works = values.map((item: unknown): PublicWork => {
+    const record = item as { ID?: unknown; Subject?: unknown; Category?: unknown; User?: { Nickname?: unknown; ID?: unknown; Verification?: string | null }; Tags?: unknown; Image?: unknown; CreationDate?: unknown; Visits?: unknown; Stars?: unknown; Comments?: unknown; Remixes?: unknown };
+    return { id:String(record.ID), title:String(record.Subject||'Untitled work'), category:String(record.Category||(query.Category as string)), author:String(record.User?.Nickname||'Anonymous'), authorId:String(record.User?.ID||''), verification:record.User?.Verification||null, tags:Array.isArray(record.Tags)?record.Tags.filter((tag:unknown)=>typeof tag==='string'&&!String(tag).startsWith('Type-')).slice(0,5):[], imageUrl:imageUrl(String(record.ID),Number(record.Image)||0), createdAt:Number(record.CreationDate)||0, visits:Number(record.Visits)||0, stars:Number(record.Stars)||0, comments:Number(record.Comments)||0, remixes:Number(record.Remixes)||0 };
+  });
   cacheWorks(cacheKey,works); return {source:'live' as const,cached:false,works};
 }

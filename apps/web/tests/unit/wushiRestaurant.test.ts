@@ -5,6 +5,13 @@ import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { isNpcHiddenAtHour } from '../../src/city/npcSystem';
 import { createBuildingInteraction } from '../../src/city/buildingInteraction';
 import { createWildMushroomRestaurant } from '../../src/city/wildMushroomRestaurant';
+import type { BuildingEntity } from '../../src/city/buildingEntity';
+import type { CityDialogController } from '../../src/adapters/ui/cityDialogController';
+
+const stubDialogs = (onOpen: () => void): CityDialogController =>
+  ({ openBuilding: () => { onOpen(); }, closeBuilding: () => {} } as unknown as CityDialogController);
+const stubBuilding = (id: string): BuildingEntity =>
+  ({ id } as unknown as BuildingEntity);
 
 test('Wushi restaurant is a fixed unique building with a complete dialogue tree', () => {
   const restaurant = BUILDING_DEFS.find((building) => building.id === 'wushi_restaurant');
@@ -20,7 +27,7 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   const distanceToPond = Math.hypot(restaurant.x - southwestPond.x, restaurant.z - southwestPond.z);
   assert.ok(distanceToPond > southwestPond.radius + 3, 'restaurant footprint stays clear of the southwest pond');
 
-  const tree = BUILDING_CONTENT.wushi_restaurant.dialogTree;
+  const tree = BUILDING_CONTENT.wushi_restaurant!.dialogTree!;
   assert.equal(tree.length, 17);
   tree.forEach((node, nodeIndex) => node.options.forEach((option) => {
     assert.ok(option.next === null || (option.next >= 0 && option.next < tree.length), `node ${nodeIndex} has a valid destination`);
@@ -39,7 +46,7 @@ test('wild mushroom restaurant uses the standard unlock flow', () => {
       interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
       openShop: () => {},
     } }),
-    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getCityDialogs: () => stubDialogs(() => { modalOpened = true; }),
     getEchoStoryController: () => null,
     getStatsPanelController: () => null,
     getCommunityPanels: () => null,
@@ -49,7 +56,7 @@ test('wild mushroom restaurant uses the standard unlock flow', () => {
     getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; return 'opened'; } }),
   });
 
-  interaction.navigateTo({ id: 'writingclub_outer' });
+  interaction.navigateTo(stubBuilding('writingclub_outer'));
   assert.equal(interacted, true);
   assert.equal(modalOpened, false);
   assert.equal(trackCount, 1);
@@ -64,7 +71,7 @@ test('wild mushroom restaurant falls back to the building modal once exhausted',
       interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
       openShop: () => {},
     } }),
-    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getCityDialogs: () => stubDialogs(() => { modalOpened = true; }),
     getEchoStoryController: () => null,
     getStatsPanelController: () => null,
     getCommunityPanels: () => null,
@@ -74,7 +81,7 @@ test('wild mushroom restaurant falls back to the building modal once exhausted',
     getWildMushroomRestaurant: () => ({ interact: () => 'exhausted' }),
   });
 
-  interaction.navigateTo({ id: 'writingclub_outer' });
+  interaction.navigateTo(stubBuilding('writingclub_outer'));
   assert.equal(modalOpened, true);
   assert.equal(trackCount, 1);
 });
@@ -88,7 +95,7 @@ test('wild mushroom restaurant falls back to the building modal when dialogs are
       interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
       openShop: () => {},
     } }),
-    getCityDialogs: () => ({ openBuilding: () => { modalOpened = true; }, closeBuilding: () => {} }),
+    getCityDialogs: () => stubDialogs(() => { modalOpened = true; }),
     getEchoStoryController: () => null,
     getStatsPanelController: () => null,
     getCommunityPanels: () => null,
@@ -98,7 +105,7 @@ test('wild mushroom restaurant falls back to the building modal when dialogs are
     getWildMushroomRestaurant: () => ({ interact: () => 'no-dialog' }),
   });
 
-  interaction.navigateTo({ id: 'writingclub_outer' });
+  interaction.navigateTo(stubBuilding('writingclub_outer'));
   assert.equal(modalOpened, true);
   assert.equal(trackCount, 1);
 });

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
+export type { SceneInterestPointId };
 import { createWestBeach } from './westBeach';
 
 export interface SceneInterestPointEntity {

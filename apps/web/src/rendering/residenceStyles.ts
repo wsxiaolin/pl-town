@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import type { MaterialParameters } from './meshFactory';
 
 type Part = (
   group: THREE.Group | null,
   geometry: THREE.BufferGeometry,
-  material: Record<string, unknown>,
-  position?: readonly [number, number, number],
+  material: THREE.Material | MaterialParameters,
+  position?: [number, number, number],
   castShadow?: boolean,
 ) => THREE.Mesh;
 
@@ -53,7 +54,7 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
     { wall: 0xd9eadc, wallTex: 'residence_plaster', roof: 0x6c9279, roofTex: 'residence_tile' },
   ] as const;
   const palette = families[Math.floor(styleId / 2)]!;
-  const mesh = (geometry: THREE.BufferGeometry, material: Record<string, unknown>, position: readonly [number, number, number], cast = true) =>
+  const mesh = (geometry: THREE.BufferGeometry, material: THREE.Material | MaterialParameters, position: [number, number, number], cast = true) =>
     part(group, geometry, material, position, cast);
 
   mesh(new THREE.BoxGeometry(width + 0.38, 0.12, depth + 0.38), { color: 0xe0dfdc, roughness: 0.86, tex: 'stone', rx: 1, ry: 1 }, [0, 0.06, 0]);

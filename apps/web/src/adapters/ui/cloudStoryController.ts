@@ -104,12 +104,12 @@ export function createCloudStoryController(options: Options) {
     }
     const transition = runtime.choose(choiceId);
     if (!transition) return;
-    const { choice, state } = transition;
+    const { choice, state, resumptionNodeId } = transition;
     const sent = options.send({
       type: 'story.update',
       storyId: options.definition.id,
       definitionVersion: options.definition.definitionVersion,
-      nodeId: choice.next,
+      nodeId: resumptionNodeId,
       flags: { ...state.flags },
       ...(choice.ending ? { ending: choice.ending } : {}),
       ...(choice.visit ? { visit: true } : {}),
@@ -120,7 +120,9 @@ export function createCloudStoryController(options: Options) {
     }
     // The server remains authoritative, but rendering the deterministic next
     // node immediately keeps a choice responsive while its snapshot is in flight.
-    snapshot = state;
+    // Keep the server snapshot at the savepoint while the runtime renders the
+    // live transient node immediately.
+    snapshot = { ...state, nodeId: resumptionNodeId };
     render();
   };
 
