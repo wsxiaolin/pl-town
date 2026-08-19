@@ -53,6 +53,7 @@ export function bindCityUiEvents(options: {
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (options.isMapOpen()) return options.toggleMap();
+    if (document.getElementById('academyReader')?.classList.contains('open')) return options.closeAcademyReader();
     options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeModal(); options.closeNpcDialog();
   }, { signal });
   document.getElementById('loginBtn')?.addEventListener('click', options.login, { signal });

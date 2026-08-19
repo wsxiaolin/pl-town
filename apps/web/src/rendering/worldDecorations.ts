@@ -4,6 +4,7 @@ import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createResidenceModel } from './residenceStyles';
+import { isFilmCityClearing } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
@@ -195,7 +196,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         const seeded=Math.abs(Math.round((x+41)*97+(z+43)*193+k*389))%1000/1000;
         if(seeded>density)return;
         const lx=x+dx, lz=z+dz;
-        if (Math.abs(lx - 3) < 0.01 && Math.abs(lz + 15) < 0.01) return;
+        if(isFilmCityClearing(lx,lz))return;
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;

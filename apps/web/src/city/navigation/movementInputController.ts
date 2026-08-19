@@ -45,6 +45,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   let centerX = 0;
   let centerY = 0;
   let active = false;
+  let locked = false;
 
   const touchCapable = options.window.navigator.maxTouchPoints > 0
     || options.window.matchMedia('(any-pointer: coarse)').matches;
@@ -132,6 +133,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   }, { once: true });
 
   function getMovement(): MovementVector {
+    if (locked) { movement.x = 0; movement.z = 0; return movement; }
     let screenX = 0;
     let screenY = 0;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) screenX -= 1;
@@ -148,5 +150,5 @@ export function createMovementInputController(options: MovementInputControllerOp
     return movement;
   }
 
-  return { getMovement };
+  return { getMovement, setLocked: (value: boolean) => { locked = value; if (value) { keys.clear(); finishPointer(); } } };
 }
