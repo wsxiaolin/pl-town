@@ -261,6 +261,16 @@ try {
   if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
   if (!alice.hello.progress.unlockedBuildings.includes('writingclub_outer')) throw new Error('The wild mushroom restaurant must be unlocked by default');
 
+  send(bob, { type: 'progress.filmCity.experience' });
+  const firstFilmCityExperience = await waitFor(bob, 'progress.updated', (message) => message.event?.type === 'film_city.experience' && message.event.purchased === true);
+  if (firstFilmCityExperience.progress.currency !== 800 || firstFilmCityExperience.event.price !== 400) throw new Error('Film city experience must atomically deduct 400 currency');
+  send(bob, { type: 'progress.filmCity.experience' });
+  await waitFor(bob, 'progress.updated', (message) => message.event?.type === 'film_city.experience' && message.progress.currency === 400);
+  send(bob, { type: 'progress.filmCity.experience' });
+  await waitFor(bob, 'progress.updated', (message) => message.event?.type === 'film_city.experience' && message.progress.currency === 0);
+  send(bob, { type: 'progress.filmCity.experience' });
+  await waitFor(bob, 'error', (message) => message.message === 'Insufficient currency');
+
   send(alice, { type: 'story.get', storyId: 'sample-story' });
   const freshStory = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
   if (freshStory.story.nodeId !== 'start' || freshStory.story.visitCount !== 0 || Object.keys(freshStory.story.flags).length !== 0) throw new Error('New story progress must start from a clean server state');

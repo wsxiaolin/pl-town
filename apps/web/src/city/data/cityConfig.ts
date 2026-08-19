@@ -34,6 +34,14 @@ export const PALETTE = Object.freeze({
 export const ROAD_COORDS = Object.freeze([-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36]);
 export const CITY_LIMIT = 42;
 export const BUILDING_PLATFORM_HEIGHT = 0.3;
+export const FILM_CITY_CLEARINGS = Object.freeze([
+  Object.freeze([-9, -21] as const),
+  Object.freeze([-9, -27] as const),
+]);
+
+export function isFilmCityClearing(x: number, z: number): boolean {
+  return FILM_CITY_CLEARINGS.some(([clearingX, clearingZ]) => x === clearingX && z === clearingZ);
+}
 export const WEST_BEACH = Object.freeze({
   coastlineX: -43.2,
   deepWaterX: -44.5,

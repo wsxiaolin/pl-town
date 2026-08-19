@@ -318,6 +318,15 @@ export function purchaseItem(userId: string, itemId: string, quantity: number, u
   return getPlayerProgress(userId);
 }
 
+export function purchaseFilmCityExperience(userId: string, price: number): PlayerProgress {
+  db.transaction(() => {
+    ensureProgress(db, userId, now());
+    const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(price, now(), userId, price);
+    if (!charged.changes) throw new Error('Insufficient currency');
+  })();
+  return getPlayerProgress(userId);
+}
+
 export function consumeItem(userId: string, itemId: string, quantity: number): PlayerProgress {
   db.transaction(() => {
     ensureProgress(db, userId, now());

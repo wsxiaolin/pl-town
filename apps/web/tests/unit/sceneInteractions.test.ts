@@ -6,6 +6,8 @@ import { createSceneInterestPointController } from '../../src/city/sceneInterest
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { residenceStyleFor } from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
+import { isFilmCityClearing } from '../../src/city/data/cityConfig';
+import { FILM_CITY_EXPERIENCE_PRICE, FILM_CITY_SHOTS } from '../../src/city/filmCity/filmCityExperienceController';
 import { MUSIC_HALL_LYRICS } from '../../src/city/data/musicHallLyrics';
 import {
   beijingDayKey,
@@ -127,6 +129,17 @@ test('建筑更新保留音乐厅歌词和两家商店名称', () => {
   assert.equal(BUILDING_DEFS.find((building) => building.id === 'mall_west')?.label, '断星玄');
   assert.equal(BUILDING_CONTENT.mall_south!.name, '金月店');
   assert.equal(BUILDING_CONTENT.mall_west!.name, '断星玄');
+});
+
+test('影视城占用两处住宅清场并提供三段式航拍', () => {
+  const filmCity = BUILDING_DEFS.find((building) => building.id === 'film_city');
+  assert.deepEqual([filmCity?.x, filmCity?.z], [-9, -21]);
+  assert.equal(isFilmCityClearing(-9, -21), true);
+  assert.equal(isFilmCityClearing(-9, -27), true);
+  assert.equal(isFilmCityClearing(-9, -15), false);
+  assert.equal(FILM_CITY_EXPERIENCE_PRICE, 400);
+  assert.deepEqual(FILM_CITY_SHOTS.map((shot) => shot.phase), ['wide', 'near', 'closeup']);
+  assert.equal(FILM_CITY_SHOTS.reduce((total, shot) => total + shot.duration, 0), 30);
 });
 
 test('west beach encounter grants Tirpitz once and awards the achievement', async () => {
