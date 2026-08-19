@@ -15,6 +15,7 @@ import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
+import { startInvasionCG, stopInvasionCG } from './invasionCg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
@@ -574,6 +575,8 @@ function setupScene() {
     burnCity: () => burnCityEffect.trigger(),
     burnCityActive: () => burnCityEffect.isActive(),
     burnCityProgress: () => burnCityEffect.getProgress(),
+    playInvasionCG: startInvasionCG,
+    stopInvasionCG,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -790,6 +793,7 @@ export function destroyMiniCity() {
   clearInterval(trackingInterval);
   multiplayerHousing?.destroy();
   destroyCG();
+  stopInvasionCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
   npcSystem?.destroy();
