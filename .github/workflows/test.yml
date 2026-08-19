@@ -26,7 +26,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - name: Configure npm network retries
+        run: npm config set registry https://registry.npmjs.org/ && npm config set fetch-retries 3 && npm config set fetch-retry-mintimeout 1000 && npm config set fetch-retry-maxtimeout 10000 && npm config set fetch-timeout 120000
+
+      - run: npm ci --prefer-offline
 
       - name: Source-size, typecheck, build
         run: npm run typecheck && npm run build
@@ -62,7 +65,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - name: Configure npm network retries
+        run: npm config set registry https://registry.npmjs.org/ && npm config set fetch-retries 3 && npm config set fetch-retry-mintimeout 1000 && npm config set fetch-retry-maxtimeout 10000 && npm config set fetch-timeout 120000
+
+      - run: npm ci --prefer-offline
 
       # Xvfb (virtual display) + the Vulkan/SwiftShader software-GL stack that
       # headed Chromium needs to create a WebGL context in a headless runner.

@@ -33,13 +33,16 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Configure npm network retries
+        run: npm config set registry https://registry.npmjs.org/ && npm config set fetch-retries 3 && npm config set fetch-retry-mintimeout 1000 && npm config set fetch-retry-maxtimeout 10000 && npm config set fetch-timeout 120000
+
       - name: Install project dependencies
         run: |
           # pl-town 是 npm workspace（apps/web + apps/server），根目录有 package-lock.json
           if [ -f "package-lock.json" ]; then
-            npm ci
+            npm ci --prefer-offline
           else
-            npm install
+            npm install --prefer-offline
           fi
 
       - name: Install OpenCode CLI
