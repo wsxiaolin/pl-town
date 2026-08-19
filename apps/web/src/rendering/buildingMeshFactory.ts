@@ -843,7 +843,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const bodyMat = stdMat({color:0xdce7ec, roughness:0.28, metalness:0.24, tex:'metal', rx:1, ry:4});
     bodyMat.emissive = new THREE.Color(0x8aaed0); bodyMat.emissiveIntensity = 0;
     const body = mk(new THREE.CylinderGeometry(0.38, 0.74, 5.25, 16), bodyMat);
-    body.position.y = baseY + 2.625; body.castShadow = body.receiveShadow = true; g.add(body);
+    body.position.y = baseY + 2.625 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
     const deckY = baseY + 3.25;
     part(g, new THREE.CylinderGeometry(1.33, 1.33, 0.16, 24), {color:0x4f6570, roughness:0.38, metalness:0.42, tex:'metal', rx:2, ry:1}, [0, deckY, 0]);
     part(g, new THREE.CylinderGeometry(1.05, 1.1, 0.55, 24), {color:0x9fc6df, roughness:0.12, metalness:0.38, tex:'glass', rx:2, ry:1, emissive:0x6a9fc8, emissiveIntensity:0.08}, [0, deckY + 0.34, 0]);
@@ -869,7 +869,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const bodyMat = stdMat({color:0xe95e3f, roughness:0.42, tex:'wall', rx:2, ry:1});
     bodyMat.emissive = new THREE.Color(0xc83f2d); bodyMat.emissiveIntensity = 0;
     const body = mk(new THREE.BoxGeometry(width, height, depth), bodyMat);
-    body.position.y = baseY + height / 2; body.castShadow = body.receiveShadow = true; g.add(body);
+    body.position.y = baseY + height / 2 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
     const top = baseY + height;
     part(g, new THREE.BoxGeometry(width + 0.24, 0.16, depth + 0.24), {color:0xf1c54a, roughness:0.38, tex:'metal', rx:2, ry:2}, [0, top + 0.08, 0]);
     const glass = {color:0x9ac7dc, emissive:0x5b92bd, emissiveIntensity:0.08, roughness:0.14, metalness:0.25, tex:'glass', rx:1, ry:1};
@@ -895,7 +895,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const bodyMat = stdMat({color:0x7a5238, roughness:0.63, tex:'residence_wood', rx:2, ry:2});
     bodyMat.emissive = new THREE.Color(0x3d2418); bodyMat.emissiveIntensity = 0;
     const body = mk(new THREE.BoxGeometry(width, height, depth), bodyMat);
-    body.position.y = baseY + height / 2; body.castShadow = body.receiveShadow = true; g.add(body);
+    body.position.y = baseY + height / 2 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
     const top = baseY + height;
     const roof = part(g, new THREE.ConeGeometry(2.22, 1.08, 4), {color:0x36534e, roughness:0.54, tex:'residence_tile', rx:2, ry:1}, [0, top + 0.54, 0]);
     roof.rotation.y = Math.PI / 4;
