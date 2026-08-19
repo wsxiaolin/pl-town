@@ -1,9 +1,47 @@
 import * as THREE from 'three';
 import type { ResourcePool } from '../core/ResourcePool';
+import groundCityColor from '../assets/textures/ground_city_color.png';
+import groundDistrictColor from '../assets/textures/ground_district_color.png';
+import groundGrassColor from '../assets/textures/ground_grass_color.png';
+import asphaltColor from '../assets/textures/road_asphalt_color.png';
+import pavementColor from '../assets/textures/road_pavement_color.png';
+import wallPlasterColor from '../assets/textures/wall_plaster_color.png';
+import stoneLightColor from '../assets/textures/stone_light_color.png';
+import brickWarmColor from '../assets/textures/brick_warm_color.png';
+import woodColor from '../assets/textures/wood_color.png';
+import metalColor from '../assets/textures/metal_color.png';
+import roofTileColor from '../assets/textures/rooftile_color.png';
+import shingleColor from '../assets/textures/residence_shingle_color.png';
+import wetAsphaltColor from '../assets/textures/road_asphalt_wet_color.png';
+import snowGroundColor from '../assets/textures/snow_ground_color.png';
+import snowRoofColor from '../assets/textures/snow_roof_color.png';
+import sandColor from '../assets/textures/sand_color.png';
 
 type Canvas2D = CanvasRenderingContext2D;
 type DrawFn = (ctx: Canvas2D, size: number) => void;
 type RGB = [number, number, number];
+
+const GENERATED_TEXTURES: Record<string, string> = {
+  ground6: groundCityColor,
+  ground2: groundDistrictColor,
+  ground4: groundGrassColor,
+  ground5: groundDistrictColor,
+  asphalt: asphaltColor,
+  road: asphaltColor,
+  pavement: pavementColor,
+  wall: wallPlasterColor,
+  residence_plaster: wallPlasterColor,
+  stone: stoneLightColor,
+  brick: brickWarmColor,
+  academybrick: brickWarmColor,
+  wood: woodColor,
+  residence_wood: woodColor,
+  metal: metalColor,
+  rooftile: roofTileColor,
+  residence_tile: roofTileColor,
+  residence_shingle: shingleColor,
+  ground: sandColor,
+};
 
 export function createProceduralTextureLibrary(
   resources: ResourcePool,
@@ -21,6 +59,31 @@ export function createProceduralTextureLibrary(
     return _texCanvases[key];
   }
   function _tex(key: string, rx = 1, ry = 1) {
+    const weather = readWeather();
+    const generatedKey = weather === 'rain' && (key === 'asphalt' || key === 'road')
+      ? 'wet_asphalt'
+      : weather === 'snow' && (key.startsWith('ground') || key === 'pavement' || key === 'asphalt' || key === 'road')
+        ? 'snow_ground'
+        : weather === 'snow' && (key === 'rooftile' || key === 'residence_tile' || key === 'residence_shingle')
+          ? 'snow_roof'
+          : key;
+    const generatedSource = generatedKey === 'wet_asphalt' ? wetAsphaltColor
+      : generatedKey === 'snow_ground' ? snowGroundColor
+        : generatedKey === 'snow_roof' ? snowRoofColor
+          : GENERATED_TEXTURES[generatedKey];
+    if (readTextureRendering() && generatedSource) {
+      return resources.texture(`generated:repeat:${generatedKey}:${rx || 1}:${ry || 1}`, () => {
+        const t = new THREE.TextureLoader().load(generatedSource);
+        t.name = `generated_${generatedKey}`;
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+        t.colorSpace = THREE.SRGBColorSpace;
+        const renderer = getRenderer();
+        t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), getAnisotropy()) : 1;
+        t.repeat.set(rx || 1, ry || 1);
+        return t;
+      });
+    }
     const c = _texCanvases[key];
     if (!c) return null;
     const repeatX = rx || 1, repeatY = ry || 1;
@@ -35,6 +98,14 @@ export function createProceduralTextureLibrary(
       t.repeat.set(repeatX, repeatY);
       return t;
     });
+  }
+  function readTextureRendering(): boolean {
+    try { return Boolean(JSON.parse(localStorage.getItem('minicityRenderSettings') || 'null')?.textureRendering); }
+    catch { return false; }
+  }
+  function readWeather(): 'clear' | 'rain' | 'snow' {
+    const weather = document.body.dataset.weather;
+    return weather === 'rain' || weather === 'snow' ? weather : 'clear';
   }
   function _texClamp(key: string) {
     const c = _texCanvases[key];

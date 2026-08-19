@@ -38,6 +38,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   const anisotropyValue = panel.querySelector<HTMLOutputElement>('#renderAnisotropyValue')!;
   const shadows = panel.querySelector<HTMLInputElement>('#renderShadows')!;
   const exposure = panel.querySelector<HTMLInputElement>('#renderExposure')!;
+  const textureRendering = panel.querySelector<HTMLInputElement>('#renderTextureRendering')!;
   const exposureValue = panel.querySelector<HTMLOutputElement>('#renderExposureValue')!;
   const presetStatus = panel.querySelector<HTMLElement>('#renderPresetStatus')!;
   const presetButtons = [...panel.querySelectorAll<HTMLButtonElement>('[data-render-preset]')];
@@ -59,6 +60,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   anisotropy.value = String(selectSupportedAnisotropy(settings.anisotropy, normalizedMaxAnisotropy));
   shadows.checked = settings.shadows;
   exposure.value = String(settings.exposure);
+  textureRendering.checked = settings.textureRendering;
 
   for (const option of anisotropy.options) {
     option.disabled = Number(option.value) > normalizedMaxAnisotropy;
@@ -74,10 +76,10 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   );
 
   const presets: Record<RenderPresetName, Omit<RenderSettings, 'exposure'>> = {
-    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false },
-    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false },
-    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false },
-    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true },
+    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false, textureRendering: false },
+    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true },
+    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true },
+    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true },
   };
 
   const currentValues = (): Omit<RenderSettings, 'exposure'> => ({
@@ -85,6 +87,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
     antialias: antialias.checked,
     anisotropy: Number(anisotropy.value),
     shadows: shadows.checked,
+    textureRendering: textureRendering.checked,
   });
 
   const updateLabels = () => {
@@ -123,6 +126,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
       antialias.checked = preset.antialias;
       anisotropy.value = String(preset.anisotropy);
       shadows.checked = preset.shadows;
+      textureRendering.checked = preset.textureRendering;
       updateLabels();
     }, { signal });
   }
@@ -131,6 +135,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   antialias.addEventListener('change', updateLabels, { signal });
   anisotropy.addEventListener('change', updateLabels, { signal });
   shadows.addEventListener('change', updateLabels, { signal });
+  textureRendering.addEventListener('change', updateLabels, { signal });
   exposure.addEventListener('input', updateLabels, { signal });
   panel.querySelector('#renderSettingsApply')!.addEventListener('click', () => {
     localStorage.setItem(RENDER_SETTINGS_KEY, JSON.stringify({

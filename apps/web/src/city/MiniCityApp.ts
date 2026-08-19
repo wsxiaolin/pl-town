@@ -96,6 +96,8 @@ let playerMarker: THREE.Group | null = null; // 玩家头顶的三角标记，�
 let cameraZoom: number; // 当前视野宽度，由滚轮/双指缩放调整
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
+type Weather = 'clear' | 'rain' | 'snow';
+let weather: Weather = 'clear';
 const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
 let currentFilter = 'all';
 const cameraTarget = new THREE.Vector3(0,0,0);
@@ -339,6 +341,7 @@ let UNLOCK_TIERS = createUnlockTiers(
 function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
 function init() {
+  updateWeather(townGameDay());
   setupRenderer();
   cameraController = createCameraController({
     getCamera: () => camera,
@@ -611,7 +614,15 @@ function init() {
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
   initAnimations();
-  clockInterval = window.setInterval(syncTimeAndTheme, 1000);
+  let lastWeatherDay = townGameDay();
+  clockInterval = window.setInterval(() => {
+    syncTimeAndTheme();
+    const currentWeatherDay = townGameDay();
+    if (currentWeatherDay !== lastWeatherDay) {
+      lastWeatherDay = currentWeatherDay;
+      updateWeather(currentWeatherDay);
+    }
+  }, 1000);
   syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
@@ -764,6 +775,14 @@ function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionP
 
 function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
+
+function updateWeather(day: number): void {
+  const cycle = ((day % 9) + 9) % 9;
+  const next: Weather = cycle === 3 || cycle === 7 ? 'rain' : cycle === 5 ? 'snow' : 'clear';
+  if (next === weather) return;
+  weather = next;
+  document.body.dataset.weather = weather;
+}
 
 function entranceAnimation() { sceneAnimations.entranceAnimation(); }
 function initAnimations() { sceneAnimations.initAnimations(); }

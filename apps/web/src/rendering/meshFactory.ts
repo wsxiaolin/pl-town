@@ -34,6 +34,14 @@ export function createMeshHelpers(
       const t = repeatTexture(texKey, rx, ry);
       if (t) o.map = t;
     }
+    const weather = document.body.dataset.weather;
+    if (weather === 'rain') {
+      o.roughness = Math.min(Number(o.roughness ?? 0.8), 0.48);
+      o.metalness = Math.max(Number(o.metalness ?? 0), 0.08);
+    } else if (weather === 'snow') {
+      o.color = new THREE.Color(Number(o.color ?? 0xffffff)).lerp(new THREE.Color(0xeaf3ff), 0.28);
+      o.roughness = Math.max(Number(o.roughness ?? 0.8), 0.86);
+    }
     if (o.transparent) o.depthWrite = false;
     return new THREE.MeshStandardMaterial(o);
   }
