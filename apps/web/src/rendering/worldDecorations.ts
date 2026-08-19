@@ -195,6 +195,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         const seeded=Math.abs(Math.round((x+41)*97+(z+43)*193+k*389))%1000/1000;
         if(seeded>density)return;
         const lx=x+dx, lz=z+dz;
+        if (Math.abs(lx - 3) < 0.01 && Math.abs(lz + 15) < 0.01) return;
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;

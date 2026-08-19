@@ -6,6 +6,8 @@ export function bindCityUiEvents(options: {
   setStatsMode: (mode: 'clean' | 'raw') => void;
   closeWorks: () => void;
   closeWriterCatalog: () => void;
+  closeAcademy: () => void;
+  closeAcademyReader: () => void;
   closeWorkDetail: () => void;
   toggleWorkStar: () => void;
   loadWorkComments: () => void;
@@ -39,6 +41,8 @@ export function bindCityUiEvents(options: {
   document.getElementById('spModeRaw')?.addEventListener('click', () => options.setStatsMode('raw'), { signal });
   document.getElementById('worksClose')?.addEventListener('click', options.closeWorks, { signal });
   document.getElementById('writerCatalogClose')?.addEventListener('click', options.closeWriterCatalog, { signal });
+  document.getElementById('academyClose')?.addEventListener('click', options.closeAcademy, { signal });
+  document.getElementById('academyReaderClose')?.addEventListener('click', options.closeAcademyReader, { signal });
   document.getElementById('workDetailClose')?.addEventListener('click', options.closeWorkDetail, { signal });
   document.getElementById('workStar')?.addEventListener('click', options.toggleWorkStar, { signal });
   document.getElementById('workCommentsTab')?.addEventListener('click', options.loadWorkComments, { signal });
@@ -49,7 +53,7 @@ export function bindCityUiEvents(options: {
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (options.isMapOpen()) return options.toggleMap();
-    options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeModal(); options.closeNpcDialog();
+    options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeModal(); options.closeNpcDialog();
   }, { signal });
   document.getElementById('loginBtn')?.addEventListener('click', options.login, { signal });
   document.getElementById('loginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });

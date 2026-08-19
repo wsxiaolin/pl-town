@@ -17,6 +17,7 @@ export type BuildingInteractionOptions = {
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
+  getAcademyController?: () => { open: () => void; close: () => void; closeReader: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: () => WildMushroomInteractResult } | null;
 };
@@ -81,6 +82,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'newsstand') {
       options.getNewsstandController()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'academy_library') {
+      options.getAcademyController?.()?.open();
       options.trackInteraction(b.id);
       return;
     }
