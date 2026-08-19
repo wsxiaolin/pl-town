@@ -10,6 +10,8 @@ export type CameraControllerOptions = {
   cameraOffset: THREE.Vector3;
 };
 
+export type CameraFocusOptions = { duration?: number };
+
 export function createCameraController(options: CameraControllerOptions) {
   const interiorAnchor = new THREE.Vector3(8.2, 15.5, -8.2);
 
@@ -46,5 +48,17 @@ export function createCameraController(options: CameraControllerOptions) {
     gsap.to(target, { x, z, duration: 0.55, ease: 'power2.out', onUpdate: apply });
   }
 
-  return { setTarget, updateProjection, stop: () => gsap.killTweensOf(options.getTarget()) };
+  function focus(x: number, z: number, focusOptions: CameraFocusOptions = {}): void {
+    const target = options.getTarget();
+    const camera = options.getCamera();
+    if (!camera) return;
+    const duration = focusOptions.duration ?? 0.8;
+    gsap.killTweensOf(target);
+    gsap.to(target, { x, z, duration, ease: 'power2.out', onUpdate: () => {
+      camera.position.copy(target).add(options.cameraOffset);
+      camera.lookAt(target);
+    } });
+  }
+
+  return { setTarget, focus, updateProjection, stop: () => gsap.killTweensOf(options.getTarget()) };
 }

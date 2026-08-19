@@ -129,7 +129,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
 
   function updateCamera(): void {
     const cursor = options.getCursor();
-    if (!cursor || options.isMapOpen()) return;
+    if (!cursor || options.isMapOpen() || options.isDialogOpen()) return;
     const echo = options.getEcho();
     // Reaching the physical cabin doorway always exits immediately. Keep this
     // ahead of every story, legacy-coordinate and interior-boundary check so
