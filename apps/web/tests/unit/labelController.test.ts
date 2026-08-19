@@ -23,7 +23,7 @@ test('city labels avoid redundant DOM writes and hide offscreen entries', () => 
   camera.updateMatrixWorld(true);
   const options = {
     camera,
-    buildings: [{ group, labelEl, labelY: 1 }],
+    buildings: [{ id: 'test', num: 'T1', x: 0, z: 0, shape: 'box', icon: 'test', group, labelEl, labelY: 1 }],
     residences: [],
     isStoryLocked: () => false,
     worldPosition: new THREE.Vector3(),
