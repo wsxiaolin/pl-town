@@ -17,6 +17,7 @@ type ProgressionCommand =
   | { type: 'progress.achievement.unlock'; achievementId: string }
   | { type: 'progress.shop.buy'; productId: string; quantity?: number }
   | { type: 'progress.item.consume'; itemId: string; quantity?: number }
+  | { type: 'progress.filmCity.experience' }
   | { type: 'progress.reward.claim'; rewardId: string };
 
 type Options = {
@@ -49,6 +50,7 @@ export function createCloudProgressionController(options: Options) {
   let shopArea: HTMLElement | null = null;
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
   const pendingRewards = new Map<string, (claimed: boolean) => void>();
+  let pendingFilmCity: ((purchased: boolean) => void) | null = null;
 
   function setup(): void {
     panel = options.document.getElementById('onlineInventoryView');
@@ -93,6 +95,11 @@ export function createCloudProgressionController(options: Options) {
     if (event?.type === 'reward.claimed' && event.rewardId) {
       pendingRewards.get(event.rewardId)?.(Boolean(event.claimed));
       pendingRewards.delete(event.rewardId);
+    }
+    if (event?.type === 'film_city.experience' && pendingFilmCity) {
+      const resolve = pendingFilmCity;
+      pendingFilmCity = null;
+      resolve(event.purchased !== false);
     }
     if (event?.type === 'building.unlocked' && event.buildingId && pendingBuilding?.id === event.buildingId && pendingBuilding.phase === 'unlock') {
       pendingBuilding.phase = 'visit';
@@ -260,6 +267,21 @@ else if (event.type === 'shop.purchased') {
     });
   }
 
+  function purchaseFilmCityExperience(): Promise<boolean> {
+    if (!online) { offlineNotice(); return Promise.resolve(false); }
+    if (progress.currency < 400 || pendingFilmCity) {
+      if (progress.currency < 400) options.showToast('体验需要 400 物实币，余额不足');
+      return Promise.resolve(false);
+    }
+    return new Promise((resolve) => {
+      pendingFilmCity = resolve;
+      if (!options.send({ type: 'progress.filmCity.experience' })) {
+        pendingFilmCity = null;
+        resolve(false);
+      }
+    });
+  }
+
   function offlineNotice(): void { options.showToast('此功能需要连接服务器'); }
 
   function handleError(): void {
@@ -268,13 +290,15 @@ else if (event.type === 'shop.purchased') {
     pendingRewards.forEach((resolve) => resolve(false));
     pendingConsumption.clear();
     pendingRewards.clear();
+    pendingFilmCity?.(false);
+    pendingFilmCity = null;
   }
 
   function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
     setup, setConnection, applySnapshot, interactBuilding, unlockAchievement, syncAchievements,
-buyProduct, consumeItem, claimReward, openInventory, openShop,
+ buyProduct, consumeItem, purchaseFilmCityExperience, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),
     isOnline: () => online, handleError,
