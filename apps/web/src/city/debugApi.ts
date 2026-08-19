@@ -66,6 +66,7 @@ function createMiniCityApi(options: DebugApiOptions) {
       stopLanYuPrelude: () => stopLanYuPreludeCG(),
       isLanYuPreludeActive: () => isLanYuPreludeCGActive(),
     },
+    invasionCG: () => options.playInvasionCG(),
   });
 }
 
@@ -96,6 +97,8 @@ export type DebugApiOptions = {
   burnCity: () => boolean;
   burnCityActive: () => boolean;
   burnCityProgress: () => number;
+  playInvasionCG: () => boolean;
+  stopInvasionCG: () => void;
 };
 
 export function installDebugApi(options: DebugApiOptions) {
@@ -107,4 +110,6 @@ export function installDebugApi(options: DebugApiOptions) {
   window.restoreBuilding = options.restoreBuilding;
   window.restoreResidence = options.restoreResidence;
   window.restoreAll = options.restoreAll;
+  window.playInvasionCG = options.playInvasionCG;
+  window.stopInvasionCG = options.stopInvasionCG;
 }

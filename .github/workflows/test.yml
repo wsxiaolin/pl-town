@@ -26,7 +26,15 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - name: Configure npm network retries
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set fetch-retries 3
+          npm config set fetch-retry-mintimeout 1000
+          npm config set fetch-retry-maxtimeout 10000
+          npm config set fetch-timeout 120000
+
+      - run: npm ci --prefer-offline
 
       - name: Source-size, typecheck, build
         run: npm run typecheck && npm run build
@@ -39,19 +47,15 @@ jobs:
 
   # The Playwright suite renders a Three.js city with WebGL, which headless
   # Chromium cannot create. We shard the suite across a matrix and run each
-  # shard under Xvfb with the SwiftShader software-GL driver (via the shared
-  # scripts/run-web-tests.sh wrapper). Shards cut wall-clock time roughly
-  # linearly; bump SHARD_TOTAL if the suite grows past ~6 min per shard.
+  # shard under Xvfb with the SwiftShader software-GL driver.
   web:
     name: Web (Playwright) shard ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # 4 shards keeps each ~3-4 min on a 2-core runner while still leaving
-        # headroom for the WebGL frame loop under software rendering.
         shard: [1, 2, 3, 4]
         total: [4]
     steps:
@@ -62,26 +66,22 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-
-      # Xvfb (virtual display) + the Vulkan/SwiftShader software-GL stack that
-      # headed Chromium needs to create a WebGL context in a headless runner.
-      - name: Install Xvfb + software GL
+      - name: Configure npm network retries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            xvfb xauth \
-            libgl1 libegl1 libgles2 mesa-vulkan-drivers \
-            fonts-noto-cjk fonts-noto-color-emoji
+          npm config set registry https://registry.npmjs.org/
+          npm config set fetch-retries 3
+          npm config set fetch-retry-mintimeout 1000
+          npm config set fetch-retry-maxtimeout 10000
+          npm config set fetch-timeout 120000
 
-      # The browser download (~170MB) is by far the slowest part of CI setup
-      # and runs once per shard, so cache it across runs/shards. Key on the
-      # exact Playwright version from the lockfile so unrelated dependency
-      # updates don't bust the cache.
+      - run: npm ci --prefer-offline
+
+      # 1. 获取准确的 Playwright 版本以命中缓存
       - name: Resolve Playwright version
         id: pw-version
-        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test']?.version || 'unknown'")" >> "$GITHUB_OUTPUT"
 
+      # 2. 缓存 Playwright 浏览器二进制包 (~170MB)
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v4
@@ -89,21 +89,28 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
 
-      # System libraries are not part of the browser cache, so always install
-      # them (apt-only, fast). Splitting this from the browser download lets
-      # the cache-hit path skip the expensive binary fetch entirely.
-      - name: Install Chromium system dependencies
-        run: npx playwright install-deps chromium
+      # 3. 安装轻量图形库与 Xvfb（加了超时防卡死参数，换掉了近 1GB 的超大 noto 字体）
+      - name: Install Xvfb, GL Stack & System Dependencies
+        run: |
+          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="15" -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            -o Acquire::Retries=3 -o Acquire::http::Timeout="15" \
+            xvfb xauth \
+            libgl1 libegl1 libgles2 mesa-vulkan-drivers \
+            fonts-wqy-zenhei fonts-noto-color-emoji
+          npx playwright install-deps chromium
 
-      - name: Install Playwright Chromium (full build, WebGL-capable)
+      # 4. 仅在缓存未命中时才下载浏览器二进制包
+      - name: Install Playwright Chromium
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium
 
+      # 5. 运行测试（将 Worker 锁定为 1，避免 2 核 CPU 跑 WebGL 软解发生线程争抢死锁）
       - name: Run web test shard under Xvfb
         run: scripts/run-web-tests.sh --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           CI: 'true'
-          PLAYWRIGHT_WORKERS: '2'
+          PLAYWRIGHT_WORKERS: '1'
 
       - name: Upload shard report
         if: ${{ !cancelled() }}

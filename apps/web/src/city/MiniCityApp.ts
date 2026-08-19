@@ -15,6 +15,7 @@ import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
+import { startInvasionCG, stopInvasionCG } from './invasionCg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
@@ -34,6 +35,9 @@ import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import { createEchoStoryController } from './echo/echoStoryController';
+import { createYesterdaySongController } from './yesterday/yesterdaySongController';
+import { createMagiStoryController } from './magi/magiStoryController';
+import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
@@ -48,7 +52,7 @@ import { isBuildingDestroyed } from './buildingDamage';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
-import { townGameHour } from '../gameplay/time/townClock';
+import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
 import { BUILDING_PLOT_MAP } from './data/buildingPlots';
 import { createMeshHelpers, type MeshHelpers } from '../rendering/meshFactory';
@@ -98,6 +102,9 @@ const cameraTarget = new THREE.Vector3(0,0,0);
 // still letting the camera look down into the complete room.
 let cityDialogs: CityDialogController | null = null;
 let echoStoryController: ReturnType<typeof createEchoStoryController>;
+let yesterdaySongController: ReturnType<typeof createYesterdaySongController>;
+let magiStoryController: ReturnType<typeof createMagiStoryController>;
+let overcoatStoryController: ReturnType<typeof createOvercoatStoryController>;
 let mapController: ReturnType<typeof createMapController>;
 let loginController: ReturnType<typeof createLoginController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
@@ -114,6 +121,14 @@ let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
+let echoActiveActors = new Set<string>();
+let yesterdayActiveActors = new Set<string>();
+let magiActiveActors = new Set<string>();
+let overcoatActiveActors = new Set<string>();
+function mergeActiveStoryActorIds() {
+  activeStoryActorIds = new Set([...echoActiveActors, ...yesterdayActiveActors, ...magiActiveActors, ...overcoatActiveActors]);
+  npcSystem?.updateNpcSchedules();
+}
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const residences: ResidenceEntity[] = [];
@@ -137,7 +152,12 @@ const themeClock = createThemeClock({
   setIsNight: (value) => { isNight = value; },
   getGameClock: () => gameClock,
   setGameClock: (value) => { gameClock = value; },
-  announceGuide: () => echoStoryController?.announceGuide(),
+  announceGuide: () => {
+    echoStoryController?.announceGuide();
+    yesterdaySongController?.announceGuide();
+    magiStoryController?.announceGuide();
+    overcoatStoryController?.announceGuide();
+  },
   invalidateMapShot: () => mapController?.invalidateShot(),
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
@@ -248,6 +268,9 @@ const buildingInteraction = createBuildingInteraction({
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
   getEchoStoryController: () => echoStoryController,
+  getYesterdayStoryController: () => yesterdaySongController,
+  getMagiStoryController: () => magiStoryController,
+  getOvercoatStoryController: () => overcoatStoryController,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
@@ -395,10 +418,10 @@ function init() {
   });
   echoStoryController = createEchoStoryController({
     document,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
     setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
-    setActiveActors: (ids) => { activeStoryActorIds = new Set(ids); },
+    setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
     awardAchievement: (id, name) => progressionController?.awardDirectAchievement(id, name),
     getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
@@ -416,6 +439,33 @@ function init() {
   echoStoryController.setupScene(scene);
   echoStoryController.setupGuide();
   echoStoryController.restoreAchievements();
+  // ── 昨日之歌 · 支线剧情 ──────────────────────────────────────
+  yesterdaySongController = createYesterdaySongController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
+    onActiveActorsChanged: (ids) => { yesterdayActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  yesterdaySongController.announceGuide();
+  yesterdaySongController.syncActiveActors();
+  // ── 麦琪的礼物 · 支线剧情 ──────────────────────────────────────
+  magiStoryController = createMagiStoryController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
+    onActiveActorsChanged: (ids) => { magiActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  magiStoryController.announceGuide();
+  magiStoryController.syncActiveActors();
+  // ── 今晚别走那条街 · 支线剧情 ──────────────────────────────────
+  overcoatStoryController = createOvercoatStoryController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
+    onActiveActorsChanged: (ids) => { overcoatActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  overcoatStoryController.announceGuide();
+  overcoatStoryController.syncActiveActors();
   mapController = createMapController({
     document,
     getScene: () => scene,
@@ -580,6 +630,8 @@ function setupScene() {
     burnCity: () => burnCityEffect.trigger(),
     burnCityActive: () => burnCityEffect.isActive(),
     burnCityProgress: () => burnCityEffect.getProgress(),
+    playInvasionCG: startInvasionCG,
+    stopInvasionCG,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -767,6 +819,18 @@ function openNpcDialog(npc: Npc) {
     recordNpcInteraction(npc.profile.id);
     return;
   }
+  if (cityDialogs && yesterdaySongController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && magiStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && overcoatStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
   cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
 }
 function closeNpcDialog() { cityDialogs?.closeNpc(); }
@@ -796,6 +860,7 @@ export function destroyMiniCity() {
   clearInterval(trackingInterval);
   multiplayerHousing?.destroy();
   destroyCG();
+  stopInvasionCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
   npcSystem?.destroy();
@@ -812,4 +877,7 @@ export function destroyMiniCity() {
   document.getElementById('labelsWrap')?.replaceChildren();
   document.getElementById('mapIcons')?.replaceChildren();
   echoStoryController?.dispose();
+  yesterdaySongController?.dispose();
+  magiStoryController?.dispose();
+  overcoatStoryController?.dispose();
 }
