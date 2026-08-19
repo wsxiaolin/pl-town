@@ -259,6 +259,7 @@ try {
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
   if (alice.hello.catalog.buildingPrices.wushi_restaurant !== 0) throw new Error('The Wushi restaurant must be available in the city catalog');
   if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
+  if (!alice.hello.progress.unlockedBuildings.includes('writingclub_outer')) throw new Error('The wild mushroom restaurant must be unlocked by default');
 
   send(alice, { type: 'story.get', storyId: 'sample-story' });
   const freshStory = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
@@ -289,6 +290,8 @@ try {
   send(alice, { type: 'progress.building.visit', buildingId: 'bulletin' });
   const duplicateVisit = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'bulletin' && message.event.welcomeItemsGranted === false);
   if (duplicateVisit.event.welcomeItemsGranted || duplicateVisit.progress.inventory.city_guide !== 1) throw new Error('Repeated building visits must not duplicate starter items');
+  send(alice, { type: 'progress.building.visit', buildingId: 'writingclub_outer' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'writingclub_outer');
 
   send(alice, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 2 });
   const purchase = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'shop.purchased');
