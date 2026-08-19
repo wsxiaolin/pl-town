@@ -236,10 +236,10 @@ export function createMultiplayerHousingController(options) {
   }
   
   function updateRemotePlayers(delta) {
-    remotePlayers.forEach((remote) => {
+    for (const remote of remotePlayers.values()) {
       remote.mesh.position.lerp(remote.target, Math.min(1, delta * 12));
       remote.mesh.rotation.y += Math.atan2(Math.sin(remote.rotation - remote.mesh.rotation.y), Math.cos(remote.rotation - remote.mesh.rotation.y)) * Math.min(1, delta * 12);
-    });
+    }
   }
   
   function appendChat(nickname, text, own) {

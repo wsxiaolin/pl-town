@@ -196,7 +196,7 @@ const frameLoop = createFrameLoop({
   getBuildings: () => buildings,
   getResidences: () => residences,
   getLabelWorldPosition: () => labelWorldPosition,
-  getNpcList: () => npcList,
+  getNpcList: () => npcSystem?.getAvoidanceNpcs() ?? npcList,
   getPlayerController: () => playerController,
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
@@ -314,6 +314,10 @@ function init() {
     raycaster, roadCoords: ROAD_COORDS, reduced: REDUCED, isMobile: MOBILE,
     getGameClock: () => gameClock, getCurrentFilter: () => currentFilter,
     nearestRoadCoord, buildRoadPath, makeMaterial: stdMat, makeMesh: mk,
+    makeCharacterMaterial: (partName, color, factory) => resources.material(
+      { kind: 'character', partName, color },
+      factory,
+    ),
     view: {
       get mapMode() { return Boolean(mapController?.isOpen()); },
       get dialogOpen() { return Boolean(cityDialogs?.isOpen()); },
@@ -329,6 +333,7 @@ function init() {
     cityLimit: CITY_LIMIT,
     colors: { asphalt: P.ASPHALT, dayPath: P.DAY_PATH, nightPath: P.NIGHT_PATH },
     createMaterial: stdMat,
+    createMesh: mk,
     pathMaterials: pathMats,
     groundMaterials: groundMats,
     addLamps,
@@ -373,6 +378,7 @@ function init() {
     getResidences: () => residences,
     invalidateMap: () => mapController?.invalidateShot(),
     refreshResidenceLabels: () => multiplayerHousing?.renderMapHouseTags(),
+    setResidenceVisualVisible: (id, visible) => worldDecorations?.setResidenceVisualVisible(id, visible),
   });
   buildingDamageController.applyPersisted();
   progressionController = createProgressionController({
@@ -443,7 +449,7 @@ function init() {
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
     addDistance: flushDistance,
     getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
-    resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
+    resolveMovement: (from, target, result) => roadNavigation.resolveMovement(from, target, result),
   });
   loginController = createLoginController({
     getStats,
@@ -722,11 +728,9 @@ function setupFilter() {
 function setFilter(filter) {
   currentFilter=filter;
   document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
+  updateNpcSchedules();
   if(filter==='friends'){
-    npcList.forEach(npc=>{ if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } } });
     showUnlockToast('no friends online yet — invite someone!');
-  } else {
-    updateNpcSchedules();
   }
 }
 
@@ -782,6 +786,7 @@ export function destroyMiniCity() {
   destroyCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
+  npcSystem?.destroy();
   gsap.globalTimeline.clear();
   mapController?.destroy();
   renderer?.dispose();

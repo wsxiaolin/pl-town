@@ -20,18 +20,36 @@ export function createNpcSystem(options) {
   const {
     scene, profiles: NPC_PROFILES, npcList, actors, raycaster, roadCoords: ROAD_COORDS,
     reduced: REDUCED, isMobile: MOBILE, getGameClock, getCurrentFilter,
-    nearestRoadCoord, buildRoadPath, makeMaterial: stdMat, makeMesh: mk,
+    nearestRoadCoord, buildRoadPath, makeMaterial: stdMat, makeMesh: mk, makeCharacterMaterial,
     view, updateCameraProjection,
     getActiveStoryActorIds,
   } = options;
+  const avoidanceNpcs=[];
+  const visibleNpcMeshes=[];
+  const npcById=new Map();
+  const shadowMaterial=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.11,depthWrite:false});
+
+  function refreshNpcIndexes() {
+    avoidanceNpcs.length=0;
+    visibleNpcMeshes.length=0;
+    for(const npc of npcList){
+      if(!npc.mesh.visible) continue;
+      visibleNpcMeshes.push(npc.mesh);
+      if(npc.walking!==false) avoidanceNpcs.push(npc);
+    }
+  }
 
   function makeCharacter(headHex, bodyHex) {
     const g=new THREE.Group();
-    const shadow=mk(new THREE.CircleGeometry(0.17,16),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.11,depthWrite:false}));
+    const shadow=mk(new THREE.CircleGeometry(0.17,16),shadowMaterial);
     shadow.rotation.x=-Math.PI/2; shadow.position.y=0.012; g.add(shadow);
-    const body=mk(new THREE.CylinderGeometry(0.10,0.13,0.30,12),stdMat({color:bodyHex,roughness:0.6}));
+    const bodyMaterial=makeCharacterMaterial?.('body',bodyHex,()=>stdMat({color:bodyHex,roughness:0.6}))
+      ?? stdMat({color:bodyHex,roughness:0.6});
+    const body=mk(new THREE.CylinderGeometry(0.10,0.13,0.30,12),bodyMaterial);
     body.position.y=0.15; body.castShadow=true; g.add(body);
-    const head=mk(new THREE.SphereGeometry(0.135,14,14),stdMat({color:headHex,roughness:0.5}));
+    const headMaterial=makeCharacterMaterial?.('head',headHex,()=>stdMat({color:headHex,roughness:0.5}))
+      ?? stdMat({color:headHex,roughness:0.5});
+    const head=mk(new THREE.SphereGeometry(0.135,14,14),headMaterial);
     head.position.y=0.43; head.castShadow=true; g.add(head);
     return g;
   }
@@ -76,8 +94,17 @@ export function createNpcSystem(options) {
       g.traverse(c=>{ if(c.isMesh) { c.userData.npcId=profile.id; c.userData.npcType=getNpcType(profile); } });
       const start=randomSpawnPosition(profile) ?? new THREE.Vector3(profile.home[0],0,profile.home[1]);
       g.position.copy(start); scene.add(g);
-      const npc={profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0};
+      const homeTarget=new THREE.Vector3(profile.home[0],0,profile.home[1]);
+      const workPosition=profile.work||profile.home;
+      const workTarget=new THREE.Vector3(workPosition[0],0,workPosition[1]);
+      const npc={
+        profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0,
+        homeTarget, workTarget,
+        homePatrol:createPatrolPool(homeTarget,profile.patrolRadius??2.5),
+        workPatrol:createPatrolPool(workTarget,profile.patrolRadius??3.5),
+      };
       npcList.push(npc);
+      npcById.set(profile.id,npc);
       if(profile.behavior==='rare') g.visible=false;
       if(isNpcHiddenAtHour(profile, getGameClock())) g.visible=false;
       if(profile.storyOnly) g.visible=false;
@@ -89,6 +116,7 @@ export function createNpcSystem(options) {
     actors.cursorChar.visible=false; scene.add(actors.cursorChar);
     actors.playerMarker=makePlayerMarker();
     actors.playerMarker.position.y=0.95; actors.cursorChar.add(actors.playerMarker);
+    refreshNpcIndexes();
   }
 
   function randomSpawnPosition(profile) {
@@ -99,27 +127,33 @@ export function createNpcSystem(options) {
     return new THREE.Vector3(x+Math.cos(angle)*distance,0,z+Math.sin(angle)*distance);
   }
   
-  function npcDesiredTarget(npc) {
-    const dest = hoursInRange(getGameClock(), npc.profile.workHours)
-      ? (npc.profile.work || npc.profile.home) : npc.profile.home;
-    return new THREE.Vector3(dest[0],0,dest[1]);
+  function npcIsWorking(npc, gameHour) {
+    return hoursInRange(gameHour,npc.profile.workHours);
   }
-  
-  function pickPatrolSpot(npc) {
-    const radius = npc.profile.patrolRadius ?? (hoursInRange(getGameClock(), npc.profile.workHours) ? 3.5 : 2.5);
-    const center = npcDesiredTarget(npc);
+
+  function npcDesiredTarget(npc, gameHour) {
+    return npcIsWorking(npc,gameHour)?npc.workTarget:npc.homeTarget;
+  }
+
+  function createPatrolPool(center,radius) {
     const pool=[];
-    ROAD_COORDS.forEach(x=>ROAD_COORDS.forEach(z=>{
-      const p=new THREE.Vector3(x,0,z);
-      if(p.distanceTo(center)<=radius && p.distanceTo(center)>0.5) pool.push(p);
-    }));
+    const radiusSquared=radius*radius;
+    for(const x of ROAD_COORDS) for(const z of ROAD_COORDS){
+      const dx=x-center.x,dz=z-center.z,distanceSquared=dx*dx+dz*dz;
+      if(distanceSquared<=radiusSquared&&distanceSquared>0.25) pool.push(new THREE.Vector3(x,0,z));
+    }
     // Also consider road-line points right beside the destination, so NPCs don't
     // only stand at the intersection grid.
     const rx=nearestRoadCoord(center.x), rz=nearestRoadCoord(center.z);
-    [[rx,center.z],[center.x,rz],[rx,rz]].forEach(([x,z])=>{
-      const p=new THREE.Vector3(x,0,z);
-      if(p.distanceTo(center)<=radius && p.distanceTo(center)>0.5) pool.push(p);
-    });
+    for(const [x,z] of [[rx,center.z],[center.x,rz],[rx,rz]]){
+      const dx=x-center.x,dz=z-center.z,distanceSquared=dx*dx+dz*dz;
+      if(distanceSquared<=radiusSquared&&distanceSquared>0.25) pool.push(new THREE.Vector3(x,0,z));
+    }
+    return pool;
+  }
+
+  function pickPatrolSpot(npc,gameHour) {
+    const pool=npcIsWorking(npc,gameHour)?npc.workPatrol:npc.homePatrol;
     if(!pool.length) return null;
     return pool[Math.floor(Math.random()*pool.length)];
   }
@@ -129,12 +163,12 @@ export function createNpcSystem(options) {
     if (!actors.cursorChar || !actors.cursorChar.visible) return;
     const dx=npc.mesh.position.x-actors.cursorChar.position.x;
     const dz=npc.mesh.position.z-actors.cursorChar.position.z;
-    const d=Math.hypot(dx,dz);
-    if (d < 1.05) {
+    const distanceSquared=dx*dx+dz*dz;
+    if (distanceSquared < 1.05*1.05) {
       if (!npc.yielding) {
         npc.yielding=true;
         if (npc.tween){ npc.tween.kill(); npc.tween=null; }
-        const len=d||1;
+        const len=Math.sqrt(distanceSquared)||1;
         const ox=dx/len, oz=dz/len;
         // Step sideways, perpendicular to the line between player and NPC.
         const dest={x:npc.mesh.position.x-oz*0.55, z:npc.mesh.position.z+ox*0.55};
@@ -148,17 +182,16 @@ export function createNpcSystem(options) {
     }
   }
   
-  function npcRoutine(npc) {
+  function npcRoutine(npc,gameHour=getGameClock()) {
     if (npc.walking===false) return;
     if (npc.yielding) return;
     if (!npc.mesh.visible) return;
-    const target=npcDesiredTarget(npc);
-    const dist=npc.mesh.position.distanceTo(target);
-    if (dist>0.8 && !npc.tween) { walkAlongPath(npc, buildRoadPath(npc.mesh.position, target)); return; }
+    const target=npcDesiredTarget(npc,gameHour);
+    if (npc.mesh.position.distanceToSquared(target)>0.8*0.8 && !npc.tween) { walkAlongPath(npc, buildRoadPath(npc.mesh.position, target)); return; }
     if (npc.tween) return;
     if (npc.idleTimer>0) { npc.idleTimer-=1; return; }
-    const spot=pickPatrolSpot(npc);
-    if (spot && spot.distanceTo(npc.mesh.position)>0.3) {
+    const spot=pickPatrolSpot(npc,gameHour);
+    if (spot && spot.distanceToSquared(npc.mesh.position)>0.3*0.3) {
       walkAlongPath(npc, buildRoadPath(npc.mesh.position, spot));
     } else {
       npc.idleTimer=3+Math.random()*6;
@@ -168,29 +201,35 @@ export function createNpcSystem(options) {
   const MAX_RARE_VISIBLE_NPCS = 8;
   
   function updateNpcSchedules() {
-    let visibleRare=npcList.filter(n=>n.mesh.visible && (n.profile.behavior==='rare')).length;
-    npcList.forEach(npc=>{
-      if (getCurrentFilter()==='friends') {
+    const gameHour=getGameClock();
+    const currentFilter=getCurrentFilter();
+    const activeStoryActorIds=getActiveStoryActorIds();
+    let visibleRare=0;
+    for(const npc of npcList){
+      if(npc.mesh.visible&&npc.profile.behavior==='rare') visibleRare+=1;
+    }
+    for(const npc of npcList){
+      if (currentFilter==='friends') {
         if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } }
-        return;
+        continue;
       }
       const behavior=npc.profile.behavior||'field';
-      if (isNpcHiddenAtHour(npc.profile, getGameClock())) {
+      if (isNpcHiddenAtHour(npc.profile, gameHour)) {
         npc.mesh.visible=false;
         if(npc.tween){ npc.tween.kill(); npc.tween=null; }
-        return;
+        continue;
       }
-      if (npc.profile.storyOnly && !getActiveStoryActorIds().has(npc.profile.id)) {
+      if (npc.profile.storyOnly && !activeStoryActorIds.has(npc.profile.id)) {
         npc.mesh.visible=false;
         if(npc.tween){ npc.tween.kill(); npc.tween=null; }
-        return;
+        continue;
       }
       if (behavior==='rare') {
-        if (!hoursInRange(getGameClock(), npc.profile.workHours)) {
+        if (!hoursInRange(gameHour, npc.profile.workHours)) {
           npc.mesh.visible=false;
           npc.spawnTimer=0;
           if(npc.tween){ npc.tween.kill(); npc.tween=null; }
-          return;
+          continue;
         }
         npc.spawnTimer-=1;
         if(npc.spawnTimer<=0){
@@ -212,10 +251,11 @@ export function createNpcSystem(options) {
       } else {
         npc.mesh.visible=true;
       }
-      if (npc.walking===false) return;
-      if (!npc.mesh.visible) return;
-      npcRoutine(npc);
-    });
+      if (npc.walking===false) continue;
+      if (!npc.mesh.visible) continue;
+      npcRoutine(npc,gameHour);
+    }
+    refreshNpcIndexes();
   }
   
   function walkAlongPath(npc, path) {
@@ -225,49 +265,54 @@ export function createNpcSystem(options) {
       return;
     }
     const target=path.shift();
-    const from=npc.mesh.position.clone();
-    const dur=Math.max(0.6,from.distanceTo(target)/1.4);
-    gsap.to(npc.mesh.rotation,{y:Math.atan2(target.x-from.x,target.z-from.z),duration:0.3,ease:'power1.out'});
+    const fromX=npc.mesh.position.x,fromZ=npc.mesh.position.z;
+    const dx=target.x-fromX,dz=target.z-fromZ;
+    const dur=Math.max(0.6,Math.sqrt(dx*dx+dz*dz)/1.4);
+    gsap.to(npc.mesh.rotation,{y:Math.atan2(dx,dz),duration:0.3,ease:'power1.out'});
     npc.tween=gsap.to(npc.mesh.position,{x:target.x,z:target.z,duration:dur,ease:'power1.inOut',
       onComplete:()=>{ npc.tween=null; walkAlongPath(npc,path); }});
   }
   
   function pauseNpcs() {
-    npcList.forEach(npc=>{
+    for(const npc of npcList){
       npc.walking=false;
       if(npc.tween){ npc.tween.kill(); npc.tween=null; }
-    });
+    }
+    refreshNpcIndexes();
   }
   
   function resumeNpcs() {
-    npcList.forEach(npc=>{
+    const gameHour=getGameClock();
+    for(const npc of npcList){
       npc.walking=true;
-      if (!MOBILE()) npcRoutine(npc);
-    });
+      if (!MOBILE()) npcRoutine(npc,gameHour);
+    }
+    refreshNpcIndexes();
   }
   
   function nearestNpcTo(p, radius) {
-    let best=null, bestD=radius;
-    npcList.forEach(npc=>{
-      if(!npc.mesh.visible)return;
-      const d=npc.mesh.position.distanceTo(p);
-      if(d<bestD){ bestD=d; best=npc; }
-    });
+    let best=null, bestDistanceSquared=radius*radius;
+    for(const npc of npcList){
+      if(!npc.mesh.visible) continue;
+      const distanceSquared=npc.mesh.position.distanceToSquared(p);
+      if(distanceSquared<bestDistanceSquared){ bestDistanceSquared=distanceSquared; best=npc; }
+    }
     return best;
   }
   
   function npcForRaycast() {
-    const visible=npcList.filter(n=>n.mesh.visible);
-    const hits=raycaster.intersectObjects(visible.map(n=>n.mesh),true);
+    const hits=raycaster.intersectObjects(visibleNpcMeshes,true);
     if(!hits.length)return null;
     const id=hits[0].object.userData.npcId;
-    return npcList.find(n=>n.profile.id===id)||null;
+    return npcById.get(id)||null;
   }
+
+  function destroy() { shadowMaterial.dispose(); }
   
   // ── Labels ────────────────────────────────────────────────────────────────────
 
   return {
     makeCharacter, addCharacters, onYouClick, updateNpcSchedules, npcYieldToPlayer, pauseNpcs,
-    resumeNpcs, nearestNpcTo, npcForRaycast,
+    resumeNpcs, nearestNpcTo, npcForRaycast, getAvoidanceNpcs: () => avoidanceNpcs, destroy,
   };
 }

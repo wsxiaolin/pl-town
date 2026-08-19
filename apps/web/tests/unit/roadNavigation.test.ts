@@ -45,3 +45,42 @@ test('building clearance leaves nearby walking space available', () => {
   assert.equal(navigation.pointInAnyBuilding(12.15, -6), true);
   assert.equal(navigation.pointInAnyBuilding(12.25, -6), false);
 });
+
+test('runtime obstacles are added incrementally across negative grid cells', () => {
+  const navigation = createRoadNavigationSystem({
+    roadCoords: [-12, -6, 0, 6, 12],
+    echoObservatoryArea: { roadNodes: [], roadSegments: [] },
+    cityLimit: 42,
+    getBuildings: () => [],
+  });
+  navigation.cacheBuildingBoxes();
+  const obstacle = new THREE.Group();
+  obstacle.position.set(-6, 0, -6);
+  obstacle.add(new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3)));
+  navigation.registerObstacleGroup(obstacle);
+
+  assert.equal(navigation.pointInAnyBuilding(-6, -6), true);
+  assert.equal(navigation.pointInAnyBuilding(-3.9, -6), false);
+  const start = new THREE.Vector3(-10, 0, -6);
+  assert.deepEqual(navigation.resolveMovement(start, new THREE.Vector3(-2, 0, -6)).toArray(), start.toArray());
+});
+
+test('manual movement can reuse a caller-owned result vector', () => {
+  const navigation = navigationWithBuilding();
+  const output = new THREE.Vector3();
+  const result = navigation.resolveMovement(
+    new THREE.Vector3(5, 0, -10),
+    new THREE.Vector3(5.5, 0, -9.5),
+    output,
+  );
+  assert.equal(result, output);
+  assert.deepEqual(output.toArray(), [5.5, 0, -9.5]);
+});
+
+test('manual movement result may alias the source vector', () => {
+  const navigation = navigationWithBuilding();
+  const position = new THREE.Vector3(5, 0, -10);
+  const result = navigation.resolveMovement(position, new THREE.Vector3(5.5, 0, -9.5), position);
+  assert.equal(result, position);
+  assert.deepEqual(position.toArray(), [5.5, 0, -9.5]);
+});
