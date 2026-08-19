@@ -80,7 +80,7 @@ jobs:
       # updates don't bust the cache.
       - name: Resolve Playwright version
         id: pw-version
-        run: node -p "const v=require('./package-lock.json').packages['node_modules/@playwright/test'].version; console.log('version='+v)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: pw-cache
