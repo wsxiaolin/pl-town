@@ -17,7 +17,7 @@ export interface WildMushroomRestaurantOptions {
 export type WildMushroomInteractResult = 'opened' | 'no-dialog' | 'exhausted';
 
 export interface WildMushroomRestaurant {
-  interact(): WildMushroomInteractResult;
+  interact(onComplete?: () => void): WildMushroomInteractResult;
 }
 
 export function createWildMushroomRestaurant(options: WildMushroomRestaurantOptions): WildMushroomRestaurant {
@@ -36,19 +36,19 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
   const close = (): void => {
     options.getDialogs()?.closeNpc();
   };
-  const leaveOption = (text = '离开') => ({ text, onPick: () => close() });
-
   const burnThen = (after: () => void): void => {
-    options.burnCity(after);
+    close();
+    if (!options.burnCity(after)) after();
   };
 
   // 第一次：点「一年总要吃两次野生菌火锅」→ 3 个感叹号选项 → 火烧小城 → 镜子幻觉吐槽。
-  const firstVisit = (): void => {
+  const firstVisit = (complete: () => void): void => {
     const afterBurn = (): void => open({
       title: '野生菌餐馆',
       role: '醒来',
       text: '这镜子一看就是真的，都给我干出幻觉来了。',
-      options: [leaveOption()],
+      onClose: complete,
+      options: [{ text: '离开', onPick: complete }],
     });
     const threeOptions = (): void => open({
       title: '野生菌餐馆',
@@ -71,7 +71,7 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
   };
 
   // 第二次：明知会被放倒还是吃，烧完解锁「吃一堑再吃一堑」。
-  const secondVisit = (): void => {
+  const secondVisit = (complete: () => void): void => {
     const afterBurn = (): void => {
       const ach = WILD_MUSHROOM_ACHIEVEMENTS.stubborn;
       options.awardAchievement(ach.id, ach.name);
@@ -79,7 +79,8 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
         title: '野生菌餐馆',
         role: '又被放倒了',
         text: '熟悉的幻觉又来了，老板在一旁默默记下「常客 +1」。',
-        options: [leaveOption()],
+        onClose: complete,
+        options: [{ text: '离开', onPick: complete }],
       });
     };
     open({
@@ -94,7 +95,7 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
   };
 
   // 第三次：老板劝退两连 → 逐项签免责声明 → 上菜再烧一次 → 解锁「真正的云南人」。
-  const thirdVisit = (): void => {
+  const thirdVisit = (complete: () => void): void => {
     const afterBurn = (): void => {
       const ach = WILD_MUSHROOM_ACHIEVEMENTS.local;
       options.awardAchievement(ach.id, ach.name);
@@ -102,7 +103,8 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
         title: '野生菌餐馆',
         role: '老板含泪上菜',
         text: '老板把免责声明收进抽屉，端上一锅翻滚的见手青：「真正的云南人，佩服佩服。」',
-        options: [leaveOption()],
+        onClose: complete,
+        options: [{ text: '离开', onPick: complete }],
       });
     };
     const steps = [
@@ -128,14 +130,21 @@ export function createWildMushroomRestaurant(options: WildMushroomRestaurantOpti
     advance(0);
   };
 
-  function interact(): WildMushroomInteractResult {
+  function interact(onComplete?: () => void): WildMushroomInteractResult {
     if (!options.getDialogs()) return 'no-dialog';
     const visits = readVisits();
     if (visits >= 3) return 'exhausted';
-    writeVisits(visits + 1);
-    if (visits === 0) firstVisit();
-    else if (visits === 1) secondVisit();
-    else thirdVisit();
+    let completed = false;
+    const complete = (): void => {
+      if (completed) return;
+      completed = true;
+      writeVisits(visits + 1);
+      close();
+      onComplete?.();
+    };
+    if (visits === 0) firstVisit(complete);
+    else if (visits === 1) secondVisit(complete);
+    else thirdVisit(complete);
     return 'opened';
   }
 

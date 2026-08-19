@@ -20,6 +20,9 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   const wildMushroomRestaurant = BUILDING_DEFS.find((building) => building.id === 'writingclub_outer');
   assert.ok(wildMushroomRestaurant);
   assert.equal(wildMushroomRestaurant.shape, 'wild_mushroom_restaurant');
+  assert.deepEqual([wildMushroomRestaurant.x, wildMushroomRestaurant.z], [-33, 3]);
+  assert.ok(Math.hypot(wildMushroomRestaurant.x + 30, wildMushroomRestaurant.z - 30) > 20, 'restaurant stays clear of Bunala');
+  assert.equal(BUILDING_DEFS.filter((building) => building.x === wildMushroomRestaurant.x && building.z === wildMushroomRestaurant.z).length, 1);
   assert.notEqual(wildMushroomRestaurant.shape, restaurant.shape);
   assert.equal(BUILDING_DEFS.filter((building) => building.x === restaurant.x && building.z === restaurant.z).length, 1);
 
@@ -50,6 +53,7 @@ test('shrine dialogue includes the username-gated sword challenge', () => {
 
 test('wild mushroom restaurant uses the standard unlock flow', () => {
   let interacted = false;
+  let completeInteraction: (() => void) | undefined;
   let modalOpened = false;
   let trackCount = 0;
   const interaction = createBuildingInteraction({
@@ -65,12 +69,14 @@ test('wild mushroom restaurant uses the standard unlock flow', () => {
     getWriterCatalogController: () => null,
     getNewsstandController: () => null,
     trackInteraction: () => { trackCount += 1; },
-    getWildMushroomRestaurant: () => ({ interact: () => { interacted = true; return 'opened'; } }),
+    getWildMushroomRestaurant: () => ({ interact: (onComplete) => { interacted = true; completeInteraction = onComplete; return 'opened'; } }),
   });
 
   interaction.navigateTo(stubBuilding('writingclub_outer'));
   assert.equal(interacted, true);
   assert.equal(modalOpened, false);
+  assert.equal(trackCount, 0);
+  completeInteraction?.();
   assert.equal(trackCount, 1);
 });
 
@@ -124,11 +130,14 @@ test('wild mushroom restaurant falls back to the building modal when dialogs are
 
 test('wild mushroom restaurant story stops after three visits', () => {
   let openedStories = 0;
+  let currentStory: Parameters<CityDialogController['openStory']>[0] | undefined;
+  let closedStories = 0;
+  let completedInteractions = 0;
   const values = new Map<string, string>();
   const restaurant = createWildMushroomRestaurant({
     getDialogs: () => ({
-      openStory: () => { openedStories += 1; },
-      closeNpc: () => {},
+      openStory: (story) => { openedStories += 1; currentStory = story; },
+      closeNpc: () => { closedStories += 1; },
     }),
     burnCity: (onDone) => { onDone?.(); return true; },
     awardAchievement: () => {},
@@ -138,12 +147,46 @@ test('wild mushroom restaurant story stops after three visits', () => {
     }),
   });
 
-  assert.equal(restaurant.interact(), 'opened');
-  assert.equal(restaurant.interact(), 'opened');
-  assert.equal(restaurant.interact(), 'opened');
+  const completeVisit = () => {
+    while (currentStory?.options?.[0]?.text !== '离开') currentStory?.options?.[0]?.onPick();
+    currentStory?.options?.[0]?.onPick();
+  };
+
+  assert.equal(restaurant.interact(() => { completedInteractions += 1; }), 'opened');
+  assert.equal(values.get('minicityWildMushroomVisits'), undefined);
+  completeVisit();
+  assert.equal(restaurant.interact(() => { completedInteractions += 1; }), 'opened');
+  completeVisit();
+  assert.equal(restaurant.interact(() => { completedInteractions += 1; }), 'opened');
+  completeVisit();
   assert.equal(restaurant.interact(), 'exhausted');
   assert.equal(values.get('minicityWildMushroomVisits'), '3');
+  assert.equal(completedInteractions, 3);
+  assert.ok(closedStories >= 6, 'dialog closes before each burn and after each completed visit');
   assert.ok(openedStories > 0);
+});
+
+test('wild mushroom restaurant hides its dialog throughout the burn effect', () => {
+  let currentStory: Parameters<CityDialogController['openStory']>[0] | undefined;
+  let dialogOpen = false;
+  let finishBurn: (() => void) | undefined;
+  const restaurant = createWildMushroomRestaurant({
+    getDialogs: () => ({
+      openStory: (story) => { currentStory = story; dialogOpen = true; },
+      closeNpc: () => { dialogOpen = false; },
+    }),
+    burnCity: (onDone) => { finishBurn = onDone; return true; },
+    awardAchievement: () => {},
+    getStorage: () => ({ getItem: () => null, setItem: () => {} }),
+  });
+
+  restaurant.interact();
+  currentStory?.options?.[0]?.onPick();
+  currentStory?.options?.[0]?.onPick();
+  assert.equal(dialogOpen, false);
+  finishBurn?.();
+  assert.equal(dialogOpen, true);
+  assert.match(currentStory?.text ?? '', /镜子/);
 });
 
 test('Shinian Mengyanyu follows the noon pause and exposes both teleports', () => {
