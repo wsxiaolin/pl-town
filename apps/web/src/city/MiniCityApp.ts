@@ -480,7 +480,10 @@ function init() {
     getQuestAction: (npcId)=>questRuntime.getNpcAction(npcId,getQuestProgressView()),
     performQuestAction: (action,at)=>questRuntime.performNpcAction(action,at),
     onNpcInteracted: recordNpcInteraction,
-    onDialogueAction: (action)=>action.startsWith('teleport:')&&mapController?.teleportToBuilding(action.slice(9)),
+    onDialogueAction: (action)=>{
+      if(action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
+      if(action.startsWith('open-url:')) window.location.href=action.slice(9);
+    },
     pauseNpcs,
     resumeNpcs,
     showToast: showUnlockToast,
