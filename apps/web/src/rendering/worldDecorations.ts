@@ -185,6 +185,8 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   
   function addDistrictBuildings() {
     const centers=[-33,-27,-21,-15,-9,-3,3,9,15,21,27,33], lots: Array<[number, number, number]> = [];
+    // Keep these landmark coordinates reserved as an explicit intent marker;
+    // buildingBounds below also blocks their current building footprints.
     const reservedSpecialLots = new Set(['32,-8', '28,2', '33,3']);
     const buildingBounds=buildings.map((building)=>new THREE.Box3().setFromObject(building.group));
     centers.forEach(x=>centers.forEach(z=>{
