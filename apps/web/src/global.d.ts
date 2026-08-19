@@ -9,6 +9,8 @@ declare global {
     restoreBuilding?: (buildingId: string) => boolean;
     restoreResidence?: (residenceId: string) => boolean;
     restoreAll?: () => number;
+    playInvasionCG?: () => boolean;
+    stopInvasionCG?: () => void;
   }
 }
 
