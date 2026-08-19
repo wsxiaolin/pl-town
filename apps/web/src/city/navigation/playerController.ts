@@ -27,6 +27,8 @@ export type PlayerControllerOptions = {
   addDistance: (amount: number) => void;
   getManualMovement: () => { x: number; z: number };
   resolveMovement: (from: THREE.Vector3, target: THREE.Vector3, result?: THREE.Vector3) => THREE.Vector3;
+  isInputLocked?: () => boolean;
+  isCinematicCameraActive?: () => boolean;
 };
 
 export function createPlayerController(options: PlayerControllerOptions) {
@@ -35,6 +37,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
   const resolvedMovement = new THREE.Vector3();
 
   function moveTo(target: THREE.Vector3): void {
+    if (options.isInputLocked?.()) return;
     const cursor = options.getCursor();
     if (!cursor || options.isDialogOpen()) return;
     cursor.visible = true;
@@ -53,6 +56,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
   }
 
   function updateMovement(delta: number): void {
+    if (options.isInputLocked?.()) return;
     const cursor = options.getCursor();
     const manual = options.getManualMovement();
     const path = options.getPlayerPath();
@@ -128,6 +132,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
   }
 
   function updateCamera(): void {
+    if (options.isCinematicCameraActive?.()) return;
     const cursor = options.getCursor();
     if (!cursor || options.isMapOpen() || options.isDialogOpen()) return;
     const echo = options.getEcho();

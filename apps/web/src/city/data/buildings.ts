@@ -5,6 +5,15 @@ const I = (svg: string) =>
 
 export const BUILDING_DEFS = [
   {
+    id: "academy_library",
+    num: "书院",
+    label: "书院",
+    x: 3,
+    z: -15,
+    shape: "academy",
+    icon: I(`<path d="M4 19V8l8-4 8 4v11"/><path d="M8 19v-6h8v6"/><path d="M9 9h6"/><path d="M12 4v5"/>`),
+  },
+  {
     id: "activity",
     num: "01",
     label: "活动区",
@@ -403,11 +412,20 @@ export const BUILDING_DEFS = [
     num: "36",
     label: "野生菌餐馆",
     x: -33,
-    z: 33,
+    z: 3,
     shape: "wild_mushroom_restaurant",
     icon: I(
       `<path d="M4 10h16v10H4z"/><path d="M3 10h18"/><path d="M6 6v4M12 6v4M18 6v4"/><path d="M8 14h8v6H8z"/>`,
     ),
+  },
+  {
+    id: "film_city",
+    num: "50",
+    label: "物实影视城",
+    x: -9,
+    z: -21,
+    shape: "film_city",
+    icon: I(`<rect x="3" y="7" width="14" height="12" rx="2"/><path d="m17 11 4-2v8l-4-2z"/><path d="M6 7 8 3h4l2 4"/>`),
   },
   {
     id: "archive",

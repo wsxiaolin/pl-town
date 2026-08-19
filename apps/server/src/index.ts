@@ -12,7 +12,7 @@ import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, ServerMessage, User } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
@@ -212,6 +212,13 @@ async function handle(client: Client, raw: string) {
         const progress = db.consumeItem(userId, message.itemId, quantity);
         send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'item.consumed', itemId: message.itemId, quantity } });
       } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not consume item'); }
+      return;
+    }
+    if (message.type === 'progress.filmCity.experience') {
+      try {
+        const progress = db.purchaseFilmCityExperience(userId, FILM_CITY_EXPERIENCE_PRICE);
+        send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'film_city.experience', serviceId: 'film_city_flyover', purchased: true, price: FILM_CITY_EXPERIENCE_PRICE } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not purchase film city experience'); }
       return;
     }
     if (message.type === 'progress.reward.claim') {

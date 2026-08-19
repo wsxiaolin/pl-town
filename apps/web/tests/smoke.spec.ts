@@ -88,7 +88,8 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
       send(raw: string) {
         const request = JSON.parse(raw);
         const catalog = {
-          initialCurrency: 1200, buildingPrices: { mall_south: 0 },
+          initialCurrency: 1200, buildingPrices: { mall_south: 0, academy_library: 0 },
+          buildingUnlockable: { mall_south: true, academy_library: true },
           achievementRewards: { citizen: 20, cat_cafe_note: 30, minicity_origin: 50, dragonwell_assimilation: 80 },
           products: {
             dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
@@ -154,6 +155,15 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     await expect(product.locator('small')).toHaveText(detail);
   }
   await page.locator('[data-shop-close]').click();
+
+  await page.evaluate(() => (window as any).__mini().interactBuilding('academy_library'));
+  await expect(page.locator('#academyPanel')).toHaveClass(/open/);
+  await page.locator('.academy-work').first().click();
+  await expect(page.locator('#academyReader')).toHaveClass(/open/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#academyReader')).not.toHaveClass(/open/);
+  await expect(page.locator('#academyPanel')).toHaveClass(/open/);
+  await page.locator('#academyClose').click();
 
   const worldAudit = await page.evaluate(async () => {
     const mini = (window as any).__mini();
@@ -770,18 +780,28 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
     const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { achievements?: string[] };
     return stats.achievements ?? [];
   });
+  const interactionCount = () => page.evaluate(() => {
+    const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { interactions?: number };
+    return stats.interactions ?? 0;
+  });
   const pick = (label: string) => page.locator('.npc-opt').filter({ hasText: label }).click();
 
   // 首访：点火锅 → 3 个感叹号选项 → 烧城 → 镜子幻觉吐槽。
+  const interactionsBeforeVisit = await interactionCount();
   await interact();
   await expect(page.locator('#npcLine')).toHaveText('老板招呼你坐下，锅里的汤咕嘟咕嘟地响。');
+  expect(await page.evaluate(() => localStorage.getItem('minicityWildMushroomVisits'))).toBeNull();
   await pick('一年总要吃两次野生菌火锅');
   await expect(page.locator('.npc-opt')).toHaveCount(3);
   await page.locator('.npc-opt').filter({ hasText: /^我要吃！$/ }).click();
+  await expect(page.locator('#npcOverlay')).not.toHaveClass(/open/);
   // 烧城动画约 6s（GSAP timeline），软件渲染下轮询等待 onDone 后的下一段对话。
   await expect(page.locator('#npcLine')).toContainText('这镜子一看就是真的', { timeout: 30_000 });
-  await page.locator('#npcClose').click();
+  expect(await page.evaluate(() => localStorage.getItem('minicityWildMushroomVisits'))).toBeNull();
+  await pick('离开');
   await expect(page.locator('#npcOverlay')).not.toHaveClass(/open/);
+  expect(await page.evaluate(() => localStorage.getItem('minicityWildMushroomVisits'))).toBe('1');
+  expect(await interactionCount()).toBe(interactionsBeforeVisit + 1);
 
   // 二访：预置一次访问 → 明知道还要吃 → 烧城 → 解锁「吃一堑再吃一堑」。
   await page.evaluate(() => localStorage.setItem('minicityWildMushroomVisits', '1'));
@@ -790,7 +810,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await page.locator('.npc-opt').first().click();
   await expect(page.locator('#npcLine')).toContainText('熟悉的幻觉又来了', { timeout: 30_000 });
   await expect.poll(() => unlocked(), { timeout: 10_000 }).toContain('wild_mushroom_stubborn');
-  await page.locator('#npcClose').click();
+  await pick('离开');
 
   // 三访：预置两次访问 → 免责声明四连 → 上菜 → 烧城 → 解锁「真正的云南人」。
   await page.evaluate(() => localStorage.setItem('minicityWildMushroomVisits', '2'));
@@ -807,7 +827,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await page.locator('.npc-opt').first().click();
   await expect(page.locator('#npcLine')).toContainText('真正的云南人，佩服佩服', { timeout: 30_000 });
   await expect.poll(() => unlocked(), { timeout: 10_000 }).toContain('wild_mushroom_local');
-  await page.locator('#npcClose').click();
+  await pick('离开');
 
   // 四访：预置三次访问（剧情已用尽）→ 不再进入小剧情，回退到普通建筑弹窗。
   await page.evaluate(() => localStorage.setItem('minicityWildMushroomVisits', '3'));

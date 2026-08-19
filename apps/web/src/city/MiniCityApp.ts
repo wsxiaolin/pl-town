@@ -24,6 +24,7 @@ import { createCommunityPanelController } from '../adapters/ui/communityPanelCon
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
 import { createWriterCatalogController, type WriterCatalogController } from '../adapters/ui/writerCatalogController';
 import { createNewsstandController, type NewsstandController } from '../adapters/ui/newsstandController';
+import { createAcademyController, type AcademyController } from '../adapters/ui/academyController';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
@@ -67,6 +68,7 @@ import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
+import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -110,10 +112,11 @@ let loginController: ReturnType<typeof createLoginController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
+let filmCityCinematicActive = false;
 let progressionController: ReturnType<typeof createProgressionController>;
 let buildingSceneController: ReturnType<typeof createBuildingSceneController>;
 let buildingLabelController: ReturnType<typeof createBuildingLabelController>;
-let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController;
+let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController, academyController: AcademyController;
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof createWorldDecorations>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
@@ -263,6 +266,26 @@ const wildMushroomRestaurant = createWildMushroomRestaurant({
   awardAchievement: awardDirectAchievement,
 });
 
+const filmCityExperience = createFilmCityExperienceController({
+  dialogs: () => cityDialogs,
+  getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
+  purchase: () => multiplayerHousing?.progression.purchaseFilmCityExperience() ?? Promise.resolve(false),
+  getCameraSnapshot: () => ({ x: cameraTarget.x, z: cameraTarget.z, zoom: cameraZoom }),
+  playShots: (shots, onComplete) => cameraController?.playSequence(shots, onComplete),
+  stopShots: () => cameraController?.stop(),
+  restoreCamera: (snapshot) => {
+    cameraZoom = snapshot.zoom;
+    updateCameraProjection(cameraZoom);
+    cameraController?.setTarget(snapshot.x, snapshot.z, true);
+  },
+  setCinematicActive: (active) => {
+    filmCityCinematicActive = active;
+    movementInputController?.setLocked(active);
+  },
+  clearPlayerPath: () => { playerPath = []; },
+  showToast: showUnlockToast,
+});
+
 const buildingInteraction = createBuildingInteraction({
   isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
@@ -275,8 +298,10 @@ const buildingInteraction = createBuildingInteraction({
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
+  getAcademyController: () => academyController,
   trackInteraction,
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
+  getFilmCityController: () => filmCityExperience,
 });
 
 const eventBindings = createEventBindings({
@@ -296,6 +321,7 @@ const eventBindings = createEventBindings({
   getCommunityPanels: () => communityPanels,
   getMapController: () => mapController,
   getWriterCatalogController: () => writerCatalogController,
+  getAcademyController: () => academyController,
   toggleMapMode,
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog,
@@ -317,6 +343,7 @@ function init() {
   cameraController = createCameraController({
     getCamera: () => camera,
     getZoom: () => cameraZoom,
+    setZoom: (zoom) => { cameraZoom = zoom; },
     getTarget: () => cameraTarget,
     isEchoInterior: () => Boolean(echoStoryController?.isInteriorView()),
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
@@ -392,6 +419,7 @@ function init() {
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   writerCatalogController = createWriterCatalogController({ document });
   newsstandController = createNewsstandController({ document, signal: eventController.signal });
+  academyController = createAcademyController(document);
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter, showLoginEntry, showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding,
@@ -484,6 +512,9 @@ function init() {
   });
   mapController.setup(eventController.signal);
   movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];interactionPointer.clearPending();}});
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
+  }, { signal: eventController.signal });
   playerController = createPlayerController({
     getCursor: () => cursorChar,
     getCamera: () => camera,
@@ -504,6 +535,8 @@ function init() {
     addDistance: flushDistance,
     getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
     resolveMovement: (from, target, result) => roadNavigation.resolveMovement(from, target, result),
+    isInputLocked: () => filmCityCinematicActive,
+    isCinematicCameraActive: () => filmCityCinematicActive,
   });
   loginController = createLoginController({
     getStats,
@@ -855,6 +888,7 @@ export function startMiniCity() {
 export function destroyMiniCity() {
   if(!started)return;
   started=false;
+  filmCityExperience.dispose();
   frameLoop.stop();
   clearInterval(clockInterval);
   clearInterval(trackingInterval);

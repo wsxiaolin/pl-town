@@ -17,8 +17,10 @@ export type BuildingInteractionOptions = {
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
+  getAcademyController?: () => { open: () => void; close: () => void; closeReader: () => void } | null;
   trackInteraction: (buildingId: string) => void;
-  getWildMushroomRestaurant?: () => { interact: () => WildMushroomInteractResult } | null;
+  getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
+  getFilmCityController?: () => { interact: () => void } | null;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
@@ -39,15 +41,17 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateUnlocked(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
+    if (b.id === 'film_city') {
+      options.getFilmCityController?.()?.interact();
+      options.trackInteraction(b.id);
+      return;
+    }
     // 点击「野生菌餐馆」（原文训社外环）触发野生菌小剧情：每次进店都会被放倒、烧一次城。
     if (b.id === 'writingclub_outer') {
       const restaurant = options.getWildMushroomRestaurant?.();
       if (restaurant) {
-        // 'opened'：小剧情已展开，仅记录互动；'no-dialog' / 'exhausted' 均回退到普通建筑弹窗。
-        if (restaurant.interact() === 'opened') {
-          options.trackInteraction(b.id);
-          return;
-        }
+        // 小剧情走到最终离开选项时，才算完成一次互动。
+        if (restaurant.interact(() => options.trackInteraction(b.id)) === 'opened') return;
       }
       options.trackInteraction(b.id);
       openModal(b);
@@ -81,6 +85,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'newsstand') {
       options.getNewsstandController()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'academy_library') {
+      options.getAcademyController?.()?.open();
       options.trackInteraction(b.id);
       return;
     }

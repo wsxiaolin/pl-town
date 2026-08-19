@@ -1,6 +1,7 @@
 import type { PlayerProgress } from './types.js';
 
 export const INITIAL_CURRENCY = 1200;
+export const FILM_CITY_EXPERIENCE_PRICE = 400;
 
 export const DEFAULT_UNLOCKED_BUILDING_IDS = ['writingclub_outer'] as const;
 
@@ -11,7 +12,7 @@ const BUILDING_IDS = [
   'teahouse', 'mall_south', 'school_east', 'mall_west', 'school_north', 'kingice', 'knowledgebaseD',
   'community_outer', 'commons_outer', 'lab_outer', 'teahouse_outer', 'writingclub_outer',
   'archive', 'tradingpost', 'records', 'guildhall', 'musichall', 'conservatory', 'arena',
-  'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall', 'wushi_restaurant',
+  'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall', 'wushi_restaurant', 'film_city', 'academy_library',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
