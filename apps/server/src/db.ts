@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { DATA_DIR, DATABASE_PATH } from './config.js';
 import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
-import { DEFAULT_UNLOCKED_BUILDING_IDS, INITIAL_CURRENCY } from './progression.js';
+import { ensureProgress, addInventory } from './playerProgressDefaults.js';
 import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
 import type { ChatMessage, PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
 import type {
@@ -275,24 +275,8 @@ export function updateUserProfile(id: string, nickname: string, email?: string):
 export function savePosition(id: string, position: Position): void {
   db.prepare('UPDATE users SET position_x = ?, position_y = ?, position_z = ?, rotation = ?, updated_at = ? WHERE id = ?').run(position.x, position.y, position.z, position.rotation ?? null, now(), id);
 }
-
-function ensureProgress(userId: string): void {
-  const timestamp = now();
-  db.prepare('INSERT OR IGNORE INTO player_progress (user_id, currency, created_at, updated_at) VALUES (?, ?, ?, ?)')
-    .run(userId, INITIAL_CURRENCY, timestamp, timestamp);
-  const unlockBuilding = db.prepare('INSERT OR IGNORE INTO player_building_unlocks (user_id, building_id, unlocked_at) VALUES (?, ?, ?)');
-  DEFAULT_UNLOCKED_BUILDING_IDS.forEach((buildingId) => unlockBuilding.run(userId, buildingId, timestamp));
-}
-
-function addInventory(userId: string, itemId: string, quantity: number): void {
-  db.prepare(`
-    INSERT INTO player_inventory (user_id, item_id, quantity, updated_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity, updated_at = excluded.updated_at
-  `).run(userId, itemId, quantity, now());
-}
-
 export function getPlayerProgress(userId: string): PlayerProgress {
-  ensureProgress(userId);
+  ensureProgress(db, userId, now());
   const currency = (db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(userId) as { currency: number }).currency;
   const inventoryRows = db.prepare('SELECT item_id, quantity FROM player_inventory WHERE user_id = ? ORDER BY item_id').all(userId) as Array<{ item_id: string; quantity: number }>;
   const inventory = Object.fromEntries(inventoryRows.map((row) => [row.item_id, row.quantity]));
@@ -305,13 +289,13 @@ export function getPlayerProgress(userId: string): PlayerProgress {
 export function recordBuildingVisit(userId: string, buildingId: string): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
   let welcomeItemsGranted = false;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const inserted = db.prepare('INSERT OR IGNORE INTO player_building_visits (user_id, building_id, first_visited_at) VALUES (?, ?, ?)').run(userId, buildingId, now());
     if (!inserted.changes) return;
     const count = (db.prepare('SELECT COUNT(*) AS count FROM player_building_visits WHERE user_id = ?').get(userId) as { count: number }).count;
     if (count === 2) {
-      addInventory(userId, 'city_guide', 1);
-      addInventory(userId, 'city_badge', 1);
+      addInventory(db, userId, 'city_guide', 1, now());
+      addInventory(db, userId, 'city_badge', 1, now());
       welcomeItemsGranted = true;
     }
   })();
@@ -322,7 +306,7 @@ export function unlockAchievement(userId: string, achievementId: string, currenc
   let unlocked = false;
   let rewardGranted = 0;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const result = db.prepare('INSERT OR IGNORE INTO player_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)').run(userId, achievementId, now());
     unlocked = result.changes > 0;
     if (currencyReward <= 0) return;
@@ -337,7 +321,7 @@ export function unlockAchievement(userId: string, achievementId: string, currenc
 export function purchaseBuilding(userId: string, buildingId: string, price: number): { progress: PlayerProgress; unlocked: boolean } {
   let unlocked = false;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     if (db.prepare('SELECT 1 FROM player_building_unlocks WHERE user_id = ? AND building_id = ?').get(userId, buildingId)) return;
     if (price > 0) {
       const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(price, now(), userId, price);
@@ -351,18 +335,18 @@ export function purchaseBuilding(userId: string, buildingId: string, price: numb
 
 export function purchaseItem(userId: string, itemId: string, quantity: number, unitPrice: number): PlayerProgress {
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const total = quantity * unitPrice;
     const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(total, now(), userId, total);
     if (!charged.changes) throw new Error('Insufficient currency');
-    addInventory(userId, itemId, quantity);
+    addInventory(db, userId, itemId, quantity, now());
   })();
   return getPlayerProgress(userId);
 }
 
 export function consumeItem(userId: string, itemId: string, quantity: number): PlayerProgress {
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const row = db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, itemId) as { quantity: number } | undefined;
     if (!row || row.quantity < quantity) throw new Error('Item is not available');
     if (row.quantity === quantity) db.prepare('DELETE FROM player_inventory WHERE user_id = ? AND item_id = ?').run(userId, itemId);
@@ -374,10 +358,10 @@ export function consumeItem(userId: string, itemId: string, quantity: number): P
 export function claimReward(userId: string, rewardId: string, claimKey: string, itemId: string, quantity: number): { progress: PlayerProgress; claimed: boolean } {
   let claimed = false;
   db.transaction(() => {
-    ensureProgress(userId);
+    ensureProgress(db, userId, now());
     const inserted = db.prepare('INSERT OR IGNORE INTO player_reward_claims (user_id, reward_id, claim_key, claimed_at) VALUES (?, ?, ?, ?)').run(userId, rewardId, claimKey, now());
     if (!inserted.changes) return;
-    addInventory(userId, itemId, quantity);
+    addInventory(db, userId, itemId, quantity, now());
     claimed = true;
   })();
   return { progress: getPlayerProgress(userId), claimed };
