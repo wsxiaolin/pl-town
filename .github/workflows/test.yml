@@ -6,14 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Cancel superseded runs on the same ref.
 concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Static checks + unit/domain + server tests run on the runner directly; none
-  # of them need WebGL, so they stay fast and shard-free.
   verify:
     name: Typecheck, build, unit & server tests
     runs-on: ubuntu-latest
@@ -27,7 +24,12 @@ jobs:
           cache: npm
 
       - name: Configure npm network retries
-        run: npm config set registry https://registry.npmjs.org/ && npm config set fetch-retries 3 && npm config set fetch-retry-mintimeout 1000 && npm config set fetch-retry-maxtimeout 10000 && npm config set fetch-timeout 120000
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set fetch-retries 3
+          npm config set fetch-retry-mintimeout 1000
+          npm config set fetch-retry-maxtimeout 10000
+          npm config set fetch-timeout 120000
 
       - run: npm ci --prefer-offline
 
@@ -40,76 +42,38 @@ jobs:
       - name: Server integration tests
         run: npm run test:server
 
-  # The Playwright suite renders a Three.js city with WebGL, which headless
-  # Chromium cannot create. We shard the suite across a matrix and run each
-  # shard under Xvfb with the SwiftShader software-GL driver (via the shared
-  # scripts/run-web-tests.sh wrapper). Shards cut wall-clock time roughly
-  # linearly; bump SHARD_TOTAL if the suite grows past ~6 min per shard.
   web:
     name: Web (Playwright) shard ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+
+    # ---------------- 关键：直接使用官方镜像 ----------------
+    # 请确认你 package.json 里的 @playwright/test 版本，比如 1.49.0 就写 v1.49.0-noble
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host # 给 Chromium 共享内存，防止 WebGL 复杂场景爆内存崩溃
+    # -----------------------------------------------------
+
     strategy:
       fail-fast: false
       matrix:
-        # 4 shards keeps each ~3-4 min on a 2-core runner while still leaving
-        # headroom for the WebGL frame loop under software rendering.
         shard: [1, 2, 3, 4]
         total: [4]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+      # 容器内自带 Node.js 和已装好的全局 Playwright 浏览器，仅需安装项目依赖
+      - name: Install npm dependencies
+        run: npm ci --prefer-offline
 
-      - name: Configure npm network retries
-        run: npm config set registry https://registry.npmjs.org/ && npm config set fetch-retries 3 && npm config set fetch-retry-mintimeout 1000 && npm config set fetch-retry-maxtimeout 10000 && npm config set fetch-timeout 120000
-
-      - run: npm ci --prefer-offline
-
-      # Xvfb (virtual display) + the Vulkan/SwiftShader software-GL stack that
-      # headed Chromium needs to create a WebGL context in a headless runner.
-      - name: Install Xvfb + software GL
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            xvfb xauth \
-            libgl1 libegl1 libgles2 mesa-vulkan-drivers \
-            fonts-noto-cjk fonts-noto-color-emoji
-
-      # The browser download (~170MB) is by far the slowest part of CI setup
-      # and runs once per shard, so cache it across runs/shards. Key on the
-      # exact Playwright version from the lockfile so unrelated dependency
-      # updates don't bust the cache.
-      - name: Resolve Playwright version
-        id: pw-version
-        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
-
-      # System libraries are not part of the browser cache, so always install
-      # them (apt-only, fast). Splitting this from the browser download lets
-      # the cache-hit path skip the expensive binary fetch entirely.
-      - name: Install Chromium system dependencies
-        run: npx playwright install-deps chromium
-
-      - name: Install Playwright Chromium (full build, WebGL-capable)
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
-
+      # 零安装步骤！Xvfb、WebGL 软解库、浏览器全部出厂自带，直接运行
       - name: Run web test shard under Xvfb
         run: scripts/run-web-tests.sh --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           CI: 'true'
-          PLAYWRIGHT_WORKERS: '2'
+          PLAYWRIGHT_WORKERS: '1'
+          HOME: /root
 
       - name: Upload shard report
         if: ${{ !cancelled() }}
