@@ -18,7 +18,7 @@ export type BuildingInteractionOptions = {
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
-  getWildMushroomRestaurant?: () => { interact: () => WildMushroomInteractResult } | null;
+  getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
@@ -43,11 +43,8 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     if (b.id === 'writingclub_outer') {
       const restaurant = options.getWildMushroomRestaurant?.();
       if (restaurant) {
-        // 'opened'：小剧情已展开，仅记录互动；'no-dialog' / 'exhausted' 均回退到普通建筑弹窗。
-        if (restaurant.interact() === 'opened') {
-          options.trackInteraction(b.id);
-          return;
-        }
+        // 小剧情走到最终离开选项时，才算完成一次互动。
+        if (restaurant.interact(() => options.trackInteraction(b.id)) === 'opened') return;
       }
       options.trackInteraction(b.id);
       openModal(b);
