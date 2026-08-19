@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
 import { applyBuildingDestroyedPresentation, isBuildingDestroyed, readDestroyedIds, restoreBuildingPresentation, writeDestroyedIds } from '../../src/city/buildingDamage';
+import { createBuildingDamageController } from '../../src/city/buildingDamageController';
 
 test('destroying a building adds rubble and marks it unavailable', () => {
   const group = new THREE.Group();
@@ -43,4 +44,48 @@ test('destroyed ids persist and recover from malformed storage', () => {
   assert.deepEqual(readDestroyedIds(storage), ['library', 'residence:1.00:2.00']);
   values.set('minicityDestroyedBuildings', '{bad json');
   assert.deepEqual(readDestroyedIds(storage), []);
+});
+
+test('residence visual batches follow destroy, restore, and persisted state', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  };
+  const makeResidence = () => {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
+    group.add(body);
+    return { id: 'residence:test', group, body };
+  };
+  const visibility: Array<[string, boolean]> = [];
+  const firstResidence = makeResidence();
+  const firstController = createBuildingDamageController({
+    getBuildings: () => [],
+    getResidences: () => [firstResidence],
+    invalidateMap: () => undefined,
+    refreshResidenceLabels: () => undefined,
+    setResidenceVisualVisible: (id, visible) => visibility.push([id, visible]),
+    storage,
+  });
+
+  assert.equal(firstController.destroyAll(), 1);
+  assert.deepEqual(visibility, [['residence:test', false]]);
+  assert.equal(firstController.restoreAll(), 1);
+  assert.deepEqual(visibility.at(-1), ['residence:test', true]);
+  assert.equal(firstController.destroyResidence('residence:test'), true);
+
+  const recoveredVisibility: Array<[string, boolean]> = [];
+  const recoveredResidence = makeResidence();
+  createBuildingDamageController({
+    getBuildings: () => [],
+    getResidences: () => [recoveredResidence],
+    invalidateMap: () => undefined,
+    refreshResidenceLabels: () => undefined,
+    setResidenceVisualVisible: (id, visible) => recoveredVisibility.push([id, visible]),
+    storage,
+  }).applyPersisted();
+
+  assert.equal(isBuildingDestroyed(recoveredResidence), true);
+  assert.deepEqual(recoveredVisibility, [['residence:test', false]]);
 });

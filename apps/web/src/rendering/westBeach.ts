@@ -87,9 +87,11 @@ export function createWestBeach(options: BeachOptions): {
   const coastLine = addMesh(object, options, new THREE.BoxGeometry(0.12, 0.02, waterLength), { color: 0xf3e9d4, roughness: 0.55, transparent: true, opacity: 0.9, depthWrite: false }, [WEST_BEACH.coastlineX + 0.03, 0.095, 10]);
   coastLine.castShadow = false;
   coastLine.renderOrder = 5;
+  const foams: THREE.Mesh[] = [];
   for (let index = 0; index < 4; index += 1) {
     const foam = addMesh(object, options, new THREE.BoxGeometry(0.1, 0.025, waterLength), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72, depthWrite: false }, [WEST_BEACH.coastlineX - 0.55 - index * 0.72, 0.09, 10]);
     foam.userData.foamIndex = index;
+    foams.push(foam);
   }
   const palms = [-1, 1].map((side) => {
     const palm = new THREE.Group();
@@ -136,15 +138,16 @@ export function createWestBeach(options: BeachOptions): {
     update(elapsedSeconds) {
       bismarck.position.z = -4 + Math.sin(elapsedSeconds * 0.16) * 12;
       hipper.position.z = 25 - Math.sin(elapsedSeconds * 0.13) * 9;
-      seagulls.forEach((bird, index) => {
+      for (let index = 0; index < seagulls.length; index += 1) {
+        const bird = seagulls[index]!;
         bird.position.x = -53 + Math.sin(elapsedSeconds * 0.35 + index * 2.1) * 7;
         bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
-      });
-      object.traverse((child) => {
-        if (typeof child.userData.foamIndex !== 'number') return;
-        child.position.x = WEST_BEACH.coastlineX - 0.55 - child.userData.foamIndex * 0.72 + Math.sin(elapsedSeconds * 0.8 + child.userData.foamIndex) * 0.14;
-      });
+      }
+      for (const foam of foams) {
+        const index = foam.userData.foamIndex as number;
+        foam.position.x = WEST_BEACH.coastlineX - 0.55 - index * 0.72 + Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
+      }
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
         rewardCard.rotation.y = elapsedSeconds * 0.8;

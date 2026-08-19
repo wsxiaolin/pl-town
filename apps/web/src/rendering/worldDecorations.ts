@@ -4,6 +4,7 @@ import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createResidenceModel } from './residenceStyles';
+import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
 
@@ -37,6 +38,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addObstacleGroup,
   } = options;
   let treeTrunks: InstancedBatch | undefined, treeCrowns: InstancedBatch | undefined, lampPosts: InstancedBatch | undefined, lampLights: InstancedBatch | undefined;
+  let decorationObstacleBounds: THREE.Box3[] | null = null;
+  let residenceVisualBatch: RetainedStaticMeshBatch | null = null;
+  const residenceRoots: RetainedStaticMeshRoot[] = [];
+  const interactiveDecorationRoots = new Set<THREE.Object3D>();
   const orangeGroveCenter={x:-15,z:-3};
   const roadWidth=(position: number)=>position===0?2.4:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
 
@@ -49,6 +54,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
 
   // ── Building ground plots ──
   function addDecorations() {
+    const existingSceneChildren = new Set(scene.children);
     addDistrictBuildings();
     addMarketStalls(-9, 6, 4, 0);
     addMarketStalls(6, -12, 3, 1);
@@ -102,6 +108,9 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     for(let v of [-27,-21,-15,15,21,27]) {
       addTrees([[v,0,-3],[v,0,3],[-3,0,v],[3,0,v]]);
     }
+    const decorationRoots = scene.children.filter((child)=>!existingSceneChildren.has(child));
+    batchStaticMeshes(scene, decorationRoots, interactiveDecorationRoots);
+    residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots);
   }
   
   // ── Edge grass + edge pond with short straight paths and small buildings ─────
@@ -176,6 +185,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   
   function addDistrictBuildings() {
     const centers=[-33,-27,-21,-15,-9,-3,3,9,15,21,27,33], lots: Array<[number, number, number]> = [];
+    const buildingBounds=buildings.map((building)=>new THREE.Box3().setFromObject(building.group));
     centers.forEach(x=>centers.forEach(z=>{
       if(Math.hypot(x,z)<4.8)return;
       const dist=Math.max(Math.abs(x),Math.abs(z));
@@ -188,8 +198,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
-        const blocked=buildings.some(b=>{
-          const box=new THREE.Box3().setFromObject(b.group);
+        const blocked=buildingBounds.some(box=>{
           return lx>=box.min.x-1.35&&lx<=box.max.x+1.35
             &&lz>=box.min.z-1.35&&lz<=box.max.z+1.35;
         });
@@ -197,6 +206,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       });
     }));
     lots.forEach(([x,z,t],i)=>addSmallBlock(x,0,z,t,i));
+    decorationObstacleBounds=null;
   }
   
   function addSmallBlock(x: number, y: number, z: number, type: number, i: number) {
@@ -204,7 +214,8 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
     g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
     g.traverse((object: THREE.Object3D)=>{ if('isMesh' in object && object.isMesh) { object.userData.residenceId=residenceId; object.userData.residenceStyleId=styleId; } });
-    scene.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
+    scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
+    residenceRoots.push({key:residenceId,root:g});
     residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅 · ${styleName}`,group:g,body,labelEl:null,styleId});
     // ── 建筑下面的小地块贴图（成片共享纹理）──
     const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
@@ -217,7 +228,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     plot.userData.residenceId = residenceId;
     const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
     plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
-    plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot); addRaycastGroup(plot);
+    plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot); interactiveDecorationRoots.add(plot); addRaycastGroup(plot);
   }
   
   function addTrees(positions: readonly Vec3[]) {
@@ -244,9 +255,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       lampLights = new InstancedBatch(scene,resources.geometry(new THREE.SphereGeometry(0.13,14,14)),globeMaterial,384,false);
       lampGlobes.push(globeMaterial);
     }
+    const bounds = decorationObstacleBounds ?? (decorationObstacleBounds=[...buildings,...residences]
+        .map((entry)=>new THREE.Box3().setFromObject(entry.group)));
     positions.forEach(([x,,z]) => {
-      const blocked=[...buildings.map(b=>b.group),...residences.map(r=>r.group)].some(group=>{
-        const box=new THREE.Box3().setFromObject(group);
+      const blocked=bounds.some(box=>{
         return x>=box.min.x-0.8&&x<=box.max.x+0.8&&z>=box.min.z-0.8&&z<=box.max.z+0.8;
       });
       if(blocked)return;
@@ -450,11 +462,14 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       part(g, new THREE.SphereGeometry(0.07, 8, 8), {color:0xE85858, roughness:0.8}, [-0.1, 0.68, 0.3], false);
       g.position.set(px, 0, pz);
       g.userData.collisionGroup='market-stall';
-      scene.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
+      scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
     }
   }
   
   // ── Characters ────────────────────────────────────────────────────────────────
 
-  return { addDecorations, addTrees, addLamps, addArch, addBench };
+  return {
+    addDecorations, addTrees, addLamps, addArch, addBench,
+    setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
+  };
 }

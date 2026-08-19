@@ -47,19 +47,20 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const now = performance.now();
     const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
     options.setLastFrameTime(now);
-    options.getPlayerController()?.updateMovement(delta);
+    const playerController = options.getPlayerController();
+    playerController?.updateMovement(delta);
     options.getMultiplayerHousing()?.updateRemotePlayers(delta);
-    options.getNpcList().forEach(npc => {
-      if (!npc.mesh.visible || npc.walking === false) return;
-      options.npcYieldToPlayer(npc);
-    });
-    options.getPlayerController()?.updateCamera();
-    options.getSceneInterestPoints()?.update(now / 1000);
     const cursorChar = options.getCursorChar();
+    if (cursorChar?.visible) {
+      for (const npc of options.getNpcList()) options.npcYieldToPlayer(npc);
+    }
+    playerController?.updateCamera();
+    const sceneInterestPoints = options.getSceneInterestPoints();
+    sceneInterestPoints?.update(now / 1000);
     const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen()
-      ? options.getSceneInterestPoints()?.entities.get('west-beach')
+      ? sceneInterestPoints?.entities.get('west-beach')
       : null;
-    if (beach && cursorChar && cursorChar.position.distanceTo(beach.interactionPosition) <= 3.2) {
+    if (beach && cursorChar && cursorChar.position.distanceToSquared(beach.interactionPosition) <= 3.2 ** 2) {
       void options.getSceneInterestPointController()?.interact('west-beach');
     }
     updateLabels();
@@ -67,7 +68,8 @@ export function createFrameLoop(options: FrameLoopOptions) {
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);
-    if (options.getMapController()?.isOpen()) options.getMapController()?.updateMarker();
+    const mapController = options.getMapController();
+    if (mapController?.isOpen()) mapController.updateMarker();
   }
 
   function start() { animationFrame = requestAnimationFrame(loop); }

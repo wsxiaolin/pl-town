@@ -41,6 +41,8 @@ export function createMapController(options: MapControllerOptions) {
   let shotCamera: THREE.OrthographicCamera | null = null;
   let iconsBuilt = false;
   let tipBuilding: BuildingEntity | null = null;
+  let markerLeft = Number.NaN;
+  let markerTop = Number.NaN;
 
   function toggle(): void {
     open = !open;
@@ -117,8 +119,16 @@ export function createMapController(options: MapControllerOptions) {
     // North (-z) at top, East (+x) at right — matches the captured map image.
     const left = ((cursor.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
     const top = ((cursor.position.z - MAP_SHOT_CENTER_Z + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
-    marker.style.left = `${clamp(left, 0, 100)}%`;
-    marker.style.top = `${clamp(top, 0, 100)}%`;
+    const nextLeft = clamp(left, 0, 100);
+    const nextTop = clamp(top, 0, 100);
+    if (nextLeft !== markerLeft) {
+      marker.style.left = `${nextLeft}%`;
+      markerLeft = nextLeft;
+    }
+    if (nextTop !== markerTop) {
+      marker.style.top = `${nextTop}%`;
+      markerTop = nextTop;
+    }
   }
 
   function renderIcons(): void {

@@ -4,7 +4,8 @@ type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
 type RoadNode = THREE.Vector3 & { i: number; adj: RoadNode[] };
 type BuildingBox = { minX: number; maxX: number; minZ: number; maxZ: number };
-type RoadGraph = { nodes: RoadNode[]; nodeIdx: Map<string, number> };
+type RoadGraph = { nodes: RoadNode[]; nodeIdx: Map<string, number>; routeCache: Map<string, RoadNode[] | null> };
+type CollisionBox = BuildingBox & { queryStamp: number };
 type ObstacleGroup = THREE.Object3D & {
   userData: THREE.Object3D['userData'] & { navigationFootprint?: { width: number; depth: number } };
 };
@@ -31,13 +32,95 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     maxZ: Math.max(CITY_LIMIT, ...allExtraNodes.map(([,z]) => z)) + 8,
   };
   const buildings = options.getBuildings();
-  const buildingBoxes: BuildingBox[] = [];
+  const buildingBoxes: CollisionBox[] = [];
   const obstacleGroups: ObstacleGroup[] = [];
+  const obstacleGroupSet = new Set<THREE.Object3D>();
+  const collisionRows = new Map<number, Map<number, CollisionBox[]>>();
+  const collisionBounds = new THREE.Box3();
+  const collisionCenter = new THREE.Vector3();
+  const COLLISION_CELL_SIZE = 6;
+  let collisionQueryStamp = 0;
+  let buildingBoxesInitialized = false;
+
   function registerObstacleGroup(group: THREE.Object3D | null) {
-    if (!group || obstacleGroups.includes(group as ObstacleGroup)) return;
+    if (!group || obstacleGroupSet.has(group)) return;
+    obstacleGroupSet.add(group);
     obstacleGroups.push(group as ObstacleGroup);
-    cacheBuildingBoxes();
+    if (buildingBoxesInitialized) addObstacleBounds(group as ObstacleGroup);
     roadGraph = null;
+  }
+
+  function collisionCell(value: number): number {
+    return Math.floor(value / COLLISION_CELL_SIZE);
+  }
+
+  // Keep the exact AABB collision tests below, while limiting each query to
+  // boxes in the grid cells touched by the point or segment.
+  function indexBuildingBox(box: CollisionBox): void {
+    const minCellX=collisionCell(box.minX), maxCellX=collisionCell(box.maxX);
+    const minCellZ=collisionCell(box.minZ), maxCellZ=collisionCell(box.maxZ);
+    for(let cellX=minCellX;cellX<=maxCellX;cellX++){
+      let row=collisionRows.get(cellX);
+      if(!row){ row=new Map(); collisionRows.set(cellX,row); }
+      for(let cellZ=minCellZ;cellZ<=maxCellZ;cellZ++){
+        let bucket=row.get(cellZ);
+        if(!bucket){ bucket=[]; row.set(cellZ,bucket); }
+        bucket.push(box);
+      }
+    }
+  }
+
+  function addBuildingBox(box: CollisionBox): void {
+    buildingBoxes.push(box);
+    indexBuildingBox(box);
+  }
+
+  function visitCollisionCandidates(minX: number,minZ: number,maxX: number,maxZ: number,visitor: (box: CollisionBox) => boolean): boolean {
+    const stamp=++collisionQueryStamp;
+    const minCellX=collisionCell(minX), maxCellX=collisionCell(maxX);
+    const minCellZ=collisionCell(minZ), maxCellZ=collisionCell(maxZ);
+    for(let cellX=minCellX;cellX<=maxCellX;cellX++){
+      const row=collisionRows.get(cellX);
+      if(!row) continue;
+      for(let cellZ=minCellZ;cellZ<=maxCellZ;cellZ++){
+        const bucket=row.get(cellZ);
+        if(!bucket) continue;
+        for(const box of bucket){
+          // Large buildings can occupy multiple cells. A numeric stamp avoids
+          // allocating a Set for every movement query.
+          if(box.queryStamp===stamp) continue;
+          box.queryStamp=stamp;
+          if(visitor(box)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function addObjectBounds(group: THREE.Object3D): void {
+    collisionBounds.setFromObject(group);
+    if(!Number.isFinite(collisionBounds.min.x)) return;
+    addBuildingBox({
+      minX:collisionBounds.min.x-PLAYER_CLEARANCE, maxX:collisionBounds.max.x+PLAYER_CLEARANCE,
+      minZ:collisionBounds.min.z-PLAYER_CLEARANCE, maxZ:collisionBounds.max.z+PLAYER_CLEARANCE,
+      queryStamp:0,
+    });
+  }
+
+  function addObstacleBounds(group: ObstacleGroup): void {
+    const footprint=group.userData.navigationFootprint;
+    if(!footprint){ addObjectBounds(group); return; }
+    group.getWorldPosition(collisionCenter);
+    const quarterTurn=Math.abs(Math.sin(group.rotation.y))>0.5;
+    const width=quarterTurn?footprint.depth:footprint.width;
+    const depth=quarterTurn?footprint.width:footprint.depth;
+    addBuildingBox({
+      minX:collisionCenter.x-width/2-PLAYER_CLEARANCE,
+      maxX:collisionCenter.x+width/2+PLAYER_CLEARANCE,
+      minZ:collisionCenter.z-depth/2-PLAYER_CLEARANCE,
+      maxZ:collisionCenter.z+depth/2+PLAYER_CLEARANCE,
+      queryStamp:0,
+    });
   }
 
   function buildRoadPath(from: THREE.Vector3, rawTarget: THREE.Vector3): THREE.Vector3[] {
@@ -158,7 +241,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const bIdx=nodeIdx.get(x2+','+z2);
       if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
     });
-    roadGraph={nodes,nodeIdx};
+    roadGraph={nodes,nodeIdx,routeCache:new Map()};
     return roadGraph;
   }
   
@@ -180,26 +263,32 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     return pointInAnyBuilding(x,z);
   }
 
-  function resolveMovement(from: THREE.Vector3, target: THREE.Vector3): THREE.Vector3 {
-    const desired = new THREE.Vector3(
-      clamp(target.x,WORLD_BOUNDS.minX,WORLD_BOUNDS.maxX),
-      0,
-      clamp(target.z,WORLD_BOUNDS.minZ,WORLD_BOUNDS.maxZ),
-    );
-    if(WEST_BEACH && desired.x<WEST_BEACH.deepWaterX && desired.z>=WEST_BEACH.minZ && desired.z<=WEST_BEACH.maxZ) {
-      return new THREE.Vector3(WEST_BEACH.safeReturnX,0,clamp(desired.z,WEST_BEACH.minZ,WEST_BEACH.maxZ));
+  function resolveMovement(from: THREE.Vector3, target: THREE.Vector3, result: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
+    const fromX=from.x, fromZ=from.z;
+    const desiredX=clamp(target.x,WORLD_BOUNDS.minX,WORLD_BOUNDS.maxX);
+    const desiredZ=clamp(target.z,WORLD_BOUNDS.minZ,WORLD_BOUNDS.maxZ);
+    result.set(desiredX,0,desiredZ);
+    if(WEST_BEACH && desiredX<WEST_BEACH.deepWaterX && desiredZ>=WEST_BEACH.minZ && desiredZ<=WEST_BEACH.maxZ) {
+      return result.set(WEST_BEACH.safeReturnX,0,clamp(desiredZ,WEST_BEACH.minZ,WEST_BEACH.maxZ));
     }
-    if(positionBlocked(from.x,from.z)) return positionBlocked(desired.x,desired.z) ? from.clone() : desired;
-    if(!positionBlocked(desired.x,desired.z)&&!pathBlocked(from.x,from.z,desired.x,desired.z)) return desired;
-    const alongX=new THREE.Vector3(desired.x,0,from.z);
-    const alongZ=new THREE.Vector3(from.x,0,desired.z);
-    const candidates=[alongX,alongZ].filter(p=>!positionBlocked(p.x,p.z)&&!pathBlocked(from.x,from.z,p.x,p.z));
-    candidates.sort((a,b)=>a.distanceToSquared(desired)-b.distanceToSquared(desired));
-    return candidates[0] ?? from.clone();
+    if(positionBlocked(fromX,fromZ)) return positionBlocked(desiredX,desiredZ) ? result.set(fromX,0,fromZ) : result;
+    if(!positionBlocked(desiredX,desiredZ)&&!pathBlocked(fromX,fromZ,desiredX,desiredZ)) return result;
+    const alongXClear=!positionBlocked(desiredX,fromZ)&&!pathBlocked(fromX,fromZ,desiredX,fromZ);
+    const alongZClear=!positionBlocked(fromX,desiredZ)&&!pathBlocked(fromX,fromZ,fromX,desiredZ);
+    if(alongXClear&&alongZClear){
+      const alongXDistance=(fromZ-desiredZ)**2;
+      const alongZDistance=(fromX-desiredX)**2;
+      return alongXDistance<=alongZDistance ? result.set(desiredX,0,fromZ) : result.set(fromX,0,desiredZ);
+    }
+    if(alongXClear) return result.set(desiredX,0,fromZ);
+    if(alongZClear) return result.set(fromX,0,desiredZ);
+    return result.set(fromX,0,fromZ);
   }
   
   function aStarRoad(sNode: RoadNode, eNode: RoadNode, _graph: RoadGraph): RoadNode[] | null {
     if(sNode===eNode) return [sNode];
+    const cacheKey=sNode.i+','+eNode.i;
+    if(_graph.routeCache.has(cacheKey)) return _graph.routeCache.get(cacheKey) ?? null;
     const gScore=new Map<number, number>([[sNode.i,0]]);
     const cameFrom=new Map<number, RoadNode>();
     const closed=new Set<number>();
@@ -214,6 +303,8 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       if(cur.n.i===eNode.i){
         const path: RoadNode[]=[]; let c: RoadNode | undefined=cur.n;
         while(c!==undefined){ path.unshift(c); c=cameFrom.get(c.i); }
+        _graph.routeCache.set(cacheKey,path);
+        _graph.routeCache.set(eNode.i+','+sNode.i,[...path].reverse());
         return path;
       }
       closed.add(cur.n.i);
@@ -228,6 +319,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
         }
       }
     }
+    _graph.routeCache.set(cacheKey,null);
     return null;
   }
   
@@ -241,35 +333,45 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       if(node && node.adj.length) return node;
     }
     if(ROAD_COORDS.includes(p.x)){
-      const zs=ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-p.z)-Math.abs(b-p.z));
-      for(const z of zs) {
+      let best: RoadNode | null=null,bestDelta=Infinity;
+      for(const z of ROAD_COORDS) {
+        const delta=Math.abs(z-p.z);
+        if(delta>=bestDelta) continue;
         const idx=graph.nodeIdx.get(p.x+','+z);
         const node=idx!==undefined?graph.nodes[idx]:undefined;
-        if(node&&node.adj.length&&!pathBlocked(p.x,p.z,p.x,z)) return node;
+        if(node&&node.adj.length&&!pathBlocked(p.x,p.z,p.x,z)){ best=node; bestDelta=delta; }
       }
+      if(best) return best;
     }
     if(ROAD_COORDS.includes(p.z)){
-      const xs=ROAD_COORDS.slice().sort((a,b)=>Math.abs(a-p.x)-Math.abs(b-p.x));
-      for(const x of xs) {
+      let best: RoadNode | null=null,bestDelta=Infinity;
+      for(const x of ROAD_COORDS) {
+        const delta=Math.abs(x-p.x);
+        if(delta>=bestDelta) continue;
         const idx=graph.nodeIdx.get(x+','+p.z);
         const node=idx!==undefined?graph.nodes[idx]:undefined;
-        if(node&&node.adj.length&&!pathBlocked(p.x,p.z,x,p.z)) return node;
+        if(node&&node.adj.length&&!pathBlocked(p.x,p.z,x,p.z)){ best=node; bestDelta=delta; }
       }
+      if(best) return best;
     }
     // Nearest reachable node anywhere on the network. This handles spawn in the
     // fountain plaza and corner off-grid spots: the player is
     // snapped to the CLOSEST clear node so it never gets pushed the wrong way.
-    const echoNode = ECHO_OBSERVATORY_AREA.roadNodes
-      .map(([x,z])=>graph.nodes[graph.nodeIdx.get(x+','+z) ?? -1])
-      .filter((node): node is RoadNode => Boolean(node && node.adj.length))
-      .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+    let echoNode: RoadNode | null=null,echoDistanceSquared=Infinity;
+    for(const [x,z] of ECHO_OBSERVATORY_AREA.roadNodes){
+      const idx=graph.nodeIdx.get(x+','+z);
+      const node=idx!==undefined?graph.nodes[idx]:undefined;
+      if(!node||!node.adj.length) continue;
+      const dx=node.x-p.x,dz=node.z-p.z,distanceSquared=dx*dx+dz*dz;
+      if(distanceSquared<echoDistanceSquared){ echoNode=node; echoDistanceSquared=distanceSquared; }
+    }
     if(echoNode && p.x>=44 && !pathBlocked(p.x,p.z,echoNode.x,echoNode.z)) return echoNode;
-    let best: RoadNode | null=null, bestD=Infinity;
+    let best: RoadNode | null=null, bestDistanceSquared=Infinity;
     for(const node of graph.nodes){
       if(!node.adj.length) continue;
-      const d=Math.hypot(node.x-p.x,node.z-p.z);
-      if(d>=bestD) continue;
-      if(!pathBlocked(p.x,p.z,node.x,node.z)){ best=node; bestD=d; }
+      const dx=node.x-p.x,dz=node.z-p.z,distanceSquared=dx*dx+dz*dz;
+      if(distanceSquared>=bestDistanceSquared) continue;
+      if(!pathBlocked(p.x,p.z,node.x,node.z)){ best=node; bestDistanceSquared=distanceSquared; }
     }
     return best;
   }
@@ -352,42 +454,24 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   // True when (x,z) falls inside any cached building footprint (used to stop the
   // player from being told to walk through or stand inside a building).
   function pointInAnyBuilding(x: number,z: number): boolean {
-    for(const bx of buildingBoxes){
-      if(x>=bx.minX&&x<=bx.maxX&&z>=bx.minZ&&z<=bx.maxZ) return true;
-    }
-    return false;
+    return visitCollisionCandidates(x,z,x,z,(bx)=>
+      x>=bx.minX&&x<=bx.maxX&&z>=bx.minZ&&z<=bx.maxZ,
+    );
   }
   
   function cacheBuildingBoxes() {
     buildingBoxes.length=0;
-    const b=new THREE.Box3();
-    buildings.forEach(bd=>{
-      b.setFromObject(bd.group);
-      buildingBoxes.push({
-        minX:b.min.x-PLAYER_CLEARANCE, maxX:b.max.x+PLAYER_CLEARANCE,
-        minZ:b.min.z-PLAYER_CLEARANCE, maxZ:b.max.z+PLAYER_CLEARANCE
-      });
-    });
-    obstacleGroups.forEach(group=>{
-      const footprint=group.userData.navigationFootprint;
-      if(footprint){
-        const center=group.getWorldPosition(new THREE.Vector3());
-        const quarterTurn=Math.abs(Math.sin(group.rotation.y))>0.5;
-        const width=quarterTurn?footprint.depth:footprint.width;
-        const depth=quarterTurn?footprint.width:footprint.depth;
-        buildingBoxes.push({minX:center.x-width/2-PLAYER_CLEARANCE,maxX:center.x+width/2+PLAYER_CLEARANCE,minZ:center.z-depth/2-PLAYER_CLEARANCE,maxZ:center.z+depth/2+PLAYER_CLEARANCE});
-        return;
-      }
-      b.setFromObject(group);
-      if (!Number.isFinite(b.min.x)) return;
-      buildingBoxes.push({minX:b.min.x-PLAYER_CLEARANCE,maxX:b.max.x+PLAYER_CLEARANCE,minZ:b.min.z-PLAYER_CLEARANCE,maxZ:b.max.z+PLAYER_CLEARANCE});
-    });
+    collisionRows.clear();
+    buildings.forEach((building)=>addObjectBounds(building.group));
+    obstacleGroups.forEach(addObstacleBounds);
+    buildingBoxesInitialized=true;
   }
   
   function segHitsBuilding(x1: number,z1: number,x2: number,z2: number): boolean {
     const dx=x2-x1, dz=z2-z1;
     if(Math.abs(dx)<1e-8&&Math.abs(dz)<1e-8) return pointInAnyBuilding(x1,z1);
-    for(const bx of buildingBoxes){
+    return visitCollisionCandidates(
+      Math.min(x1,x2),Math.min(z1,z2),Math.max(x1,x2),Math.max(z1,z2),(bx)=>{
       let near=0, far=1;
       const clip=(origin: number,delta: number,min: number,max: number): boolean=>{
         if(Math.abs(delta)<1e-8) return origin>=min&&origin<=max;
@@ -397,8 +481,8 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
         return near<=far;
       };
       if(clip(x1,dx,bx.minX,bx.maxX)&&clip(z1,dz,bx.minZ,bx.maxZ)&&far>=0&&near<=1) return true;
-    }
-    return false;
+      return false;
+    });
   }
   
   // 找一个「从 p 直达且不穿建筑/喷泉」的路点；p 已在路上则原样返回
