@@ -217,7 +217,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (remote) { remote.target.set(position.x, position.y, position.z); remote.rotation = position.rotation ?? remote.rotation; }
       },
       playerLeft: (id) => { onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
-      chat: (message) => appendChat(message.nickname, message.text, message.userId === multiplayer?.user?.id),
+      chat: (message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id),
+      chatRemoved: (message) => removeChat(message.messageId),
       houses: renderHouseList,
       requests: (requests) => {
         currentHousingRequests = requests;
@@ -290,10 +291,11 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     });
   }
   
-  function appendChat(nickname: string, text: string, own: boolean) {
+  function appendChat(messageId: number, nickname: string, text: string, own: boolean) {
     const log = document.getElementById('chatLog');
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
+    row.dataset.messageId = String(messageId);
     const author = document.createElement('b'); author.textContent = nickname;
     const body = document.createElement('span'); body.textContent = text;
     row.append(author, body); log.appendChild(row);
@@ -303,6 +305,13 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     const panel = document.getElementById('onlinePanel');
     const chatActive = document.querySelector('[data-online-tab="chat"]')?.classList.contains('active');
     if (!own && (!panel?.classList.contains('open') || !chatActive)) bumpUnreadChats();
+  }
+
+  function removeChat(messageId: number) {
+    const rows = document.querySelectorAll('#chatLog .chat-line');
+    for (const row of rows) {
+      if (row instanceof HTMLElement && row.dataset.messageId === String(messageId)) row.remove();
+    }
   }
   
   function renderHouseList(houses: House[]) {

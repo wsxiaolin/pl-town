@@ -11,6 +11,11 @@ npm install
 npm run dev -w @minicity/server
 ```
 
+Production requires `BIGMODEL_API_KEY`. Public chat is broadcast immediately,
+then reviewed in the background with Zhipu BigModel's moderation endpoint.
+Rejected messages are removed from connected clients and retained as hidden
+records with the provider request ID and risk types in the administration UI.
+
 默认监听 `http://0.0.0.0:8787`。`GET /healthz` 是存活检查，`GET /readyz` 会查询 SQLite。首次本地运行不要求管理员凭据；配置 `ADMIN_USERNAME` 和至少 16 字符的 `ADMIN_PASSWORD` 后，访问 `http://localhost:8787/admin/`。需要多个管理员账号时，可另设 `ADMIN_ACCOUNTS_JSON='{"operator2":"至少 16 字符的密码"}'`；它会与原单账号配置合并。
 
 ## 构建与测试
