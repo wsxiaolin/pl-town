@@ -54,6 +54,7 @@ export type ClientMessage =
   | { type: 'progress.achievement.unlock'; achievementId: string }
   | { type: 'progress.shop.buy'; productId: string; quantity?: number }
   | { type: 'progress.item.consume'; itemId: string; quantity?: number }
+  | { type: 'progress.filmCity.experience' }
   | { type: 'progress.reward.claim'; rewardId: string }
   | { type: 'story.get'; storyId: string }
   | { type: 'story.update'; storyId: string; definitionVersion?: number; nodeId?: string; flags?: Record<string, StoryFlagValue>; ending?: string | null; visit?: boolean }

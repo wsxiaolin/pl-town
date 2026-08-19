@@ -16,6 +16,7 @@ export type BuildingInteractionOptions = {
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: () => WildMushroomInteractResult } | null;
+  getFilmCityController?: () => { interact: () => void } | null;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
@@ -36,6 +37,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateUnlocked(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
+    if (b.id === 'film_city') {
+      options.getFilmCityController?.()?.interact();
+      options.trackInteraction(b.id);
+      return;
+    }
     // 点击「野生菌餐馆」（原文训社外环）触发野生菌小剧情：每次进店都会被放倒、烧一次城。
     if (b.id === 'writingclub_outer') {
       const restaurant = options.getWildMushroomRestaurant?.();
