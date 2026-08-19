@@ -563,7 +563,7 @@ export const BUILDING_DEFS = [
   },
   {
     id: "television_tower",
-    num: "50",
+    num: "53",
     label: "电视塔",
     x: 32,
     z: -8,
