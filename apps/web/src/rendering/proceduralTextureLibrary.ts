@@ -141,6 +141,22 @@ export function createProceduralTextureLibrary(
       }
       _noise(ctx, s, 0.02);
     });
+
+    _canvas('academybrick', 512, (ctx, s) => {
+      ctx.fillStyle = '#C28B68'; ctx.fillRect(0, 0, s, s);
+      const bh = 28, bw = 72;
+      for (let y = 0; y < s; y += bh) {
+        const offset = ((y / bh) % 2) * (bw / 2);
+        for (let x = -bw; x < s + bw; x += bw) {
+          const bx = x + offset;
+          ctx.fillStyle = `rgb(${170 + Math.floor(Math.random() * 24)},${112 + Math.floor(Math.random() * 22)},${82 + Math.floor(Math.random() * 18)})`;
+          ctx.fillRect(bx + 1, y + 1, bw - 3, bh - 3);
+          ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(bx + 1, y + 1, bw - 3, 2);
+          ctx.fillStyle = 'rgba(60,30,20,0.08)'; ctx.fillRect(bx + 1, y + bh - 3, bw - 3, 2);
+        }
+      }
+      _noise(ctx, s, 0.02);
+    });
   
     // --- Glass: skyscraper facade ---
     _canvas('glass', 512, (ctx, s) => {

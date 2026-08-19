@@ -18,6 +18,7 @@ export type EventBindingsOptions = {
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getMapController: () => { isOpen: () => boolean; updateImage: () => void } | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
+  getAcademyController: () => { close: () => void; closeReader: () => void } | null;
   toggleMapMode: () => void;
   closeModal: () => void;
   closeNpcDialog: () => void;
@@ -88,6 +89,8 @@ export function createEventBindings(options: EventBindingsOptions) {
       setStatsMode: (mode) => options.getStatsPanelController()?.setMode(mode),
       closeWorks: () => communityPanels?.closeWorksPanel(),
       closeWriterCatalog: () => options.getWriterCatalogController()?.close(),
+      closeAcademy: () => options.getAcademyController()?.close(),
+      closeAcademyReader: () => options.getAcademyController()?.closeReader(),
       closeWorkDetail: () => communityPanels?.closeWorkDetail(),
       toggleWorkStar: () => communityPanels?.toggleWorkStar(),
       loadWorkComments: () => communityPanels?.loadWorkComments(),

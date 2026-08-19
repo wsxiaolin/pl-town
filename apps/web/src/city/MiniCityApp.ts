@@ -24,6 +24,7 @@ import { createCommunityPanelController } from '../adapters/ui/communityPanelCon
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
 import { createWriterCatalogController, type WriterCatalogController } from '../adapters/ui/writerCatalogController';
 import { createNewsstandController, type NewsstandController } from '../adapters/ui/newsstandController';
+import { createAcademyController, type AcademyController } from '../adapters/ui/academyController';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
@@ -115,7 +116,7 @@ let filmCityCinematicActive = false;
 let progressionController: ReturnType<typeof createProgressionController>;
 let buildingSceneController: ReturnType<typeof createBuildingSceneController>;
 let buildingLabelController: ReturnType<typeof createBuildingLabelController>;
-let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController;
+let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController, academyController: AcademyController;
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof createWorldDecorations>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
@@ -297,6 +298,7 @@ const buildingInteraction = createBuildingInteraction({
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
+  getAcademyController: () => academyController,
   trackInteraction,
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
@@ -319,6 +321,7 @@ const eventBindings = createEventBindings({
   getCommunityPanels: () => communityPanels,
   getMapController: () => mapController,
   getWriterCatalogController: () => writerCatalogController,
+  getAcademyController: () => academyController,
   toggleMapMode,
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog,
@@ -416,6 +419,7 @@ function init() {
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   writerCatalogController = createWriterCatalogController({ document });
   newsstandController = createNewsstandController({ document, signal: eventController.signal });
+  academyController = createAcademyController(document);
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter, showLoginEntry, showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding,
