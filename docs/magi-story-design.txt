@@ -1,0 +1,310 @@
+===========================================================
+  支线剧情1：麦琪的礼物 · 剧情设计稿
+  改编自欧·亨利《The Gift of the Magi》(1905)
+  Story ID: side.magi.gift
+  Definition Version: 1
+===========================================================
+
+【一句话概要】
+平安夜，一对贫穷夫妻各自卖掉最珍贵的东西为对方买礼物。
+玩家跑遍半座城市促成这段交换，最终发现两件礼物都暂时
+失去了用途——但它们已经完成了自己的使命。
+
+【原作出处】
+欧·亨利（O. Henry）1905年发表的短篇小说《麦琪的礼物》。
+主角德拉（Della）与吉姆·杨（Jim Young），纽约廉价公寓。
+本支线将舞台移至物实小城，保留原作核心情节，赋予玩家
+在过程中改善细节的有限能力。
+
+───────────────────────────────────────────────────────────
+一、设计理念
+───────────────────────────────────────────────────────────
+
+1. 核心原则：玩家无法"修正"原作
+   - 玩家可以争取更公平的收购价格（20→30→35美元）
+   - 玩家可以选到更合适的礼物（白金表链、玳瑁梳）
+   - 玩家可以选择留下见证或安静离开
+   - 但玩家不能替他们付清所有钱，不能阻止他们卖掉珍贵之物
+   - 原作的苦涩底色不可消除——这正是"麦琪"的定义
+
+2. 玩家角色：见证者而非拯救者
+   - 玩家是城市中的漫游者，偶然卷入这对夫妻的故事
+   - 陪德拉卖头发、买表链
+   - 陪吉姆卖金表、买梳子
+   - 在两人都请求保密时做出选择：守口如瓶 / 暗示对方
+
+3. 情感节奏
+   - 第一幕：同情——德拉数硬币的细节
+   - 第二幕：紧张——假发店的讨价还价
+   - 第三幕：期待——挑选表链的慎重
+   - 第四幕：错愕——发现两人同时卖掉了最珍贵的东西
+   - 第五幕：释然——笑着红了眼眶，窗外的雪
+
+───────────────────────────────────────────────────────────
+二、人物设定
+───────────────────────────────────────────────────────────
+
+【德拉（Della）】
+  - 年轻女性，深栗色长发（垂及膝盖）
+  - 性格温和但内心坚定，做决定后不会动摇
+  - 和吉姆住在客栈二楼，家具破旧，收入微薄
+  - 她的头发是家里两件值钱物之一
+  - 习惯性地去够已经不存在的长发（卖掉后的细节）
+
+【吉姆（Jim）】
+  - 年轻男性，瘦削，略显疲惫但眼神温和
+  - 有一块祖传金表（爷爷→父亲→他），没有表链
+  - 平时把表塞在口袋里偷偷看，有人问时间就假装不看表
+  - 对德拉很在意，记得她每次在橱窗前停留看梳子的细节
+
+【假发店老板】
+  - 矮胖中年人，金丝眼镜，精明但守规矩
+  - 不是坏人，但年底确实不是假发旺季
+  - 价格可谈，但有底线
+
+───────────────────────────────────────────────────────────
+三、城市建筑映射
+───────────────────────────────────────────────────────────
+
+  guesthouse（客栈）      → 德拉与吉姆的住所，第五幕交换礼物处
+  mall_west（断星玄）     → 假发店所在（第二幕）
+  mall_south（金月店）    → 珠宝/表链店所在（第三幕）
+  报摊附近街道            → 遇见吉姆处（第四幕）
+
+  注：不需要新建建筑，复用现有城市设施。
+
+───────────────────────────────────────────────────────────
+四、节点流程图
+───────────────────────────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────┐
+  │                     第一幕                           │
+  │                                                     │
+  │  magi.start (savepoint)                             │
+  │  德拉在客栈门口数硬币                                │
+  │  ├─ "你在数什么？" → magi.della-coins               │
+  │  └─ "你打算怎么办？" → magi.della-hair (savepoint)  │
+  │     （两条路径汇合到 magi.della-hair）               │
+  │                                                     │
+  │  magi.della-hair (savepoint)                        │
+  │  德拉展示长发，提及吉姆的金表                        │
+  │  ├─ "我陪你走一趟" → magi.della-accept              │
+  │  └─ "吉姆不会希望你卖掉头发" → magi.della-dissuade  │
+  │     └─ → magi.della-accept (德拉坚持)              │
+  │         └─ → magi.wig-shop-arrival                  │
+  └─────────────────────────────────────────────────────┘
+                          │
+  ┌───────────────────────▼─────────────────────────────┐
+  │                     第二幕                           │
+  │                                                     │
+  │  magi.wig-shop-arrival (savepoint)                   │
+  │  假发店，老板报价20美元                              │
+  │  ├─ "这头发至少值四十" → magi.wig-bargain-hard      │
+  │  │   ├─ "三十就三十" → magi.wig-deal-good (30$)     │
+  │  │   ├─ "三十五，马上成交" → magi.wig-deal-good(35$)│
+  │  │   └─ "算了，别逼太紧" → magi.wig-deal-fair (22$) │
+  │  ├─ "二十太少了" → magi.wig-bargain-soft            │
+  │  │   ├─ "二十二就二十二" → magi.wig-deal-fair (22$) │
+  │  │   └─ "三十，这头发真的很长" → magi.wig-deal-good  │
+  │  └─ "（站在旁边）" → magi.wig-observe               │
+  │      └─ → magi.wig-deal-fair (20$)                  │
+  │                                                     │
+  │  magi.wig-deal-good (savepoint) — 好价格分支         │
+  │  magi.wig-deal-fair (savepoint) — 一般价格分支       │
+  │  两条路径汇合 → magi.chain-shop-arrival              │
+  └─────────────────────────────────────────────────────┘
+                          │
+  ┌───────────────────────▼─────────────────────────────┐
+  │                     第三幕                           │
+  │                                                     │
+  │  magi.chain-shop-arrival (savepoint)                 │
+  │  金月店，三条表链可选                                 │
+  │  ├─ "白金那条最配" → magi.chain-simple               │
+  │  ├─ "镀金那条" → magi.chain-fancy (德拉选白金)       │
+  │  └─ "你自己觉得呢" → magi.chain-let-her (选白金)     │
+  │  （三条路径都买白金表链，但对话不同）                  │
+  │      └─ → magi.chain-buy (savepoint)                 │
+  │                                                     │
+  │  magi.chain-buy (savepoint) — 保密选择               │
+  │  德拉请求玩家保密                                     │
+  │  ├─ "放心，我不会说的" → flag: della.secretKept=true │
+  │  └─ "吉姆迟早会知道的" → flag: della.secretKept=false│
+  │  两条路径 → magi.della-waiting (savepoint)           │
+  └─────────────────────────────────────────────────────┘
+                          │
+  ┌───────────────────────▼─────────────────────────────┐
+  │                     第四幕                           │
+  │                                                     │
+  │  magi.della-waiting (savepoint)                      │
+  │  街道上，看见吉姆在橱窗前                             │
+  │  └─ "搭话" → magi.jim-meet (savepoint)               │
+  │                                                     │
+  │  magi.jim-meet (savepoint)                           │
+  │  ├─ "在看梳子？" → magi.jim-combs → magi.jim-comb   │
+  │  └─ "金表？" → magi.jim-watch-reveal                 │
+  │      ├─ "真的要卖掉？" → magi.jim-sell-decision     │
+  │      │   ├─ "那就卖掉" → magi.jim-sell-done         │
+  │      │   └─ "表不是在清洗吗" → magi.jim-fetch       │
+  │      └─ "表不是送去清洗了？" → magi.jim-fetch        │
+  │          ├─ "陪你走一趟" → flag: jim.helped=true    │
+  │          └─ "你自己去吧" → flag: jim.helped=false   │
+  │          └─ → magi.jim-fetch-back → magi.jim-comb    │
+  │                                                     │
+  │  magi.jim-comb-choose (savepoint)                    │
+  │  ├─ "玳瑁那组" → flag: combChoice="tortoise"        │
+  │  └─ "木梳也行" → magi.jim-comb-wood (吉姆选玳瑁)     │
+  │  → magi.jim-comb-bought (savepoint)                  │
+  │                                                     │
+  │  magi.jim-comb-bought (savepoint) — 保密选择          │
+  │  吉姆请求玩家保密                                     │
+  │  ├─ "我不会说的" → flag: jim.secretKept=true        │
+  │  └─ "也许该让德拉知道" → flag: jim.secretKept=false │
+  │  两条路径 → magi.eve-arrive (savepoint)              │
+  └─────────────────────────────────────────────────────┘
+                          │
+  ┌───────────────────────▼─────────────────────────────┐
+  │                     第五幕 · 终章                    │
+  │                                                     │
+  │  magi.eve-arrive (savepoint)                         │
+  │  客栈二楼，平安夜晚餐                                  │
+  │  ├─ "推门进去，见证这一刻" → 结局A                    │
+  │  └─ "不打扰，安静离开" → 结局B                        │
+  │                                                     │
+  │  ┌── 结局A：见证 ──────────────────────────────┐     │
+  │  │ magi.exchange-witness                        │     │
+  │  │  └→ magi.reveal-della（德拉打开梳子）        │     │
+  │  │      └→ magi.reveal-jim（吉姆打开表链）      │     │
+  │  │          └→ magi.silence（沉默与汤）          │     │
+  │  │              └→ magi.ending-witness (terminal)│     │
+  │  │                  achievement: magi_87_cents  │     │
+  │  └──────────────────────────────────────────────┘     │
+  │                                                     │
+  │  ┌── 结局B：安静离开 ──────────────────────────┐     │
+  │  │ magi.exchange-quiet                          │     │
+  │  │  └→ magi.ending-quiet (terminal)              │     │
+  │  │      achievement: magi_87_cents              │     │
+  │  └──────────────────────────────────────────────┘     │
+  └─────────────────────────────────────────────────────┘
+
+───────────────────────────────────────────────────────────
+五、旗标系统
+───────────────────────────────────────────────────────────
+
+  magi.wig.price         number   假发成交价（20/22/30/35）
+  magi.chain.choice      string   表链选择（固定为 "simple"）
+  magi.della.secretKept  boolean  是否替德拉保密
+  magi.jim.helped       boolean  是否陪吉姆取表
+  magi.jim.combChoice   string   梳子选择（固定为 "tortoise"）
+  magi.jim.secretKept   boolean  是否替吉姆保密
+
+  事件类型：
+  magi.della.secret.kept    德拉秘密被保守
+  magi.della.secret.hint    德拉秘密被暗示
+  magi.jim.secret.kept      吉姆秘密被保守
+  magi.jim.secret.hint      吉姆秘密被暗示
+  magi.achievement.87-cents 成就解锁
+  magi.completed.witness     见证结局完成
+  magi.completed.quiet       安静离开结局完成
+
+───────────────────────────────────────────────────────────
+六、成就
+───────────────────────────────────────────────────────────
+
+  ID:   magi_87_cents
+  名称: 一美元八十七美分
+  描述: 见证麦琪的礼物——有些礼物不能立刻使用，
+        但它们已经完成了自己的使命。
+  奖励: 60 币
+
+  触发条件: 完成任意结局（magi.ending-witness 或
+  magi.ending-quiet）时自动解锁。
+
+───────────────────────────────────────────────────────────
+七、交互入口
+───────────────────────────────────────────────────────────
+
+  NPC 交互：
+    della @ magi.start          → choice: talk-della
+    della @ magi.della-waiting  → choice: talk-della-waiting
+    della @ magi.eve-arrive      → choice: talk-della-eve
+    jim   @ magi.jim-meet       → choice: talk-jim
+
+  建筑交互：
+    mall_west  @ magi.wig-shop-arrival   → choice: enter-wig-shop
+    mall_south @ magi.chain-shop-arrival → choice: enter-chain-shop
+    guesthouse @ magi.eve-arrive         → choice: enter-guesthouse-eve
+
+───────────────────────────────────────────────────────────
+八、存档点（savepoint）列表
+───────────────────────────────────────────────────────────
+
+  magi.start               序章入口
+  magi.della-hair          德拉展示长发
+  magi.wig-shop-arrival    进入假发店
+  magi.wig-deal-good       好价格成交
+  magi.wig-deal-fair       一般价格成交
+  magi.chain-shop-arrival   进入金月店
+  magi.chain-buy            买下表链后
+  magi.della-waiting        街道转场
+  magi.jim-meet             遇见吉姆
+  magi.jim-comb-choose      选梳子
+  magi.jim-comb-bought      买下梳子后
+  magi.eve-arrive           客栈平安夜
+  magi.ending-witness       见证结局（terminal）
+  magi.ending-quiet         安静离开结局（terminal）
+
+───────────────────────────────────────────────────────────
+九、后续扩展方向（不在当前版本实现）
+───────────────────────────────────────────────────────────
+
+  1. 回访机制：任务完成后经过客栈时，能看到德拉的头发
+     慢慢留长。吉姆后来可能赎回一块普通怀表。
+
+  2. 旗标联动：della.secretKept 和 jim.secretKept 同时为
+     true 时，第五幕的对话可以更温暖——两人都不提秘密，
+     只享受交换礼物的那一刻。
+
+  3. 季节性触发：仅在游戏日历的冬季（或12月）可接取。
+
+  4. 奖励物品：完成后获得「旧表的发条」或「玳瑁色发夹」
+     作为纪念品。
+
+  5. NPC 常驻：德拉和吉姆成为客栈的常驻居民，日常对话
+     会根据任务完成状态变化。
+
+───────────────────────────────────────────────────────────
+十、与原作的异同
+───────────────────────────────────────────────────────────
+
+  相同：
+  - 德拉卖头发买表链
+  - 吉姆卖金表买玳瑁梳
+  - 两件礼物都暂时失去用途
+  - "一美元八十七美分"作为核心意象
+
+  不同：
+  - 舞台从纽约移至物实小城
+  - 玩家作为第三者参与全程（原作中无此角色）
+  - 玩家的选择影响细节（价格、对话语气、是否见证交换）
+  - 增加了"保守秘密 vs 暗示对方"的道德选择层
+  - 增加了"留下见证 vs 安静离开"的结局选择
+
+  设计说明：
+  "不要让玩家轻易修正原作"——玩家可以改善细节，但无法
+  消除代价。这是"普通人在贫穷中如何表达爱"的故事，不是
+  "有钱的主角解决了穷人的问题"的故事。
+
+===========================================================
+  文件清单
+  ===========================================================
+  apps/web/src/gameplay/content/stories/magi/magiStory.ts
+      — 故事定义（StoryDefinition）
+  apps/server/src/storyCatalog.ts
+      — 服务端节点拓扑镜像（+MAGI_NODES, +MAGI_EDGES）
+  apps/web/src/city/progression/achievements.ts
+      — 成就注册（+magi_87_cents）
+  apps/server/src/progression.ts
+      — 成就奖励（+magi_87_cents: 60）
+  docs/magi-story-design.txt
+      — 本文档
+===========================================================

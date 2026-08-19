@@ -1,9 +1,9 @@
-type Building = { id: string; label: string; icon: string; isStats?: boolean; labelEl?: HTMLElement };
+import type { BuildingEntity } from '../../city/buildingEntity';
 
 export function createBuildingLabelController(options: {
-  getBuildings: () => readonly Building[];
-  isStoryLocked: (building: Building) => boolean;
-  interact: (building: Building) => void;
+  getBuildings: () => readonly BuildingEntity[];
+  isStoryLocked: (building: BuildingEntity) => boolean;
+  interact: (building: BuildingEntity) => void;
 }) {
   function addLabels(): void {
     const wrap = document.getElementById('labelsWrap');
@@ -28,7 +28,7 @@ export function createBuildingLabelController(options: {
     });
   }
 
-  function startRename(building: Building, nameElement: HTMLElement): void {
+  function startRename(building: BuildingEntity, nameElement: HTMLElement): void {
     const current = nameElement.textContent ?? '';
     const input = document.createElement('input');
     input.className = 'bl-rename-input'; input.value = current; input.maxLength = 16;

@@ -26,11 +26,13 @@ export type PlayerControllerOptions = {
   sendPosition: (cursor: Cursor) => void;
   addDistance: (amount: number) => void;
   getManualMovement: () => { x: number; z: number };
-  resolveMovement: (from: THREE.Vector3, target: THREE.Vector3) => THREE.Vector3;
+  resolveMovement: (from: THREE.Vector3, target: THREE.Vector3, result?: THREE.Vector3) => THREE.Vector3;
 };
 
 export function createPlayerController(options: PlayerControllerOptions) {
   let pendingDistance = 0;
+  const manualTarget = new THREE.Vector3();
+  const resolvedMovement = new THREE.Vector3();
 
   function moveTo(target: THREE.Vector3): void {
     const cursor = options.getCursor();
@@ -55,14 +57,14 @@ export function createPlayerController(options: PlayerControllerOptions) {
     const manual = options.getManualMovement();
     const path = options.getPlayerPath();
     const echo = options.getEcho();
-    if (cursor && Math.hypot(manual.x, manual.z) > 0.01 && !options.isDialogOpen() && !options.isMapOpen()) {
+    if (cursor && manual.x * manual.x + manual.z * manual.z > 0.01 ** 2 && !options.isDialogOpen() && !options.isMapOpen()) {
       options.setPlayerPath([]);
       const step = options.playerSpeed * delta;
-      const desired = new THREE.Vector3(cursor.position.x + manual.x * step, 0, cursor.position.z + manual.z * step);
+      manualTarget.set(cursor.position.x + manual.x * step, 0, cursor.position.z + manual.z * step);
       const navigation = echo?.navigation();
       const resolved = echo?.isInteriorView() && navigation
-        ? navigation.clampToWalkable(desired)
-        : options.resolveMovement(cursor.position, desired);
+        ? navigation.clampToWalkable(manualTarget)
+        : options.resolveMovement(cursor.position, manualTarget, resolvedMovement);
       const travelled = cursor.position.distanceTo(resolved);
       if (travelled > 0.0001) {
         cursor.position.copy(resolved);
@@ -97,17 +99,18 @@ export function createPlayerController(options: PlayerControllerOptions) {
     cursor.position.x += (dx / distance) * step;
     cursor.position.z += (dz / distance) * step;
     cursor.position.y = 0;
-    options.getNpcs().forEach((npc) => {
-      if (!npc.mesh.visible) return;
+    for (const npc of options.getNpcs()) {
+      if (!npc.mesh.visible) continue;
       const offsetX = cursor.position.x - npc.mesh.position.x;
       const offsetZ = cursor.position.z - npc.mesh.position.z;
-      const separation = Math.hypot(offsetX, offsetZ);
-      if (separation > 0 && separation < 0.42) {
+      const separationSquared = offsetX * offsetX + offsetZ * offsetZ;
+      if (separationSquared > 0 && separationSquared < 0.42 ** 2) {
+        const separation = Math.sqrt(separationSquared);
         const push = (0.42 - separation) / separation;
         cursor.position.x += offsetX * push;
         cursor.position.z += offsetZ * push;
       }
-    });
+    }
     const navigation = echo?.navigation();
     if (echo?.isInteriorView() && navigation) cursor.position.copy(navigation.clampToWalkable(cursor.position));
     cursor.rotation.y = Math.atan2(dx, dz);
@@ -126,7 +129,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
 
   function updateCamera(): void {
     const cursor = options.getCursor();
-    if (!cursor || options.isMapOpen()) return;
+    if (!cursor || options.isMapOpen() || options.isDialogOpen()) return;
     const echo = options.getEcho();
     // Reaching the physical cabin doorway always exits immediately. Keep this
     // ahead of every story, legacy-coordinate and interior-boundary check so

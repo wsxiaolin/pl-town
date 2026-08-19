@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
@@ -19,7 +20,7 @@ const multiAdminConfigCheck = spawnSync(process.execPath, ['--input-type=module'
   env: {
     ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: '', ADMIN_PASSWORD: '',
     ADMIN_ACCOUNTS_JSON: JSON.stringify({ operator: 'json-only-operator-password', reviewer: 'json-only-reviewer-password' }),
-    ALLOWED_ORIGINS: 'https://city.example.com',
+    ALLOWED_ORIGINS: 'https://city.example.com', BIGMODEL_API_KEY: 'integration-api-key',
   },
   encoding: 'utf8', timeout: 5_000,
 });
@@ -31,7 +32,7 @@ const ossIncompleteConfigCheck = spawnSync(process.execPath, ['--input-type=modu
   env: {
     ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
     ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai',
-    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: '',
+    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: '', BIGMODEL_API_KEY: 'integration-api-key',
   },
   encoding: 'utf8', timeout: 5_000,
 });
@@ -43,13 +44,37 @@ const ossEnabledConfigCheck = spawnSync(process.execPath, ['--input-type=module'
   env: {
     ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
     ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai',
-    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: 'key-secret',
+    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: 'key-secret', BIGMODEL_API_KEY: 'integration-api-key',
   },
   encoding: 'utf8', timeout: 5_000,
 });
 if (ossEnabledConfigCheck.status !== 0 || !ossEnabledConfigCheck.stdout.includes('true')) {
   throw new Error(`Production configuration must enable off-site backups with complete OSS credentials:\n${ossEnabledConfigCheck.stderr}`);
 }
+const moderationPort = 8792;
+const moderationRequests = [];
+const moderationServer = createServer(async (request, response) => {
+  let raw = '';
+  for await (const chunk of request) raw += chunk;
+  const body = JSON.parse(raw);
+  moderationRequests.push({ authorization: request.headers.authorization, body });
+  if (request.headers.authorization !== 'Bearer integration-api-key') {
+    response.writeHead(401, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error: { code: 'unauthorized' } }));
+    return;
+  }
+  const riskTypes = body.input === 'integration-blocked' ? ['test-policy-violation'] : [];
+  response.writeHead(200, { 'content-type': 'application/json' });
+  response.end(JSON.stringify({
+    id: `moderation-${moderationRequests.length}`,
+    request_id: `request-${moderationRequests.length}`,
+    result_list: [{ content_type: 'text', risk_type: riskTypes }],
+  }));
+});
+await new Promise((resolve, reject) => {
+  moderationServer.once('error', reject);
+  moderationServer.listen(moderationPort, '127.0.0.1', resolve);
+});
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
@@ -57,6 +82,7 @@ const server = spawn(process.execPath, ['dist/index.js'], {
     ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'integration-admin-password',
     ADMIN_ACCOUNTS_JSON: JSON.stringify({ reviewer: 'integration-reviewer-password' }),
     AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
+    BIGMODEL_API_KEY: 'integration-api-key', BIGMODEL_MODERATION_URL: `http://127.0.0.1:${moderationPort}/moderations`,
   },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
@@ -126,6 +152,15 @@ const waitForServer = () => new Promise((resolve, reject) => {
     resolve();
   });
 });
+
+const poll = async (operation, predicate, description) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const value = await operation();
+    if (predicate(value)) return value;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for ${description}`);
+};
 
 let alice;
 let bob;
@@ -224,6 +259,7 @@ try {
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
   if (alice.hello.catalog.buildingPrices.wushi_restaurant !== 0) throw new Error('The Wushi restaurant must be available in the city catalog');
   if (alice.hello.catalog.buildingUnlockable.litreview !== false) throw new Error('Literature review must remain story-locked');
+  if (!alice.hello.progress.unlockedBuildings.includes('writingclub_outer')) throw new Error('The wild mushroom restaurant must be unlocked by default');
 
   send(alice, { type: 'story.get', storyId: 'sample-story' });
   const freshStory = await waitFor(alice, 'story.updated', (message) => message.event?.type === 'story.loaded' && message.story?.storyId === 'sample-story');
@@ -254,6 +290,8 @@ try {
   send(alice, { type: 'progress.building.visit', buildingId: 'bulletin' });
   const duplicateVisit = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'bulletin' && message.event.welcomeItemsGranted === false);
   if (duplicateVisit.event.welcomeItemsGranted || duplicateVisit.progress.inventory.city_guide !== 1) throw new Error('Repeated building visits must not duplicate starter items');
+  send(alice, { type: 'progress.building.visit', buildingId: 'writingclub_outer' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'writingclub_outer');
 
   send(alice, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 2 });
   const purchase = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'shop.purchased');
@@ -290,7 +328,33 @@ try {
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
 
   send(alice, { type: 'chat', text: 'integration-chat' });
-  await waitFor(bob, 'chat', (message) => message.text === 'integration-chat');
+  const approvedChat = await waitFor(bob, 'chat', (message) => message.text === 'integration-chat');
+  if (!Number.isInteger(approvedChat.messageId)) throw new Error('Chat broadcasts must include a persisted message id');
+  await poll(
+    () => fetch(`${adminBase}/chat?hidden=1`, { headers: { cookie } }).then((response) => response.json()),
+    (payload) => payload.items?.some((item) => item.id === approvedChat.messageId && item.moderationStatus === 'approved'),
+    'approved chat moderation',
+  );
+
+  send(alice, { type: 'chat', text: 'integration-blocked' });
+  const blockedChat = await waitFor(bob, 'chat', (message) => message.text === 'integration-blocked');
+  await waitFor(bob, 'chat.removed', (message) => message.messageId === blockedChat.messageId && message.reason === 'moderation');
+  const moderatedChat = await poll(
+    () => fetch(`${adminBase}/chat?hidden=1`, { headers: { cookie } }).then((response) => response.json()),
+    (payload) => payload.items?.some((item) => item.id === blockedChat.messageId && item.moderationStatus === 'rejected'),
+    'rejected chat audit trail',
+  );
+  const rejectedRecord = moderatedChat.items.find((item) => item.id === blockedChat.messageId);
+  if (!rejectedRecord.hiddenAt || rejectedRecord.hiddenBy !== 'system:bigmodel' || rejectedRecord.moderationRiskTypes[0] !== 'test-policy-violation' || !rejectedRecord.moderationRequestId) {
+    throw new Error('Rejected chat must retain the provider decision while becoming hidden');
+  }
+  const moderationAudit = await fetch(`${adminBase}/audit`, { headers: { cookie } }).then((response) => response.json());
+  if (!moderationAudit.items?.some((item) => item.action === 'chat.moderation.reject' && item.target === String(blockedChat.messageId))) {
+    throw new Error('Rejected chat must create an administrator audit record');
+  }
+  if (!moderationRequests.some((request) => request.body.model === 'moderation' && request.body.input === 'integration-blocked')) {
+    throw new Error('Chat moderation must call the BigModel moderation endpoint');
+  }
 
     // ── 身份与昵称校验 ─────────────────────────────────────────────
   const oneChar = await connectExpectingError('A');
@@ -496,20 +560,26 @@ try {
   const topology = await fetch(`${adminBase}/story-topology?storyId=${encodeURIComponent('main.echo.act-one')}`, { headers: { cookie } });
   const topologyPayload = await topology.json();
   if (!topology.ok || !topologyPayload.summary || !Array.isArray(topologyPayload.summary.nodes) || !Array.isArray(topologyPayload.summary.edges) || topologyPayload.summary.nodes.length === 0) throw new Error('Admin story topology must return populated nodes and edges for the echo story');
+  if (topologyPayload.summary.nodes.length !== 18) throw new Error(`Admin story topology should list exactly 18 savepoint nodes, got ${topologyPayload.summary.nodes.length}`);
+  if (topologyPayload.summary.definitionVersion !== 13) throw new Error(`Admin story topology should report definitionVersion 13, got ${topologyPayload.summary.definitionVersion}`);
   const storyCatalog = await fetch(`${adminBase}/stories`, { headers: { cookie } });
   const storyCatalogPayload = await storyCatalog.json();
   if (!storyCatalog.ok || !storyCatalogPayload.items?.some((story) => story.id === 'main.echo.act-one' && story.nodes.length > 0)) throw new Error('Admin story catalog must expose node details even when no resident progress matches');
   const topologyHtml = await fetch(`${adminOrigin}/admin/story-topology`);
   if (!topologyHtml.ok || topologyHtml.headers.get('cache-control') !== 'no-store') throw new Error('Story topology HTML shell must be served without caching');
 
-  console.log('Integration passed: production fail-closed, origin/CSRF, identity, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, and story topology');
+  console.log('Integration passed: production fail-closed, origin/CSRF, identity, chat moderation, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, and story topology');
 } finally {
   alice?.socket.close();
   bob?.socket.close();
   charlie?.socket.close();
   requester?.socket.close();
-  server.kill();
-  await new Promise((resolve) => server.once('exit', resolve));
+  if (server.exitCode === null && server.signalCode === null) {
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill();
+    await exited;
+  }
+  await new Promise((resolve) => moderationServer.close(resolve));
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       rmSync(dataDir, { recursive: true, force: true });

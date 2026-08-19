@@ -13,6 +13,7 @@ export type BuildingDamageControllerOptions = {
   getResidences: () => DamageableBuilding[];
   invalidateMap: () => void;
   refreshResidenceLabels: () => void;
+  setResidenceVisualVisible?: (id: string, visible: boolean) => void;
   storage?: Pick<Storage, 'getItem' | 'setItem'>;
 };
 
@@ -27,11 +28,16 @@ export function createBuildingDamageController(options: BuildingDamageController
     writeDestroyedIds(allBuildings().filter(isBuildingDestroyed).map(item => item.id), storage);
   }
 
+  function updateResidenceVisual(building: DamageableBuilding, visible: boolean): void {
+    if (options.getResidences().includes(building)) options.setResidenceVisualVisible?.(building.id, visible);
+  }
+
   function destroyFrom(items: DamageableBuilding[], id: string): boolean {
     const building = items.find(item => item.id === id);
     if (!building || isBuildingDestroyed(building)) return false;
     const destroyed = applyBuildingDestroyedPresentation(building);
     if (destroyed) {
+      updateResidenceVisual(building, false);
       persist();
       options.invalidateMap();
     }
@@ -41,6 +47,7 @@ export function createBuildingDamageController(options: BuildingDamageController
   function restoreFrom(items: DamageableBuilding[], id: string): boolean {
     const building = items.find(item => item.id === id);
     if (!building || !restoreBuildingPresentation(building)) return false;
+    updateResidenceVisual(building, true);
     persist();
     options.invalidateMap();
     return true;
@@ -61,7 +68,7 @@ export function createBuildingDamageController(options: BuildingDamageController
   function applyPersisted(): void {
     const destroyedIds = new Set(readDestroyedIds(storage));
     allBuildings().forEach(item => {
-      if (destroyedIds.has(item.id)) reapplyBuildingDestroyedPresentation(item);
+      if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
     });
     options.invalidateMap();
   }

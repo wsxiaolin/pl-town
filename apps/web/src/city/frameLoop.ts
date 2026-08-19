@@ -1,26 +1,33 @@
 import * as THREE from 'three';
 import { updateCityLabels } from './labelController';
+import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
+import type { Npc } from './npcSystem';
+import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { SceneInterestPointController } from './sceneInterestPointController';
+
+type NpcEntity = Npc;
 
 export type FrameLoopOptions = {
-  getRenderer: () => THREE.Renderer;
+  getRenderer: () => THREE.WebGLRenderer;
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
-  getBuildings: () => any[];
-  getResidences: () => any[];
+  getBuildings: () => BuildingEntity[];
+  getResidences: () => ResidenceEntity[];
   getLabelWorldPosition: () => THREE.Vector3;
-  getNpcList: () => any[];
+  getNpcList: () => NpcEntity[];
   getPlayerController: () => { updateMovement: (delta: number) => void; updateCamera: () => void } | null;
   getMultiplayerHousing: () => { updateRemotePlayers: (delta: number) => void } | null;
-  getSceneInterestPoints: () => { update: (time: number) => void; entities: Map<string, any> } | null;
-  getSceneInterestPointController: () => { interact: (id: string) => Promise<void> | void } | null;
+  getSceneInterestPoints: () => SceneInterestPoints | null;
+  getSceneInterestPointController: () => SceneInterestPointController | null;
   getMapController: () => { isOpen: () => boolean; updateMarker: () => void } | null;
-  getBurnOverlay: () => { render: (renderer: THREE.Renderer) => void; isActive: () => boolean } | null;
+  getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
+  getBeachEncounterActive?: () => boolean;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
-  npcYieldToPlayer: (npc: any) => void;
-  isStoryLockedBuilding: (building: any) => boolean;
+  npcYieldToPlayer: (npc: NpcEntity) => void;
+  isStoryLockedBuilding: (building: BuildingEntity) => boolean;
 };
 
 export function createFrameLoop(options: FrameLoopOptions) {
@@ -41,27 +48,31 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const now = performance.now();
     const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
     options.setLastFrameTime(now);
-    options.getPlayerController()?.updateMovement(delta);
+    const playerController = options.getPlayerController();
+    playerController?.updateMovement(delta);
     options.getMultiplayerHousing()?.updateRemotePlayers(delta);
-    options.getNpcList().forEach(npc => {
-      if (!npc.mesh.visible || npc.walking === false) return;
-      options.npcYieldToPlayer(npc);
-    });
-    options.getPlayerController()?.updateCamera();
-    options.getSceneInterestPoints()?.update(now / 1000);
     const cursorChar = options.getCursorChar();
-    const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen()
-      ? options.getSceneInterestPoints()?.entities.get('west-beach')
+    if (cursorChar?.visible) {
+      for (const npc of options.getNpcList()) options.npcYieldToPlayer(npc);
+    }
+    playerController?.updateCamera();
+    const sceneInterestPoints = options.getSceneInterestPoints();
+    sceneInterestPoints?.update(now / 1000);
+    const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen() && !options.getBeachEncounterActive?.()
+      ? sceneInterestPoints?.entities.get('west-beach')
       : null;
-    if (beach && cursorChar && cursorChar.position.distanceTo(beach.interactionPosition) <= 3.2) {
-      void options.getSceneInterestPointController()?.interact('west-beach');
+    if (beach && cursorChar) {
+      const distanceSquared = cursorChar.position.distanceToSquared(beach.interactionPosition);
+      if (distanceSquared <= 6 ** 2) void options.getSceneInterestPointController()?.interact('west-beach');
+      else options.getSceneInterestPointController()?.armBeachEncounter();
     }
     updateLabels();
     const renderer = options.getRenderer();
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);
-    if (options.getMapController()?.isOpen()) options.getMapController()?.updateMarker();
+    const mapController = options.getMapController();
+    if (mapController?.isOpen()) mapController.updateMarker();
   }
 
   function start() { animationFrame = requestAnimationFrame(loop); }

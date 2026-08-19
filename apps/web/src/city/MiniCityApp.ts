@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { ResourcePool } from '../core/ResourcePool';
@@ -16,21 +15,29 @@ import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
+import { startInvasionCG, stopInvasionCG } from './invasionCg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
 import { createCityDialogController, type CityDialogController, type NpcEntityLike } from '../adapters/ui/cityDialogController';
 import { createCommunityPanelController } from '../adapters/ui/communityPanelController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
-import { createWriterCatalogController } from '../adapters/ui/writerCatalogController';
-import { createNewsstandController } from '../adapters/ui/newsstandController';
+import { createWriterCatalogController, type WriterCatalogController } from '../adapters/ui/writerCatalogController';
+import { createNewsstandController, type NewsstandController } from '../adapters/ui/newsstandController';
+import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
+import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { SceneInterestPointController } from './sceneInterestPointController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
-import { createNpcSystem } from './npcSystem';
+import { createNpcSystem, type Npc } from './npcSystem';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import { createEchoStoryController } from './echo/echoStoryController';
+import { createYesterdaySongController } from './yesterday/yesterdaySongController';
+import { createMagiStoryController } from './magi/magiStoryController';
+import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
@@ -45,7 +52,7 @@ import { isBuildingDestroyed } from './buildingDamage';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
-import { townGameHour } from '../gameplay/time/townClock';
+import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
 import { BUILDING_PLOT_MAP } from './data/buildingPlots';
 import { createMeshHelpers, type MeshHelpers } from '../rendering/meshFactory';
@@ -63,8 +70,8 @@ import { createEventBindings } from './eventBindings';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
-let eventController = new AbortController(), raycastBuildingGroups = [];
-const buildingPlotTargets = [];
+let eventController = new AbortController(), raycastBuildingGroups: THREE.Object3D[] = [];
+const buildingPlotTargets: THREE.Object3D[] = [];
 const labelWorldPosition = new THREE.Vector3();
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
@@ -79,12 +86,12 @@ const _tex = proceduralTextures.repeat;
 const addFacade = proceduralTextures.addFacade;
 const { stdMat, mk, part }: MeshHelpers = createMeshHelpers(resources, _tex);
 
-let renderer, scene, camera;
-const pathMats = [], groundMats = [], lampGlobes = [], buildings = [], npcList = [];
-let cursorChar = null;
-let playerPath = [];
-let playerMarker = null; // 玩家头顶的三角标记，用于高亮
-let cameraZoom; // 当前视野宽度，由滚轮/双指缩放调整
+let renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera;
+const pathMats: THREE.MeshStandardMaterial[] = [], groundMats: { mat: THREE.MeshStandardMaterial; night: number; day: number }[] = [], lampGlobes: THREE.MeshStandardMaterial[] = [], buildings: BuildingEntity[] = [], npcList: Npc[] = [];
+let cursorChar: THREE.Group | null = null;
+let playerPath: THREE.Vector3[] = [];
+let playerMarker: THREE.Group | null = null; // 玩家头顶的三角标记，用于高亮
+let cameraZoom: number; // 当前视野宽度，由滚轮/双指缩放调整
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
@@ -94,26 +101,37 @@ const cameraTarget = new THREE.Vector3(0,0,0);
 // The roof is hidden while inside, so this avoids a near-wall/roof clip while
 // still letting the camera look down into the complete room.
 let cityDialogs: CityDialogController | null = null;
-let echoStoryController;
-let mapController;
-let loginController;
-let statsPanelController;
-let playerController, movementInputController;
-let cameraController;
-let progressionController;
-let buildingSceneController;
-let buildingLabelController;
-let communityPanels, writerCatalogController, newsstandController;
-let multiplayerHousing;
-let worldDecorations;
-let npcSystem;
-let sceneInterestPoints;
-let sceneInterestPointController;
-let buildingDamageController;
+let echoStoryController: ReturnType<typeof createEchoStoryController>;
+let yesterdaySongController: ReturnType<typeof createYesterdaySongController>;
+let magiStoryController: ReturnType<typeof createMagiStoryController>;
+let overcoatStoryController: ReturnType<typeof createOvercoatStoryController>;
+let mapController: ReturnType<typeof createMapController>;
+let loginController: ReturnType<typeof createLoginController>;
+let statsPanelController: ReturnType<typeof createStatsPanelController>;
+let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
+let cameraController: ReturnType<typeof createCameraController>;
+let progressionController: ReturnType<typeof createProgressionController>;
+let buildingSceneController: ReturnType<typeof createBuildingSceneController>;
+let buildingLabelController: ReturnType<typeof createBuildingLabelController>;
+let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController;
+let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
+let worldDecorations: ReturnType<typeof createWorldDecorations>;
+let npcSystem: ReturnType<typeof createNpcSystem>;
+let sceneInterestPoints: SceneInterestPoints | null = null;
+let sceneInterestPointController: SceneInterestPointController | null = null;
+let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
+let echoActiveActors = new Set<string>();
+let yesterdayActiveActors = new Set<string>();
+let magiActiveActors = new Set<string>();
+let overcoatActiveActors = new Set<string>();
+function mergeActiveStoryActorIds() {
+  activeStoryActorIds = new Set([...echoActiveActors, ...yesterdayActiveActors, ...magiActiveActors, ...overcoatActiveActors]);
+  npcSystem?.updateNpcSchedules();
+}
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
-const residences = [];
+const residences: ResidenceEntity[] = [];
 
 const mouse2D     = new THREE.Vector2(-9999, -9999);
 const raycaster   = new THREE.Raycaster();
@@ -134,7 +152,12 @@ const themeClock = createThemeClock({
   setIsNight: (value) => { isNight = value; },
   getGameClock: () => gameClock,
   setGameClock: (value) => { gameClock = value; },
-  announceGuide: () => echoStoryController?.announceGuide(),
+  announceGuide: () => {
+    echoStoryController?.announceGuide();
+    yesterdaySongController?.announceGuide();
+    magiStoryController?.announceGuide();
+    overcoatStoryController?.announceGuide();
+  },
   invalidateMapShot: () => mapController?.invalidateShot(),
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
@@ -196,7 +219,7 @@ const frameLoop = createFrameLoop({
   getBuildings: () => buildings,
   getResidences: () => residences,
   getLabelWorldPosition: () => labelWorldPosition,
-  getNpcList: () => npcList,
+  getNpcList: () => npcSystem?.getAvoidanceNpcs() ?? npcList,
   getPlayerController: () => playerController,
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
@@ -205,6 +228,7 @@ const frameLoop = createFrameLoop({
   getBurnOverlay: () => burnCityEffect,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
+  getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer,
@@ -244,6 +268,9 @@ const buildingInteraction = createBuildingInteraction({
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
   getEchoStoryController: () => echoStoryController,
+  getYesterdayStoryController: () => yesterdaySongController,
+  getMagiStoryController: () => magiStoryController,
+  getOvercoatStoryController: () => overcoatStoryController,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
@@ -253,7 +280,7 @@ const buildingInteraction = createBuildingInteraction({
 });
 
 const eventBindings = createEventBindings({
-  getCanvas: () => document.getElementById('c'),
+  getCanvas: () => document.getElementById('c') as HTMLElement,
   getSignal: () => eventController.signal,
   getRenderer: () => renderer,
   onMouseMove,
@@ -279,11 +306,11 @@ const eventBindings = createEventBindings({
 let UNLOCK_TIERS = createUnlockTiers(
   (positions) => worldDecorations?.addLamps(positions),
   (positions) => worldDecorations?.addTrees(positions),
-  (x, y, z, rotY) => worldDecorations?.addArch(x, y, z, rotY),
-  (x, y, z, rotY) => worldDecorations?.addBench(x, y, z, rotY),
+  (x: number, y: number, z: number, rotY: number) => worldDecorations?.addArch(x, y, z, rotY),
+  (x: number, y: number, z: number, rotY: number) => worldDecorations?.addBench(x, y, z, rotY),
 );
 
-function awardDirectAchievement(id, name) { progressionController?.awardDirectAchievement(id, name); }
+function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
 function init() {
   setupRenderer();
@@ -314,6 +341,10 @@ function init() {
     raycaster, roadCoords: ROAD_COORDS, reduced: REDUCED, isMobile: MOBILE,
     getGameClock: () => gameClock, getCurrentFilter: () => currentFilter,
     nearestRoadCoord, buildRoadPath, makeMaterial: stdMat, makeMesh: mk,
+    makeCharacterMaterial: (partName, color, factory) => resources.material(
+      { kind: 'character', partName, color },
+      factory,
+    ),
     view: {
       get mapMode() { return Boolean(mapController?.isOpen()); },
       get dialogOpen() { return Boolean(cityDialogs?.isOpen()); },
@@ -329,6 +360,7 @@ function init() {
     cityLimit: CITY_LIMIT,
     colors: { asphalt: P.ASPHALT, dayPath: P.DAY_PATH, nightPath: P.NIGHT_PATH },
     createMaterial: stdMat,
+    createMesh: mk,
     pathMaterials: pathMats,
     groundMaterials: groundMats,
     addLamps,
@@ -373,6 +405,7 @@ function init() {
     getResidences: () => residences,
     invalidateMap: () => mapController?.invalidateShot(),
     refreshResidenceLabels: () => multiplayerHousing?.renderMapHouseTags(),
+    setResidenceVisualVisible: (id, visible) => worldDecorations?.setResidenceVisualVisible(id, visible),
   });
   buildingDamageController.applyPersisted();
   progressionController = createProgressionController({
@@ -385,10 +418,10 @@ function init() {
   });
   echoStoryController = createEchoStoryController({
     document,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
-    setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids),
-    setActiveActors: (ids) => { activeStoryActorIds = new Set(ids); },
+    setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
+    setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
     awardAchievement: (id, name) => progressionController?.awardDirectAchievement(id, name),
     getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
@@ -406,6 +439,33 @@ function init() {
   echoStoryController.setupScene(scene);
   echoStoryController.setupGuide();
   echoStoryController.restoreAchievements();
+  // ── 昨日之歌 · 支线剧情 ──────────────────────────────────────
+  yesterdaySongController = createYesterdaySongController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
+    onActiveActorsChanged: (ids) => { yesterdayActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  yesterdaySongController.announceGuide();
+  yesterdaySongController.syncActiveActors();
+  // ── 麦琪的礼物 · 支线剧情 ──────────────────────────────────────
+  magiStoryController = createMagiStoryController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
+    onActiveActorsChanged: (ids) => { magiActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  magiStoryController.announceGuide();
+  magiStoryController.syncActiveActors();
+  // ── 今晚别走那条街 · 支线剧情 ──────────────────────────────────
+  overcoatStoryController = createOvercoatStoryController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
+    onActiveActorsChanged: (ids) => { overcoatActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  overcoatStoryController.announceGuide();
+  overcoatStoryController.syncActiveActors();
   mapController = createMapController({
     document,
     getScene: () => scene,
@@ -443,7 +503,7 @@ function init() {
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
     addDistance: flushDistance,
     getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
-    resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
+    resolveMovement: (from, target, result) => roadNavigation.resolveMovement(from, target, result),
   });
   loginController = createLoginController({
     getStats,
@@ -471,7 +531,10 @@ function init() {
     getQuestAction: (npcId)=>questRuntime.getNpcAction(npcId,getQuestProgressView()),
     performQuestAction: (action,at)=>questRuntime.performNpcAction(action,at),
     onNpcInteracted: recordNpcInteraction,
-    onDialogueAction: (action)=>action.startsWith('teleport:')&&mapController?.teleportToBuilding(action.slice(9)),
+    onDialogueAction: (action)=>{
+      if(action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
+      if(action.startsWith('open-url:')) window.location.href=action.slice(9);
+    },
     pauseNpcs,
     resumeNpcs,
     showToast: showUnlockToast,
@@ -506,13 +569,18 @@ function init() {
       }
     },
     setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
+    focusBeachEncounter: () => {
+      cameraZoom = 5.5;
+      updateCameraProjection(cameraZoom);
+      cameraController?.focus(-41.2, 11.5);
+    },
   });
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
   initAnimations();
   clockInterval = window.setInterval(syncTimeAndTheme, 1000);
   syncTimeAndTheme();
-  document.getElementById('labelsWrap').classList.add('hidden');
+  document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
   updateWelcome();
 
@@ -521,7 +589,7 @@ function init() {
 }
 
 function setupRenderer() {
-  const canvas = document.getElementById('c');
+  const canvas = document.getElementById('c') as HTMLCanvasElement;
   renderer = createRenderer(canvas);
 }
 function setupCamera() {
@@ -562,6 +630,8 @@ function setupScene() {
     burnCity: () => burnCityEffect.trigger(),
     burnCityActive: () => burnCityEffect.isActive(),
     burnCityProgress: () => burnCityEffect.getProgress(),
+    playInvasionCG: startInvasionCG,
+    stopInvasionCG,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -579,26 +649,26 @@ const PLOT_MAP = BUILDING_PLOT_MAP;
 const SHAPE_FNS = buildingMeshFactory.builders;
 
 function addDecorations() { worldDecorations.addDecorations(); }
-function addTrees(positions) { worldDecorations.addTrees(positions); }
-function addLamps(positions) { worldDecorations.addLamps(positions); }
-function addArch(x, y, z, rotY) { worldDecorations.addArch(x, y, z, rotY); }
-function addBench(x, y, z, rotY) { worldDecorations.addBench(x, y, z, rotY); }
+function addTrees(positions: readonly (readonly [number, number, number])[]) { worldDecorations.addTrees(positions); }
+function addLamps(positions: readonly (readonly [number, number, number])[]) { worldDecorations.addLamps(positions); }
+function addArch(x: number, y: number, z: number, rotY: number) { worldDecorations.addArch(x, y, z, rotY); }
+function addBench(x: number, y: number, z: number, rotY: number) { worldDecorations.addBench(x, y, z, rotY); }
 
-function makeCharacter(headHex, bodyHex) { return npcSystem.makeCharacter(headHex, bodyHex); }
+function makeCharacter(headHex: number, bodyHex: number) { return npcSystem.makeCharacter(headHex, bodyHex); }
 function addCharacters() { npcSystem.addCharacters(); }
 function onYouClick() { npcSystem.onYouClick(); }
 function updateNpcSchedules() { npcSystem.updateNpcSchedules(); }
-function npcYieldToPlayer(npc) { npcSystem.npcYieldToPlayer(npc); }
+function npcYieldToPlayer(npc: Npc) { npcSystem.npcYieldToPlayer(npc); }
 function pauseNpcs() { npcSystem.pauseNpcs(); }
 function resumeNpcs() { npcSystem.resumeNpcs(); }
-function nearestNpcTo(position, radius) { return npcSystem.nearestNpcTo(position, radius); }
+function nearestNpcTo(position: THREE.Vector3, radius: number) { return npcSystem.nearestNpcTo(position, radius); }
 function npcForRaycast() { return npcSystem.npcForRaycast(); }
 
 function setupEvents() { eventBindings.setupEvents(); }
 
-function isStoryLockedBuilding(building) { return STORY_LOCKED_BUILDINGS.has(building.id); }
+function isStoryLockedBuilding(building: BuildingEntity) { return STORY_LOCKED_BUILDINGS.has(building.id); }
 
-function isBuildingUnavailable(building) {
+function isBuildingUnavailable(building: BuildingEntity) {
   return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
 }
 
@@ -633,33 +703,33 @@ function isResidenceUnavailable(residenceId: string): boolean {
 
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
 
-function onMouseMove(e) { interactionPointer.onMouseMove(e); }
+function onMouseMove(e: MouseEvent) { interactionPointer.onMouseMove(e); }
 
 function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
-function setupMultiplayer(nickname, password) { multiplayerHousing.connect(nickname, password); }
+function setupMultiplayer(nickname: string, password?: string) { multiplayerHousing.connect(nickname, password); }
 function showLoginEntry() { loginController?.showLoginEntry(); }
 function showLoginOverlay() { loginController?.showLogin(); }
-function updateRemotePlayers(delta) { multiplayerHousing.updateRemotePlayers(delta); }
-function setPhoneOpen(open) { multiplayerHousing?.setPhoneOpen(open); }
+function updateRemotePlayers(delta: number) { multiplayerHousing.updateRemotePlayers(delta); }
+function setPhoneOpen(open: boolean) { multiplayerHousing?.setPhoneOpen(open); }
 function renderMapHouseTags() { multiplayerHousing.renderMapHouseTags(); }
-function openResidence(residenceId) { multiplayerHousing.openResidence(residenceId); }
+function openResidence(residenceId: string) { multiplayerHousing.openResidence(residenceId); }
 function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
-function navigateToResidence(residenceId) { multiplayerHousing.navigateToResidence(residenceId); }
-function raycastUserData(object, key) { return multiplayerHousing.raycastUserData(object, key); }
-function findRaycastBuilding(hits) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
-function onCanvasClick(event) { interactionPointer.onCanvasClick(event); }
+function navigateToResidence(residenceId: string) { multiplayerHousing.navigateToResidence(residenceId); }
+function raycastUserData(object: THREE.Object3D | null, key: string) { return multiplayerHousing.raycastUserData(object, key); }
+function findRaycastBuilding(hits: readonly THREE.Intersection[]) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
+function onCanvasClick(event: MouseEvent) { interactionPointer.onCanvasClick(event); }
 
-function talkToOrWalk(npc) { interactionPointer.talkToOrWalk(npc); }
+function talkToOrWalk(npc: Npc) { interactionPointer.talkToOrWalk(npc); }
 
-function interactOrWalk(b) { interactionPointer.interactOrWalk(b); }
+function interactOrWalk(b: BuildingEntity) { interactionPointer.interactOrWalk(b); }
 
-function navigateTo(b) { buildingInteraction.navigateTo(b); }
-function openModal(building) { buildingInteraction.openModal(building); }
+function navigateTo(b: BuildingEntity) { buildingInteraction.navigateTo(b); }
+function openModal(building: BuildingEntity) { buildingInteraction.openModal(building); }
 function closeModal() { buildingInteraction.closeModal(); }
 
 function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionPointer.interactWithSceneInterestPoint(id); }
 
-function applyTheme(night, instant) { themeClock.applyTheme(night, instant); }
+function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
 
 function entranceAnimation() { sceneAnimations.entranceAnimation(); }
@@ -670,23 +740,23 @@ function toggleMapMode() {
   mapController?.toggle();
 }
 
-function updateCameraProjection(vs) {
+function updateCameraProjection(vs: number) {
   cameraController?.updateProjection(vs);
 }
 
-function setCameraTarget(x,z,instant) { cameraController?.setTarget(x,z,instant); }
+function setCameraTarget(x: number, z: number, instant?: boolean) { cameraController?.setTarget(x,z,instant); }
 
-function movePlayerTo(target) { playerController?.moveTo(target); }
+function movePlayerTo(target: THREE.Vector3) { playerController?.moveTo(target); }
 
 function handlePlayerIdle() { interactionPointer.handlePlayerIdle(); }
 
-function flushDistance(amount) { interactionTracker.flushDistance(amount); }
+function flushDistance(amount: number) { interactionTracker.flushDistance(amount); }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STATS / PROGRESSION SYSTEM
 // ══════════════════════════════════════════════════════════════════════════════
 
-function trackInteraction(buildingId) { interactionTracker.trackInteraction(buildingId); }
+function trackInteraction(buildingId: string) { interactionTracker.trackInteraction(buildingId); }
 
 function updateWelcome() {
   // Cloud progression owns the unique-building threshold and inventory entry.
@@ -715,18 +785,16 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
 
 function setupFilter() {
   document.querySelectorAll('.pf-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>setFilter(btn.dataset.filter));
+    btn.addEventListener('click',()=>setFilter((btn as HTMLElement).dataset.filter ?? ''));
   });
 }
 
-function setFilter(filter) {
+function setFilter(filter: string) {
   currentFilter=filter;
-  document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
+  document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',(b as HTMLElement).dataset.filter===filter));
+  updateNpcSchedules();
   if(filter==='friends'){
-    npcList.forEach(npc=>{ if(npc.mesh.visible){ npc.mesh.visible=false; if(npc.tween){ npc.tween.kill(); npc.tween=null; } } });
     showUnlockToast('no friends online yet — invite someone!');
-  } else {
-    updateNpcSchedules();
   }
 }
 
@@ -744,10 +812,22 @@ function getQuestProgressView() {
   };
 }
 
-function recordNpcInteraction(npcId) { interactionTracker.recordNpcInteraction(npcId); }
+function recordNpcInteraction(npcId: string) { interactionTracker.recordNpcInteraction(npcId); }
 
-function openNpcDialog(npc) {
+function openNpcDialog(npc: Npc) {
   if (cityDialogs && echoStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && yesterdaySongController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && magiStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && overcoatStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
     recordNpcInteraction(npc.profile.id);
     return;
   }
@@ -780,8 +860,10 @@ export function destroyMiniCity() {
   clearInterval(trackingInterval);
   multiplayerHousing?.destroy();
   destroyCG();
+  stopInvasionCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
+  npcSystem?.destroy();
   gsap.globalTimeline.clear();
   mapController?.destroy();
   renderer?.dispose();
@@ -795,4 +877,7 @@ export function destroyMiniCity() {
   document.getElementById('labelsWrap')?.replaceChildren();
   document.getElementById('mapIcons')?.replaceChildren();
   echoStoryController?.dispose();
+  yesterdaySongController?.dispose();
+  magiStoryController?.dispose();
+  overcoatStoryController?.dispose();
 }

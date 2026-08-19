@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
+export type { SceneInterestPointId };
 import { createWestBeach } from './westBeach';
 
 export interface SceneInterestPointEntity {
@@ -386,51 +387,71 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
   const raycastTargets: THREE.Object3D[] = [...baseRaycastTargets];
   const investigationMarkers: THREE.Mesh[] = [];
   storyEntities.forEach((entity) => entity.object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.userData.investigationMarker) investigationMarkers.push(child);
+    if (!(child instanceof THREE.Mesh) || !child.userData.investigationMarker) return;
+    child.userData.investigationMarkerIndex = investigationMarkers.length;
+    investigationMarkers.push(child);
   }));
+  const activeInvestigationMarkers: THREE.Mesh[] = [];
   const orangeTree = entities.get('origin-orange-tree')?.object;
+  const orangeFruits: THREE.Mesh[] = [];
+  orangeTree?.traverse((object) => {
+    if (object instanceof THREE.Mesh && typeof object.userData.orangeFruitIndex === 'number') orangeFruits.push(object);
+  });
   const well = entities.get('longjing-well')?.object;
   const vines: THREE.Mesh[] = [];
   well?.traverse((child) => { if (child instanceof THREE.Mesh && child.userData.wellVine) vines.push(child); });
   let wellPhase: 'idle' | 'focus' | 'engulf' | 'recede' = 'idle';
   let wellPhaseStarted = 0;
+  let wellStaticDirty = true;
 
   return {
     entities,
     raycastTargets,
     update(elapsedSeconds) {
       westBeach.update(elapsedSeconds);
-      orangeTree?.traverse((object) => {
-        if (!(object instanceof THREE.Mesh) || typeof object.userData.orangeFruitIndex !== 'number') return;
+      for (const object of orangeFruits) {
         const index = object.userData.orangeFruitIndex as number;
         const baseY = object.userData.orangeFruitBaseY as number;
         object.position.y = baseY + Math.sin(elapsedSeconds * 1.4 + index) * 0.012;
-      });
-      if (well) {
+      }
+      const wellAnimating = wellPhase === 'engulf' || wellPhase === 'recede';
+      if (well && (wellStaticDirty || wellAnimating)) {
         const duration = wellPhase === 'engulf' ? 2.8 : wellPhase === 'recede' ? 2.2 : 0;
         const t = duration ? Math.min(1, (elapsedSeconds - wellPhaseStarted) / duration) : 0;
         const amount = wellPhase === 'engulf' ? t : wellPhase === 'recede' ? 1 - t : 0;
-        vines.forEach((mesh, index) => {
+        for (let index = 0; index < vines.length; index += 1) {
+          const mesh = vines[index]!;
           mesh.scale.set(1.5 * (0.25 + amount * 0.75), 0.45 + amount * 0.55, 0.75 * (0.25 + amount * 0.75));
           mesh.position.y = 0.38 + amount * (0.38 + (index % 3) * 0.12);
           mesh.rotation.z = Math.sin(elapsedSeconds * 3 + index) * 0.12 * amount;
-        });
+        }
+        wellStaticDirty = false;
+        if (wellPhase === 'recede' && t >= 1) wellPhase = 'idle';
       }
-      investigationMarkers.forEach((marker, index) => {
-        if (!marker.visible) return;
+      for (let index = 0; index < activeInvestigationMarkers.length; index += 1) {
+        const marker = activeInvestigationMarkers[index]!;
+        const markerIndex = marker.userData.investigationMarkerIndex as number;
         const baseY = Number(marker.userData.markerBaseY) || marker.position.y;
-        marker.position.y = baseY + Math.sin(elapsedSeconds * 2.2 + index * 0.7) * 0.06;
-        marker.rotation.y = elapsedSeconds * 0.8 + index * 0.35;
-      });
+        marker.position.y = baseY + Math.sin(elapsedSeconds * 2.2 + markerIndex * 0.7) * 0.06;
+        marker.rotation.y = elapsedSeconds * 0.8 + markerIndex * 0.35;
+      }
     },
-    setWellPhase(phase) { wellPhase = phase; wellPhaseStarted = performance.now() / 1000; },
+    setWellPhase(phase) {
+      wellPhase = phase;
+      wellPhaseStarted = performance.now() / 1000;
+      wellStaticDirty = true;
+    },
     setBeachEncounterPhase(phase) { westBeach.setPhase(phase); },
     setActiveStoryPoints(ids) {
       const active = new Set(ids);
+      activeInvestigationMarkers.length = 0;
       storyEntities.forEach((entity) => {
         const isActive = active.has(entity.id);
         entity.object.traverse((child) => {
           if (child.userData.storyActivationVisual) child.visible = isActive;
+          if (isActive && child instanceof THREE.Mesh && child.userData.investigationMarker) {
+            activeInvestigationMarkers.push(child);
+          }
           if (child.userData.storyInteractionTarget) {
             if (isActive) child.userData.sceneInterestPointId = entity.id;
             else delete child.userData.sceneInterestPointId;

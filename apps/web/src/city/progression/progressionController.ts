@@ -1,9 +1,11 @@
-export type Achievement = { id: string; name: string; check: (stats: any) => boolean };
+import type { LegacyStats } from './legacyStats';
+
+export type Achievement = { id: string; name: string; check: (stats: LegacyStats) => boolean };
 export type UnlockTier = { threshold: number; label: string; fn: () => void };
 
 export function createProgressionController(options: {
-  getStats: () => any;
-  saveStats: (stats: any) => void;
+  getStats: () => LegacyStats;
+  saveStats: (stats: LegacyStats) => void;
   achievements: readonly Achievement[];
   unlockTiers: readonly UnlockTier[];
   unlockAchievement: (id: string) => void;
@@ -34,7 +36,7 @@ export function createProgressionController(options: {
     if (changed) options.saveStats(stats);
   }
 
-  function checkUnlocks(stats: any): void {
+  function checkUnlocks(stats: LegacyStats): void {
     const current = stats.unlockLevel ?? 0;
     for (let index = current; index < options.unlockTiers.length; index += 1) {
       const tier = options.unlockTiers[index];

@@ -1,3 +1,5 @@
+import type { BuildingContentLike } from '../../adapters/ui/cityDialogController';
+
 const I = (svg: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
 
@@ -633,14 +635,15 @@ export const BUILDING_API_QUERIES = Object.freeze({
 
 // Materialize the optional query on every matching building definition so the
 // renderer can treat this as ordinary building data instead of a hardcoded switch.
-BUILDING_DEFS.forEach((building: any) => {
+type BuildingDefWithQuery = typeof BUILDING_DEFS[number] & { contentQuery?: Record<string, unknown> };
+BUILDING_DEFS.forEach((building: BuildingDefWithQuery) => {
   const query =
     BUILDING_API_QUERIES[building.id as keyof typeof BUILDING_API_QUERIES];
   if (query) building.contentQuery = query;
 });
 
 // ── Building dialog content (from copywriting) ────────────────────────────────
-export const BUILDING_CONTENT = {
+export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
   activity: {
     name: "活动区",
     slogan: "在这里领取你的货币吧。",
@@ -951,10 +954,38 @@ export const BUILDING_CONTENT = {
   shrine: {
     name: "神社",
     slogan: "安静地站着，也是一种参与。",
-    dialog: [
-      "石阶尽头是一座小小的殿宇。",
-      "「不必祈祷，只是站在这里就够了。」",
-      "我记得我之前曾经在这里拔出了一把刀",
+    dialog: ["石阶尽头是一座小小的殿宇。"],
+    dialogTree: [
+      {
+        text: "听说神社正在举办一个拔刀的活动，只有天选之人才能把刀从石头中拔出来。",
+        options: [
+          { text: "让我试试！", next: 1 },
+          { text: "这不对吧？", next: 1 },
+        ],
+      },
+      {
+        text: "不知道为什么，你情不自禁地接受了这个挑战。",
+        options: [
+          { text: "用力拔", next: 2 },
+          { text: "轻轻的拔", next: 2 },
+        ],
+      },
+      {
+        text: "宝刀就在眼前，决定命运的时刻到了。",
+        options: [{
+          text: "继续",
+          next: 3,
+          nextByVisitor: { includes: ["有地", "将臣"], maxLength: 5, next: 4 },
+        }],
+      },
+      {
+        text: "宝刀纹丝不动，可能是你的用户名起的不对吧。",
+        options: [{ text: "告辞", next: null }],
+      },
+      {
+        text: "你竟然把它拔出来了！",
+        options: [{ text: "然后呢？", next: null, action: "open-url:https://store.steampowered.com/app/1144400/_?l=schinese" }],
+      },
     ],
   },
   beacon: {

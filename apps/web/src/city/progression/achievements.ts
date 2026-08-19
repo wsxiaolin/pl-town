@@ -27,6 +27,13 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   { id:'echo_true_dawn',name:'真正的黎明',desc:'完成回声的全部后日谈',check:()=>false,directOnly:true },
   { id:'wild_mushroom_stubborn',name:'吃一堑再吃一堑',desc:'明知会被放倒，还是又吃了一顿野生菌',check:()=>false,directOnly:true },
   { id:'wild_mushroom_local',name:'真正的云南人',desc:'签完免责声明，把餐馆吃到赔本',check:()=>false,directOnly:true },
+  { id:'magi_87_cents',name:'一美元八十七美分',desc:'见证麦琪的礼物——有些礼物不能立刻使用，但它们已经完成了自己的使命',check:()=>false,directOnly:true },
+  { id:'overcoat.recover',name:'至少它还认得我',desc:'今晚别走那条街——找回了外套，但它已经不是原来的那件了',check:()=>false,directOnly:true },
+  { id:'overcoat.witness',name:'城市回应了',desc:'今晚别走那条街——三个人的声音比一个人的沉默更有力量',check:()=>false,directOnly:true },
+  { id:'overcoat.ghost',name:'今晚别走那条街',desc:'今晚别走那条街——被忽略的人用同一种方式留下了痕迹',check:()=>false,directOnly:true },
+  { id:'yesterday_witness',name:'见证者',desc:'把三十年前未说出口的故事接住',check:()=>false,directOnly:true },
+  { id:'yesterday_silence',name:'沉默是金',desc:'选择让故事停留在沉默里',check:()=>false,directOnly:true },
+  { id:'yesterday_true_dawn',name:'昨日之歌',desc:'完成昨日之歌的尾声',check:()=>false,directOnly:true },
 ];
 
 export function createUnlockTiers(addLamps: (positions: [number, number, number][]) => void,

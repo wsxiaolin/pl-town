@@ -1,11 +1,5 @@
 import * as THREE from 'three';
-
-type Building = {
-  id: string;
-  label?: string;
-  icon?: string;
-  group: THREE.Object3D;
-};
+import type { BuildingEntity } from './buildingEntity';
 
 type MapContent = { name: string; slogan: string };
 
@@ -14,12 +8,12 @@ type Cursor = { position: THREE.Vector3; visible: boolean };
 export type MapControllerOptions = {
   document: Document;
   getScene: () => THREE.Scene | null;
-  getBuildings: () => readonly Building[];
+  getBuildings: () => readonly BuildingEntity[];
   getCursor: () => Cursor | null;
   getStats: () => { achievements?: readonly string[] };
   getCamera: () => THREE.Camera | null;
   getBuildingContent: (buildingId: string) => MapContent | undefined;
-  isStoryLocked: (building: Building) => boolean;
+  isStoryLocked: (building: BuildingEntity) => boolean;
   getBuildingRoadEntry: (position: THREE.Vector3) => { x: number; z: number } | null;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
   movePlayerTo: (target: THREE.Vector3) => void;
@@ -46,7 +40,9 @@ export function createMapController(options: MapControllerOptions) {
   let shotRenderer: THREE.WebGLRenderer | null = null;
   let shotCamera: THREE.OrthographicCamera | null = null;
   let iconsBuilt = false;
-  let tipBuilding: Building | null = null;
+  let tipBuilding: BuildingEntity | null = null;
+  let markerLeft = Number.NaN;
+  let markerTop = Number.NaN;
 
   function toggle(): void {
     open = !open;
@@ -123,8 +119,16 @@ export function createMapController(options: MapControllerOptions) {
     // North (-z) at top, East (+x) at right — matches the captured map image.
     const left = ((cursor.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
     const top = ((cursor.position.z - MAP_SHOT_CENTER_Z + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100;
-    marker.style.left = `${clamp(left, 0, 100)}%`;
-    marker.style.top = `${clamp(top, 0, 100)}%`;
+    const nextLeft = clamp(left, 0, 100);
+    const nextTop = clamp(top, 0, 100);
+    if (nextLeft !== markerLeft) {
+      marker.style.left = `${nextLeft}%`;
+      markerLeft = nextLeft;
+    }
+    if (nextTop !== markerTop) {
+      marker.style.top = `${nextTop}%`;
+      markerTop = nextTop;
+    }
   }
 
   function renderIcons(): void {
@@ -158,7 +162,7 @@ export function createMapController(options: MapControllerOptions) {
     return (options.getStats().achievements ?? []).includes('walker_100');
   }
 
-  function openTip(building: Building): void {
+  function openTip(building: BuildingEntity): void {
     if (options.isStoryLocked(building)) return;
     tipBuilding = building;
     const content = options.getBuildingContent(building.id);
@@ -176,7 +180,7 @@ export function createMapController(options: MapControllerOptions) {
     options.document.getElementById('mapTip')?.classList.remove('open');
   }
 
-  function teleport(building: Building): void {
+  function teleport(building: BuildingEntity): void {
     const cursor = options.getCursor();
     if (!cursor) return;
     const entry = options.getBuildingRoadEntry(building.group.position);

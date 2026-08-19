@@ -1,13 +1,10 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
+import type { MaterialParameters } from './meshFactory';
 
 type Vec3 = readonly [number, number, number];
 
-type MaterialOptions = THREE.MeshStandardMaterialParameters & {
-  tex?: string;
-  rx?: number;
-  ry?: number;
-};
+type MaterialOptions = MaterialParameters;
 
 type EchoObservatoryAreaOptions = {
   scene: THREE.Scene;

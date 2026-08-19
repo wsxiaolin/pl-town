@@ -5,6 +5,11 @@ export interface LegacyDialogueOption {
   next: number | null;
   onPick?: () => void;
   action?: string;
+  nextByVisitor?: {
+    includes: readonly string[];
+    maxLength?: number;
+    next: number;
+  };
 }
 
 export interface LegacyDialogueNode {
@@ -16,7 +21,7 @@ export interface NpcEntityLike {
   profile: {
     id: string;
     name: string;
-    role: string;
+    role?: string;
     head: number;
     body: number;
     dialog: readonly LegacyDialogueNode[];
@@ -145,14 +150,20 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const renderNode = (node: LegacyDialogueNode): void => {
     if (!activeNpc) return;
     renderLine(node.text);
+    const visitor = options.document.defaultView?.localStorage.getItem('minicityUser') || '旅人';
     const dialogOptions = node.options.map((option) => ({
       text: option.text,
       onPick: () => {
         if (option.action) options.onDialogueAction?.(option.action, activeNpc?.profile.id ?? '');
         option.onPick?.();
         if (!activeNpc) return;
-        if (option.next === null) controller.closeNpc();
-        else renderNode(activeNpc.profile.dialog[option.next] ?? firstNode(activeNpc));
+        const visitorBranch = option.nextByVisitor;
+        const visitorMatches = visitorBranch
+          && visitorBranch.includes.some((name) => visitor.includes(name))
+          && (visitorBranch.maxLength === undefined || visitor.length <= visitorBranch.maxLength);
+        const next = visitorMatches ? visitorBranch.next : option.next;
+        if (next === null) controller.closeNpc();
+        else renderNode(activeNpc.profile.dialog[next] ?? firstNode(activeNpc));
       },
     }));
     if (node === activeNpc.profile.dialog[0]) {

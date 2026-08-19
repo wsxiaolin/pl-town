@@ -6,7 +6,7 @@ import starlitCabinImage from "../../../../assets/cg/echo/starlit-cabin.png";
 
 export const ECHO_STORY: StoryDefinition = {
   schemaVersion: 1,
-  definitionVersion: 12,
+  definitionVersion: 13,
   id: "main.echo.act-one",
   title: "回声",
   startNode: "meeting",

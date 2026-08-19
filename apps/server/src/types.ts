@@ -28,6 +28,22 @@ export type StoryProgress = {
   updatedAt: string;
 };
 
+export type ChatMessage = {
+  id: number;
+  userId: string;
+  nickname: string;
+  text: string;
+  flaggedAt: string | null;
+  hiddenAt: string | null;
+  hiddenBy: string | null;
+  moderationStatus: 'unreviewed' | 'pending' | 'approved' | 'rejected' | 'error';
+  moderationRequestId: string | null;
+  moderationRiskTypes: string[];
+  moderationError: string | null;
+  moderatedAt: string | null;
+  createdAt: string;
+};
+
 export type ClientMessage =
   | { type: 'hello'; token?: string; nickname?: string; password?: string }
   | { type: 'position'; position: Position }

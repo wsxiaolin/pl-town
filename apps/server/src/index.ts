@@ -5,6 +5,7 @@ import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate, RegistrationLimitError, tokenHash } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
+import { ChatModerationService } from './chatModerationService.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
@@ -50,6 +51,8 @@ const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ 
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
+const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
+chatModeration.start();
 let housingBroadcastTimer: NodeJS.Timeout | undefined;
 function broadcastHousingState() {
   if (housingBroadcastTimer) return;
@@ -156,7 +159,14 @@ async function handle(client: Client, raw: string) {
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim(); if (text) { db.recordChatMessage(userId, client.user.nickname, text.slice(0, 500)); bumpMetric('chatMessages'); broadcast({ type: 'chat', userId, nickname: client.user.nickname, text }, undefined); } return;
+      const text = message.text.trim().slice(0, 500);
+      if (text) {
+        const messageId = db.recordChatMessage(userId, client.user.nickname, text, chatModeration.enabled);
+        bumpMetric('chatMessages');
+        broadcast({ type: 'chat', messageId, userId, nickname: client.user.nickname, text }, undefined);
+        chatModeration.enqueue(messageId, text);
+      }
+      return;
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
@@ -454,9 +464,10 @@ const http = createServer(async (request, response) => {
       const take = Math.min(24, Math.max(1, Number.parseInt(params.get('take') || '20', 10) || 20));
       const body = { CategoryID: 3, Skip: skip, Take: take, NoTemplates: accountMatch[1] === 'messages' };
       const data = await requestAccount(account, path, body);
-      const collection = (value: any) => Array.isArray(value) ? value : Array.isArray(value?.$values) ? value.$values : [];
-      const items = collection(data.Data?.Messages).length ? collection(data.Data.Messages) : collection(data.Data);
-      const templates = collection(data.Data?.Templates);
+      const collection = (value: unknown): unknown[] => Array.isArray(value) ? value : (typeof value === 'object' && value !== null && Array.isArray((value as { $values?: unknown[] }).$values) ? (value as { $values: unknown[] }).$values : []);
+      const dataRecord = data.Data as { Messages?: unknown; Templates?: unknown } | undefined;
+      const items = collection(dataRecord?.Messages).length ? collection(dataRecord?.Messages) : collection(data.Data);
+      const templates = collection(dataRecord?.Templates);
       response.writeHead(200, headers); response.end(JSON.stringify({ data: items, templates, hasMore: items.length >= take }));
     } catch (error) { logApiError(request, error); response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
     return;
@@ -466,7 +477,7 @@ const http = createServer(async (request, response) => {
     const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
     if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
     try {
-      const kind = socialMatch[1]; let result;
+      const kind = socialMatch[1]; let result: Record<string, unknown>;
       if (kind === 'profile') result = await requestAccount(account, '/Users/GetUser', { ID: account.user.id });
       else if (kind === 'following' || kind === 'followers' || kind === 'volunteers') result = await requestAccount(account, '/Users/GetRelations', { UserID: account.user.id, DisplayType: kind === 'following' ? 1 : kind === 'followers' ? 0 : 3, Skip: 0, Take: 24, Query: '' });
       else result = await requestAccount(account, '/Contents/QueryExperiments', { Query: { Category: 'Experiment', Languages: [], ExcludeLanguages: null, Tags: null, ExcludeTags: null, ModelTags: null, ModelID: null, ParentID: null, UserID: kind === 'mine' ? account.user.id : 'Favorite', Special: null, From: null, Skip: 0, Take: 24, Days: 0, Sort: 0, ShowAnnouncement: false } });
@@ -479,7 +490,7 @@ const http = createServer(async (request, response) => {
     const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
     if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
     try {
-      const id=workMatch[1]; const action=workMatch[2]; const category=request.headers['x-town-work-category']==='Discussion'?'Discussion':'Experiment'; let path='/Contents/GetSummary'; let body:any={ContentID:id,Category:category};
+      const id=workMatch[1]; const action=workMatch[2]; const category=request.headers['x-town-work-category']==='Discussion'?'Discussion':'Experiment'; let path='/Contents/GetSummary'; let body: Record<string, unknown> = { ContentID:id, Category:category };
       if(action==='comments'&&request.method==='GET'){path='/Messages/GetComments';body={TargetID:id,TargetType:category,Skip:0,Take:16};}
       if(action==='comments'&&request.method==='POST'){const input=await readJson(request);const content=typeof input.content==='string'?input.content.trim().slice(0,1200):'';if(!content)throw new Error('Comment cannot be empty');path='/Messages/PostComment';body={TargetID:id,TargetType:category,Content:content,Language:'Chinese'};}
       if(action==='star'){const input=await readJson(request);path='/Contents/StarContent';body={ContentID:id,Category:category,Status:input.action!==0,Type:0};}
@@ -573,12 +584,14 @@ const shutdown = async (signal: string) => {
   stopping = true;
   logger.info('Graceful shutdown started', { signal, clients: clients.size });
   stopAutomaticBackups();
+  const moderationStopped = chatModeration.stop();
   if (housingBroadcastTimer) clearTimeout(housingBroadcastTimer);
   pendingPositions.forEach((_position, userId) => flushPosition(userId));
   for (const socket of sockets) socket.close(1001, 'Server shutting down');
   wss.close();
   try { await waitForBackup(); } catch (error) { logger.error('Backup did not finish during shutdown', { error: String(error) }); }
   http.close(async () => {
+    await moderationStopped;
     db.closeDatabase();
     logger.info('Graceful shutdown complete');
     await closeLogger();
