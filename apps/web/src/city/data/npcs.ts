@@ -49,6 +49,21 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
     dialog:[{ text:'「来查旧档案吗？有些事，纸上写得比人记得清楚。」', options:[{ text:'先不打扰', next:null }] }],
   },
   {
+    id:'akaki', name:'阿卡基', role:'文书院誊写员', core:false, spawnChance:1, storyOnly:true,
+    npcType:'story', type:'story', behavior:'field', workHours:[0,24],
+    head:0xC8B89A, body:0x4A5A6A, home:[13,13], work:[13,13], patrolRadius:0.8,
+    dialog:[
+      { text:'「……我的外套。」', options:[
+        { text:'怎么了？', next:1 },
+        { text:'（离开）', next:null },
+      ]},
+      { text:'「它被抢走了。就在那条街上。」', options:[
+        { text:'我帮你找。', next:null },
+        { text:'（离开）', next:null },
+      ]},
+    ],
+  },
+  {
     id:'linxu', name:'林叙', role:'图书馆管理员', core:true, spawnChance:1,
     behavior:'field', workHours:[9,17],
     head:0xD4A574, body:0x8B9DBF, home:[-6,6], work:[-4,3], patrolRadius:8,
@@ -211,6 +226,19 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
     ],
   },
   {
+    // ── 昨日之歌 · 画翁（老画家）──────────────────────────────────
+    // 三十年前在居民楼天台画画的少年，如今每周三来报摊买烟。
+    // 仅在昨日之歌剧情进入 painter-arrives 节点时出现。
+    id:'huaweng', name:'画翁', role:'老画家', core:false, spawnChance:1, storyOnly:true,
+    npcType:'story', type:'story', behavior:'field', workHours:[14,17],
+    head:0xE8E0D8, body:0x6B7A8A, home:[-9,-15], work:[-9,-14], patrolRadius:1.5,
+    dialog:[
+      { text:'「……」他看着窗外的街，像在看一幅画了三十年还没画完的画。', options:[
+        { text:'不打扰他', next:null },
+      ]},
+    ],
+  },
+  {
     id:'li', name:'李叔', role:'社区守望者', core:false, spawnChance:0.5,
     behavior:'rare', workHours:[20,7],
     head:0xA08060, body:0x4A6A8A, home:[12,12], work:[15,-15], patrolRadius:6,
@@ -260,6 +288,37 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
       { text:'「我自己吗……我叫时年梦烟雨，你可以叫我时年。我很喜欢记录这里的人，人们也乐得在历史中留下自己的印记，所以我的人物志会流传开啦（）。如果你想快点知道大家口中的一些“黑话”，那就快去档案馆看看吧！」', options:[
         { text:'这就去！', next:null, action:'teleport:archive' },
         { text:'先等等吧', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'della', name:'德拉', role:'客栈住客', core:false, spawnChance:1,
+    behavior:'field', workHours:[6,22], guaranteedSpawn:true,
+    head:0xE8C4A0, body:0x8B4A6B, home:[33,21], work:[31,19], patrolRadius:3,
+    spawnArea:[31,19,2.5],
+    dialog:[
+      { text:'「……一美元八十七美分。还差这么多。」', options:[
+        { text:'你在数什么？', next:1 },
+        { text:'你打算怎么办？', next:1 },
+        { text:'（不打扰她）', next:null },
+      ]},
+      { text:'「吉姆的金表……配一条白金表链才合适。可是……」', options:[
+        { text:'（听她继续说）', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'jim', name:'吉姆', role:'普通居民', core:false, spawnChance:1,
+    behavior:'rare', workHours:[8,22], guaranteedSpawn:true,
+    head:0xD7B49A, body:0x3A5A3A, home:[33,21], work:[-7,-12], patrolRadius:4,
+    spawnArea:[-7,-12,3],
+    dialog:[
+      { text:'「……」', options:[
+        { text:'你好', next:1 },
+        { text:'（不打扰他）', next:null },
+      ]},
+      { text:'「……抱歉，我在想事情。」', options:[
+        { text:'好的', next:null },
       ]},
     ],
   },

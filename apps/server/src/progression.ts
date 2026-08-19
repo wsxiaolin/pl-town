@@ -44,8 +44,15 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   echo_eternal_lie: 40,
   echo_real_echo: 80,
   echo_true_dawn: 120,
+  yesterday_witness: 40,
+  yesterday_silence: 30,
+  yesterday_true_dawn: 80,
   wild_mushroom_stubborn: 0,
   wild_mushroom_local: 0,
+  magi_87_cents: 60,
+  'overcoat.recover': 50,
+  'overcoat.witness': 60,
+  'overcoat.ghost': 80,
 });
 
 export const SHOP_PRODUCTS = Object.freeze({

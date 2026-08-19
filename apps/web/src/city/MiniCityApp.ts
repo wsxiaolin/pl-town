@@ -34,6 +34,9 @@ import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import { createEchoStoryController } from './echo/echoStoryController';
+import { createYesterdaySongController } from './yesterday/yesterdaySongController';
+import { createMagiStoryController } from './magi/magiStoryController';
+import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
@@ -98,6 +101,9 @@ const cameraTarget = new THREE.Vector3(0,0,0);
 // still letting the camera look down into the complete room.
 let cityDialogs: CityDialogController | null = null;
 let echoStoryController: ReturnType<typeof createEchoStoryController>;
+let yesterdaySongController: ReturnType<typeof createYesterdaySongController>;
+let magiStoryController: ReturnType<typeof createMagiStoryController>;
+let overcoatStoryController: ReturnType<typeof createOvercoatStoryController>;
 let mapController: ReturnType<typeof createMapController>;
 let loginController: ReturnType<typeof createLoginController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
@@ -114,6 +120,14 @@ let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
+let echoActiveActors = new Set<string>();
+let yesterdayActiveActors = new Set<string>();
+let magiActiveActors = new Set<string>();
+let overcoatActiveActors = new Set<string>();
+function mergeActiveStoryActorIds() {
+  activeStoryActorIds = new Set([...echoActiveActors, ...yesterdayActiveActors, ...magiActiveActors, ...overcoatActiveActors]);
+  npcSystem?.updateNpcSchedules();
+}
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const residences: ResidenceEntity[] = [];
@@ -247,6 +261,9 @@ const buildingInteraction = createBuildingInteraction({
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
   getEchoStoryController: () => echoStoryController,
+  getYesterdayStoryController: () => yesterdaySongController,
+  getMagiStoryController: () => magiStoryController,
+  getOvercoatStoryController: () => overcoatStoryController,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
@@ -397,7 +414,7 @@ function init() {
     getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
     consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
     setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
-    setActiveActors: (ids) => { activeStoryActorIds = new Set(ids); },
+    setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
     awardAchievement: (id, name) => progressionController?.awardDirectAchievement(id, name),
     getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
@@ -415,6 +432,27 @@ function init() {
   echoStoryController.setupScene(scene);
   echoStoryController.setupGuide();
   echoStoryController.restoreAchievements();
+  // ── 昨日之歌 · 支线剧情 ──────────────────────────────────────
+  yesterdaySongController = createYesterdaySongController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    onActiveActorsChanged: (ids) => { yesterdayActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  // ── 麦琪的礼物 · 支线剧情 ──────────────────────────────────────
+  magiStoryController = createMagiStoryController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    onActiveActorsChanged: (ids) => { magiActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
+  // ── 今晚别走那条街 · 支线剧情 ──────────────────────────────────
+  overcoatStoryController = createOvercoatStoryController({
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: gameClock }),
+    onActiveActorsChanged: (ids) => { overcoatActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  });
   mapController = createMapController({
     document,
     getScene: () => scene,
@@ -761,6 +799,18 @@ function openNpcDialog(npc: Npc) {
     recordNpcInteraction(npc.profile.id);
     return;
   }
+  if (cityDialogs && yesterdaySongController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && magiStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
+  if (cityDialogs && overcoatStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+    recordNpcInteraction(npc.profile.id);
+    return;
+  }
   cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
 }
 function closeNpcDialog() { cityDialogs?.closeNpc(); }
@@ -806,4 +856,7 @@ export function destroyMiniCity() {
   document.getElementById('labelsWrap')?.replaceChildren();
   document.getElementById('mapIcons')?.replaceChildren();
   echoStoryController?.dispose();
+  yesterdaySongController?.dispose();
+  magiStoryController?.dispose();
+  overcoatStoryController?.dispose();
 }
