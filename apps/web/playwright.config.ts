@@ -7,12 +7,10 @@ import { defineConfig, devices } from '@playwright/test';
 // ANGLE) is the only reliable way to exercise WebGL in CI / containers. The
 // launch flags below are harmless on machines with a real GPU.
 const webglChromiumArgs = [
-  // Vulkan via ANGLE is the fastest software-GL backend available in Chromium
-  // and keeps requestAnimationFrame firing often enough for frame-based tests
-  // (player movement) to stay deterministic on CPU-only CI runners.
+  // SwiftShader via ANGLE keeps WebGL available on CPU-only CI runners without
+  // depending on the runner's Vulkan driver or GPU process implementation.
   '--use-gl=angle',
-  '--use-angle=vulkan',
-  '--enable-features=Vulkan',
+  '--use-angle=swiftshader',
   '--enable-unsafe-swiftshader',
   '--ignore-gpu-blocklist',
   '--no-sandbox',
