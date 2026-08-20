@@ -16,15 +16,15 @@ export type MiniCityDebugApi = ReturnType<typeof createMiniCityApi>;
 
 function createMiniCityApi(options: DebugApiOptions) {
   return {
-    scene: options.getScene(),
-    camera: options.getCamera(),
-    renderer: options.getRenderer(),
-    cameraZoom: options.getCameraZoom(),
-    THREE: options.getThree(),
-    npcs: options.getNpcList(),
-    player: options.getCursorChar(),
-    navigation: options.getNavigation(),
-    residences: options.getResidences(),
+    get scene() { return options.getScene(); },
+    get camera() { return options.getCamera(); },
+    get renderer() { return options.getRenderer(); },
+    get cameraZoom() { return options.getCameraZoom(); },
+    get THREE() { return options.getThree(); },
+    get npcs() { return options.getNpcList(); },
+    get player() { return options.getCursorChar(); },
+    get navigation() { return options.getNavigation(); },
+    get residences() { return options.getResidences(); },
     getPlayerPath: () => options.getPlayerPath().map(point => point.clone()),
     interactNpc: (npcId: string) => {
       const npc = options.getNpcList().find(item => item.profile.id === npcId);

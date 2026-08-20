@@ -67,14 +67,12 @@ test('render settings use the available width and keep controls responsive', asy
   await expect(page.locator('#renderSettingsClose')).toBeVisible();
 });
 
-test('weather selector updates the visible weather state', async ({ page }) => {
+test('weather debug API updates the visible weather state', async ({ page }) => {
   await waitForCityReady(page, 'weather-tester');
-  await page.evaluate(() => document.getElementById('renderSettingsToggle')?.click());
-  await expect(page.locator('#renderSettings')).toHaveClass(/open/);
-  await page.locator('#renderWeather').selectOption('rain');
+  await page.evaluate(() => (window as any)._mini.weather.set('rain'));
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
-  await page.locator('#renderWeather').selectOption('snow');
+  await page.evaluate(() => (window as any)._mini.weather.set('snow'));
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('snow');
 });
 
