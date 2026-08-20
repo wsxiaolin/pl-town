@@ -3,7 +3,7 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
-import type { Weather } from './weather';
+import { isWeather, type Weather } from './weather';
 
 type NpcEntity = Npc;
 
@@ -71,7 +71,11 @@ function createMiniCityApi(options: DebugApiOptions) {
     stopInvasionCG: () => options.stopInvasionCG(),
     weather: {
       get: () => options.getWeather(),
-      set: (value: Weather) => options.setWeather(value),
+      set: (value: Weather) => {
+        if (!isWeather(value)) return false;
+        options.setWeather(value);
+        return true;
+      },
     },
   };
 }

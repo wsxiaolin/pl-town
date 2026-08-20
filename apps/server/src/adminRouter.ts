@@ -19,14 +19,17 @@ import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog
 import { NPC_CATALOG } from './npcCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 
+type Weather = 'clear' | 'rain' | 'snow' | 'snow-deep';
+const isWeather = (value: string): value is Weather => ['clear', 'rain', 'snow', 'snow-deep'].includes(value);
+
 type Context = {
   online: () => number;
   disconnectUser: (userId: string) => void;
   disconnectAll: () => void;
   broadcastHousing: () => void;
   startedAt: number;
-  getWeather: () => string;
-  setWeather: (weather: string) => void;
+  getWeather: () => Weather;
+  setWeather: (weather: Weather) => void;
 };
 
 type AdminAsset = { type: string; body: Buffer };
@@ -134,7 +137,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'POST' && path === '/admin/api/weather') {
     const body = await readJson(request, 1_024);
     const weather = typeof body.weather === 'string' ? body.weather : '';
-    if (!['clear', 'rain', 'snow', 'snow-deep'].includes(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
+    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
     context.setWeather(weather);
     db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather });
     respond(response, 200, { ok: true, weather }); return true;

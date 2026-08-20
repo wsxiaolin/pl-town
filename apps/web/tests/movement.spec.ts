@@ -175,7 +175,7 @@ test.describe('touch-capable tablet', () => {
     // fixed 350ms wait under-shoots the 0.3 threshold. Poll for the player to
     // actually travel past it instead of asserting on a single snapshot.
     await expect.poll(async () => {
-    const after = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
+      const after = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
       return Math.hypot(after[0] - before[0], after[2] - before[2]);
     }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.3);
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -185,12 +185,12 @@ test.describe('touch-capable tablet', () => {
   test('camera keeps the city orientation while approaching Linche', async ({ page }) => {
     await enterCity(page);
     await page.evaluate(() => {
-    const mini = (window as any)._mini;
+      const mini = (window as any)._mini;
       mini.player.position.set(50, 0, 0);
     });
     await page.waitForTimeout(200);
     const cameraDirection = await page.evaluate(() => {
-    const mini = (window as any)._mini;
+      const mini = (window as any)._mini;
       return mini.camera.getWorldDirection(new mini.THREE.Vector3()).toArray();
     });
     expect(cameraDirection[0]).toBeLessThan(0);

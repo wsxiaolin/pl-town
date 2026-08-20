@@ -17,7 +17,7 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
   expect(apiShape).toEqual({ hasPlay: true, hasStop: true, hasStatus: true, hasPublicShortcut: false });
 
   const handleShape = await page.evaluate(() => {
-  const handle = (window as any)._mini.cinematics.playLanYuPrelude();
+    const handle = (window as any)._mini.cinematics.playLanYuPrelude();
     return {
       hasFinished: handle.finished instanceof Promise,
       hasStop: typeof handle.stop === 'function',
