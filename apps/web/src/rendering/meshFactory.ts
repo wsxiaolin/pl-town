@@ -100,7 +100,7 @@ export function createMeshHelpers(
     if (getWeather() === 'rain') {
       material.roughness = Math.min(baseRoughness, 0.48);
       material.metalness = Math.max(baseMetalness, 0.08);
-    } else if (getWeather() === 'snow') {
+    } else if (getWeather() === 'snow' || getWeather() === 'snow-deep') {
       material.color.lerp(new THREE.Color(0xeaf3ff), 0.28);
       material.roughness = Math.max(baseRoughness, 0.86);
     }

@@ -1,7 +1,7 @@
-export type Weather = 'clear' | 'rain' | 'snow';
+export type Weather = 'clear' | 'rain' | 'snow' | 'snow-deep';
 
 const WEATHER_KEY = 'minicityWeather';
-const WEATHER_VALUES: readonly Weather[] = ['clear', 'rain', 'snow'];
+const WEATHER_VALUES: readonly Weather[] = ['clear', 'rain', 'snow', 'snow-deep'];
 
 export function isWeather(value: string | null | undefined): value is Weather {
   return WEATHER_VALUES.includes(value as Weather);

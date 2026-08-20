@@ -51,6 +51,12 @@ body[data-weather="snow"] .weather-overlay {
   background-size: 170px 170px, 230px 230px, 190px 190px;
   animation: weatherSnow 5s linear infinite;
 }
+body[data-weather="snow-deep"] .weather-overlay {
+  opacity: 0.72;
+  background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.9) 0 3px, transparent 4px), radial-gradient(circle at 60% 40%, rgba(255,255,255,0.86) 0 4px, transparent 5px), radial-gradient(circle at 35% 80%, rgba(255,255,255,0.82) 0 3px, transparent 4px);
+  background-size: 145px 145px, 200px 200px, 165px 165px;
+  animation: weatherSnow 5s linear infinite;
+}
 @keyframes weatherRain { from { background-position: 0 -120px, 0 -160px, 0 -220px, 0 -140px; } to { background-position: -18px 180px, -24px 210px, -28px 260px, -14px 190px; } }
 @keyframes weatherDrizzle { from { transform: translate3d(0, -5px, 0); } to { transform: translate3d(-4px, 8px, 0); } }
 @keyframes weatherSnow { from { background-position: 0 -160px, 30px -210px, -20px -120px; } to { background-position: 40px 160px, -20px 210px, 30px 120px; } }

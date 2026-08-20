@@ -179,5 +179,5 @@ function getCapabilityHint(resolutionLimit: number, maxAnisotropy: number): stri
 }
 
 function weatherLabel(weather: Weather): string {
-  return weather === 'rain' ? '雨天' : weather === 'snow' ? '雪天' : '晴天';
+  return weather === 'rain' ? '雨天' : weather === 'snow-deep' ? '深雪天' : weather === 'snow' ? '薄雪天' : '晴天';
 }

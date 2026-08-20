@@ -94,8 +94,14 @@ export function subscribeTextureResourceProgress(listener: (state: TextureProgre
   return () => listeners.delete(listener);
 }
 
-export function preloadTextureResources(enabled = true): void {
-  if (started) return;
+export function preloadTextureResources(enabled = true): Promise<void> {
+  if (started) return ready ? Promise.resolve() : new Promise((resolve) => {
+    const unsubscribe = subscribeTextureResourceProgress(() => {
+      if (!ready) return;
+      unsubscribe();
+      resolve();
+    });
+  });
   started = true;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
   if (!enabled || connection?.saveData || connection?.effectiveType === 'slow-2g') {
@@ -104,10 +110,10 @@ export function preloadTextureResources(enabled = true): void {
     const detail = document.getElementById('textureLoadDetail');
     if (detail) detail.textContent = enabled ? '已根据网络设置跳过高清资源' : '节能模式使用程序化材质';
     window.dispatchEvent(new CustomEvent('minicity:textures-ready'));
-    return;
+    return Promise.resolve();
   }
   publish();
-  void runWithConcurrency(Object.values(textureModules), 6).then(() => {
+  return runWithConcurrency(Object.values(textureModules), 6).then(() => {
     ready = true;
     publish();
     document.getElementById('textureLoadPanel')?.classList.add('is-complete');

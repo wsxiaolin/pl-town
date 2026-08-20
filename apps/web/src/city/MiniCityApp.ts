@@ -907,7 +907,10 @@ export function startMiniCity() {
   if(started)return;
   started=true;
   eventController=new AbortController();
-  preloadTextureResources(readRenderSettings().textureRendering);
+  void preloadTextureResources(readRenderSettings().textureRendering).then(() => {
+    init();
+    window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+  });
   initCG({
     onFinish: () => {
       showUnlockToast('全屏效果更好哦');
@@ -918,7 +921,6 @@ export function startMiniCity() {
   });
   document.body.classList.remove('day','night');
   document.body.classList.add(isNight?'night':'day');
-  init();
 }
 
 export function destroyMiniCity() {

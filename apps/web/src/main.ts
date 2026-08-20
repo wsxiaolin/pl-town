@@ -21,10 +21,11 @@ window.addEventListener('pointerdown', requestLandscape, { once: true });
 
 startMiniCity();
 
-// Let the first rendered WebGL frame land before removing the first-paint shell.
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => document.getElementById('bootScreen')?.classList.add('is-ready'));
-});
+window.addEventListener('minicity:city-ready', () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => document.getElementById('bootScreen')?.classList.add('is-ready'));
+  });
+}, { once: true });
 
 window.addEventListener('pagehide', destroyMiniCity, { once: true });
 
