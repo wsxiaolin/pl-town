@@ -33,7 +33,7 @@ export async function seedCityStorage(page: Page, user = 'tester'): Promise<void
  */
 export async function waitForCityBooted(page: Page): Promise<void> {
   await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any).__mini?.().player), undefined, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 30_000 });
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
   // The boot-screen first-paint shell fades out over ~0.7s after is-ready is
   // applied. Clicking a top-bar control during that window can be swallowed by
@@ -53,8 +53,8 @@ export async function waitForCityReady(page: Page, user = 'tester'): Promise<voi
  * who has already visited the 报摊, so `interactBuilding('newsstand')` opens
  * the catalog without any server round-trips.
  */
-export function stubNewsstandWebSocket(page: Page, user = 'news-tester'): void {
-  void page.addInitScript(({ u }) => {
+export function stubNewsstandWebSocket(page: Page, user = 'news-tester', weather = 'clear'): void {
+  void page.addInitScript(({ u, w }) => {
     const NativeWebSocket = window.WebSocket;
     class NewsGameWebSocket extends EventTarget {
       readyState = NativeWebSocket.CONNECTING;
@@ -74,19 +74,20 @@ export function stubNewsstandWebSocket(page: Page, user = 'news-tester'): void {
           response = {
             type: 'hello', token: 'news-token',
             user: { id: 'news-user', nickname: u, email: null, position: { x: 0, y: 0, z: -6 } },
-            players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog,
+            players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog, weather: w,
           };
         } else if (request.type === 'progress.building.visit') {
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) queueMicrotask(() => {
+          this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) }));
+          if (request.type === 'hello' && w !== 'clear') this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'world.weather', weather: w }) }));
+        });
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
       construct(Target, args) { return String(args[0]).includes(':8787') ? new NewsGameWebSocket() : Reflect.construct(Target, args); },
     }) });
-  }, { u: user });
+  }, { u: user, w: weather });
 }
-
-

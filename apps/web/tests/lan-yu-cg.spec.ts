@@ -6,7 +6,7 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
 
   await expect(page.locator('[data-lanyu-cg]')).toHaveCount(0);
   const apiShape = await page.evaluate(() => {
-    const api = (window as any).__mini?.();
+    const api = (window as any)._mini;
     return {
       hasPlay: typeof api?.cinematics?.playLanYuPrelude === 'function',
       hasStop: typeof api?.cinematics?.stopLanYuPrelude === 'function',
@@ -17,11 +17,11 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
   expect(apiShape).toEqual({ hasPlay: true, hasStop: true, hasStatus: true, hasPublicShortcut: false });
 
   const handleShape = await page.evaluate(() => {
-    const handle = (window as any).__mini().cinematics.playLanYuPrelude();
+    const handle = (window as any)._mini.cinematics.playLanYuPrelude();
     return {
       hasFinished: handle.finished instanceof Promise,
       hasStop: typeof handle.stop === 'function',
-      active: (window as any).__mini().cinematics.isLanYuPreludeActive(),
+      active: (window as any)._mini.cinematics.isLanYuPreludeActive(),
     };
   });
   expect(handleShape).toEqual({ hasFinished: true, hasStop: true, active: true });
@@ -43,7 +43,7 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
   expect(viewport.canvasHeight).toBeGreaterThan(0);
   expect(viewport.overflow).toBeLessThanOrEqual(1);
 
-  expect(await page.evaluate(() => (window as any).__mini().cinematics.stopLanYuPrelude())).toBe(true);
+  expect(await page.evaluate(() => (window as any)._mini.cinematics.stopLanYuPrelude())).toBe(true);
   await expect(overlay).toHaveCount(0, { timeout: 2_000 });
-  expect(await page.evaluate(() => (window as any).__mini().cinematics.isLanYuPreludeActive())).toBe(false);
+  expect(await page.evaluate(() => (window as any)._mini.cinematics.isLanYuPreludeActive())).toBe(false);
 });

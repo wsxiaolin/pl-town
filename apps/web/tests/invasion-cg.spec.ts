@@ -4,7 +4,7 @@ import { waitForCityReady } from './helpers';
 test('invasion CG renders its continuous arc in the shared overlay and exits cleanly', async ({ page }) => {
   await waitForCityReady(page, 'cg-tester');
 
-  const started = await page.evaluate(() => (window as any).playInvasionCG());
+  const started = await page.evaluate(() => (window as any)._mini.invasionCG());
   expect(started).toBe(true);
   const overlay = page.locator('#cgOverlay');
   await expect(overlay).toHaveClass(/active/);

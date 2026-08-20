@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { seedCityStorage, waitForCityBooted } from './helpers';
 
 function readActivityStateInPage() {
-  const mini = (window as any).__mini();
+  const mini = (window as any)._mini;
   let root: any = null;
   (mini as any).scene.traverse((object: any) => {
     if (root) return;
@@ -35,7 +35,7 @@ test('clicking a building plot keeps it grounded (no hover required)', async ({ 
   await waitForEntranceSettled(page);
 
   await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     mini.player.position.set(4, 0, -7.5);
   });
   await page.mouse.move(10, 700);
@@ -43,7 +43,7 @@ test('clicking a building plot keeps it grounded (no hover required)', async ({ 
   expect((await readState(page)).groupY).toBe(0);
 
   const point = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     const v = new mini.THREE.Vector3(4, 0, -8).project(mini.camera);
     return { cx: (v.x + 1) * innerWidth / 2, cy: (1 - v.y) * innerHeight / 2 };
   });
@@ -87,22 +87,22 @@ test('destroyed buildings persist across reload and can be restored globally', a
   await waitForEntranceSettled(page);
 
   const beforeReload = await page.evaluate(() => {
-    const result = (window as any).destroyBuilding('library');
+    const result = (window as any)._mini.destroyBuilding('library');
     return {
       result,
       stored: JSON.parse(localStorage.getItem('minicityDestroyedBuildings') || '[]'),
-      hasGlobalRestore: typeof (window as any).restoreBuilding === 'function',
+      hasRestore: typeof (window as any)._mini.restoreBuilding === 'function',
     };
   });
   expect(beforeReload.result).toBe(true);
   expect(beforeReload.stored).toContain('library');
-  expect(beforeReload.hasGlobalRestore).toBe(true);
+  expect(beforeReload.hasRestore).toBe(true);
 
   await page.reload();
   await waitForCityBooted(page);
   await waitForEntranceSettled(page);
   const afterReload = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     let libraryMesh: any = null;
     mini.scene.traverse((object: any) => {
       if (!libraryMesh && object.userData?.buildingId === 'library') libraryMesh = object;
@@ -113,7 +113,7 @@ test('destroyed buildings persist across reload and can be restored globally', a
       stored: JSON.parse(localStorage.getItem('minicityDestroyedBuildings') || '[]'),
       damaged: group?.userData?.buildingState === 'damaged',
       rubble: Boolean(group?.getObjectByName('building-destruction-rubble')),
-      restored: (window as any).restoreBuilding('library'),
+      restored: (window as any)._mini.restoreBuilding('library'),
       restoredState: group?.userData?.buildingState,
     };
   });

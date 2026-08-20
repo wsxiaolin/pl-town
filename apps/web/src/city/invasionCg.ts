@@ -10,7 +10,7 @@
 //   haze:      color  →  mix toward the atmosphere color by hazeAmt(d)
 // so the frame reads as stacked planes with aerial perspective, not a flat cutout.
 //
-// Console-only entry points: window.playInvasionCG() / window.stopInvasionCG().
+// Console-only entry points are exposed through window._mini.
 
 import { destroyCG } from './cg';
 

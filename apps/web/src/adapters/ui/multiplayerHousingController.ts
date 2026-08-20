@@ -1,6 +1,6 @@
 // Multiplayer presence, chat, and housing UI state.
 import * as THREE from 'three';
-import { MultiplayerClient, type House, type HousingRequest, type NetPlayerProgress, type NetProgressionCatalog, type NetUser } from '../../network/MultiplayerClient';
+import { MultiplayerClient, type House, type HousingRequest, type NetPlayerProgress, type NetProgressionCatalog, type NetUser, type NetWeather } from '../../network/MultiplayerClient';
 import { createCloudProgressionController } from './cloudProgressionController';
 import { createCommunityPanelController, type SocialKind } from './communityPanelController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
@@ -36,6 +36,7 @@ export interface MultiplayerHousingOptions {
   communityPanels: ReturnType<typeof createCommunityPanelController>;
   getLegacyAchievements?: () => string[];
   isResidenceUnavailable?: (residenceId: string) => boolean;
+  setWeather?: (weather: NetWeather) => void;
 }
 
 export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
@@ -45,6 +46,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
     getLegacyAchievements = () => [],
     isResidenceUnavailable = () => false,
+    setWeather = () => {},
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -230,6 +232,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         progression.applySnapshot(progress, catalog, event);
         if (!event) progression.syncAchievements(getLegacyAchievements());
       },
+      weather: setWeather,
       authenticationFailed: (message) => {
         const previousNickname = localStorage.getItem('minicityUser') || nickname;
         localStorage.removeItem('minicityUser');

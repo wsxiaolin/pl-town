@@ -1,6 +1,5 @@
 import { setupRenderSettingsController } from '../adapters/ui/renderSettingsController';
 import { bindCityUiEvents } from '../adapters/ui/cityEventBindings';
-import type { Weather } from './weather';
 
 export type EventBindingsOptions = {
   getCanvas: () => HTMLElement;
@@ -24,8 +23,6 @@ export type EventBindingsOptions = {
   closeModal: () => void;
   closeNpcDialog: () => void;
   getLoginController: () => { login: () => void; validateInput: () => void; showLogin: () => void } | null;
-  getWeather: () => Weather;
-  setWeather: (weather: Weather) => void;
 };
 
 export function createEventBindings(options: EventBindingsOptions) {
@@ -36,8 +33,6 @@ export function createEventBindings(options: EventBindingsOptions) {
       maxAnisotropy: renderer.capabilities.getMaxAnisotropy(),
       maxTextureSize: renderer.capabilities.maxTextureSize,
       close: options.closeRenderSettings,
-      getWeather: options.getWeather,
-      setWeather: options.setWeather,
     });
   }
 

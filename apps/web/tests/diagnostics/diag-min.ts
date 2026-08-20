@@ -41,8 +41,8 @@ async function main() {
     page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text()); });
     console.log('navigating...');
     await page.goto('http://127.0.0.1:4173/');
-    console.log('waiting for __mini player...');
-    await page.waitForFunction(() => Boolean((window as any).__mini?.().player), undefined, { timeout: 90_000 });
+    console.log('waiting for _mini player...');
+    await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 90_000 });
     console.log('player ready');
     await page.waitForFunction(() => document.getElementById('bootScreen')?.classList.contains('is-ready'), undefined, { timeout: 90_000 });
     console.log('boot ready');

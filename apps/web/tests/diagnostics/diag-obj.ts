@@ -55,8 +55,8 @@ async function main() {
 
   console.log('evaluating...');
   const result = await page.evaluate(({ bbox, VW, VH }) => {
-    const { scene, camera } = window.__mini();
-    const T = window.__mini().THREE;
+    const { scene, camera } = window._mini;
+    const T = window._mini.THREE;
     const list = [];
     let count = 0;
     scene.traverse(o => {

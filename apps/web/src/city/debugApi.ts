@@ -3,6 +3,7 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
+import { isWeather, type Weather } from './weather';
 
 type NpcEntity = Npc;
 
@@ -14,16 +15,16 @@ type NavigationApi = {
 export type MiniCityDebugApi = ReturnType<typeof createMiniCityApi>;
 
 function createMiniCityApi(options: DebugApiOptions) {
-  return () => ({
-    scene: options.getScene(),
-    camera: options.getCamera(),
-    renderer: options.getRenderer(),
-    cameraZoom: options.getCameraZoom(),
-    THREE: options.getThree(),
-    npcs: options.getNpcList(),
-    player: options.getCursorChar(),
-    navigation: options.getNavigation(),
-    residences: options.getResidences(),
+  return {
+    get scene() { return options.getScene(); },
+    get camera() { return options.getCamera(); },
+    get renderer() { return options.getRenderer(); },
+    get cameraZoom() { return options.getCameraZoom(); },
+    get THREE() { return options.getThree(); },
+    get npcs() { return options.getNpcList(); },
+    get player() { return options.getCursorChar(); },
+    get navigation() { return options.getNavigation(); },
+    get residences() { return options.getResidences(); },
     getPlayerPath: () => options.getPlayerPath().map(point => point.clone()),
     interactNpc: (npcId: string) => {
       const npc = options.getNpcList().find(item => item.profile.id === npcId);
@@ -67,7 +68,16 @@ function createMiniCityApi(options: DebugApiOptions) {
       isLanYuPreludeActive: () => isLanYuPreludeCGActive(),
     },
     invasionCG: () => options.playInvasionCG(),
-  });
+    stopInvasionCG: () => options.stopInvasionCG(),
+    weather: {
+      get: () => options.getWeather(),
+      set: (value: Weather) => {
+        if (!isWeather(value)) return false;
+        options.setWeather(value);
+        return true;
+      },
+    },
+  };
 }
 
 export type DebugApiOptions = {
@@ -99,17 +109,11 @@ export type DebugApiOptions = {
   burnCityProgress: () => number;
   playInvasionCG: () => boolean;
   stopInvasionCG: () => void;
+  getWeather: () => Weather;
+  setWeather: (weather: Weather) => void;
 };
 
 export function installDebugApi(options: DebugApiOptions) {
   const api = createMiniCityApi(options);
-  window.__mini = api;
-  window.destroyBuilding = options.destroyBuilding;
-  window.destroyResidence = options.destroyResidence;
-  window.destroyAll = options.destroyAll;
-  window.restoreBuilding = options.restoreBuilding;
-  window.restoreResidence = options.restoreResidence;
-  window.restoreAll = options.restoreAll;
-  window.playInvasionCG = options.playInvasionCG;
-  window.stopInvasionCG = options.stopInvasionCG;
+  window._mini = api;
 }

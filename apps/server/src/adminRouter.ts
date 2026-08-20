@@ -18,6 +18,9 @@ import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './r
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
+import type { Weather } from './types.js';
+
+const isWeather = (value: string): value is Weather => ['clear', 'rain', 'snow', 'snow-deep'].includes(value);
 
 type Context = {
   online: () => number;
@@ -25,6 +28,8 @@ type Context = {
   disconnectAll: () => void;
   broadcastHousing: () => void;
   startedAt: number;
+  getWeather: () => Weather;
+  setWeather: (weather: Weather) => void;
 };
 
 type AdminAsset = { type: string; body: Buffer };
@@ -125,6 +130,17 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     db.recordAdminAudit(principal.actor, 'admin.logout');
     destroyAdminSession(request, response);
     respond(response, 200, { ok: true }); return true;
+  }
+  if (request.method === 'GET' && path === '/admin/api/weather') {
+    respond(response, 200, { weather: context.getWeather() }); return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/weather') {
+    const body = await readJson(request, 1_024);
+    const weather = typeof body.weather === 'string' ? body.weather : '';
+    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
+    context.setWeather(weather);
+    db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather });
+    respond(response, 200, { ok: true, weather }); return true;
   }
   if (request.method === 'GET' && path === '/admin/api/overview') {
     const databaseBytes = (() => { try { return statSync(DATABASE_PATH).size; } catch { return 0; } })();

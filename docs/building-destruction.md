@@ -1,35 +1,27 @@
 # 建筑毁坏控制台命令
 
-城市运行后，浏览器控制台可以通过 `window.__mini()` 调试建筑毁坏状态。命令会立即改变场景视觉状态，并禁用对应建筑的射线交互、导航、弹窗和地图入口。
+城市运行后，浏览器控制台可以通过 `window._mini` 调试建筑毁坏状态。命令会立即改变场景视觉状态，并禁用对应建筑的射线交互、导航、弹窗和地图入口。
 
 ## 命令
 
 ```js
 // 毁坏主建筑，例如图书馆
-window.__mini().destroyBuilding('library')
+window._mini.destroyBuilding('library')
 
 // 毁坏居民楼，ID 来自居民楼列表
-window.__mini().destroyResidence('residence:12.00:-6.00')
+window._mini.destroyResidence('residence:12.00:-6.00')
 
 // 毁坏所有主建筑和居民楼，并返回本次实际毁坏数量
-window.__mini().destroyAll()
+window._mini.destroyAll()
 
 // 恢复单个主建筑
-window.__mini().restoreBuilding('library')
+window._mini.restoreBuilding('library')
 
 // 恢复单个居民楼
-window.__mini().restoreResidence('residence:12.00:-6.00')
+window._mini.restoreResidence('residence:12.00:-6.00')
 
 // 恢复全部建筑和居民楼
-window.__mini().restoreAll()
-```
-
-上述方法也会直接挂在全局 `window` 对象上：
-
-```js
-window.destroyBuilding('library')
-window.restoreBuilding('library')
-window.restoreAll()
+window._mini.restoreAll()
 ```
 
 ## 居民楼 ID
@@ -37,7 +29,7 @@ window.restoreAll()
 居民楼 ID 使用世界坐标生成，格式为 `residence:X.XX:Z.XX`。可以在控制台查看当前居民楼：
 
 ```js
-window.__mini().residences.map(residence => residence.id)
+window._mini.residences.map(residence => residence.id)
 ```
 
 单个毁坏命令首次成功时返回 `true`，目标不存在或已经毁坏时返回 `false`。`destroyAll()` 返回本次新毁坏的对象数量，重复执行时返回 `0`。

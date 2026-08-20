@@ -1,4 +1,5 @@
 export type Position = { x: number; y: number; z: number; rotation?: number };
+export type Weather = 'clear' | 'rain' | 'snow' | 'snow-deep';
 
 export type User = {
   id: string;

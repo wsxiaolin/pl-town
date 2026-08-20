@@ -91,7 +91,7 @@ async function main() {
 
   await page.goto(BASE);
   // Wait for the debug API + player cursor, then the boot screen to be ready.
-  await page.waitForFunction(() => Boolean((window as any).__mini?.().player), undefined, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 30_000 });
   await page.waitForFunction(() => document.getElementById('bootScreen')?.classList.contains('is-ready'), undefined, { timeout: 30_000 });
   await page.waitForTimeout(1500);
 
@@ -108,7 +108,7 @@ async function main() {
   console.log('baseline brightness:', regionBrightness(base));
 
   // Trigger the burn via the debug API (same path as clicking 文训社·外环).
-  const started = await page.evaluate(() => (window as any).__mini?.().burnCity());
+  const started = await page.evaluate(() => (window as any)._mini?.burnCity());
   console.log('burn triggered:', started);
 
   // Sample frames across the burn duration.
@@ -119,13 +119,13 @@ async function main() {
     const png = await shot(page);
     const name = `burn-${String(k + 1).padStart(2, '0')}.png`;
     fs.writeFileSync(`diagnostics-output/${name}`, PNG.sync.write(png));
-    const st = await page.evaluate(() => { const m = (window as any).__mini?.(); return { p: m?.burnCityProgress?.(), a: m?.burnCityActive?.() }; });
+    const st = await page.evaluate(() => { const m = (window as any)._mini; return { p: m?.burnCityProgress?.(), a: m?.burnCityActive?.() }; });
     console.log(`t=${t}ms`, name, regionBrightness(png), 'progress', st.p, 'active', st.a);
   }
 
   // Final: confirm the burn effect ended (no longer active).
   const leftover = await page.evaluate(() => {
-    const m = (window as any).__mini?.();
+    const m = (window as any)._mini;
     return { active: m ? m.burnCityActive?.() : 'no-mini' };
   });
   console.log('overlay after burn:', leftover);

@@ -67,15 +67,20 @@ test('render settings use the available width and keep controls responsive', asy
   await expect(page.locator('#renderSettingsClose')).toBeVisible();
 });
 
-test('weather selector updates the visible weather state', async ({ page }) => {
+test('weather debug API updates the visible weather state', async ({ page }) => {
   await waitForCityReady(page, 'weather-tester');
-  await page.evaluate(() => document.getElementById('renderSettingsToggle')?.click());
-  await expect(page.locator('#renderSettings')).toHaveClass(/open/);
-  await page.locator('#renderWeather').selectOption('rain');
+  await page.evaluate(() => (window as any)._mini.weather.set('rain'));
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
-  await page.locator('#renderWeather').selectOption('snow');
+  await page.evaluate(() => (window as any)._mini.weather.set('snow'));
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('snow');
+});
+
+test('server weather messages update the visible weather state', async ({ page }) => {
+  stubNewsstandWebSocket(page, 'weather-network-tester', 'rain');
+  await waitForCityReady(page, 'weather-network-tester');
+  await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
+  await expect(page.locator('#weatherOverlay')).toBeVisible();
 });
 
 test('cloud inventory and scene discoveries work in the rendered city', async ({ page }) => {
@@ -149,7 +154,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 2');
   await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
-  await page.evaluate(() => (window as any).__mini().interactBuilding('mall_south'));
+  await page.evaluate(() => (window as any)._mini.interactBuilding('mall_south'));
   await expect(page.locator('#shopPanel')).toHaveClass(/open/);
   await expect(page.locator('#shopPanel')).toContainText('物实商店');
   await expect(page.locator('#onlinePanel')).not.toHaveClass(/open/);
@@ -167,7 +172,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   }
   await page.locator('[data-shop-close]').click();
 
-  await page.evaluate(() => (window as any).__mini().interactBuilding('academy_library'));
+  await page.evaluate(() => (window as any)._mini.interactBuilding('academy_library'));
   await expect(page.locator('#academyPanel')).toHaveClass(/open/);
   await page.locator('.academy-work').first().click();
   await expect(page.locator('#academyReader')).toHaveClass(/open/);
@@ -177,7 +182,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await page.locator('#academyClose').click();
 
   const worldAudit = await page.evaluate(async () => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     mini.player.position.set(7, 0, 5);
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     const projected = mini.player.position.clone().project(mini.camera);
@@ -200,19 +205,19 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   expect(worldAudit.interactivePlot).toBe(true);
   expect(worldAudit.hasStoryNpc).toBe(true);
 
-  await page.evaluate(() => (window as any).__mini().interactInterestPoint('origin-orange-tree'));
+  await page.evaluate(() => (window as any)._mini.interactInterestPoint('origin-orange-tree'));
   await expect(page.locator('#npcLine')).toHaveText('城中的守望者，它或许不是最高的，但它见证了最多的风雨');
   await expect(page.locator('#npcRole')).toHaveText('获得沃柑 ×1');
   await page.locator('#npcClose').click();
 
-  await page.evaluate(() => (window as any).__mini().interactInterestPoint('cat-cafe-note'));
+  await page.evaluate(() => (window as any)._mini.interactInterestPoint('cat-cafe-note'));
   await expect(page.locator('#npcName')).toHaveText('掉落的纸');
   await expect(page.locator('#npcLine')).toHaveText('');
   await page.locator('#npcClose').click();
 
-  await page.evaluate(() => (window as any).__mini().interactInterestPoint('longjing-well'));
+  await page.evaluate(() => (window as any)._mini.interactInterestPoint('longjing-well'));
   const wellFocus = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     let well: any;
     mini.scene.traverse((object: any) => { if (object.userData?.sceneInterestPointId === 'longjing-well') well ??= object; });
     const position = well.getWorldPosition(new mini.THREE.Vector3());
@@ -304,10 +309,10 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   await expect(page.locator('.map-icon[data-building-id="litreview"]')).toHaveCount(0);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.locator('.map-icon[data-building-id="echo-observatory"]')).toHaveCount(0);
-  expect(await page.evaluate(() => (window as any).__mini().interactBuilding('litreview'))).toBe(false);
+  expect(await page.evaluate(() => (window as any)._mini.interactBuilding('litreview'))).toBe(false);
 
   const lockedAudit = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     let storyLocked = false;
     let emissiveIntensity = -1;
     mini.scene.traverse((object: any) => {
@@ -325,10 +330,10 @@ test('renamed mall buildings surface their new store names', async ({ page }) =>
   await waitForCityReady(page, 'mall-rename-tester');
   await expect(page.locator('.b-label-item[data-building-id="mall_south"] .bl-name')).toHaveText('金月店');
   await expect(page.locator('.b-label-item[data-building-id="mall_west"] .bl-name')).toHaveText('断星玄');
-  await page.evaluate(() => (window as any).__mini().openBuildingDialog('mall_south'));
+  await page.evaluate(() => (window as any)._mini.openBuildingDialog('mall_south'));
   await expect(page.locator('#modalTitle')).toHaveText('金月店');
   await page.locator('#modalClose').click();
-  await page.evaluate(() => (window as any).__mini().openBuildingDialog('mall_west'));
+  await page.evaluate(() => (window as any)._mini.openBuildingDialog('mall_west'));
   await expect(page.locator('#modalTitle')).toHaveText('断星玄');
   await page.locator('#modalClose').click();
 });
@@ -368,14 +373,14 @@ test('NPC side quest flows from offer to building objective to delivery', async 
   });
   await page.goto('/');
   await page.waitForFunction(() => {
-    const mini = (window as any).__mini?.();
+    const mini = (window as any)._mini;
     return !!mini?.player?.visible && !!mini?.npcs?.some((npc: any) => npc.profile.id === 'azi');
   }, undefined, { timeout: 30_000 });
   await expect(page.locator('#onlineStateDot')).toHaveClass(/connected/);
 
   const clickWorldEntity = async (kind: 'npc' | 'building', id: string) => {
     const handled = await page.evaluate(({ kind: entityKind, id: entityId }) => {
-      const mini = (window as any).__mini();
+      const mini = (window as any)._mini;
       const entity = entityKind === 'npc'
         ? mini.npcs.find((npc: any) => npc.profile.id === entityId).mesh
         : (() => {
@@ -620,11 +625,11 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
 
   await page.goto('/');
   await page.waitForFunction(() => {
-    const mini = (window as any).__mini?.();
+    const mini = (window as any)._mini;
     return !!mini?.player?.visible;
   }, undefined, { timeout: 30_000 });
 
-  await page.evaluate(() => (window as any).__mini().interactBuilding('culturehall'));
+  await page.evaluate(() => (window as any)._mini.interactBuilding('culturehall'));
   const panel = page.locator('#writerCatalogPanel');
   await expect(panel).toHaveClass(/open/);
   await expect(page.locator('#writerCatalogTitle')).toHaveText('物实作家图鉴');
@@ -644,11 +649,11 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
 
   await page.goto('/');
   await page.waitForFunction(() => {
-    const mini = (window as any).__mini?.();
+    const mini = (window as any)._mini;
     return !!mini?.player?.visible;
   }, undefined, { timeout: 30_000 });
 
-  await page.evaluate(() => (window as any).__mini().interactBuilding('newsstand'));
+  await page.evaluate(() => (window as any)._mini.interactBuilding('newsstand'));
   const panel = page.locator('#newsstandPanel');
   await expect(panel).toHaveClass(/open/);
   await expect(page.locator('#newsstandTitle')).toHaveText('报摊 · 星辉刊物目录');
@@ -698,11 +703,11 @@ test('newsstand hides empty pages and degrades to a single column on mobile', as
 
   await page.goto('/');
   await page.waitForFunction(() => {
-    const mini = (window as any).__mini?.();
+    const mini = (window as any)._mini;
     return !!mini?.player?.visible;
   }, undefined, { timeout: 30_000 });
 
-  await page.evaluate(() => (window as any).__mini().interactBuilding('newsstand'));
+  await page.evaluate(() => (window as any)._mini.interactBuilding('newsstand'));
   const panel = page.locator('#newsstandPanel');
   await expect(panel).toHaveClass(/open/);
 
@@ -734,7 +739,7 @@ test('newsstand hides empty pages and degrades to a single column on mobile', as
   });
   await expect(reader).not.toHaveClass(/open/);
   await expect(panel).not.toHaveClass(/open/);
-  await page.evaluate(() => (window as any).__mini().interactBuilding('newsstand'));
+  await page.evaluate(() => (window as any)._mini.interactBuilding('newsstand'));
   await expect(panel).toHaveClass(/open/);
   await page.evaluate(() => {
     const button = Array.from(document.querySelectorAll<HTMLElement>('.np-issue')).find((b) => b.textContent?.includes('2024.7.7'));
@@ -786,7 +791,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await seedCityStorage(page, 'mushroom-tester');
   await waitForCityBooted(page);
 
-  const interact = () => page.evaluate(() => (window as any).__mini().interactBuilding('writingclub_outer'));
+  const interact = () => page.evaluate(() => (window as any)._mini.interactBuilding('writingclub_outer'));
   const unlocked = () => page.evaluate(() => {
     const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { achievements?: string[] };
     return stats.achievements ?? [];
