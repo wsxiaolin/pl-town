@@ -143,10 +143,10 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
     addRoadSegment(2.4, 35.8, 0, -21.1, true, 'asphalt');
     addRoadSegment(2.4, 35.8, 0, 21.1, true, 'asphalt');
-    addRoadSegment(38.8, 2.4, -23.6, 0, true, 'asphalt');
-    addRoadSegment(38.8, 2.4, 23.6, 0, true, 'asphalt');
-    addRoadSegment(2.4, 2.0, 0, -39.0, true, 'asphalt');
-    addRoadSegment(2.4, 2.0, 0, 39.0, true, 'asphalt');
+    addRoadSegment(38.8, 2.4, -23.6, 0, false, 'pavement');
+    addRoadSegment(38.8, 2.4, 23.6, 0, false, 'pavement');
+    addRoadSegment(2.4, 2.0, 0, -39.0, false, 'pavement');
+    addRoadSegment(2.4, 2.0, 0, 39.0, false, 'pavement');
 
     ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
@@ -172,15 +172,14 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     const minorCoords = roadCoords.filter((position) => position !== 0);
     for (const position of minorCoords) {
       const width = roadWidth(position);
-      const texture = Math.abs(position) === 6 || Math.abs(position) === 12 ? 'road' : 'pavement';
-      addRoadSegment(width, 32.8, position, -18.6, false, texture);
-      addRoadSegment(width, 32.8, position, 18.6, false, texture);
+      addRoadSegment(width, 32.8, position, -18.6, false, 'pavement');
+      addRoadSegment(width, 32.8, position, 18.6, false, 'pavement');
     }
 
     const boundaries = [-cityLimit, ...roadCoords, cityLimit];
     for (const z of minorCoords) {
       const width = roadWidth(z);
-      const texture = Math.abs(z) === 6 || Math.abs(z) === 12 ? 'road' : 'pavement';
+      const texture = 'pavement';
       for (let index = 0; index < boundaries.length - 1; index++) {
         const left = boundaries[index]!;
         const right = boundaries[index + 1]!;
@@ -215,7 +214,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       addMarking(new THREE.BoxGeometry(2.4, 0.005, roadWidth(z)), material, 0, z);
     }
 
-    const ringMat = createLayerMaterial({ color: colors.asphalt, roughness: 0.95 });
+    const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });
     trackPathMaterial(ringMat);
     addRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
 

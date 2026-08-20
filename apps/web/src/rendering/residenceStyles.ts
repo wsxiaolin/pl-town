@@ -47,11 +47,11 @@ export function createResidenceModel(options: ResidenceStyleOptions): { group: T
   const height = 0.92 + (index % 4) * 0.18 + (styleId === 8 ? 0.42 : 0);
   const families = [
     { wall: 0xf2eee4, wallTex: 'facade_residence_cream', roof: 0x9b5a48, roofTex: 'rooftile' },
-    { wall: 0xd6c2a0, wallTex: 'brick', roof: 0x59656f, roofTex: 'residence_shingle' },
-    { wall: 0xdce8e9, wallTex: 'facade_residence_bluepanel', roof: 0x557d91, roofTex: 'metal' },
-    { wall: 0xd8d5cb, wallTex: 'facade_residence_stone', roof: 0x3d4651, roofTex: 'metal' },
-    { wall: 0xe5d1b8, wallTex: 'residence_panel', roof: 0xa5493c, roofTex: 'rooftile' },
-    { wall: 0xd9eadc, wallTex: 'facade_residence_moss', roof: 0x6c9279, roofTex: 'residence_tile' },
+    { wall: 0xd6c2a0, wallTex: 'residence_redbrick', roof: 0x59656f, roofTex: 'residence_slate_roof' },
+    { wall: 0xdce8e9, wallTex: 'residence_bluepanel', roof: 0x557d91, roofTex: 'residence_green_roof' },
+    { wall: 0xd8d5cb, wallTex: 'residence_palestone', roof: 0x3d4651, roofTex: 'residence_slate_roof' },
+    { wall: 0xe5d1b8, wallTex: 'residence_clapboard', roof: 0xa5493c, roofTex: 'residence_terracotta_roof' },
+    { wall: 0xd9eadc, wallTex: 'residence_mossplaster', roof: 0x6c9279, roofTex: 'residence_green_roof' },
   ] as const;
   const palette = families[Math.floor(styleId / 2)]!;
   const mesh = (geometry: THREE.BufferGeometry, material: THREE.Material | MaterialParameters, position: [number, number, number], cast = true) =>

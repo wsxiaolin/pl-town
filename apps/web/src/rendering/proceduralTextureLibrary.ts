@@ -21,6 +21,7 @@ import concreteWornColor from '../assets/textures/concrete_worn_color.png';
 import redBrickColor from '../assets/textures/brick_red_color.png';
 import puddleAsphaltColor from '../assets/textures/puddle_asphalt_color.png';
 import type { Weather } from '../city/weather';
+import { weatherTextureKey } from './weatherTextureVariants';
 
 type Canvas2D = CanvasRenderingContext2D;
 type DrawFn = (ctx: Canvas2D, size: number) => void;
@@ -31,10 +32,24 @@ const GENERATED_FACADES = import.meta.glob('../assets/textures/facade_*_color.pn
   query: '?url',
   import: 'default',
 }) as Record<string, string>;
+const GENERATED_WEATHER_TEXTURES = import.meta.glob('../assets/textures/{residence_*,road_*}_color.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
 
 /** Canvas fallbacks for generated facade keys used by the canvas (low-preset) path. */
 const FACADE_CANVAS_FALLBACK: Record<string, string> = {
   facade_residence_cream: 'residence_plaster',
+  residence_cream: 'residence_plaster',
+  residence_redbrick: 'brick',
+  residence_bluepanel: 'residence_panel',
+  residence_palestone: 'stone',
+  residence_clapboard: 'residence_panel',
+  residence_mossplaster: 'residence_plaster',
+  residence_terracotta_roof: 'rooftile',
+  residence_slate_roof: 'residence_shingle',
+  residence_green_roof: 'residence_tile',
   facade_residence_bluepanel: 'residence_panel',
   facade_residence_stone: 'stone',
   facade_residence_darkwood: 'residence_wood',
@@ -92,17 +107,13 @@ export function createProceduralTextureLibrary(
   }
   function _tex(key: string, rx = 1, ry = 1) {
     const weather = getWeather();
-    const generatedKey = weather === 'rain' && (key === 'asphalt' || key === 'road')
-      ? 'wet_asphalt'
-      : weather === 'snow' && (key.startsWith('ground') || key === 'pavement' || key === 'asphalt' || key === 'road')
-        ? 'snow_ground'
-        : weather === 'snow' && (key === 'rooftile' || key === 'residence_tile' || key === 'residence_shingle')
-          ? 'snow_roof'
-          : key;
-    const generatedSource = generatedKey === 'wet_asphalt' ? puddleAsphaltColor
-      : generatedKey === 'snow_ground' ? snowGroundColor
-        : generatedKey === 'snow_roof' ? snowRoofColor
-          : GENERATED_TEXTURES[generatedKey];
+    const generatedKey = weatherTextureKey(key, weather);
+    const generatedSource = GENERATED_TEXTURES[generatedKey]
+      ?? GENERATED_WEATHER_TEXTURES[`../assets/textures/${generatedKey}_color.png`]
+      ?? (generatedKey === 'wet_asphalt' ? puddleAsphaltColor
+        : generatedKey === 'snow_ground' ? snowGroundColor
+          : generatedKey === 'snow_roof' ? snowRoofColor
+            : undefined);
     if (getTextureRendering() && generatedSource) {
       return resources.texture(`generated:repeat:${generatedKey}:${rx || 1}:${ry || 1}`, () => {
         const t = new THREE.TextureLoader().load(generatedSource);
