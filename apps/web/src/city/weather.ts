@@ -30,5 +30,5 @@ export function weatherForDay(day: number): Weather {
 }
 
 export function persistWeather(weather: Weather): void {
-  localStorage.setItem(WEATHER_KEY, weather);
+  try { localStorage.setItem(WEATHER_KEY, weather); } catch { /* Storage can be unavailable. */ }
 }

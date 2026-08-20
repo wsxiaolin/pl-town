@@ -793,9 +793,9 @@ function updateWeather(day: number): void {
 
 function updateWeatherState(next: Weather, persist = false): void {
   document.body.dataset.weather = next;
+  if (persist) persistWeather(next);
   if (next === weather) return;
   weather = next;
-  if (persist) persistWeather(weather);
   refreshWeather();
   proceduralTextures.refreshWeather();
 }
@@ -907,8 +907,13 @@ export function startMiniCity() {
   if(started)return;
   started=true;
   eventController=new AbortController();
-  void preloadTextureResources(readRenderSettings().textureRendering).then(() => {
-    init();
+  void preloadTextureResources(readRenderSettings().textureRendering, eventController.signal).then(() => {
+    if (!started) return;
+    try { init(); } catch (error) { console.error('City initialization failed', error); }
+    window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+  }).catch(() => {
+    if (!started) return;
+    try { init(); } catch (error) { console.error('City initialization failed', error); }
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));
   });
   initCG({
