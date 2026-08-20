@@ -70,6 +70,7 @@ import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { hasWeatherPreference, persistWeather, readWeather, weatherForDay, type Weather } from './weather';
+import { preloadTextureResources, subscribeTextureResourceProgress } from './textureResourcePreloader';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -358,6 +359,10 @@ function init() {
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
+  window.addEventListener('minicity:textures-ready', () => {
+    refreshWeather();
+    proceduralTextures.refreshWeather();
+  }, { once: true, signal: eventController.signal });
   worldDecorations = createWorldDecorations({
     scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
@@ -902,6 +907,13 @@ export function startMiniCity() {
   if(started)return;
   started=true;
   eventController=new AbortController();
+  preloadTextureResources();
+  subscribeTextureResourceProgress((state) => {
+    const detail = document.getElementById('textureLoadDetail');
+    if (detail && state.loadedFiles === state.totalFiles && state.failedFiles === 0) {
+      detail.textContent = '高清资源已就绪';
+    }
+  });
   initCG({
     onFinish: () => {
       showUnlockToast('全屏效果更好哦');

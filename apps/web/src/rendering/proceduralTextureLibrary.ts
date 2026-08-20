@@ -22,6 +22,7 @@ import redBrickColor from '../assets/textures/brick_red_color.png';
 import puddleAsphaltColor from '../assets/textures/puddle_asphalt_color.png';
 import type { Weather } from '../city/weather';
 import { weatherTextureKey } from './weatherTextureVariants';
+import { isTextureResourceAvailable, isTextureResourceReady } from '../city/textureResourcePreloader';
 
 type Canvas2D = CanvasRenderingContext2D;
 type DrawFn = (ctx: Canvas2D, size: number) => void;
@@ -114,7 +115,7 @@ export function createProceduralTextureLibrary(
         : generatedKey === 'snow_ground' ? snowGroundColor
           : generatedKey === 'snow_roof' ? snowRoofColor
             : undefined);
-    if (getTextureRendering() && generatedSource) {
+    if (getTextureRendering() && isTextureResourceReady() && generatedSource && isTextureResourceAvailable(generatedSource)) {
       return resources.texture(`generated:repeat:${generatedKey}:${rx || 1}:${ry || 1}`, () => {
         const t = new THREE.TextureLoader().load(generatedSource);
         t.name = `generated_${generatedKey}`;
@@ -149,7 +150,7 @@ export function createProceduralTextureLibrary(
   }
   function _texClamp(key: string) {
     const facadeSource = GENERATED_FACADES[`../assets/textures/${key}_color.png`];
-    if (getTextureRendering() && facadeSource) {
+    if (getTextureRendering() && isTextureResourceReady() && facadeSource && isTextureResourceAvailable(facadeSource)) {
       return resources.texture(`generated:clamp:${key}`, () => {
         const texture = new THREE.TextureLoader().load(facadeSource);
         texture.name = `generated_${key}`;

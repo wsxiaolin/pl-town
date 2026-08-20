@@ -34,8 +34,12 @@
         <span class="boot-live"><i></i> LIVE</span>
       </div>
       <p class="boot-subtitle">准备街道、建筑与居民，马上见面。</p>
-      <div class="boot-progress" aria-hidden="true"><span></span></div>
-      <div class="boot-meta"><span>INITIALIZING CITY</span><span>v1.0</span></div>
+       <div class="boot-progress" aria-hidden="true"><span></span></div>
+       <section class="texture-load-panel" id="textureLoadPanel" aria-live="polite">
+         <div class="texture-load-label"><span>下载高清城市资源</span><span id="textureLoadDetail">准备资源清单</span></div>
+         <progress id="textureLoadProgress" max="1" value="0" aria-label="高清资源下载进度"></progress>
+       </section>
+       <div class="boot-meta"><span>INITIALIZING CITY</span><span>v1.0</span></div>
     </div>
   </div>
 
