@@ -42,6 +42,16 @@ export const FILM_CITY_CLEARINGS = Object.freeze([
 export function isFilmCityClearing(x: number, z: number): boolean {
   return FILM_CITY_CLEARINGS.some(([clearingX, clearingZ]) => x === clearingX && z === clearingZ);
 }
+
+export const SPECIAL_BUILDING_CLEARINGS = Object.freeze([
+  Object.freeze([32, -8] as const),
+  Object.freeze([28, 2] as const),
+  Object.freeze([33, 3] as const),
+]);
+
+export function isSpecialBuildingClearing(x: number, z: number): boolean {
+  return SPECIAL_BUILDING_CLEARINGS.some(([clearingX, clearingZ]) => x === clearingX && z === clearingZ);
+}
 export const WEST_BEACH = Object.freeze({
   coastlineX: -43.2,
   deepWaterX: -44.5,

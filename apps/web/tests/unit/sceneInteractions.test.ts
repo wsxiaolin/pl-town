@@ -6,7 +6,7 @@ import { createSceneInterestPointController } from '../../src/city/sceneInterest
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { residenceStyleFor } from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
-import { isFilmCityClearing } from '../../src/city/data/cityConfig';
+import { isFilmCityClearing, isSpecialBuildingClearing } from '../../src/city/data/cityConfig';
 import { FILM_CITY_EXPERIENCE_PRICE, FILM_CITY_SHOTS } from '../../src/city/filmCity/filmCityExperienceController';
 import { MUSIC_HALL_LYRICS } from '../../src/city/data/musicHallLyrics';
 import {
@@ -140,6 +140,13 @@ test('影视城占用两处住宅清场并提供三段式航拍', () => {
   assert.equal(FILM_CITY_EXPERIENCE_PRICE, 400);
   assert.deepEqual(FILM_CITY_SHOTS.map((shot) => shot.phase), ['wide', 'near', 'closeup']);
   assert.equal(FILM_CITY_SHOTS.reduce((total, shot) => total + shot.duration, 0), 30);
+});
+
+test('三个新地标占用住宅清场位置', () => {
+  assert.equal(isSpecialBuildingClearing(32, -8), true);
+  assert.equal(isSpecialBuildingClearing(28, 2), true);
+  assert.equal(isSpecialBuildingClearing(33, 3), true);
+  assert.equal(isSpecialBuildingClearing(31.9, -8), false);
 });
 
 test('west beach encounter grants Tirpitz once and awards the achievement', async () => {
