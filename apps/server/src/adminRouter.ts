@@ -18,8 +18,8 @@ import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './r
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
+import type { Weather } from './types.js';
 
-type Weather = 'clear' | 'rain' | 'snow' | 'snow-deep';
 const isWeather = (value: string): value is Weather => ['clear', 'rain', 'snow', 'snow-deep'].includes(value);
 
 type Context = {

@@ -76,6 +76,13 @@ test('weather debug API updates the visible weather state', async ({ page }) => 
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('snow');
 });
 
+test('server weather messages update the visible weather state', async ({ page }) => {
+  stubNewsstandWebSocket(page, 'weather-network-tester', 'rain');
+  await waitForCityReady(page, 'weather-network-tester');
+  await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
+  await expect(page.locator('#weatherOverlay')).toBeVisible();
+});
+
 test('cloud inventory and scene discoveries work in the rendered city', async ({ page }) => {
   test.setTimeout(120_000);
   await page.addInitScript(() => {

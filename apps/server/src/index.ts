@@ -10,7 +10,7 @@ import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
-import type { ClientMessage, Position, ServerMessage, User } from './types.js';
+import type { ClientMessage, Position, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
@@ -45,7 +45,6 @@ const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // budget used by WebSocket `hello` logins. Password sign-ins still use the
 // global limiter to stay consistent with the game login path.
 const npcEditTokenRestoreRate = new FixedWindowRateLimiter(20, 60_000);
-type Weather = 'clear' | 'rain' | 'snow' | 'snow-deep';
 let serverWeather: Weather = 'clear';
 // The edit page only needs the identity fields for its dropdown; the full
 // catalog carries hundreds of KB of dialog text that the page never shows.
@@ -328,7 +327,7 @@ const http = createServer(async (request, response) => {
     broadcastHousing: broadcastHousingState,
     startedAt,
     getWeather: () => serverWeather,
-    setWeather: (weather) => { serverWeather = weather as Weather; broadcastWeather(); },
+    setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
   })) return;
   const headers = jsonSecurityHeaders;
   if (request.url === '/healthz') { response.writeHead(200, headers); response.end(JSON.stringify({ ok: true })); return; }

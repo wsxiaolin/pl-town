@@ -69,7 +69,7 @@ import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
-import { type Weather } from './weather';
+import { isWeather, type Weather } from './weather';
 import { preloadTextureResources } from './textureResourcePreloader';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
@@ -782,6 +782,7 @@ function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(n
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
 
 function updateWeatherState(next: Weather): void {
+  if (!isWeather(next)) return;
   document.body.dataset.weather = next;
   if (next === weather) return;
   weather = next;
