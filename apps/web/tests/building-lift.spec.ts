@@ -87,16 +87,16 @@ test('destroyed buildings persist across reload and can be restored globally', a
   await waitForEntranceSettled(page);
 
   const beforeReload = await page.evaluate(() => {
-    const result = (window as any).destroyBuilding('library');
+    const result = (window as any)._mini.destroyBuilding('library');
     return {
       result,
       stored: JSON.parse(localStorage.getItem('minicityDestroyedBuildings') || '[]'),
-      hasGlobalRestore: typeof (window as any).restoreBuilding === 'function',
+      hasRestore: typeof (window as any)._mini.restoreBuilding === 'function',
     };
   });
   expect(beforeReload.result).toBe(true);
   expect(beforeReload.stored).toContain('library');
-  expect(beforeReload.hasGlobalRestore).toBe(true);
+  expect(beforeReload.hasRestore).toBe(true);
 
   await page.reload();
   await waitForCityBooted(page);
@@ -113,7 +113,7 @@ test('destroyed buildings persist across reload and can be restored globally', a
       stored: JSON.parse(localStorage.getItem('minicityDestroyedBuildings') || '[]'),
       damaged: group?.userData?.buildingState === 'damaged',
       rubble: Boolean(group?.getObjectByName('building-destruction-rubble')),
-      restored: (window as any).restoreBuilding('library'),
+      restored: (window as any)._mini.restoreBuilding('library'),
       restoredState: group?.userData?.buildingState,
     };
   });
