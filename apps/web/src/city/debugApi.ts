@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
+import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
 
 type NpcEntity = Npc;
 
@@ -60,6 +61,11 @@ function createMiniCityApi(options: DebugApiOptions) {
     burnCity: () => options.burnCity(),
     burnCityActive: () => options.burnCityActive(),
     burnCityProgress: () => options.burnCityProgress(),
+    cinematics: {
+      playLanYuPrelude: () => playLanYuPreludeCG(),
+      stopLanYuPrelude: () => stopLanYuPreludeCG(),
+      isLanYuPreludeActive: () => isLanYuPreludeCGActive(),
+    },
     invasionCG: () => options.playInvasionCG(),
   });
 }
