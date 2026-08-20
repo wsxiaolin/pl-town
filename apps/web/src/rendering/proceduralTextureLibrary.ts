@@ -32,6 +32,15 @@ const GENERATED_FACADES = import.meta.glob('../assets/textures/facade_*_color.pn
   import: 'default',
 }) as Record<string, string>;
 
+/** Canvas fallbacks for generated facade keys used by the canvas (low-preset) path. */
+const FACADE_CANVAS_FALLBACK: Record<string, string> = {
+  facade_residence_cream: 'residence_plaster',
+  facade_residence_bluepanel: 'residence_panel',
+  facade_residence_stone: 'stone',
+  facade_residence_darkwood: 'residence_wood',
+  facade_residence_moss: 'residence_tile',
+};
+
 const GENERATED_TEXTURES: Record<string, string> = {
   ground6: groundCityColor,
   ground2: groundDistrictColor,
@@ -107,12 +116,17 @@ export function createProceduralTextureLibrary(
         return t;
       });
     }
-    const c = _texCanvases[key];
+    const canvasKey = _texCanvases[generatedKey]
+      ? generatedKey
+      : (FACADE_CANVAS_FALLBACK[key] && _texCanvases[FACADE_CANVAS_FALLBACK[key]])
+        ? FACADE_CANVAS_FALLBACK[key]
+        : key;
+    const c = _texCanvases[canvasKey];
     if (!c) return null;
     const repeatX = rx || 1, repeatY = ry || 1;
-    return resources.texture(`repeat:${key}:${repeatX}:${repeatY}`, () => {
+    return resources.texture(`repeat:${canvasKey}:${key}:${repeatX}:${repeatY}`, () => {
       const t = new THREE.CanvasTexture(c);
-      t.name = key;
+      t.name = canvasKey;
       t.wrapS = THREE.RepeatWrapping;
       t.wrapT = THREE.RepeatWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -136,10 +150,12 @@ export function createProceduralTextureLibrary(
         return texture;
       });
     }
-    const c = _texCanvases[key];
+    const canvasKey = FACADE_CANVAS_FALLBACK[key] ?? key;
+    const c = _texCanvases[canvasKey];
     if (!c) return null;
     return resources.texture(`clamp:${key}`, () => {
       const t = new THREE.CanvasTexture(c);
+      t.name = canvasKey;
       t.wrapS = THREE.ClampToEdgeWrapping;
       t.wrapT = THREE.ClampToEdgeWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -156,6 +172,9 @@ export function createProceduralTextureLibrary(
     );
     facadeMaterials.add(mat);
     mat.name = `generated_${texKey}`;
+    mat.userData.weatherBaseColor = mat.color.clone();
+    mat.userData.weatherBaseRoughness = mat.roughness;
+    mat.userData.weatherBaseMetalness = mat.metalness;
     const facade = new THREE.Mesh(resources.geometry(new THREE.PlaneGeometry(w, h)), mat);
     facade.position.set(0, y, zOffset);
     if (rotY) facade.rotation.y = rotY;
@@ -165,10 +184,26 @@ export function createProceduralTextureLibrary(
   }
 
   function refreshWeather(): void {
+    const weather = getWeather();
     for (const material of facadeMaterials) {
       const key = material.name.replace(/^generated_/, '');
       const texture = _texClamp(key);
       if (texture) material.map = texture;
+      const baseColor = (material.userData.weatherBaseColor as THREE.Color | undefined)?.clone() ?? new THREE.Color(0xffffff);
+      const baseRoughness = Number(material.userData.weatherBaseRoughness ?? 0.65);
+      const baseMetalness = Number(material.userData.weatherBaseMetalness ?? 0.05);
+      material.color.copy(baseColor);
+      material.roughness = baseRoughness;
+      material.metalness = baseMetalness;
+      if (weather === 'rain') {
+        material.roughness = Math.min(baseRoughness, 0.24);
+        material.metalness = Math.max(baseMetalness, 0.08);
+        material.color.multiplyScalar(0.78);
+      } else if (weather === 'snow') {
+        material.roughness = Math.max(baseRoughness, 0.85);
+        material.metalness = Math.min(baseMetalness, 0.02);
+        material.color.multiplyScalar(1.12);
+      }
       material.needsUpdate = true;
     }
   }
@@ -541,7 +576,38 @@ export function createProceduralTextureLibrary(
       }
       _noise(ctx, s, 0.025);
     });
-  
+
+    // --- Wet asphalt: dark rain-slicked road with puddle sheen ---
+    _canvas('wet_asphalt', 256, (ctx, s) => {
+      ctx.fillStyle = '#2E3036'; ctx.fillRect(0, 0, s, s);
+      for (let i = 0; i < 800; i++) {
+        const x = Math.random()*s, y = Math.random()*s;
+        const sh = Math.random();
+        ctx.fillStyle = sh > 0.5 ? 'rgba(70,72,82,0.5)' : 'rgba(20,22,28,0.5)';
+        ctx.fillRect(x, y, 1.5, 1.5);
+      }
+      for (let i = 0; i < 6; i++) {
+        ctx.strokeStyle = 'rgba(16,18,24,0.55)'; ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        const x = Math.random()*s, y = Math.random()*s;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*40);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 14; i++) {
+        const x = Math.random()*s, y = Math.random()*s, r = 6 + Math.random()*18;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(150,180,220,0.28)');
+        g.addColorStop(0.55, 'rgba(120,150,200,0.14)');
+        g.addColorStop(1, 'rgba(120,150,200,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r*2, r*2);
+      }
+      ctx.fillStyle = 'rgba(200,220,255,0.10)';
+      for (let i = 0; i < 40; i++) ctx.fillRect(Math.random()*s, Math.random()*s, 18 + Math.random()*22, 1);
+      _noise(ctx, s, 0.02);
+    });
+
     // --- Crosswalk: white stripes on dark for intersections ---
     _canvas('crosswalk', 256, (ctx, s) => {
       ctx.fillStyle = '#3A3D44'; ctx.fillRect(0, 0, s, s);
