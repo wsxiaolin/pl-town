@@ -1,8 +1,11 @@
 import './styles/index.css';
 import { destroyMiniCity, startMiniCity } from './city/MiniCityApp';
 import { initTelemetry } from './core/telemetryClient';
+import { subscribeTextureResourceProgress } from './city/textureResourcePreloader';
+import { finishTextureLoadUi, updateTextureLoadUi } from './adapters/ui/textureLoadUi';
 
 void initTelemetry();
+subscribeTextureResourceProgress(updateTextureLoadUi);
 
 async function requestLandscape(): Promise<void> {
   if (window.innerHeight <= window.innerWidth) return;
@@ -21,10 +24,12 @@ window.addEventListener('pointerdown', requestLandscape, { once: true });
 
 startMiniCity();
 
-// Let the first rendered WebGL frame land before removing the first-paint shell.
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => document.getElementById('bootScreen')?.classList.add('is-ready'));
-});
+window.addEventListener('minicity:city-ready', () => {
+  finishTextureLoadUi();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => document.getElementById('bootScreen')?.classList.add('is-ready'));
+  });
+}, { once: true });
 
 window.addEventListener('pagehide', destroyMiniCity, { once: true });
 

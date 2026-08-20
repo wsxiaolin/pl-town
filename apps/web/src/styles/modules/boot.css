@@ -87,12 +87,24 @@
 .boot-progress span { position: absolute; inset: 0 auto 0 -35%; width: 35%; background: #78A8FF; box-shadow: 0 0 16px rgba(120, 168, 255, 0.72); animation: boot-progress 1.55s ease-in-out infinite; }
 .boot-meta { display: flex; justify-content: space-between; margin-top: 12px; color: #61728E; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; }
 
+.texture-load-panel { margin-top: 22px; opacity: 1; transition: opacity 240ms ease; }
+.texture-load-panel:not(.is-complete) { padding: 18px; border: 1px solid rgba(120, 168, 255, 0.24); background: rgba(17, 23, 34, 0.58); box-shadow: 0 0 36px rgba(78, 126, 221, 0.14); }
+.texture-load-panel:not(.is-complete) .texture-load-label { color: #dce8ff; font-size: 12px; font-weight: 700; }
+.texture-load-panel.is-complete { opacity: 0.68; }
+.texture-load-label { display: flex; justify-content: space-between; gap: 16px; color: #879AB9; font-size: 10px; letter-spacing: 0.05em; }
+.texture-load-label span:last-child { color: #61728E; text-align: right; }
+.texture-load-panel progress { display: block; width: 100%; height: 4px; margin-top: 9px; border: 0; border-radius: 99px; background: rgba(155, 182, 226, 0.14); }
+.texture-load-panel progress::-webkit-progress-bar { border-radius: 99px; background: rgba(155, 182, 226, 0.14); }
+.texture-load-panel progress::-webkit-progress-value { border-radius: 99px; background: #78A8FF; box-shadow: 0 0 12px rgba(120, 168, 255, 0.56); }
+.texture-load-panel progress::-moz-progress-bar { border-radius: 99px; background: #78A8FF; }
+
 @keyframes boot-progress { 0% { transform: translateX(0); } 100% { transform: translateX(385%); } }
 @keyframes boot-pulse { 0%, 100% { opacity: 0.5; transform: scale(0.88); } 50% { opacity: 1; transform: scale(1.1); } }
 
 @media (prefers-reduced-motion: reduce) {
   .boot-screen { transition-duration: 0.2s; }
   .boot-live i, .boot-progress span { animation: none; }
+  .texture-load-panel { transition: none; }
 }
 
 @media (max-width: 680px) {

@@ -11,6 +11,7 @@
   </style>
 </head>
 <body class="day">
+  <div class="weather-overlay" id="weatherOverlay" aria-hidden="true"></div>
 
   <div class="landscape-required" id="landscapeRequired" role="alert" aria-live="assertive">
     <strong>请横屏使用</strong>
@@ -29,12 +30,16 @@
         <span class="boot-brand-name">MINI CITY</span>
       </div>
       <div class="boot-title-row">
-        <h1>正在唤醒这座城</h1>
+        <h1>正在下载城市资源</h1>
         <span class="boot-live"><i></i> LIVE</span>
       </div>
-      <p class="boot-subtitle">准备街道、建筑与居民，马上见面。</p>
-      <div class="boot-progress" aria-hidden="true"><span></span></div>
-      <div class="boot-meta"><span>INITIALIZING CITY</span><span>v1.0</span></div>
+       <p class="boot-subtitle">高清材质下载完成后才会进入小城，请保持页面打开。</p>
+       <div class="boot-progress" aria-hidden="true"><span></span></div>
+       <section class="texture-load-panel" id="textureLoadPanel" aria-live="polite">
+         <div class="texture-load-label"><span>正在下载，请稍候</span><span id="textureLoadDetail">准备资源清单</span></div>
+         <progress id="textureLoadProgress" max="1" value="0" aria-label="高清资源下载进度"></progress>
+       </section>
+       <div class="boot-meta"><span>INITIALIZING CITY</span><span>v1.0</span></div>
     </div>
   </div>
 
@@ -322,10 +327,24 @@
            <div class="render-settings-section-head"><h2>边缘平滑</h2><label class="render-switch"><input id="renderAntialias" type="checkbox" /><span></span></label></div>
            <p>平滑模型边缘，会增加显存占用。</p>
          </section>
-         <section class="render-settings-section render-settings-toggle-section">
-           <div class="render-settings-section-head"><h2>实时阴影</h2><label class="render-switch"><input id="renderShadows" type="checkbox" /><span></span></label></div>
-           <p>增强建筑层次，性能开销较高。</p>
-         </section>
+          <section class="render-settings-section render-settings-toggle-section">
+            <div class="render-settings-section-head"><h2>实时阴影</h2><label class="render-switch"><input id="renderShadows" type="checkbox" /><span></span></label></div>
+            <p>增强建筑层次，性能开销较高。</p>
+          </section>
+           <section class="render-settings-section render-settings-toggle-section">
+             <div class="render-settings-section-head"><h2>贴图渲染</h2><label class="render-switch"><input id="renderTextureRendering" type="checkbox" /><span></span></label></div>
+             <p>启用真实地面、道路、墙面、石材和砖墙贴图。</p>
+           </section>
+          <section class="render-settings-section">
+            <div class="render-settings-section-head"><h2>天气</h2><output id="renderWeatherValue">晴天</output></div>
+            <p>切换晴天、雨天和雪天材质与场景效果。</p>
+            <select class="render-select" id="renderWeather">
+              <option value="clear">晴天</option>
+              <option value="rain">雨天</option>
+              <option value="snow">薄雪天</option>
+              <option value="snow-deep">深雪天</option>
+            </select>
+          </section>
          <section class="render-settings-section">
            <div class="render-settings-section-head"><h2>纹理过滤</h2><output id="renderAnisotropyValue">16x</output></div>
            <p>提升斜角道路和建筑贴图的远处清晰度。</p>

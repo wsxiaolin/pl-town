@@ -4,6 +4,7 @@ import {
   RENDER_SETTINGS_KEY,
   type RenderSettings,
 } from '../../rendering/createRenderer';
+import type { Weather } from '../../city/weather';
 
 type RenderPresetName = 'saving' | 'balanced' | 'high' | 'ultra';
 
@@ -12,6 +13,8 @@ type RenderSettingsControllerOptions = {
   maxAnisotropy: number;
   maxTextureSize: number;
   close: () => void;
+  getWeather: () => Weather;
+  setWeather: (weather: Weather) => void;
 };
 
 const PRESET_LABELS: Record<RenderPresetName, string> = {
@@ -38,9 +41,12 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   const anisotropyValue = panel.querySelector<HTMLOutputElement>('#renderAnisotropyValue')!;
   const shadows = panel.querySelector<HTMLInputElement>('#renderShadows')!;
   const exposure = panel.querySelector<HTMLInputElement>('#renderExposure')!;
+  const textureRendering = panel.querySelector<HTMLInputElement>('#renderTextureRendering')!;
   const exposureValue = panel.querySelector<HTMLOutputElement>('#renderExposureValue')!;
   const presetStatus = panel.querySelector<HTMLElement>('#renderPresetStatus')!;
   const presetButtons = [...panel.querySelectorAll<HTMLButtonElement>('[data-render-preset]')];
+  const weather = panel.querySelector<HTMLSelectElement>('#renderWeather');
+  const weatherValue = panel.querySelector<HTMLOutputElement>('#renderWeatherValue');
 
   const resolutionLimit = getRenderResolutionLimit(
     maxTextureSize,
@@ -59,6 +65,9 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   anisotropy.value = String(selectSupportedAnisotropy(settings.anisotropy, normalizedMaxAnisotropy));
   shadows.checked = settings.shadows;
   exposure.value = String(settings.exposure);
+  textureRendering.checked = settings.textureRendering;
+  if (weather) weather.value = options.getWeather();
+  if (weatherValue) weatherValue.textContent = weatherLabel(options.getWeather());
 
   for (const option of anisotropy.options) {
     option.disabled = Number(option.value) > normalizedMaxAnisotropy;
@@ -74,10 +83,10 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   );
 
   const presets: Record<RenderPresetName, Omit<RenderSettings, 'exposure'>> = {
-    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false },
-    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false },
-    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false },
-    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true },
+    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false, textureRendering: false },
+    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true },
+    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true },
+    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true },
   };
 
   const currentValues = (): Omit<RenderSettings, 'exposure'> => ({
@@ -85,6 +94,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
     antialias: antialias.checked,
     anisotropy: Number(anisotropy.value),
     shadows: shadows.checked,
+    textureRendering: textureRendering.checked,
   });
 
   const updateLabels = () => {
@@ -123,6 +133,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
       antialias.checked = preset.antialias;
       anisotropy.value = String(preset.anisotropy);
       shadows.checked = preset.shadows;
+      textureRendering.checked = preset.textureRendering;
       updateLabels();
     }, { signal });
   }
@@ -131,6 +142,12 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   antialias.addEventListener('change', updateLabels, { signal });
   anisotropy.addEventListener('change', updateLabels, { signal });
   shadows.addEventListener('change', updateLabels, { signal });
+  textureRendering.addEventListener('change', updateLabels, { signal });
+  weather?.addEventListener('change', () => {
+    const next = weather.value as Weather;
+    options.setWeather(next);
+    if (weatherValue) weatherValue.textContent = weatherLabel(next);
+  }, { signal });
   exposure.addEventListener('input', updateLabels, { signal });
   panel.querySelector('#renderSettingsApply')!.addEventListener('click', () => {
     localStorage.setItem(RENDER_SETTINGS_KEY, JSON.stringify({
@@ -159,4 +176,8 @@ function getCapabilityHint(resolutionLimit: number, maxAnisotropy: number): stri
       ? '均衡'
       : '节能';
   return `建议从${suggestedPreset}开始；当前视口最高安全倍率 ${formatMetric(resolutionLimit)}x，超出会受图形缓冲尺寸限制。`;
+}
+
+function weatherLabel(weather: Weather): string {
+  return weather === 'rain' ? '雨天' : weather === 'snow-deep' ? '深雪天' : weather === 'snow' ? '薄雪天' : '晴天';
 }

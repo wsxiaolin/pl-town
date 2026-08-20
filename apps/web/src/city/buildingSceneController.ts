@@ -34,7 +34,7 @@ export function createBuildingSceneController(options: {
   }
 
   function addBuildings(): void {
-    const facadeMap: Record<string, string> = { bank:'facade_bank', board:'facade_board', tower:'facade_tower', darktower:'facade_darktower', pavilion:'facade_temple', library:'facade_library', ruins:'facade_library', skyscraper:'facade_skyscraper', campus:'facade_campus', kiosk:'facade_kiosk', screen:'facade_screen', shaft:'facade_shaft', altar:'facade_altar', observatory:'facade_observatory', market:'facade_market', greenhouse:'facade_greenhouse', clocktower:'facade_clocktower', temple:'facade_temple', factory:'facade_factory', mall:'facade_mall', school:'facade_school', banana:'facade_banana', qipai:'facade_qipai' };
+    const facadeMap: Record<string, string> = { bank:'facade_bank_plaster', board:'facade_utility_concrete', tower:'facade_tower_glass', darktower:'facade_darktower_glass', pavilion:'facade_temple_stone', library:'facade_library_stone', ruins:'facade_ruin_stone', skyscraper:'facade_tower_glass', campus:'facade_school_cream', kiosk:'facade_kiosk_woodglass', screen:'facade_utility_concrete', shaft:'facade_utility_concrete', altar:'facade_utility_concrete', observatory:'facade_observatory_concrete', market:'facade_market_awning', greenhouse:'facade_greenhouse_glass', clocktower:'facade_clocktower_brick', temple:'facade_temple_stone', factory:'facade_factory_brick', mall:'facade_tower_glass', school:'facade_school_cream', banana:'facade_residence_cream', qipai:'facade_community_brick' };
     options.definitions.filter((definition) => !definition.disabled).forEach((definition) => {
       const builder = options.builders[definition.shape];
       if (!builder) return;
