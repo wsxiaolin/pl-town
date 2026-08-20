@@ -116,7 +116,8 @@ test('city renders twelve residence models and the modeled west beach', async ({
       waterSize: new mini.THREE.Box3().setFromObject(mini.scene.getObjectByName('west-beach')).getSize(new mini.THREE.Vector3()).toArray(),
     };
   });
-  expect(sceneContent.styles).toEqual([0,1,2,3,4,5,6,7,8,9,10,11]);
+  // The tavern clears the generated lot that would otherwise use style 7.
+  expect(sceneContent.styles).toEqual([0,1,2,3,4,5,6,8,9,10,11]);
   expect(sceneContent.styles).toEqual(expect.arrayContaining([10, 11]));
   expect(sceneContent.textures).toEqual(expect.arrayContaining(['residence_plaster', 'residence_wood', 'residence_tile']));
   expect(sceneContent.beach && sceneContent.seaGod && sceneContent.ships).toBe(true);
