@@ -18,6 +18,7 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   { id:'night_owl',     name:'守夜人',        desc:'第一次在夜里看这座城市',                check:s=>(s.nightToggles||0)>=1 },
   { id:'unlock_3',      name:'城市生长',      desc:'解锁 3 次城市变化',                     check:s=>(s.unlockLevel||0)>=3 },
   { id:'cat_cafe_note', name:'猫咖拾遗',      desc:'发现猫咖馆旁掉落的纸张',                  check:()=>false, directOnly:true },
+  { id:'cat_death_remembrance',name:'我会记得你的喵！',desc:'完整观看猫咖冰墙中保存的影像',check:()=>false,directOnly:true },
   { id:'minicity_origin',name:'物实城缘起',    desc:'触碰城中守望已久的沃柑树',                check:()=>false, directOnly:true },
   { id:'dragonwell_assimilation',name:'被龙井同化',desc:'向爬满绿色植物的石井献上龙井茶',          check:()=>false, directOnly:true },
   { id:'west_beach_encounter',name:'海神的考验',desc:'在城市西侧海滩通过亦航海神的考验',check:()=>false,directOnly:true },

@@ -94,6 +94,9 @@
 .inventory-panel [data-item-id="mandarin"] .inventory-item-icon { background: #fff0dc; color: #ba6719; }
 .inventory-panel [data-item-id="dragonwell_tea"] .inventory-item-icon { background: #e5f0e1; color: #397044; }
 .inventory-panel .sp-ul-name { min-width: 0; flex: 1; margin-left: 7px; overflow: hidden; color: #3d454e; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-panel .sp-ul-copy { min-width: 0; flex: 1; margin-left: 7px; display: flex; flex-direction: column; gap: 2px; color: #3d454e; font-size: 9px; }
+.inventory-panel .sp-ul-copy .sp-ul-name { margin: 0; overflow: visible; white-space: normal; }
+.inventory-panel .sp-ul-copy small { color: #858b91; font-size: 8px; line-height: 1.35; white-space: pre-line; }
 .inventory-panel .sp-ul-thresh { margin-left: 4px; font-size: 8px; color: #858b91; white-space: nowrap; }
 .shop-product { display: flex; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid rgba(20,30,40,.08); }
 .shop-product-icon { width: 46px; height: 46px; flex-basis: 46px; font-size: 18px; background: #dcebd8; }

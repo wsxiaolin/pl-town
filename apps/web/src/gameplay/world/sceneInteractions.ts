@@ -1,4 +1,4 @@
-export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'origin-orange-tree', 'longjing-well', 'west-beach', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
+export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'cat-cafe-ice-wall', 'origin-orange-tree', 'longjing-well', 'west-beach', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
 
 export type SceneInterestPointId = (typeof SCENE_INTEREST_POINT_IDS)[number];
 
@@ -6,18 +6,22 @@ export const WORLD_ITEM_IDS = {
   orange: 'mandarin',
   longjingTea: 'dragonwell_tea',
   tirpitz: 'tirpitz_card',
+  iceLemonade: 'ice_lemonade',
 } as const;
 
 export type WorldItemId = (typeof WORLD_ITEM_IDS)[keyof typeof WORLD_ITEM_IDS];
 
 export const WORLD_ACHIEVEMENTS = {
   catCafeNote: { id: 'cat_cafe_note', name: '猫咖拾遗' },
+  catDeathRemembrance: { id: 'cat_death_remembrance', name: '我会记得你的喵！' },
   cityOrigin: { id: 'minicity_origin', name: '物实城缘起' },
   longjingAssimilation: { id: 'dragonwell_assimilation', name: '被龙井同化' },
   westBeachEncounter: { id: 'west_beach_encounter', name: '海神的考验' },
 } as const;
 
 export const ORANGE_TREE_COPY = '城中的守望者，它或许不是最高的，但它见证了最多的风雨';
+
+export const CAT_CAFE_ICE_WALL_COPY = '听说保存信息最久的方式是把字刻在石头上……一块不会融化的冰应该也差不多';
 
 export const WELL_STORY = {
   intro: '你看见了一个爬满绿色植物的石井。',

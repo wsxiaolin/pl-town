@@ -21,6 +21,8 @@ export type BuildingInteractionOptions = {
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
+  canEnterIceSanctum?: () => boolean;
+  onIceSanctumLocked?: () => void;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
@@ -41,6 +43,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateUnlocked(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
+    if (b.id === 'kingice' && options.canEnterIceSanctum && !options.canEnterIceSanctum()) {
+      options.trackInteraction(b.id);
+      options.onIceSanctumLocked?.();
+      return;
+    }
     if (b.id === 'film_city') {
       options.getFilmCityController?.()?.interact();
       options.trackInteraction(b.id);

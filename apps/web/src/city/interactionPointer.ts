@@ -32,12 +32,25 @@ export type InteractionPointerOptions = {
   navigateTo: (building: BuildingEntity) => void;
   interactWithSceneInterestPoint: (id: SceneInterestPointId) => void;
   interactWithInterestPointController: (id: SceneInterestPointId) => Promise<void> | void;
+  getSpecialInterior?: () => {
+    isActive: () => boolean;
+    navigation: () => { buildPath: (from: THREE.Vector3, target: THREE.Vector3) => THREE.Vector3[]; clampToWalkable: (point: THREE.Vector3) => THREE.Vector3 } | null;
+    npcMesh: THREE.Object3D;
+    npcHitMesh?: THREE.Object3D;
+    npcWorldPosition: (target?: THREE.Vector3) => THREE.Vector3;
+    interactionPosition: (target?: THREE.Vector3) => THREE.Vector3;
+    interactNpc: () => boolean;
+    isInteractionLocked?: () => boolean;
+  } | null;
 };
+
+type SpecialInterior = NonNullable<ReturnType<NonNullable<InteractionPointerOptions['getSpecialInterior']>>>;
 
 export function createInteractionPointer(options: InteractionPointerOptions) {
   let hoveredB: BuildingEntity | null = null;
   let pendingBuilding: BuildingEntity | null = null;
   let pendingSceneInterestPoint: SceneInterestPointId | null = null;
+  let pendingSpecialNpc = false;
 
   function hover(b: BuildingEntity) {
     hoveredB = b;
@@ -62,6 +75,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     const camera = options.getCamera();
     raycaster.setFromCamera(mouse2D, camera);
     raycaster.ray.intersectPlane(options.getGroundPlane(), options.getCursorWorld());
+    if (options.getSpecialInterior?.()?.isActive()) return;
     raycaster.setFromCamera(mouse2D, camera);
     const hits = raycaster.intersectObjects(options.getRaycastBuildingGroups(), true);
     if (hits.length) {
@@ -99,7 +113,8 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
       cursorChar.position.x - b.group.position.x,
       cursorChar.position.z - b.group.position.z,
     ) : Infinity;
-    if (cursorChar && buildingDistance <= CONFIG.buildingInteractRadius) {
+    const interactionRadius = b.id === 'kingice' ? 3.6 : CONFIG.buildingInteractRadius;
+    if (cursorChar && buildingDistance <= interactionRadius) {
       pendingBuilding = null;
       options.navigateTo(b);
     } else {
@@ -126,9 +141,23 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     options.movePlayerTo(entity.interactionPosition);
   }
 
+  function specialNpcWasClicked(event: MouseEvent, camera: THREE.Camera, raycaster: THREE.Raycaster, specialInterior: SpecialInterior): boolean {
+    if (raycaster.intersectObject(specialInterior.npcMesh, true).length > 0) return true;
+    if (specialInterior.npcHitMesh && raycaster.intersectObject(specialInterior.npcHitMesh, true).length > 0) return true;
+    camera.updateMatrixWorld();
+    const npcScreen = specialInterior.npcWorldPosition(new THREE.Vector3()).project(camera);
+    if (npcScreen.z < -1 || npcScreen.z > 1) return false;
+    const npcX = (npcScreen.x + 1) * 0.5 * window.innerWidth;
+    const npcY = (1 - npcScreen.y) * 0.5 * window.innerHeight;
+    const clickRadius = Math.max(42, Math.min(86, window.innerWidth * 0.08));
+    return Math.hypot(event.clientX - npcX, event.clientY - npcY) <= clickRadius;
+  }
+
   function onCanvasClick(event: MouseEvent) {
     const cityDialogs = options.getCityDialogs();
     if (cityDialogs?.isOpen()) return;
+    const specialInterior = options.getSpecialInterior?.();
+    if (specialInterior?.isInteractionLocked?.()) return;
     const mouse2D = options.getMouse2D();
     mouse2D.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse2D.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -137,6 +166,24 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     raycaster.setFromCamera(mouse2D, camera);
     raycaster.ray.intersectPlane(options.getGroundPlane(), options.getCursorWorld());
     raycaster.setFromCamera(mouse2D, camera);
+    if (specialInterior?.isActive()) {
+      const cursorChar = options.getCursorChar();
+      if (!cursorChar) return;
+      if (specialNpcWasClicked(event, camera, raycaster, specialInterior)) {
+        const interactionPosition = specialInterior.interactionPosition();
+        if (cursorChar.position.distanceTo(interactionPosition) <= 0.45) {
+          pendingSpecialNpc = false;
+          specialInterior.interactNpc();
+        } else {
+          pendingSpecialNpc = true;
+          options.movePlayerTo(interactionPosition);
+        }
+        return;
+      }
+      pendingSpecialNpc = false;
+      options.movePlayerTo(options.getCursorWorld());
+      return;
+    }
     const points = options.getSceneInterestPoints();
     const cabinDoor = points?.entities.get('echo-cabin-door');
     if (cabinDoor && options.getEchoStoryController()?.tryExitCabinFromClick(raycaster, cabinDoor.object)) {
@@ -176,10 +223,22 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
   function handlePlayerIdle() {
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
+    const specialInterior = options.getSpecialInterior?.();
+    if (specialInterior?.isInteractionLocked?.()) return;
+    if (pendingSpecialNpc && cursorChar && specialInterior?.isActive()) {
+      const interactionPosition = specialInterior.interactionPosition();
+      if (cursorChar.position.distanceTo(interactionPosition) <= 0.45) {
+        pendingSpecialNpc = false;
+        specialInterior.interactNpc();
+      }
+    } else if (!specialInterior?.isActive()) {
+      pendingSpecialNpc = false;
+    }
     if (pendingBuilding && cursorChar) {
       const b = pendingBuilding;
       const distance = Math.hypot(cursorChar.position.x - b.group.position.x, cursorChar.position.z - b.group.position.z);
-      if (distance <= CONFIG.buildingInteractRadius) { pendingBuilding = null; liftForClick(b); options.navigateTo(b); }
+      const interactionRadius = b.id === 'kingice' ? 3.6 : CONFIG.buildingInteractRadius;
+      if (distance <= interactionRadius) { pendingBuilding = null; liftForClick(b); options.navigateTo(b); }
     }
     if (pendingSceneInterestPoint && cursorChar) {
       const id = pendingSceneInterestPoint;
@@ -194,6 +253,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
   function clearPending() {
     pendingBuilding = null;
     pendingSceneInterestPoint = null;
+    pendingSpecialNpc = false;
   }
 
   return { onMouseMove, onCanvasClick, interactOrWalk, interactWithSceneInterestPoint, talkToOrWalk, handlePlayerIdle, clearPending };

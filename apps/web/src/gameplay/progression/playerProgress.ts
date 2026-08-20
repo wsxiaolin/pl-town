@@ -54,6 +54,13 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   music_box: '音乐盒',
   mandarin: '沃柑',
   tirpitz_card: '皮尔皮茨号',
+  ice_wet_crown: '湿湿的皇冠',
+  ice_lemonade: '冰镇柠檬水',
+});
+
+export const ITEM_DETAILS: Readonly<Record<string, string>> = Object.freeze({
+  ice_wet_crown: '真奇怪，明明没淋到雨的',
+  ice_lemonade: '冰镇柠檬水，可作为任意一种道具提交。\n真奇怪，这里头的冰块似乎怎么都不会化',
 });
 
 const validStringArray = (value: unknown): string[] => Array.isArray(value)

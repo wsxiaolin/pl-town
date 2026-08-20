@@ -12,7 +12,7 @@ import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
@@ -210,7 +210,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.item.consume') {
       const quantity = message.quantity ?? 1;
-      if (!Object.values(SHOP_PRODUCTS).some((product) => product.itemId === message.itemId) || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
+      if (!CONSUMABLE_ITEM_IDS.has(message.itemId) || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
       try {
         const progress = db.consumeItem(userId, message.itemId, quantity);
         send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'item.consumed', itemId: message.itemId, quantity } });
@@ -228,9 +228,11 @@ async function handle(client: Client, raw: string) {
       if (!validId(message.rewardId)) return fail(client.socket, 'Reward is not available');
       const dailyReward = DAILY_REWARDS[message.rewardId as keyof typeof DAILY_REWARDS];
       const oneTimeReward = ONE_TIME_REWARDS[message.rewardId as keyof typeof ONE_TIME_REWARDS];
-      const reward = dailyReward ?? oneTimeReward;
+      const repeatableReward = REPEATABLE_REWARDS[message.rewardId as keyof typeof REPEATABLE_REWARDS];
+      const reward = dailyReward ?? oneTimeReward ?? repeatableReward;
       if (!reward) return fail(client.socket, 'Reward is not available');
-      const result = db.claimReward(userId, message.rewardId, oneTimeReward ? 'once' : shanghaiDayKey(), reward.itemId, reward.quantity);
+      const claimKey = repeatableReward ? randomUUID() : oneTimeReward ? 'once' : shanghaiDayKey();
+      const result = db.claimReward(userId, message.rewardId, claimKey, reward.itemId, reward.quantity);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
       return;
     }

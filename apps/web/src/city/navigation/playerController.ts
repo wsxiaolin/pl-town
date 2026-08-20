@@ -21,6 +21,11 @@ export type PlayerControllerOptions = {
   playerSpeed: number;
   getNpcs: () => readonly Npc[];
   getEcho: () => any;
+  getSpecialInterior?: () => {
+    navigation: () => { buildPath: (from: THREE.Vector3, target: THREE.Vector3) => THREE.Vector3[]; clampToWalkable: (point: THREE.Vector3) => THREE.Vector3 } | null;
+    isMovementLocked?: () => boolean;
+    isCinematic?: () => boolean;
+  } | null;
   echoInterior: readonly [number, number];
   onIdle: () => void;
   sendPosition: (cursor: Cursor) => void;
@@ -39,9 +44,15 @@ export function createPlayerController(options: PlayerControllerOptions) {
   function moveTo(target: THREE.Vector3): void {
     if (options.isInputLocked?.()) return;
     const cursor = options.getCursor();
-    if (!cursor || options.isDialogOpen()) return;
+    const specialInterior = options.getSpecialInterior?.();
+    if (!cursor || options.isDialogOpen() || specialInterior?.isMovementLocked?.()) return;
     cursor.visible = true;
     const echo = options.getEcho();
+    const specialNavigation = specialInterior?.navigation();
+    if (specialNavigation) {
+      options.setPlayerPath(specialNavigation.buildPath(cursor.position, target));
+      return;
+    }
     if (echo?.isInteriorView()) {
       const navigation = echo.navigation();
       options.setPlayerPath(navigation ? navigation.buildPath(cursor.position, target) : [new THREE.Vector3(
@@ -58,15 +69,21 @@ export function createPlayerController(options: PlayerControllerOptions) {
   function updateMovement(delta: number): void {
     if (options.isInputLocked?.()) return;
     const cursor = options.getCursor();
+    const specialInterior = options.getSpecialInterior?.();
+    if (specialInterior?.isMovementLocked?.()) {
+      options.setPlayerPath([]);
+      return;
+    }
     const manual = options.getManualMovement();
     const path = options.getPlayerPath();
     const echo = options.getEcho();
+    const specialNavigation = specialInterior?.navigation();
     if (cursor && manual.x * manual.x + manual.z * manual.z > 0.01 ** 2 && !options.isDialogOpen() && !options.isMapOpen()) {
       options.setPlayerPath([]);
       const step = options.playerSpeed * delta;
       manualTarget.set(cursor.position.x + manual.x * step, 0, cursor.position.z + manual.z * step);
-      const navigation = echo?.navigation();
-      const resolved = echo?.isInteriorView() && navigation
+      const navigation = specialNavigation ?? echo?.navigation();
+      const resolved = navigation && (specialNavigation || echo?.isInteriorView())
         ? navigation.clampToWalkable(manualTarget)
         : options.resolveMovement(cursor.position, manualTarget, resolvedMovement);
       const travelled = cursor.position.distanceTo(resolved);
@@ -80,8 +97,8 @@ export function createPlayerController(options: PlayerControllerOptions) {
       return;
     }
     if (!cursor || path.length === 0) {
-      const navigation = echo?.navigation();
-      if (cursor && echo?.isInteriorView() && navigation) cursor.position.copy(navigation.clampToWalkable(cursor.position));
+      const navigation = specialNavigation ?? echo?.navigation();
+      if (cursor && navigation && (specialNavigation || echo?.isInteriorView())) cursor.position.copy(navigation.clampToWalkable(cursor.position));
       options.onIdle();
       return;
     }
@@ -115,8 +132,8 @@ export function createPlayerController(options: PlayerControllerOptions) {
         cursor.position.z += offsetZ * push;
       }
     }
-    const navigation = echo?.navigation();
-    if (echo?.isInteriorView() && navigation) cursor.position.copy(navigation.clampToWalkable(cursor.position));
+    const navigation = specialNavigation ?? echo?.navigation();
+    if (navigation && (specialNavigation || echo?.isInteriorView())) cursor.position.copy(navigation.clampToWalkable(cursor.position));
     cursor.rotation.y = Math.atan2(dx, dz);
     options.sendPosition(cursor);
     pendingDistance += Math.min(step, distance);
@@ -135,6 +152,12 @@ export function createPlayerController(options: PlayerControllerOptions) {
     if (options.isCinematicCameraActive?.()) return;
     const cursor = options.getCursor();
     if (!cursor || options.isMapOpen() || options.isDialogOpen()) return;
+    const specialInterior = options.getSpecialInterior?.();
+    if (specialInterior?.isCinematic?.()) return;
+    if (specialInterior) {
+      options.setCameraTarget(cursor.position.x, cursor.position.z, true);
+      return;
+    }
     const echo = options.getEcho();
     // Reaching the physical cabin doorway always exits immediately. Keep this
     // ahead of every story, legacy-coordinate and interior-boundary check so

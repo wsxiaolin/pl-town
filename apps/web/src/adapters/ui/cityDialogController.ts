@@ -13,6 +13,7 @@ export interface LegacyDialogueOption {
 }
 
 export interface LegacyDialogueNode {
+  speaker?: string;
   text: string;
   options: readonly LegacyDialogueOption[];
 }
@@ -24,6 +25,7 @@ export interface NpcEntityLike {
     role?: string;
     head: number;
     body: number;
+    transitionDelayMs?: number;
     dialog: readonly LegacyDialogueNode[];
   };
   mesh: { rotation: { y: number }; position: { x: number; z: number } };
@@ -124,46 +126,92 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   let activeNpc: NpcEntityLike | null = null;
   let activeStoryClose: (() => void) | undefined;
   let activeStoryAdvance: (() => void) | undefined;
+  let optionRevealTimer: number | undefined;
   const firstNode = (npc: NpcEntityLike): LegacyDialogueNode => npc.profile.dialog[0] ?? { text: '……', options: [] };
 
-  const renderOptions = (items: readonly { text: string; onPick: () => void }[]): void => {
+  const clearOptionRevealTimer = (): void => {
+    if (optionRevealTimer === undefined) return;
+    window.clearTimeout(optionRevealTimer);
+    optionRevealTimer = undefined;
+  };
+
+  const renderOptions = (
+    items: readonly { text: string; onPick: (button: HTMLButtonElement) => void }[],
+    revealAfterMs = 0,
+    staggerMs = 0,
+  ): void => {
     const wrapper = getElement<HTMLDivElement>(document, 'npcOptions');
+    clearOptionRevealTimer();
     wrapper.replaceChildren();
-    items.forEach((item) => {
+    if (revealAfterMs > 0 && items.length > 0) {
+      wrapper.classList.add('npc-options-waiting');
+      optionRevealTimer = window.setTimeout(() => {
+        optionRevealTimer = undefined;
+        renderOptions(items, 0, staggerMs);
+      }, revealAfterMs);
+      return;
+    }
+    wrapper.classList.remove('npc-options-waiting');
+    items.forEach((item, index) => {
       const button = document.createElement('button');
-      button.className = 'npc-opt';
+      button.className = staggerMs > 0 ? 'npc-opt npc-opt-revealing' : 'npc-opt';
       button.textContent = item.text;
-      button.addEventListener('click', item.onPick);
+      if (staggerMs > 0) button.style.animationDelay = `${index * staggerMs}ms`;
+      button.addEventListener('click', () => item.onPick(button));
       wrapper.appendChild(button);
     });
   };
 
-  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default'): void => {
+  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default'): number => {
     const line = getElement<HTMLParagraphElement>(document, 'npcLine');
-    line.textContent = text;
+    const characters = Array.from(text);
+    const iceDialog = document.body.classList.contains('ice-sanctum-active');
+    const timingScale = iceDialog ? 1.5 : 1;
+    const stepMs = Math.min(90, 3600 / Math.max(characters.length - 1, 1)) * timingScale;
+    line.replaceChildren(...characters.map((character, index) => {
+      if (character === '\n') return document.createElement('br');
+      const span = document.createElement('span');
+      span.className = 'npc-line-char';
+      span.textContent = character;
+      span.style.animationDelay = `${index * stepMs}ms`;
+      return span;
+    }));
     line.style.color = tone === 'green' ? '#3f8a4f' : '';
-    line.style.animation = 'none';
-    void line.offsetWidth;
-    line.style.animation = '';
+    if (characters.length === 0) return 0;
+    const characterAnimationMs = iceDialog ? 975 : 650;
+    return (characters.length - 1) * stepMs + characterAnimationMs;
   };
 
   const renderNode = (node: LegacyDialogueNode): void => {
     if (!activeNpc) return;
-    renderLine(node.text);
+    setIdentityField(document, 'npcName', node.speaker ?? activeNpc.profile.name);
+    const lineRevealMs = renderLine(node.text);
+    const revealOptionsAfterLine = document.body.classList.contains('ice-sanctum-active');
     const visitor = options.document.defaultView?.localStorage.getItem('minicityUser') || '旅人';
     const dialogOptions = node.options.map((option) => ({
       text: option.text,
-      onPick: () => {
-        if (option.action) options.onDialogueAction?.(option.action, activeNpc?.profile.id ?? '');
-        option.onPick?.();
-        if (!activeNpc) return;
-        const visitorBranch = option.nextByVisitor;
-        const visitorMatches = visitorBranch
-          && visitorBranch.includes.some((name) => visitor.includes(name))
-          && (visitorBranch.maxLength === undefined || visitor.length <= visitorBranch.maxLength);
-        const next = visitorMatches ? visitorBranch.next : option.next;
-        if (next === null) controller.closeNpc();
-        else renderNode(activeNpc.profile.dialog[next] ?? firstNode(activeNpc));
+      onPick: (selectedButton: HTMLButtonElement) => {
+        const sourceNpc = activeNpc;
+        if (!sourceNpc) return;
+        const advance = () => {
+          if (activeNpc !== sourceNpc) return;
+          if (option.action) options.onDialogueAction?.(option.action, sourceNpc.profile.id);
+          option.onPick?.();
+          if (activeNpc !== sourceNpc) return;
+          const visitorBranch = option.nextByVisitor;
+          const visitorMatches = visitorBranch
+            && visitorBranch.includes.some((name) => visitor.includes(name))
+            && (visitorBranch.maxLength === undefined || visitor.length <= visitorBranch.maxLength);
+          const next = visitorMatches ? visitorBranch.next : option.next;
+          if (next === null) controller.closeNpc();
+          else renderNode(sourceNpc.profile.dialog[next] ?? firstNode(sourceNpc));
+        };
+        const transitionDelayMs = sourceNpc.profile.transitionDelayMs ?? 0;
+        if (transitionDelayMs > 0) {
+          selectedButton.classList.add('npc-opt-selected');
+          selectedButton.parentElement?.classList.add('npc-options-waiting');
+          window.setTimeout(advance, transitionDelayMs);
+        } else advance();
       },
     }));
     if (node === activeNpc.profile.dialog[0]) {
@@ -175,7 +223,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         });
       }
     }
-    renderOptions(dialogOptions);
+    renderOptions(dialogOptions, revealOptionsAfterLine ? lineRevealMs : 0, revealOptionsAfterLine ? 180 : 0);
   };
 
   const renderQuestAction = (action: NpcQuestAction): void => {
@@ -382,6 +430,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     },
     closeNpc() {
       if (!npcOpen) return;
+      clearOptionRevealTimer();
       npcOpen = false;
       activeNpc = null;
       activeStoryAdvance = undefined;

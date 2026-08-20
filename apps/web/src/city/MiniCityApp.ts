@@ -71,6 +71,9 @@ import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { isWeather, type Weather } from './weather';
 import { preloadTextureResources } from './textureResourcePreloader';
+import { createIceSanctum } from './iceSanctum';
+import { createWeatherEffect } from './weatherEffect';
+import { playCatDeathCGAfterBlackout, stopCatDeathCG } from './catDeathCG';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -99,6 +102,7 @@ let cursorChar: THREE.Group | null = null;
 let playerPath: THREE.Vector3[] = [];
 let playerMarker: THREE.Group | null = null; // 玩家头顶的三角标记，用于高亮
 let cameraZoom: number; // 当前视野宽度，由滚轮/双指缩放调整
+let preIceCameraZoom: number = CITY_CONFIG.cameraNearSize;
 let lastFrameTime = performance.now();
 let isNight    = false; // 由社区时间自动决定
 const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
@@ -127,6 +131,8 @@ let worldDecorations: ReturnType<typeof createWorldDecorations>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
+let iceSanctum: ReturnType<typeof createIceSanctum> | null = null;
+let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
 let echoActiveActors = new Set<string>();
@@ -199,6 +205,7 @@ const interactionPointer = createInteractionPointer({
   navigateTo,
   interactWithSceneInterestPoint,
   interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
+  getSpecialInterior: () => iceSanctum?.isActive() ? iceSanctum : null,
 });
 
 const interactionTracker = createInteractionTracker({
@@ -237,6 +244,8 @@ const frameLoop = createFrameLoop({
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
+  getSpecialInterior: () => iceSanctum?.isActive() ? iceSanctum : null,
+  updateWeather: (delta) => weatherEffect?.update(delta),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer,
@@ -307,6 +316,8 @@ const buildingInteraction = createBuildingInteraction({
   trackInteraction,
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
+  canEnterIceSanctum: () => !(iceSanctum?.hasEntered() ?? false),
+  onIceSanctumLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
 });
 
 const eventBindings = createEventBindings({
@@ -331,6 +342,7 @@ const eventBindings = createEventBindings({
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog,
   getLoginController: () => loginController,
+  isMovementOnlyMode: () => Boolean(iceSanctum?.isActive()),
 });
 
 // Unlock tiers reference world decoration helpers, which are created during init().
@@ -352,8 +364,11 @@ function init() {
     getZoom: () => cameraZoom,
     setZoom: (zoom) => { cameraZoom = zoom; },
     getTarget: () => cameraTarget,
-    isEchoInterior: () => Boolean(echoStoryController?.isInteriorView()),
+    isEchoInterior: () => Boolean(echoStoryController?.isInteriorView() || iceSanctum?.isActive()),
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
+    getInteriorCenter: () => iceSanctum?.isActive() ? iceSanctum.center : ECHO_OBSERVATORY_AREA.interior,
+    getInteriorCameraOffset: () => iceSanctum?.isActive() ? [13, 22, 17] : null,
+    getInteriorFollowsTarget: () => Boolean(iceSanctum?.isActive()),
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
@@ -422,6 +437,7 @@ function init() {
   }).forEach(group => roadNavigation.registerObstacleGroup(group));
   cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
+  roadNavigation.registerObstacleGroup(sceneInterestPoints.entities.get('cat-cafe-ice-wall')?.object ?? null);
   addRealBuildingModels(scene, buildings)
     .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
     .catch(error => console.error('3D model loading failed', error));
@@ -541,6 +557,7 @@ function init() {
     playerSpeed: CONFIG.playerSpeed,
     getNpcs: () => npcList,
     getEcho: () => echoStoryController,
+    getSpecialInterior: () => iceSanctum?.isActive() ? iceSanctum : null,
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
     onIdle: handlePlayerIdle,
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
@@ -579,6 +596,8 @@ function init() {
     onDialogueAction: (action)=>{
       if(action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if(action.startsWith('open-url:')) window.location.href=action.slice(9);
+      if(action === 'ice:enter') iceSanctum?.enter();
+      if(action === 'ice:accept' || action === 'ice:reject' || action === 'ice:finish-accept') iceSanctum?.handleAction(action);
     },
     pauseNpcs,
     resumeNpcs,
@@ -588,6 +607,32 @@ function init() {
     signal: eventController.signal,
   });
   cityDialogs.setup();
+  weatherEffect = createWeatherEffect({ scene, getCursor: () => cursorChar });
+  iceSanctum = createIceSanctum({
+    scene, makeCharacter,
+    makeMaterial: (parameters) => resources.material({ kind: 'ice-sanctum', ...parameters }, () => stdMat(parameters)),
+    getCursor: () => cursorChar, dialogs: () => cityDialogs,
+    claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId),
+    onEnter: () => {
+      if (mapController?.isOpen()) mapController.toggle();
+      setPhoneOpen(false); statsPanelController?.close(); eventBindings.closeRenderSettings();
+      preIceCameraZoom = cameraZoom; cameraZoom = MOBILE() ? 9.5 : 13.5;
+      updateCameraProjection(cameraZoom);
+      playerPath = []; interactionPointer.clearPending();
+    },
+    onReturn: (weather) => {
+      document.body.classList.remove('ice-sanctum-active');
+      weatherEffect?.set(weather === 'rain' ? 'rain' : 'sunny');
+      updateWeatherState(weather === 'rain' ? 'rain' : 'clear');
+      cameraZoom = preIceCameraZoom; updateCameraProjection(cameraZoom);
+      mapController?.invalidateShot();
+      setCameraTarget(cursorChar?.position.x ?? 20, cursorChar?.position.z ?? 26, true);
+      multiplayerHousing?.sendLocalPosition({ x: cursorChar?.position.x ?? 20, y: 0, z: cursorChar?.position.z ?? 26, rotation: cursorChar?.rotation.y }, performance.now());
+    },
+    setCameraTarget: (x, z, instant) => cameraController?.setTarget(x, z, instant),
+    focusCamera: (x, z, focusOptions) => cameraController?.focus(x, z, focusOptions),
+    stopCameraFocus: () => cameraController?.stop(), isMobile: MOBILE,
+  });
   sceneInterestPointController=createSceneInterestPointController({
     dialogs: cityDialogs,
     inventory: {
@@ -619,13 +664,12 @@ function init() {
       updateCameraProjection(cameraZoom);
       cameraController?.focus(-41.2, 11.5);
     },
+    startCatDeathCG: async () => { cityDialogs?.closeNpc(); const handle = await playCatDeathCGAfterBlackout(); return handle?.finished ?? null; },
   });
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
   initAnimations();
-  clockInterval = window.setInterval(() => {
-    syncTimeAndTheme();
-  }, 1000);
+  clockInterval = window.setInterval(syncTimeAndTheme, 1000);
   syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
@@ -681,6 +725,7 @@ function setupScene() {
     stopInvasionCG,
     getWeather: () => weather,
     setWeather: (value) => updateWeatherState(value),
+    getIceSanctum: () => iceSanctum,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -926,8 +971,9 @@ export function destroyMiniCity() {
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
   multiplayerHousing?.destroy();
-  destroyCG();
-  stopInvasionCG();
+  iceSanctum?.dispose(); weatherEffect?.dispose();
+  iceSanctum=null; weatherEffect=null;
+  destroyCG(); stopInvasionCG(); stopCatDeathCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
   npcSystem?.destroy();

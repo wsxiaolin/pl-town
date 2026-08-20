@@ -56,7 +56,7 @@ export function createBuildingSceneController(options: {
       building.group.position.y = -3;
       options.scene.add(building.group);
       options.addBuilding(building);
-      addPlot(definition.x, definition.z, definition.shape, definition.id);
+      if (definition.shape !== 'crown') addPlot(definition.x, definition.z, definition.shape, definition.id);
     });
   }
 

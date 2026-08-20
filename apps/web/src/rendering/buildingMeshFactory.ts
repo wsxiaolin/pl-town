@@ -708,49 +708,81 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     part(g, new THREE.BoxGeometry(0.02,0.45,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y, z+0.005], false);
   }
   
-  // 30 KINGICE — crown-shaped golden building with "King Ice" text
+  // 30 KINGICE — a freestanding royal crown used as the Ice sanctum entrance
   function buildCrown(cfg: BuildingDefinition): BuildingEntity {
     const g = new THREE.Group();
-    // Stone base
-    part(g, new THREE.CylinderGeometry(1.8, 2.0, 0.3, 32), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.15,0]);
-    // Crown band — main cylinder body with golden "King Ice" texture
-    const bodyMat = stdMat({color:0xE8A838,roughness:0.25,metalness:0.35,tex:'kingice',rx:1,ry:1});
-    bodyMat.emissive = new THREE.Color(P.GOLD); bodyMat.emissiveIntensity = 0;
-    const body = mk(new THREE.CylinderGeometry(1.5, 1.6, 1.6, 32), bodyMat);
-    body.position.y = 0.3 + 0.8; body.castShadow = body.receiveShadow = true; g.add(body);
-    const top = 0.3 + 1.6;
-    // Gold rim at top of band
-    part(g, new THREE.CylinderGeometry(1.58, 1.58, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, top + 0.04, 0]);
-    // Gold rim at bottom of band
-    // Do not let the lower gold ring share the stone base's top face.
-    part(g, new THREE.CylinderGeometry(1.62, 1.62, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, 0.355, 0]);
-    // 5 crown points (teeth) — evenly spaced around the top rim
-    const pointCount = 5;
-    const crownGemColors = [0x3B6FE0, 0xE85858, 0x5A8A3A, 0xA858E8, 0xE8A838];
-    for (let i = 0; i < pointCount; i++) {
-      const angle = (i / pointCount) * Math.PI * 2 - Math.PI / 2;
-      const px = Math.cos(angle) * 1.25;
-      const pz = Math.sin(angle) * 1.25;
-      // Tapered crown point — wider at base, narrow at tip
-      const pointH = 0.75 + (i % 2) * 0.15; // alternate heights for variety
-      part(g, new THREE.CylinderGeometry(0.06, 0.22, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
-      // Gem at each tip
-      part(g, new THREE.SphereGeometry(0.1, 12, 12), {color:crownGemColors[i],emissive:crownGemColors[i],emissiveIntensity:0.35,roughness:0.15,metalness:0.4}, [px, top + 0.08 + pointH + 0.1, pz], false);
+    const bandBottom = 0.14;
+    const bandHeight = 0.66;
+    const bandTop = bandBottom + bandHeight;
+    const outerBottomRadius = 1.48;
+    const outerTopRadius = 1.72;
+    const goldMat = stdMat({color:0xe8ad32,roughness:0.2,metalness:0.72});
+    const innerGoldMat = stdMat({color:0x9f6818,roughness:0.28,metalness:0.62,side:THREE.BackSide});
+    const liningMat = stdMat({color:0xa8e1e7,roughness:0.3,metalness:0.12,side:THREE.DoubleSide});
+    const bodyMat = stdMat({color:0xd99522,roughness:0.2,metalness:0.7,side:THREE.DoubleSide});
+    bodyMat.emissive = new THREE.Color(0x7d510f); bodyMat.emissiveIntensity = 0;
+
+    const body = mk(new THREE.CylinderGeometry(outerTopRadius, outerBottomRadius, bandHeight, 64, 1, true), bodyMat);
+    body.position.y = bandBottom + bandHeight / 2;
+    body.castShadow = body.receiveShadow = true;
+    g.add(body);
+
+    part(g, new THREE.CylinderGeometry(1.57, 1.35, bandHeight - 0.08, 64, 1, true), innerGoldMat, [0, bandBottom + bandHeight / 2, 0]);
+    const lining = part(g, new THREE.CircleGeometry(1.34, 48), liningMat, [0, bandBottom + 0.015, 0], false);
+    lining.rotation.x = -Math.PI / 2;
+    const lowerRim = part(g, new THREE.TorusGeometry(outerBottomRadius, 0.11, 10, 64), goldMat, [0, bandBottom, 0]);
+    lowerRim.rotation.x = Math.PI / 2;
+    const middleRim = part(g, new THREE.TorusGeometry(1.59, 0.045, 8, 64), goldMat, [0, bandBottom + bandHeight * 0.48, 0]);
+    middleRim.rotation.x = Math.PI / 2;
+    const upperRim = part(g, new THREE.TorusGeometry(outerTopRadius, 0.1, 10, 64), goldMat, [0, bandTop, 0]);
+    upperRim.rotation.x = Math.PI / 2;
+
+    function crownPointGeometry(width: number, height: number): THREE.ExtrudeGeometry {
+      const shape = new THREE.Shape();
+      shape.moveTo(-width / 2, 0);
+      shape.lineTo(-width * 0.43, height * 0.3);
+      shape.quadraticCurveTo(-width * 0.2, height * 0.68, 0, height);
+      shape.quadraticCurveTo(width * 0.2, height * 0.68, width * 0.43, height * 0.3);
+      shape.lineTo(width / 2, 0);
+      shape.closePath();
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.14,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        bevelSize: 0.035,
+        bevelThickness: 0.025,
+        curveSegments: 6,
+      });
+      geometry.translate(0, 0, -0.07);
+      return geometry;
     }
-    // Short crown points between the tall ones (fill the gaps for full crown look)
-    for (let i = 0; i < pointCount; i++) {
-      const angle = ((i + 0.5) / pointCount) * Math.PI * 2 - Math.PI / 2;
-      const px = Math.cos(angle) * 1.35;
-      const pz = Math.sin(angle) * 1.35;
-      const pointH = 0.4;
-      part(g, new THREE.CylinderGeometry(0.04, 0.18, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
-      // Small gem at tip
-      part(g, new THREE.SphereGeometry(0.06, 8, 8), {color:0xFFF8E0,emissive:0xFFF8E0,emissiveIntensity:0.25,roughness:0.2,metalness:0.3}, [px, top + 0.08 + pointH + 0.06, pz], false);
+
+    const tallPoint = crownPointGeometry(0.9, 1.68);
+    const shortPoint = crownPointGeometry(0.76, 1.18);
+    const pointRadius = 1.57;
+    const jewelColors = [0x8de5ef, 0x4caec8, 0xcdf8fa, 0x62c8d8, 0x9eeff2, 0x3f9ebd, 0xd8ffff, 0x68cad7];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
+      const tall = i % 2 === 0;
+      const pointHeight = tall ? 1.68 : 1.18;
+      const px = Math.cos(angle) * pointRadius;
+      const pz = Math.sin(angle) * pointRadius;
+      const point = part(g, tall ? tallPoint : shortPoint, goldMat, [px, bandTop - 0.04, pz]);
+      point.rotation.y = Math.PI / 2 - angle;
+      part(g, new THREE.SphereGeometry(tall ? 0.12 : 0.09, 14, 10), goldMat, [px, bandTop - 0.04 + pointHeight + (tall ? 0.08 : 0.06), pz]);
+
+      const settingRadius = 1.64;
+      const setting = part(g, new THREE.SphereGeometry(0.21, 16, 12), goldMat, [Math.cos(angle) * settingRadius, bandBottom + bandHeight * 0.48, Math.sin(angle) * settingRadius]);
+      setting.scale.set(1, 1, 0.34);
+      setting.rotation.y = Math.PI / 2 - angle;
+      const jewelRadius = 1.76;
+      const jewelColor = jewelColors[i]!;
+      const jewel = part(g, new THREE.OctahedronGeometry(0.15, 0), {color:jewelColor,roughness:0.08,metalness:0.25,emissive:jewelColor,emissiveIntensity:0.24}, [Math.cos(angle) * jewelRadius, bandBottom + bandHeight * 0.48, Math.sin(angle) * jewelRadius], false);
+      jewel.scale.set(0.82, 1.18, 0.48);
+      jewel.rotation.y = Math.PI / 2 - angle;
     }
-    // Blue entrance disc at base
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.3+0.05,0], false);
-    // Label Y for floating tag
-    const labelY = top + 0.08 + 0.85 + 0.5;
+
+    const labelY = bandTop + 1.68 + 0.45;
     g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY};
   }

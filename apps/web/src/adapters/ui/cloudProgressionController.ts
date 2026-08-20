@@ -3,6 +3,7 @@ import {
   EMPTY_PROGRESSION_CATALOG,
   canInteractWithBuilding,
   inventoryEntries,
+  ITEM_DETAILS,
   normalizePlayerProgress,
   toQuestProgressView,
   type PlayerProgress,
@@ -121,6 +122,8 @@ else if (event.type === 'shop.purchased') {
       options.showToast(`${productName ?? '商品'}已放入背包`);
     }
     else if (event.type === 'reward.claimed' && event.rewardId === 'tirpitz_beach') options.showToast(event.claimed ? '皮尔皮茨号已放入背包' : '皮尔皮茨号已经领取过了');
+    else if (event.type === 'reward.claimed' && event.rewardId === 'ice_reject') options.showToast(event.claimed ? '湿湿的皇冠已放入背包' : '湿湿的皇冠已经领取过了');
+    else if (event.type === 'reward.claimed' && event.rewardId === 'ice_accept') options.showToast(event.claimed ? '冰镇柠檬水已放入背包' : '冰镇柠檬水已经领取过了');
     else if (event.type === 'reward.claimed') options.showToast(event.claimed ? '今日沃柑已放入背包' : '今天已经领取过沃柑了');
   }
 
@@ -135,10 +138,19 @@ else if (event.type === 'shop.purchased') {
         row.dataset.itemId = entry.itemId;
         const icon = options.document.createElement('span');
         icon.className = 'inventory-item-icon';
-        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : entry.itemId === 'tirpitz_card' ? '舰' : '册';
+        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : entry.itemId === 'tirpitz_card' ? '舰' : entry.itemId === 'ice_wet_crown' ? '冠' : entry.itemId === 'ice_lemonade' ? '柠' : '册';
         const name = options.document.createElement('span');
         name.className = 'sp-ul-name';
         name.textContent = entry.name;
+        const detail = ITEM_DETAILS[entry.itemId];
+        if (detail) {
+          const copy = options.document.createElement('span');
+          copy.className = 'sp-ul-copy';
+          name.replaceWith(copy);
+          const detailText = options.document.createElement('small');
+          detailText.textContent = detail;
+          copy.append(name, detailText);
+        }
         const count = options.document.createElement('span');
         count.className = 'sp-ul-thresh';
         count.textContent = `× ${entry.quantity}`;

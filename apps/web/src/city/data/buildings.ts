@@ -904,6 +904,15 @@ export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
     name: "King Ice",
     slogan: "皇冠落座之处，冰与光交界。",
     dialog: ["这段话是ice自己写的，他直接推送到我代码仓库里面了"],
+    dialogTree: [
+      {
+        text: "是否觐见【冰】",
+        options: [
+          { text: "是", next: null, action: "ice:enter" },
+          { text: "否", next: null },
+        ],
+      },
+    ],
   },
   archive: {
     name: "档案馆",
