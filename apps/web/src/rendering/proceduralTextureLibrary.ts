@@ -16,10 +16,21 @@ import wetAsphaltColor from '../assets/textures/road_asphalt_wet_color.png';
 import snowGroundColor from '../assets/textures/snow_ground_color.png';
 import snowRoofColor from '../assets/textures/snow_roof_color.png';
 import sandColor from '../assets/textures/sand_color.png';
+import mossGroundColor from '../assets/textures/ground_moss_color.png';
+import concreteWornColor from '../assets/textures/concrete_worn_color.png';
+import redBrickColor from '../assets/textures/brick_red_color.png';
+import puddleAsphaltColor from '../assets/textures/puddle_asphalt_color.png';
+import type { Weather } from '../city/weather';
 
 type Canvas2D = CanvasRenderingContext2D;
 type DrawFn = (ctx: Canvas2D, size: number) => void;
 type RGB = [number, number, number];
+
+const GENERATED_FACADES = import.meta.glob('../assets/textures/facade_*_color.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
 
 const GENERATED_TEXTURES: Record<string, string> = {
   ground6: groundCityColor,
@@ -41,13 +52,25 @@ const GENERATED_TEXTURES: Record<string, string> = {
   residence_tile: roofTileColor,
   residence_shingle: shingleColor,
   ground: sandColor,
+  moss_ground: mossGroundColor,
+  concrete_worn: concreteWornColor,
+  brick_red: redBrickColor,
+  puddle_asphalt: puddleAsphaltColor,
+  facade_residence_cream: GENERATED_FACADES['../assets/textures/facade_residence_cream_color.png'] ?? '',
+  facade_residence_bluepanel: GENERATED_FACADES['../assets/textures/facade_residence_bluepanel_color.png'] ?? '',
+  facade_residence_stone: GENERATED_FACADES['../assets/textures/facade_residence_stone_color.png'] ?? '',
+  facade_residence_darkwood: GENERATED_FACADES['../assets/textures/facade_residence_darkwood_color.png'] ?? '',
+  facade_residence_moss: GENERATED_FACADES['../assets/textures/facade_residence_moss_color.png'] ?? '',
 };
 
 export function createProceduralTextureLibrary(
   resources: ResourcePool,
   getRenderer: () => THREE.WebGLRenderer | null | undefined,
   getAnisotropy: () => number,
+  getWeather: () => Weather,
+  getTextureRendering: () => boolean,
 ) {
+  const facadeMaterials = new Set<THREE.MeshStandardMaterial>();
   const _texCanvases: Record<string, HTMLCanvasElement> = {};
   function _canvas(key: string, size: number, drawFn: DrawFn) {
     if (!_texCanvases[key]) {
@@ -59,7 +82,7 @@ export function createProceduralTextureLibrary(
     return _texCanvases[key];
   }
   function _tex(key: string, rx = 1, ry = 1) {
-    const weather = readWeather();
+    const weather = getWeather();
     const generatedKey = weather === 'rain' && (key === 'asphalt' || key === 'road')
       ? 'wet_asphalt'
       : weather === 'snow' && (key.startsWith('ground') || key === 'pavement' || key === 'asphalt' || key === 'road')
@@ -67,11 +90,11 @@ export function createProceduralTextureLibrary(
         : weather === 'snow' && (key === 'rooftile' || key === 'residence_tile' || key === 'residence_shingle')
           ? 'snow_roof'
           : key;
-    const generatedSource = generatedKey === 'wet_asphalt' ? wetAsphaltColor
+    const generatedSource = generatedKey === 'wet_asphalt' ? puddleAsphaltColor
       : generatedKey === 'snow_ground' ? snowGroundColor
         : generatedKey === 'snow_roof' ? snowRoofColor
           : GENERATED_TEXTURES[generatedKey];
-    if (readTextureRendering() && generatedSource) {
+    if (getTextureRendering() && generatedSource) {
       return resources.texture(`generated:repeat:${generatedKey}:${rx || 1}:${ry || 1}`, () => {
         const t = new THREE.TextureLoader().load(generatedSource);
         t.name = `generated_${generatedKey}`;
@@ -99,15 +122,20 @@ export function createProceduralTextureLibrary(
       return t;
     });
   }
-  function readTextureRendering(): boolean {
-    try { return Boolean(JSON.parse(localStorage.getItem('minicityRenderSettings') || 'null')?.textureRendering); }
-    catch { return false; }
-  }
-  function readWeather(): 'clear' | 'rain' | 'snow' {
-    const weather = document.body.dataset.weather;
-    return weather === 'rain' || weather === 'snow' ? weather : 'clear';
-  }
   function _texClamp(key: string) {
+    const facadeSource = GENERATED_FACADES[`../assets/textures/${key}_color.png`];
+    if (getTextureRendering() && facadeSource) {
+      return resources.texture(`generated:clamp:${key}`, () => {
+        const texture = new THREE.TextureLoader().load(facadeSource);
+        texture.name = `generated_${key}`;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const renderer = getRenderer();
+        texture.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), getAnisotropy()) : 1;
+        return texture;
+      });
+    }
     const c = _texCanvases[key];
     if (!c) return null;
     return resources.texture(`clamp:${key}`, () => {
@@ -126,12 +154,23 @@ export function createProceduralTextureLibrary(
     const mat = resources.material({ kind:'facade', texKey }, () =>
       new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
     );
+    facadeMaterials.add(mat);
+    mat.name = `generated_${texKey}`;
     const facade = new THREE.Mesh(resources.geometry(new THREE.PlaneGeometry(w, h)), mat);
     facade.position.set(0, y, zOffset);
     if (rotY) facade.rotation.y = rotY;
     facade.castShadow = true; facade.receiveShadow = true;
     g.add(facade);
     return facade;
+  }
+
+  function refreshWeather(): void {
+    for (const material of facadeMaterials) {
+      const key = material.name.replace(/^generated_/, '');
+      const texture = _texClamp(key);
+      if (texture) material.map = texture;
+      material.needsUpdate = true;
+    }
   }
   function _noise(ctx: Canvas2D, size: number, amount: number) {
     const img = ctx.getImageData(0, 0, size, size);
@@ -868,6 +907,7 @@ export function createProceduralTextureLibrary(
     initialize: initTextures,
     repeat: _tex,
     addFacade,
+    refreshWeather,
     backgrounds: TEX,
   };
 }

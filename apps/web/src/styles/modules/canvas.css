@@ -6,6 +6,27 @@
   height: 100%;
   display: block;
 }
+.weather-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+body[data-weather="rain"] .weather-overlay {
+  opacity: 0.2;
+  background-image: repeating-linear-gradient(112deg, transparent 0 22px, rgba(188, 215, 255, 0.6) 23px 24px, transparent 25px 48px);
+  animation: weatherRain 0.7s linear infinite;
+}
+body[data-weather="snow"] .weather-overlay {
+  opacity: 0.58;
+  background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.85) 0 2px, transparent 3px), radial-gradient(circle at 60% 40%, rgba(255,255,255,0.8) 0 3px, transparent 4px), radial-gradient(circle at 35% 80%, rgba(255,255,255,0.75) 0 2px, transparent 3px);
+  background-size: 170px 170px, 230px 230px, 190px 190px;
+  animation: weatherSnow 5s linear infinite;
+}
+@keyframes weatherRain { from { background-position: 0 0; } to { background-position: -40px 80px; } }
+@keyframes weatherSnow { from { background-position: 0 -160px, 30px -210px, -20px -120px; } to { background-position: 40px 160px, -20px 210px, 30px 120px; } }
 .movement-control {
   display: none;
   position: fixed;

@@ -11,6 +11,7 @@
   </style>
 </head>
 <body class="day">
+  <div class="weather-overlay" id="weatherOverlay" aria-hidden="true"></div>
 
   <div class="landscape-required" id="landscapeRequired" role="alert" aria-live="assertive">
     <strong>请横屏使用</strong>
@@ -326,9 +327,18 @@
             <div class="render-settings-section-head"><h2>实时阴影</h2><label class="render-switch"><input id="renderShadows" type="checkbox" /><span></span></label></div>
             <p>增强建筑层次，性能开销较高。</p>
           </section>
-          <section class="render-settings-section render-settings-toggle-section">
-            <div class="render-settings-section-head"><h2>贴图渲染</h2><label class="render-switch"><input id="renderTextureRendering" type="checkbox" /><span></span></label></div>
-            <p>启用真实地面、道路、墙面、石材和砖墙贴图。</p>
+           <section class="render-settings-section render-settings-toggle-section">
+             <div class="render-settings-section-head"><h2>贴图渲染</h2><label class="render-switch"><input id="renderTextureRendering" type="checkbox" /><span></span></label></div>
+             <p>启用真实地面、道路、墙面、石材和砖墙贴图。</p>
+           </section>
+          <section class="render-settings-section">
+            <div class="render-settings-section-head"><h2>天气</h2><output id="renderWeatherValue">晴天</output></div>
+            <p>切换晴天、雨天和雪天材质与场景效果。</p>
+            <select class="render-select" id="renderWeather">
+              <option value="clear">晴天</option>
+              <option value="rain">雨天</option>
+              <option value="snow">雪天</option>
+            </select>
           </section>
          <section class="render-settings-section">
            <div class="render-settings-section-head"><h2>纹理过滤</h2><output id="renderAnisotropyValue">16x</output></div>

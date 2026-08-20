@@ -13,3 +13,6 @@ apps/server/data/
 logs/
 apps/server/logs/
 todo.txt
+.texture-responses/
+texture-batch-4k.png
+texture-batch-response.json

@@ -4,6 +4,7 @@ import {
   RENDER_SETTINGS_KEY,
   type RenderSettings,
 } from '../../rendering/createRenderer';
+import type { Weather } from '../../city/weather';
 
 type RenderPresetName = 'saving' | 'balanced' | 'high' | 'ultra';
 
@@ -12,6 +13,8 @@ type RenderSettingsControllerOptions = {
   maxAnisotropy: number;
   maxTextureSize: number;
   close: () => void;
+  getWeather: () => Weather;
+  setWeather: (weather: Weather) => void;
 };
 
 const PRESET_LABELS: Record<RenderPresetName, string> = {
@@ -42,6 +45,8 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   const exposureValue = panel.querySelector<HTMLOutputElement>('#renderExposureValue')!;
   const presetStatus = panel.querySelector<HTMLElement>('#renderPresetStatus')!;
   const presetButtons = [...panel.querySelectorAll<HTMLButtonElement>('[data-render-preset]')];
+  const weather = panel.querySelector<HTMLSelectElement>('#renderWeather');
+  const weatherValue = panel.querySelector<HTMLOutputElement>('#renderWeatherValue');
 
   const resolutionLimit = getRenderResolutionLimit(
     maxTextureSize,
@@ -61,6 +66,8 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   shadows.checked = settings.shadows;
   exposure.value = String(settings.exposure);
   textureRendering.checked = settings.textureRendering;
+  if (weather) weather.value = options.getWeather();
+  if (weatherValue) weatherValue.textContent = weatherLabel(options.getWeather());
 
   for (const option of anisotropy.options) {
     option.disabled = Number(option.value) > normalizedMaxAnisotropy;
@@ -136,6 +143,11 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   anisotropy.addEventListener('change', updateLabels, { signal });
   shadows.addEventListener('change', updateLabels, { signal });
   textureRendering.addEventListener('change', updateLabels, { signal });
+  weather?.addEventListener('change', () => {
+    const next = weather.value as Weather;
+    options.setWeather(next);
+    if (weatherValue) weatherValue.textContent = weatherLabel(next);
+  }, { signal });
   exposure.addEventListener('input', updateLabels, { signal });
   panel.querySelector('#renderSettingsApply')!.addEventListener('click', () => {
     localStorage.setItem(RENDER_SETTINGS_KEY, JSON.stringify({
@@ -164,4 +176,8 @@ function getCapabilityHint(resolutionLimit: number, maxAnisotropy: number): stri
       ? '均衡'
       : '节能';
   return `建议从${suggestedPreset}开始；当前视口最高安全倍率 ${formatMetric(resolutionLimit)}x，超出会受图形缓冲尺寸限制。`;
+}
+
+function weatherLabel(weather: Weather): string {
+  return weather === 'rain' ? '雨天' : weather === 'snow' ? '雪天' : '晴天';
 }
