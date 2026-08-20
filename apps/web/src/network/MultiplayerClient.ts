@@ -33,9 +33,10 @@ export type NetStoryProgress = {
   visitCount: number;
   updatedAt: string;
 };
+export type NetWeather = 'clear' | 'rain' | 'snow' | 'snow-deep';
 
 type ServerMessage =
-  | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog }
+  | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather }
   | { type: 'player.joined'; player: NetUser }
   | { type: 'player.moved'; playerId: string; position: NetPosition }
   | { type: 'player.left'; playerId: string }
@@ -45,6 +46,7 @@ type ServerMessage =
   | { type: 'housing.requests'; requests?: HousingRequest[] }
   | { type: 'progress.updated'; progress: NetPlayerProgress; catalog: NetProgressionCatalog; event?: Record<string, unknown> }
   | { type: 'story.updated'; story: NetStoryProgress; event?: Record<string, unknown> }
+  | { type: 'world.weather'; weather: NetWeather }
   | { type: 'error'; message?: string };
 
 type Callbacks = {
@@ -59,6 +61,7 @@ type Callbacks = {
   requests?: (requests: HousingRequest[]) => void;
   progress?: (progress: NetPlayerProgress, catalog: NetProgressionCatalog, event?: Record<string, unknown>) => void;
   story?: (story: NetStoryProgress, event?: Record<string, unknown>) => void;
+  weather?: (weather: NetWeather) => void;
   authenticationFailed?: (message: string) => void;
   error?: (message: string) => void;
 };
@@ -98,7 +101,7 @@ export class MultiplayerClient {
   private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(this.credentials.nickname, this.credentials.password), 2500); }
   private handle(raw: string) {
     let message: ServerMessage; try { message = JSON.parse(raw) as ServerMessage; } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); trackEvent('player.connect', { nickname: message.user?.nickname }); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (message.weather) this.callbacks.weather?.(message.weather); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
@@ -108,6 +111,7 @@ export class MultiplayerClient {
     else if (message.type === 'housing.requests') this.callbacks.requests?.(message.requests ?? []);
     else if (message.type === 'progress.updated') this.callbacks.progress?.(message.progress, message.catalog, message.event);
     else if (message.type === 'story.updated') this.callbacks.story?.(message.story, message.event);
+    else if (message.type === 'world.weather') this.callbacks.weather?.(message.weather);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {

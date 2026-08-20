@@ -3,6 +3,7 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
+import type { Weather } from './weather';
 
 type NpcEntity = Npc;
 
@@ -14,7 +15,7 @@ type NavigationApi = {
 export type MiniCityDebugApi = ReturnType<typeof createMiniCityApi>;
 
 function createMiniCityApi(options: DebugApiOptions) {
-  return () => ({
+  return {
     scene: options.getScene(),
     camera: options.getCamera(),
     renderer: options.getRenderer(),
@@ -67,7 +68,12 @@ function createMiniCityApi(options: DebugApiOptions) {
       isLanYuPreludeActive: () => isLanYuPreludeCGActive(),
     },
     invasionCG: () => options.playInvasionCG(),
-  });
+    stopInvasionCG: () => options.stopInvasionCG(),
+    weather: {
+      get: () => options.getWeather(),
+      set: (value: Weather) => options.setWeather(value),
+    },
+  };
 }
 
 export type DebugApiOptions = {
@@ -99,17 +105,11 @@ export type DebugApiOptions = {
   burnCityProgress: () => number;
   playInvasionCG: () => boolean;
   stopInvasionCG: () => void;
+  getWeather: () => Weather;
+  setWeather: (weather: Weather) => void;
 };
 
 export function installDebugApi(options: DebugApiOptions) {
   const api = createMiniCityApi(options);
-  window.__mini = api;
-  window.destroyBuilding = options.destroyBuilding;
-  window.destroyResidence = options.destroyResidence;
-  window.destroyAll = options.destroyAll;
-  window.restoreBuilding = options.restoreBuilding;
-  window.restoreResidence = options.restoreResidence;
-  window.restoreAll = options.restoreAll;
-  window.playInvasionCG = options.playInvasionCG;
-  window.stopInvasionCG = options.stopInvasionCG;
+  window._mini = api;
 }

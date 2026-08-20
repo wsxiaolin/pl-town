@@ -33,7 +33,7 @@ export async function seedCityStorage(page: Page, user = 'tester'): Promise<void
  */
 export async function waitForCityBooted(page: Page): Promise<void> {
   await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any).__mini?.().player), undefined, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 30_000 });
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
   // The boot-screen first-paint shell fades out over ~0.7s after is-ready is
   // applied. Clicking a top-bar control during that window can be swallowed by
@@ -88,5 +88,4 @@ export function stubNewsstandWebSocket(page: Page, user = 'news-tester'): void {
     }) });
   }, { u: user });
 }
-
 

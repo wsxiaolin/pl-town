@@ -69,7 +69,7 @@ import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
-import { hasWeatherPreference, persistWeather, readWeather, weatherForDay, type Weather } from './weather';
+import { type Weather } from './weather';
 import { preloadTextureResources } from './textureResourcePreloader';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
@@ -80,7 +80,7 @@ const labelWorldPosition = new THREE.Vector3();
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
 const P = PALETTE;
-let weather: Weather = readWeather();
+let weather: Weather = 'clear';
 const proceduralTextures = createProceduralTextureLibrary(
   resources,
   () => renderer,
@@ -331,8 +331,6 @@ const eventBindings = createEventBindings({
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog,
   getLoginController: () => loginController,
-  getWeather: () => weather,
-  setWeather: (value) => updateWeatherState(value, true),
 });
 
 // Unlock tiers reference world decoration helpers, which are created during init().
@@ -347,7 +345,7 @@ function awardDirectAchievement(id: string, name: string) { progressionControlle
 function checkAchievements() { progressionController?.checkAchievements(); }
 function init() {
   document.body.dataset.weather = weather;
-  updateWeather(townGameDay());
+  updateWeatherState(weather);
   setupRenderer();
   cameraController = createCameraController({
     getCamera: () => camera,
@@ -440,6 +438,7 @@ function init() {
     mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
     isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
+    setWeather: (value) => updateWeatherState(value),
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -624,14 +623,8 @@ function init() {
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
   initAnimations();
-  let lastWeatherDay = townGameDay();
   clockInterval = window.setInterval(() => {
     syncTimeAndTheme();
-    const currentWeatherDay = townGameDay();
-    if (currentWeatherDay !== lastWeatherDay) {
-      lastWeatherDay = currentWeatherDay;
-      updateWeather(currentWeatherDay);
-    }
   }, 1000);
   syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
@@ -686,6 +679,8 @@ function setupScene() {
     burnCityProgress: () => burnCityEffect.getProgress(),
     playInvasionCG: startInvasionCG,
     stopInvasionCG,
+    getWeather: () => weather,
+    setWeather: (value) => updateWeatherState(value),
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -786,14 +781,8 @@ function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionP
 function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
 
-function updateWeather(day: number): void {
-  if (hasWeatherPreference()) return;
-  updateWeatherState(weatherForDay(day));
-}
-
-function updateWeatherState(next: Weather, persist = false): void {
+function updateWeatherState(next: Weather): void {
   document.body.dataset.weather = next;
-  if (persist) persistWeather(next);
   if (next === weather) return;
   weather = next;
   refreshWeather();
