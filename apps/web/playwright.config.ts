@@ -24,7 +24,9 @@ export default defineConfig({
   // Default to a single worker for interactive `npm run test:web`; CI raises
   // this via PLAYWRIGHT_WORKERS / matrix sharding for throughput.
   workers: Number(process.env.PLAYWRIGHT_WORKERS) || 1,
-  timeout: 60_000,
+  // City boot can take over a minute on a busy GitHub-hosted SwiftShader
+  // runner. Keep the timeout above the boot wait plus the first interaction.
+  timeout: process.env.CI ? 120_000 : 60_000,
   // Surface shard env vars set by `playwright test --shard=x/y` / CI matrix.
   shard: process.env.PLAYWRIGHT_SHARD
     ? {
