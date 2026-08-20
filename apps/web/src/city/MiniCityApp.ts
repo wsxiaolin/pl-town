@@ -70,7 +70,7 @@ import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { hasWeatherPreference, persistWeather, readWeather, weatherForDay, type Weather } from './weather';
-import { preloadTextureResources, subscribeTextureResourceProgress } from './textureResourcePreloader';
+import { preloadTextureResources } from './textureResourcePreloader';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -332,7 +332,7 @@ const eventBindings = createEventBindings({
   closeNpcDialog,
   getLoginController: () => loginController,
   getWeather: () => weather,
-  setWeather: (value) => updateWeatherState(value),
+  setWeather: (value) => updateWeatherState(value, true),
 });
 
 // Unlock tiers reference world decoration helpers, which are created during init().
@@ -791,11 +791,11 @@ function updateWeather(day: number): void {
   updateWeatherState(weatherForDay(day));
 }
 
-function updateWeatherState(next: Weather): void {
+function updateWeatherState(next: Weather, persist = false): void {
   document.body.dataset.weather = next;
   if (next === weather) return;
   weather = next;
-  persistWeather(weather);
+  if (persist) persistWeather(weather);
   refreshWeather();
   proceduralTextures.refreshWeather();
 }
@@ -907,13 +907,7 @@ export function startMiniCity() {
   if(started)return;
   started=true;
   eventController=new AbortController();
-  preloadTextureResources();
-  subscribeTextureResourceProgress((state) => {
-    const detail = document.getElementById('textureLoadDetail');
-    if (detail && state.loadedFiles === state.totalFiles && state.failedFiles === 0) {
-      detail.textContent = '高清资源已就绪';
-    }
-  });
+  preloadTextureResources(readRenderSettings().textureRendering);
   initCG({
     onFinish: () => {
       showUnlockToast('全屏效果更好哦');

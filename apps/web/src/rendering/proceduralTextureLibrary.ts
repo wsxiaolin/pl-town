@@ -41,6 +41,7 @@ const GENERATED_WEATHER_TEXTURES = import.meta.glob('../assets/textures/{residen
 
 /** Canvas fallbacks for generated facade keys used by the canvas (low-preset) path. */
 const FACADE_CANVAS_FALLBACK: Record<string, string> = {
+  facade_bank_plaster: 'wall', facade_utility_concrete: 'concrete_worn', facade_tower_glass: 'glass', facade_darktower_glass: 'glass', facade_temple_stone: 'stone', facade_library_stone: 'stone', facade_ruin_stone: 'stone', facade_school_cream: 'wall', facade_kiosk_woodglass: 'wood', facade_observatory_concrete: 'concrete_worn', facade_market_awning: 'wall', facade_greenhouse_glass: 'glass', facade_clocktower_brick: 'brick', facade_factory_brick: 'brick', facade_community_brick: 'brick',
   facade_residence_cream: 'residence_plaster',
   residence_cream: 'residence_plaster',
   residence_redbrick: 'brick',

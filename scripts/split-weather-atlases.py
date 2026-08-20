@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-ROOT = Path('/workspace/pl-town')
+ROOT = Path(__file__).resolve().parents[1]
 RESPONSE_DIR = ROOT / '.texture-responses'
 OUTPUT_DIR = ROOT / 'apps/web/src/assets/textures'
 
