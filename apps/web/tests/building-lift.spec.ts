@@ -98,10 +98,18 @@ test('destroyed buildings persist across reload and can be restored globally', a
   expect(beforeReload.stored).toContain('library');
   expect(beforeReload.hasGlobalRestore).toBe(true);
 
-  await page.reload();
-  await waitForCityBooted(page);
-  await waitForEntranceSettled(page);
-  const afterReload = await page.evaluate(() => {
+  // Close the first WebGL page before creating its replacement. Keeping both
+  // contexts alive can exhaust SwiftShader on the two-core CI runner.
+  await page.close();
+  const reloadedPage = await page.context().newPage();
+  try {
+    await reloadedPage.goto('/');
+    await waitForCityBooted(reloadedPage);
+  } catch (error) {
+    await reloadedPage.close();
+    throw error;
+  }
+  const afterReload = await reloadedPage.evaluate(() => {
     const mini = (window as any).__mini();
     let libraryMesh: any = null;
     mini.scene.traverse((object: any) => {
@@ -122,4 +130,5 @@ test('destroyed buildings persist across reload and can be restored globally', a
   expect(afterReload.rubble).toBe(true);
   expect(afterReload.restored).toBe(true);
   expect(afterReload.restoredState).toBe('default');
+  await reloadedPage.close();
 });

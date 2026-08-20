@@ -55,7 +55,6 @@ import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
-import { BUILDING_PLOT_MAP } from './data/buildingPlots';
 import { createMeshHelpers, type MeshHelpers } from '../rendering/meshFactory';
 import { createThemeClock } from './themeClock';
 import { createInteractionPointer } from './interactionPointer';
@@ -699,7 +698,6 @@ const buildingMeshFactory = createBuildingMeshFactory({
   addPart: part,
 });
 
-const PLOT_MAP = BUILDING_PLOT_MAP;
 const SHAPE_FNS = buildingMeshFactory.builders;
 
 function addDecorations() { worldDecorations.addDecorations(); }
