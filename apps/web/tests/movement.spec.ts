@@ -1,17 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { waitForCityReady } from './helpers';
 
-async function enterCity(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem('minicityCGSeenV3', 'true');
-    localStorage.setItem('minicityUser', 'movement-tester');
-    localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
-  });
-  await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any).__mini?.().player));
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
-  // Let the boot-screen fade settle before interacting (see helpers.waitForCityBooted).
-  await page.waitForTimeout(1_000);
-}
+const enterCity = (page: import('@playwright/test').Page) => waitForCityReady(page, 'movement-tester');
 
 test('desktop keyboard moves the player while the touch wheel stays hidden', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
