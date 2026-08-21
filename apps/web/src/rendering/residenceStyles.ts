@@ -38,10 +38,14 @@ export function residenceStyleFor(x: number, z: number, index: number): number {
   return family * 2 + alternate;
 }
 
+export function residenceStyleSeedForLot(x: number, z: number): number {
+  return Math.abs(Math.round(x * 31 + z));
+}
+
 export function createResidenceModel(options: ResidenceStyleOptions): { group: THREE.Group; body: THREE.Mesh; styleId: number; styleName: string } {
   const { x, z, index, lotType, isNight, part } = options;
   const group = new THREE.Group();
-  const styleId = residenceStyleFor(x, z, index);
+  const styleId = residenceStyleFor(x, z, residenceStyleSeedForLot(x, z));
   const width = lotType === 2 ? 1.25 : 1.6;
   const depth = lotType === 1 ? 1.15 : 1.5;
   const height = 0.92 + (index % 4) * 0.18 + (styleId === 8 ? 0.42 : 0);
