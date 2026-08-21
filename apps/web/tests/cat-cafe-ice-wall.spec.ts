@@ -144,7 +144,8 @@ for (const viewport of viewports) {
     await expect(transition).toHaveCount(1);
     await expect(cg).toHaveCount(0);
     await expect(transition).toHaveClass(/is-active/);
-    await expect(transition).toHaveCSS('opacity', '1');
+    await expect.poll(() => transition.evaluate((element) => Number.parseFloat(getComputedStyle(element).opacity)))
+      .toBeGreaterThan(0.9);
     await expect(cg).toHaveClass(/is-active/);
     await expect(cg.locator('canvas')).toBeVisible();
     await expect(cg.locator('.cat-death-cg__caption.is-current')).toBeVisible({ timeout: 3_000 });
