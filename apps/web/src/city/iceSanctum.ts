@@ -42,6 +42,7 @@ const CINEMATIC_FOCUS_DURATION = 1.8;
 const CINEMATIC_HOLD_DURATION = 0.9;
 const CINEMATIC_RETURN_DURATION = 1.6;
 const CINEMATIC_EXIT_AT = CINEMATIC_PAUSE_DURATION + CINEMATIC_FOCUS_DURATION + CINEMATIC_HOLD_DURATION;
+const ICE_REPEATABLE_RESIDENT = 'ice';
 
 function iceResidentId(): string {
   return typeof localStorage === 'undefined' ? 'visitor' : localStorage.getItem('minicityUser') || 'visitor';
@@ -524,6 +525,7 @@ export function createIceSanctum(options: IceSanctumOptions) {
 
   function hasEntered(): boolean {
     if (typeof localStorage === 'undefined') return false;
+    if (iceResidentId() === ICE_REPEATABLE_RESIDENT) return false;
     return localStorage.getItem(iceChoiceKey()) !== null;
   }
 

@@ -229,6 +229,62 @@ test('a failed Ice reward claim leaves the ending unlocked for a retry', async (
   sanctum.dispose();
 });
 
+test('the resident named ice can re-enter after completing the sanctum story', () => {
+  const bodyClasses = new Set<string>();
+  const storage = new Map<string, string>([
+    ['minicityUser', 'ice'],
+    ['minicityIceChoice:ice', 'accept'],
+  ]);
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    },
+  });
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      body: {
+        classList: {
+          add: (name: string) => bodyClasses.add(name),
+          remove: (name: string) => bodyClasses.delete(name),
+        },
+        append: () => undefined,
+      },
+      createElement: () => ({
+        className: '',
+        setAttribute: () => undefined,
+        append: () => undefined,
+        remove: () => undefined,
+      }),
+    },
+  });
+  const scene = new THREE.Scene();
+  const cursor = new THREE.Group();
+  const sanctum = createIceSanctum({
+    scene,
+    makeMaterial: () => new THREE.MeshStandardMaterial(),
+    makeCharacter: () => new THREE.Group(),
+    getCursor: () => cursor,
+    dialogs: () => null,
+    claimReward: async () => true,
+    onEnter: () => undefined,
+    onEnterUnavailable: () => undefined,
+    onRewardFailure: () => undefined,
+    onReturn: () => undefined,
+    setCameraTarget: () => undefined,
+    focusCamera: () => undefined,
+    stopCameraFocus: () => undefined,
+    isMobile: () => false,
+  });
+
+  assert.equal(sanctum.hasEntered(), false);
+  assert.equal(sanctum.enter(), true);
+  assert.equal(sanctum.isActive(), true);
+  sanctum.dispose();
+});
+
 test('clicking Ice walks to the desk and opens the dialog on arrival', () => {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,

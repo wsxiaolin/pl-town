@@ -138,6 +138,18 @@ test('Ice time skip fades the blackout away before the second conversation', asy
   await expect(page.getByRole('button', { name: '喜欢' })).toBeVisible({ timeout: 5_000 });
 });
 
+test('resident ice can re-enter the crown building after completing its story', async ({ page }) => {
+  stubIceProgression(page);
+  await page.addInitScript(() => localStorage.setItem('minicityIceChoice:ice', 'accept'));
+  await seedCityStorage(page, 'ice');
+  await waitForCityBooted(page);
+  await page.waitForFunction(() => Boolean((window as any)._mini?.iceSanctum));
+
+  expect(await page.evaluate(() => (window as any)._mini.iceSanctum.hasEntered())).toBe(false);
+  expect(await page.evaluate(() => (window as any)._mini.iceSanctum.enter())).toBe(true);
+  await expect(page.locator('body')).toHaveClass(/ice-sanctum-active/);
+});
+
 test('leaving Ice sanctum before an ending still allows the resident to enter again', async ({ page }) => {
   stubIceProgression(page);
   await seedCityStorage(page, 'ice-interrupted-tester');
