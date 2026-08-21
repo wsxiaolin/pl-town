@@ -6,6 +6,7 @@ type BeachOptions = {
   scene: THREE.Scene;
   materialFor: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
+  getWaterRendering?: () => boolean;
 };
 
 export const WEST_BEACH_EVENT_POSITION = new THREE.Vector3(-39.2, 0, 11.5);
@@ -14,10 +15,10 @@ function addMesh(
   group: THREE.Group,
   options: BeachOptions,
   geometry: THREE.BufferGeometry,
-  material: Record<string, unknown>,
+  material: Record<string, unknown> | THREE.Material,
   position: readonly [number, number, number],
 ): THREE.Mesh {
-  const mesh = options.makeMesh(geometry, options.materialFor(material));
+  const mesh = options.makeMesh(geometry, material instanceof THREE.Material ? material : options.materialFor(material));
   mesh.position.set(...position);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -79,17 +80,30 @@ export function createWestBeach(options: BeachOptions): {
   const sand = addMesh(object, options, new THREE.PlaneGeometry(9, 58), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [-39.4, 0.07, 10]);
   sand.rotation.x = -Math.PI / 2;
   sand.renderOrder = 4;
-  const waterWidth = 66;
-  const waterLength = 140;
-  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, waterLength), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, -0.02, 10]);
+  const waterWidth = 106;
+  const waterLength = 180;
+  const waterGeometry = new THREE.PlaneGeometry(waterWidth, waterLength, 42, 56);
+  const waterBase = options.materialFor({ color: 0x2f789b, roughness: 0.2, metalness: 0.16, tex: 'water', rx: 32, ry: 42 });
+  const waterMaterial = options.getWaterRendering?.()
+    ? new THREE.MeshPhysicalMaterial({ color: 0x2f789b, roughness: 0.12, metalness: 0.22, clearcoat: 0.78, clearcoatRoughness: 0.08, reflectivity: 0.9, map: waterBase.map })
+    : waterBase;
+  const water = addMesh(object, options, waterGeometry, waterMaterial, [WEST_BEACH.coastlineX-waterWidth/2, -0.02, 10]);
+  water.rotation.x = -Math.PI / 2;
+  waterGeometry.computeVertexNormals();
   water.castShadow = false;
   water.renderOrder = 3;
-  const coastLine = addMesh(object, options, new THREE.BoxGeometry(0.12, 0.02, waterLength), { color: 0xf3e9d4, roughness: 0.55, transparent: true, opacity: 0.9, depthWrite: false }, [WEST_BEACH.coastlineX + 0.03, 0.095, 10]);
+  const coastLine = addMesh(object, options, new THREE.TubeGeometry(new THREE.LineCurve3(
+    new THREE.Vector3(WEST_BEACH.coastlineX + 0.03, 0.095, -waterLength / 2 + 10),
+    new THREE.Vector3(WEST_BEACH.coastlineX + 0.03, 0.095, waterLength / 2 + 10),
+  ), 48, 0.06, 5, false), { color: 0xf3e9d4, roughness: 0.42, transparent: true, opacity: 0.92, depthWrite: false }, [0, 0, 0]);
   coastLine.castShadow = false;
   coastLine.renderOrder = 5;
   const foams: THREE.Mesh[] = [];
   for (let index = 0; index < 4; index += 1) {
-    const foam = addMesh(object, options, new THREE.BoxGeometry(0.1, 0.025, waterLength), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72, depthWrite: false }, [WEST_BEACH.coastlineX - 0.55 - index * 0.72, 0.09, 10]);
+    const foam = addMesh(object, options, new THREE.TubeGeometry(new THREE.LineCurve3(
+      new THREE.Vector3(WEST_BEACH.coastlineX - 0.55 - index * 0.72, 0.10, -waterLength / 2 + 10),
+      new THREE.Vector3(WEST_BEACH.coastlineX - 0.55 - index * 0.72, 0.10, waterLength / 2 + 10),
+    ), 48, 0.045, 5, false), { color: 0xe9f3ef, roughness: 0.42, transparent: true, opacity: 0.64, depthWrite: false }, [0, 0, 0]);
     foam.userData.foamIndex = index;
     foams.push(foam);
   }
@@ -146,7 +160,20 @@ export function createWestBeach(options: BeachOptions): {
       }
       for (const foam of foams) {
         const index = foam.userData.foamIndex as number;
-        foam.position.x = WEST_BEACH.coastlineX - 0.55 - index * 0.72 + Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
+        foam.position.x = Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
+        foam.position.z = Math.cos(elapsedSeconds * 0.36 + index) * 0.55;
+      }
+      const position = water.geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let index = 0; index < position.count; index += 1) {
+        const x = position.getX(index);
+        const z = position.getZ(index);
+        position.setY(index, Math.sin(elapsedSeconds * 1.25 + x * 0.17 + z * 0.11) * 0.06 + Math.sin(elapsedSeconds * 2.1 + z * 0.23) * 0.025);
+      }
+      position.needsUpdate = true;
+      water.geometry.computeVertexNormals();
+      if (water.material instanceof THREE.MeshPhysicalMaterial) {
+        water.material.clearcoat = 0.72 + Math.sin(elapsedSeconds * 0.8) * 0.08;
+        water.material.needsUpdate = true;
       }
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {

@@ -14,6 +14,7 @@ interface SceneInterestPointOptionsInput {
   scene: THREE.Scene;
   makeMaterial: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
+  getWaterRendering?: () => boolean;
 }
 
 interface SceneInterestPointOptions extends SceneInterestPointOptionsInput {
@@ -370,7 +371,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       return material;
     },
   };
-  const westBeach = createWestBeach(options);
+  const westBeach = createWestBeach({ ...options, getWaterRendering: options.getWaterRendering });
   const list = [createCatCafeNote(options), createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options)];
   const entities = new Map(list.map((entity) => [entity.id, entity]));
   const storyEntities = ECHO_STORY_POINT_IDS

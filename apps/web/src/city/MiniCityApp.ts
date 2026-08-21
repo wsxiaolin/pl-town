@@ -61,6 +61,8 @@ import { createThemeClock } from './themeClock';
 import { createInteractionPointer } from './interactionPointer';
 import { showUnlockToast } from './toast';
 import { createInteractionTracker } from './interactionTracker';
+import { createNaturalBorder } from '../rendering/naturalBorder';
+import { createWeatherEffects } from '../rendering/weatherEffects';
 import { createSceneAnimations } from './sceneAnimations';
 import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
@@ -124,6 +126,8 @@ let buildingLabelController: ReturnType<typeof createBuildingLabelController>;
 let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController, academyController: AcademyController;
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof createWorldDecorations>;
+let naturalBorder: ReturnType<typeof createNaturalBorder>;
+let weatherEffects: ReturnType<typeof createWeatherEffects>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
@@ -236,6 +240,10 @@ const frameLoop = createFrameLoop({
   getBurnOverlay: () => burnCityEffect,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
+  updateWeatherEffects: (elapsedSeconds, activeCamera) => {
+    weatherEffects?.update(elapsedSeconds, activeCamera);
+    naturalBorder?.update(elapsedSeconds);
+  },
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
@@ -357,6 +365,7 @@ function init() {
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
+  weatherEffects = createWeatherEffects(scene, () => weather);
   window.addEventListener('minicity:textures-ready', () => {
     refreshWeather();
     proceduralTextures.refreshWeather();
@@ -366,6 +375,14 @@ function init() {
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
     getIsNight: () => isNight, makeMaterial: stdMat, makeMesh: mk, addPart: part,
     addRaycastGroup: (group) => raycastBuildingGroups.push(group),
+    addObstacleGroup: (group) => roadNavigation.registerObstacleGroup(group),
+  });
+  naturalBorder = createNaturalBorder({
+    scene,
+    makeMaterial: stdMat,
+    makeMesh: mk,
+    getWeather: () => weather,
+    getWaterRendering: () => readRenderSettings().waterRendering,
     addObstacleGroup: (group) => roadNavigation.registerObstacleGroup(group),
   });
   npcSystem = createNpcSystem({
@@ -421,7 +438,12 @@ function init() {
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => stdMat(parameters)),
   }).forEach(group => roadNavigation.registerObstacleGroup(group));
   cacheBuildingBoxes(); addDecorations(); addCharacters();
-  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
+  sceneInterestPoints = createSceneInterestPoints({
+    scene,
+    makeMaterial: stdMat,
+    makeMesh: mk,
+    getWaterRendering: () => readRenderSettings().waterRendering,
+  });
   addRealBuildingModels(scene, buildings)
     .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
     .catch(error => console.error('3D model loading failed', error));

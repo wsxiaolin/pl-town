@@ -23,6 +23,7 @@ export type FrameLoopOptions = {
   getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
+  updateWeatherEffects?: (elapsedSeconds: number, camera: THREE.Camera) => void;
   getBeachEncounterActive?: () => boolean;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
@@ -67,6 +68,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
       else options.getSceneInterestPointController()?.armBeachEncounter();
     }
     updateLabels();
+    options.updateWeatherEffects?.(now / 1000, options.getCamera());
     const renderer = options.getRenderer();
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
