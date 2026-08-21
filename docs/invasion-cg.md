@@ -9,9 +9,8 @@ CG 全程在与开场 CG 相同的独立覆盖层（`#cgOverlay`）内渲染，�
 CG 不接入任何界面按钮或剧情流程，只能在浏览器控制台调用：
 
 ```js
-window.playInvasionCG();   // 开始播放，返回是否成功
-window.stopInvasionCG();   // 立即停止并淡出
-window.__mini().invasionCG(); // 与 playInvasionCG() 等价
+window._mini.invasionCG();      // 开始播放，返回是否成功
+window._mini.stopInvasionCG();  // 立即停止并淡出
 ```
 
 播放中点击界面任意处或按 `Esc` 可退出；片名出现后约 9 秒自动退出。重复调用 `playInvasionCG()` 会干净地重启。若开场 CG 正在播放，会先终止其渲染循环再接管覆盖层。
@@ -52,5 +51,5 @@ window.__mini().invasionCG(); // 与 playInvasionCG() 等价
 
 - `apps/web/src/city/invasionCg.ts` — 引擎与全部绘制逻辑（< 1000 行，符合 `check:source-size`）。
 - `apps/web/src/city/cg.ts` — 开场 CG，本 CG 复用其 `#cgOverlay` DOM 与影院边框。
-- `apps/web/src/city/debugApi.ts` — 控制台 API 注册（`window.playInvasionCG` / `window.stopInvasionCG` / `__mini().invasionCG()`）。
+- `apps/web/src/city/debugApi.ts` — 控制台 API 注册（`window._mini.invasionCG()`）。
 - `apps/web/src/styles/modules/cg.css` — 复用的影院样式 + 新增的 `.cgm-*` 样式。

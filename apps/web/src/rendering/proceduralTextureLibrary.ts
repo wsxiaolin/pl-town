@@ -1,15 +1,102 @@
 import * as THREE from 'three';
 import type { ResourcePool } from '../core/ResourcePool';
+import groundCityColor from '../assets/textures/ground_city_color.png';
+import groundDistrictColor from '../assets/textures/ground_district_color.png';
+import groundGrassColor from '../assets/textures/ground_grass_color.png';
+import asphaltColor from '../assets/textures/road_asphalt_color.png';
+import pavementColor from '../assets/textures/road_pavement_color.png';
+import wallPlasterColor from '../assets/textures/wall_plaster_color.png';
+import stoneLightColor from '../assets/textures/stone_light_color.png';
+import brickWarmColor from '../assets/textures/brick_warm_color.png';
+import woodColor from '../assets/textures/wood_color.png';
+import metalColor from '../assets/textures/metal_color.png';
+import roofTileColor from '../assets/textures/rooftile_color.png';
+import shingleColor from '../assets/textures/residence_shingle_color.png';
+import wetAsphaltColor from '../assets/textures/road_asphalt_wet_color.png';
+import snowGroundColor from '../assets/textures/snow_ground_color.png';
+import snowRoofColor from '../assets/textures/snow_roof_color.png';
+import sandColor from '../assets/textures/sand_color.png';
+import mossGroundColor from '../assets/textures/ground_moss_color.png';
+import concreteWornColor from '../assets/textures/concrete_worn_color.png';
+import redBrickColor from '../assets/textures/brick_red_color.png';
+import puddleAsphaltColor from '../assets/textures/puddle_asphalt_color.png';
+import type { Weather } from '../city/weather';
+import { weatherTextureKey } from './weatherTextureVariants';
+import { isTextureResourceAvailable } from '../city/textureResourcePreloader';
 
 type Canvas2D = CanvasRenderingContext2D;
 type DrawFn = (ctx: Canvas2D, size: number) => void;
 type RGB = [number, number, number];
 
+const GENERATED_FACADES = import.meta.glob('../assets/textures/facade_*_color.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+const GENERATED_WEATHER_TEXTURES = import.meta.glob('../assets/textures/{residence_*,road_*}_color.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+
+/** Canvas fallbacks for generated facade keys used by the canvas (low-preset) path. */
+const FACADE_CANVAS_FALLBACK: Record<string, string> = {
+  facade_bank_plaster: 'wall', facade_utility_concrete: 'concrete_worn', facade_tower_glass: 'glass', facade_darktower_glass: 'glass', facade_temple_stone: 'stone', facade_library_stone: 'stone', facade_ruin_stone: 'stone', facade_school_cream: 'wall', facade_kiosk_woodglass: 'wood', facade_observatory_concrete: 'concrete_worn', facade_market_awning: 'wall', facade_greenhouse_glass: 'glass', facade_clocktower_brick: 'brick', facade_factory_brick: 'brick', facade_community_brick: 'brick',
+  facade_residence_cream: 'residence_plaster',
+  residence_cream: 'residence_plaster',
+  residence_redbrick: 'brick',
+  residence_bluepanel: 'residence_panel',
+  residence_palestone: 'stone',
+  residence_clapboard: 'residence_panel',
+  residence_mossplaster: 'residence_plaster',
+  residence_terracotta_roof: 'rooftile',
+  residence_slate_roof: 'residence_shingle',
+  residence_green_roof: 'residence_tile',
+  facade_residence_bluepanel: 'residence_panel',
+  facade_residence_stone: 'stone',
+  facade_residence_darkwood: 'residence_wood',
+  facade_residence_moss: 'residence_tile',
+};
+
+const GENERATED_TEXTURES: Record<string, string> = {
+  ground6: groundCityColor,
+  ground2: groundDistrictColor,
+  ground4: groundGrassColor,
+  ground5: groundDistrictColor,
+  asphalt: asphaltColor,
+  road: asphaltColor,
+  pavement: pavementColor,
+  wall: wallPlasterColor,
+  residence_plaster: wallPlasterColor,
+  stone: stoneLightColor,
+  brick: brickWarmColor,
+  academybrick: brickWarmColor,
+  wood: woodColor,
+  residence_wood: woodColor,
+  metal: metalColor,
+  rooftile: roofTileColor,
+  residence_tile: roofTileColor,
+  residence_shingle: shingleColor,
+  ground: sandColor,
+  moss_ground: mossGroundColor,
+  concrete_worn: concreteWornColor,
+  brick_red: redBrickColor,
+  puddle_asphalt: puddleAsphaltColor,
+  facade_residence_cream: GENERATED_FACADES['../assets/textures/facade_residence_cream_color.png'] ?? '',
+  facade_residence_bluepanel: GENERATED_FACADES['../assets/textures/facade_residence_bluepanel_color.png'] ?? '',
+  facade_residence_stone: GENERATED_FACADES['../assets/textures/facade_residence_stone_color.png'] ?? '',
+  facade_residence_darkwood: GENERATED_FACADES['../assets/textures/facade_residence_darkwood_color.png'] ?? '',
+  facade_residence_moss: GENERATED_FACADES['../assets/textures/facade_residence_moss_color.png'] ?? '',
+};
+
 export function createProceduralTextureLibrary(
   resources: ResourcePool,
   getRenderer: () => THREE.WebGLRenderer | null | undefined,
   getAnisotropy: () => number,
+  getWeather: () => Weather,
+  getTextureRendering: () => boolean,
 ) {
+  const facadeMaterials = new Set<THREE.MeshStandardMaterial>();
   const _texCanvases: Record<string, HTMLCanvasElement> = {};
   function _canvas(key: string, size: number, drawFn: DrawFn) {
     if (!_texCanvases[key]) {
@@ -21,12 +108,38 @@ export function createProceduralTextureLibrary(
     return _texCanvases[key];
   }
   function _tex(key: string, rx = 1, ry = 1) {
-    const c = _texCanvases[key];
+    const weather = getWeather();
+    const generatedKey = weatherTextureKey(key, weather);
+    const generatedSource = GENERATED_TEXTURES[generatedKey]
+      ?? GENERATED_WEATHER_TEXTURES[`../assets/textures/${generatedKey}_color.png`]
+      ?? (generatedKey === 'wet_asphalt' ? puddleAsphaltColor
+        : generatedKey === 'snow_ground' ? snowGroundColor
+          : generatedKey === 'snow_roof' ? snowRoofColor
+            : undefined);
+    if (getTextureRendering() && generatedSource && isTextureResourceAvailable(generatedSource)) {
+      return resources.texture(`generated:repeat:${generatedKey}:${rx || 1}:${ry || 1}`, () => {
+        const t = new THREE.TextureLoader().load(generatedSource);
+        t.name = `generated_${generatedKey}`;
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+        t.colorSpace = THREE.SRGBColorSpace;
+        const renderer = getRenderer();
+        t.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), getAnisotropy()) : 1;
+        t.repeat.set(rx || 1, ry || 1);
+        return t;
+      });
+    }
+    const canvasKey = _texCanvases[generatedKey]
+      ? generatedKey
+      : (FACADE_CANVAS_FALLBACK[key] && _texCanvases[FACADE_CANVAS_FALLBACK[key]])
+        ? FACADE_CANVAS_FALLBACK[key]
+        : key;
+    const c = _texCanvases[canvasKey];
     if (!c) return null;
     const repeatX = rx || 1, repeatY = ry || 1;
-    return resources.texture(`repeat:${key}:${repeatX}:${repeatY}`, () => {
+    return resources.texture(`repeat:${canvasKey}:${key}:${repeatX}:${repeatY}`, () => {
       const t = new THREE.CanvasTexture(c);
-      t.name = key;
+      t.name = canvasKey;
       t.wrapS = THREE.RepeatWrapping;
       t.wrapT = THREE.RepeatWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -37,10 +150,25 @@ export function createProceduralTextureLibrary(
     });
   }
   function _texClamp(key: string) {
-    const c = _texCanvases[key];
+    const facadeSource = GENERATED_FACADES[`../assets/textures/${key}_color.png`];
+    if (getTextureRendering() && facadeSource && isTextureResourceAvailable(facadeSource)) {
+      return resources.texture(`generated:clamp:${key}`, () => {
+        const texture = new THREE.TextureLoader().load(facadeSource);
+        texture.name = `generated_${key}`;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const renderer = getRenderer();
+        texture.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy(), getAnisotropy()) : 1;
+        return texture;
+      });
+    }
+    const canvasKey = FACADE_CANVAS_FALLBACK[key] ?? key;
+    const c = _texCanvases[canvasKey];
     if (!c) return null;
     return resources.texture(`clamp:${key}`, () => {
       const t = new THREE.CanvasTexture(c);
+      t.name = canvasKey;
       t.wrapS = THREE.ClampToEdgeWrapping;
       t.wrapT = THREE.ClampToEdgeWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -55,12 +183,42 @@ export function createProceduralTextureLibrary(
     const mat = resources.material({ kind:'facade', texKey }, () =>
       new THREE.MeshStandardMaterial({ map: t, roughness: 0.65, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
     );
+    facadeMaterials.add(mat);
+    mat.name = `generated_${texKey}`;
+    mat.userData.weatherBaseColor = mat.color.clone();
+    mat.userData.weatherBaseRoughness = mat.roughness;
+    mat.userData.weatherBaseMetalness = mat.metalness;
     const facade = new THREE.Mesh(resources.geometry(new THREE.PlaneGeometry(w, h)), mat);
     facade.position.set(0, y, zOffset);
     if (rotY) facade.rotation.y = rotY;
     facade.castShadow = true; facade.receiveShadow = true;
     g.add(facade);
     return facade;
+  }
+
+  function refreshWeather(): void {
+    const weather = getWeather();
+    for (const material of facadeMaterials) {
+      const key = material.name.replace(/^generated_/, '');
+      const texture = _texClamp(key);
+      if (texture) material.map = texture;
+      const baseColor = (material.userData.weatherBaseColor as THREE.Color | undefined)?.clone() ?? new THREE.Color(0xffffff);
+      const baseRoughness = Number(material.userData.weatherBaseRoughness ?? 0.65);
+      const baseMetalness = Number(material.userData.weatherBaseMetalness ?? 0.05);
+      material.color.copy(baseColor);
+      material.roughness = baseRoughness;
+      material.metalness = baseMetalness;
+      if (weather === 'rain') {
+        material.roughness = Math.min(baseRoughness, 0.24);
+        material.metalness = Math.max(baseMetalness, 0.08);
+        material.color.multiplyScalar(0.78);
+      } else if (weather === 'snow' || weather === 'snow-deep') {
+        material.roughness = Math.max(baseRoughness, 0.85);
+        material.metalness = Math.min(baseMetalness, 0.02);
+        material.color.multiplyScalar(1.12);
+      }
+      material.needsUpdate = true;
+    }
   }
   function _noise(ctx: Canvas2D, size: number, amount: number) {
     const img = ctx.getImageData(0, 0, size, size);
@@ -431,7 +589,38 @@ export function createProceduralTextureLibrary(
       }
       _noise(ctx, s, 0.025);
     });
-  
+
+    // --- Wet asphalt: dark rain-slicked road with puddle sheen ---
+    _canvas('wet_asphalt', 256, (ctx, s) => {
+      ctx.fillStyle = '#2E3036'; ctx.fillRect(0, 0, s, s);
+      for (let i = 0; i < 800; i++) {
+        const x = Math.random()*s, y = Math.random()*s;
+        const sh = Math.random();
+        ctx.fillStyle = sh > 0.5 ? 'rgba(70,72,82,0.5)' : 'rgba(20,22,28,0.5)';
+        ctx.fillRect(x, y, 1.5, 1.5);
+      }
+      for (let i = 0; i < 6; i++) {
+        ctx.strokeStyle = 'rgba(16,18,24,0.55)'; ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        const x = Math.random()*s, y = Math.random()*s;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*40);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 14; i++) {
+        const x = Math.random()*s, y = Math.random()*s, r = 6 + Math.random()*18;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(150,180,220,0.28)');
+        g.addColorStop(0.55, 'rgba(120,150,200,0.14)');
+        g.addColorStop(1, 'rgba(120,150,200,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r*2, r*2);
+      }
+      ctx.fillStyle = 'rgba(200,220,255,0.10)';
+      for (let i = 0; i < 40; i++) ctx.fillRect(Math.random()*s, Math.random()*s, 18 + Math.random()*22, 1);
+      _noise(ctx, s, 0.02);
+    });
+
     // --- Crosswalk: white stripes on dark for intersections ---
     _canvas('crosswalk', 256, (ctx, s) => {
       ctx.fillStyle = '#3A3D44'; ctx.fillRect(0, 0, s, s);
@@ -797,6 +986,7 @@ export function createProceduralTextureLibrary(
     initialize: initTextures,
     repeat: _tex,
     addFacade,
+    refreshWeather,
     backgrounds: TEX,
   };
 }

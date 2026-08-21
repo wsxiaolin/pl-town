@@ -7,7 +7,7 @@ async function enterCity(page: import('@playwright/test').Page) {
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
   });
   await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any).__mini?.().player));
+  await page.waitForFunction(() => Boolean((window as any)._mini?.player));
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
   // Let the boot-screen fade settle before interacting (see helpers.waitForCityBooted).
   await page.waitForTimeout(1_000);
@@ -16,14 +16,14 @@ async function enterCity(page: import('@playwright/test').Page) {
 test('desktop keyboard moves the player while the touch wheel stays hidden', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
-  const before = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+  const before = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
   // Under software-GL / parallel load the frame loop advances slower, so a
   // fixed 350ms wait under-shoots the 0.1 threshold (see the touch-tablet test
   // below, which polls for the same reason). Poll until the player actually
   // travels, then confirm the key release stopped it.
   await page.keyboard.down('KeyW');
   await expect.poll(async () => {
-    const pos = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+    const pos = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
     return Math.hypot(pos[0] - before[0], pos[2] - before[2]);
   }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.1);
   await page.keyboard.up('KeyW');
@@ -34,7 +34,7 @@ test('canvas click keeps automatic movement and produces a collision-safe route'
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const result = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     const point = new mini.THREE.Vector3(0, 0, -20).project(mini.camera);
     const target = { x: (point.x + 1) * innerWidth / 2, y: (1 - point.y) * innerHeight / 2 };
     document.querySelector('#c')!.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: target.x, clientY: target.y }));
@@ -49,7 +49,7 @@ test('Wushi restaurant model, dialogue, and Shinian teleport are available', asy
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const model = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     const parts: string[] = [];
     const box = new mini.THREE.Box3();
     mini.scene.traverse((object: any) => {
@@ -64,16 +64,16 @@ test('Wushi restaurant model, dialogue, and Shinian teleport are available', asy
   expect(model.size[0]).toBeGreaterThan(5);
   expect(model.size[2]).toBeGreaterThan(3.5);
 
-  await page.evaluate(() => (window as any).__mini().interactNpc('shinian_mengyanyu'));
+  await page.evaluate(() => (window as any)._mini.interactNpc('shinian_mengyanyu'));
   await expect(page.locator('#npcName')).toHaveText('时年梦烟雨');
   await page.locator('.npc-opt').filter({ hasText: '关于物实饭店？' }).click();
   await page.locator('.npc-opt').filter({ hasText: '我要去！' }).click();
   const distance = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     return mini.player.position.distanceTo(new mini.THREE.Vector3(-22.5, 0, -15));
   });
   expect(distance).toBeLessThan(8);
-  await page.evaluate(() => (window as any).__mini().openBuildingDialog('wushi_restaurant'));
+  await page.evaluate(() => (window as any)._mini.openBuildingDialog('wushi_restaurant'));
   await expect(page.locator('#npcName')).toHaveText('物实饭店');
   await expect(page.locator('#npcLine')).toContainText('为什么还会有饭店');
   await page.locator('.npc-opt').filter({ hasText: '认真读小字' }).click();
@@ -84,7 +84,7 @@ test('generated resident houses block manual movement', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const collision = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     let residence: any = null;
     mini.scene.traverse((object: any) => {
       if (!residence && object.userData?.residenceId) residence = object.parent;
@@ -109,7 +109,7 @@ test('city renders twelve residence models and the modeled west beach', async ({
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const sceneContent = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     const styles = new Set<number>();
     const textures = new Set<string>();
     mini.scene.traverse((object: any) => {
@@ -138,7 +138,7 @@ test('repeated clicks keep an active automatic route', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const lengths = await page.evaluate(() => {
-    const mini = (window as any).__mini();
+    const mini = (window as any)._mini;
     const canvas = document.querySelector('#c')!;
     return [
       new mini.THREE.Vector3(0, 0, -20),
@@ -166,7 +166,7 @@ test.describe('touch-capable tablet', () => {
     const bounds = await control.boundingBox();
     expect(bounds).not.toBeNull();
     const start = { x: bounds!.x + 86, y: bounds!.y + 110 };
-    const before = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+  const before = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
     const client = await page.context().newCDPSession(page);
     await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }] });
     await expect(base).toHaveCSS('opacity', '1');
@@ -175,7 +175,7 @@ test.describe('touch-capable tablet', () => {
     // fixed 350ms wait under-shoots the 0.3 threshold. Poll for the player to
     // actually travel past it instead of asserting on a single snapshot.
     await expect.poll(async () => {
-      const after = await page.evaluate(() => (window as any).__mini().player.position.clone().toArray());
+      const after = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
       return Math.hypot(after[0] - before[0], after[2] - before[2]);
     }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.3);
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -185,12 +185,12 @@ test.describe('touch-capable tablet', () => {
   test('camera keeps the city orientation while approaching Linche', async ({ page }) => {
     await enterCity(page);
     await page.evaluate(() => {
-      const mini = (window as any).__mini();
+      const mini = (window as any)._mini;
       mini.player.position.set(50, 0, 0);
     });
     await page.waitForTimeout(200);
     const cameraDirection = await page.evaluate(() => {
-      const mini = (window as any).__mini();
+      const mini = (window as any)._mini;
       return mini.camera.getWorldDirection(new mini.THREE.Vector3()).toArray();
     });
     expect(cameraDirection[0]).toBeLessThan(0);
@@ -201,7 +201,7 @@ test.describe('touch-capable tablet', () => {
 test('eternal retirement monument shows the memorial roster overlay on the elevator', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
-  await page.evaluate(() => (window as any).__mini().openBuildingDialog('elevator'));
+  await page.evaluate(() => (window as any)._mini.openBuildingDialog('elevator'));
   const overlay = page.locator('#memorialOverlay');
   await expect(overlay).toHaveClass(/open/);
   await expect(page.locator('#memorialTitle')).toHaveText('物实永退用户纪念碑');

@@ -69,6 +69,8 @@ import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
+import { isWeather, type Weather } from './weather';
+import { preloadTextureResources } from './textureResourcePreloader';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -78,15 +80,18 @@ const labelWorldPosition = new THREE.Vector3();
 const MOBILE  = () => window.innerWidth <= 680;
 const REDUCED = false;
 const P = PALETTE;
+let weather: Weather = 'clear';
 const proceduralTextures = createProceduralTextureLibrary(
   resources,
   () => renderer,
   () => readRenderSettings().anisotropy,
+  () => weather,
+  () => readRenderSettings().textureRendering,
 );
 const TEX = proceduralTextures.backgrounds;
 const _tex = proceduralTextures.repeat;
 const addFacade = proceduralTextures.addFacade;
-const { stdMat, mk, part }: MeshHelpers = createMeshHelpers(resources, _tex);
+const { stdMat, mk, part, refreshWeather }: MeshHelpers = createMeshHelpers(resources, _tex, () => weather);
 
 let renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera;
 const pathMats: THREE.MeshStandardMaterial[] = [], groundMats: { mat: THREE.MeshStandardMaterial; night: number; day: number }[] = [], lampGlobes: THREE.MeshStandardMaterial[] = [], buildings: BuildingEntity[] = [], npcList: Npc[] = [];
@@ -339,6 +344,8 @@ let UNLOCK_TIERS = createUnlockTiers(
 function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
 function init() {
+  document.body.dataset.weather = weather;
+  updateWeatherState(weather);
   setupRenderer();
   cameraController = createCameraController({
     getCamera: () => camera,
@@ -350,6 +357,10 @@ function init() {
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
+  window.addEventListener('minicity:textures-ready', () => {
+    refreshWeather();
+    proceduralTextures.refreshWeather();
+  }, { once: true, signal: eventController.signal });
   worldDecorations = createWorldDecorations({
     scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
@@ -427,6 +438,7 @@ function init() {
     mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
     isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
+    setWeather: (value) => updateWeatherState(value),
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -611,7 +623,9 @@ function init() {
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
   initAnimations();
-  clockInterval = window.setInterval(syncTimeAndTheme, 1000);
+  clockInterval = window.setInterval(() => {
+    syncTimeAndTheme();
+  }, 1000);
   syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
@@ -665,6 +679,8 @@ function setupScene() {
     burnCityProgress: () => burnCityEffect.getProgress(),
     playInvasionCG: startInvasionCG,
     stopInvasionCG,
+    getWeather: () => weather,
+    setWeather: (value) => updateWeatherState(value),
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -764,6 +780,15 @@ function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionP
 
 function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
+
+function updateWeatherState(next: Weather): void {
+  if (!isWeather(next)) return;
+  document.body.dataset.weather = next;
+  if (next === weather) return;
+  weather = next;
+  refreshWeather();
+  proceduralTextures.refreshWeather();
+}
 
 function entranceAnimation() { sceneAnimations.entranceAnimation(); }
 function initAnimations() { sceneAnimations.initAnimations(); }
@@ -872,6 +897,15 @@ export function startMiniCity() {
   if(started)return;
   started=true;
   eventController=new AbortController();
+  void preloadTextureResources(readRenderSettings().textureRendering, eventController.signal).then(() => {
+    if (!started) return;
+    try { init(); } catch (error) { console.error('City initialization failed', error); }
+    window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+  }).catch(() => {
+    if (!started) return;
+    try { init(); } catch (error) { console.error('City initialization failed', error); }
+    window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+  });
   initCG({
     onFinish: () => {
       showUnlockToast('全屏效果更好哦');
@@ -882,7 +916,6 @@ export function startMiniCity() {
   });
   document.body.classList.remove('day','night');
   document.body.classList.add(isNight?'night':'day');
-  init();
 }
 
 export function destroyMiniCity() {

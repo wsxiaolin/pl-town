@@ -38,6 +38,8 @@ npm run test:server
 Run one application directly with `npm run dev -w @minicity/web` or
 `npm run dev -w @minicity/server`.
 
+控制台调试命令见 [docs/console-debug-api.md](docs/console-debug-api.md)。
+
 Set `VITE_SERVER_URL` for a non-default WebSocket endpoint. The server includes
 a light administration UI at `/admin/`, verified automatic SQLite backups, and
 an offline restore command. See [server documentation](apps/server/README.md),

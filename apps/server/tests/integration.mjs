@@ -224,6 +224,28 @@ try {
   charlie = await connect('Charlie');
   await waitFor(alice, 'player.joined', (message) => message.player.id === charlie.hello.user.id);
 
+  if (alice.hello.weather !== 'clear') throw new Error(`New residents must receive the current server weather, got ${alice.hello.weather}`);
+  const initialWeather = await fetch(`${adminBase}/weather`, { headers: { cookie } });
+  const initialWeatherPayload = await initialWeather.json();
+  if (!initialWeather.ok || initialWeatherPayload.weather !== 'clear') throw new Error('Admin weather GET must return the current server weather');
+  const weatherUpdate = await fetch(`${adminBase}/weather`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ weather: 'rain' }),
+  });
+  const weatherUpdatePayload = await weatherUpdate.json();
+  if (!weatherUpdate.ok || weatherUpdatePayload.weather !== 'rain') throw new Error('Admin weather POST must accept a valid weather value');
+  for (const client of [alice, bob, charlie]) {
+    const weatherMessage = await waitFor(client, 'world.weather', (message) => message.weather === 'rain');
+    if (weatherMessage.weather !== 'rain') throw new Error('Weather updates must broadcast the new server weather');
+  }
+  const restoredWeather = await fetch(`${adminBase}/weather`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ weather: 'clear' }),
+  });
+  if (!restoredWeather.ok) throw new Error('Integration setup must restore the default server weather');
+
   const overview = await fetch(`${adminBase}/overview`, { headers: { cookie } });
   const overviewPayload = await overview.json();
   if (!overview.ok || overviewPayload.summary.users !== 3 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');

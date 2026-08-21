@@ -66,3 +66,13 @@ Entries discovered by the Agent during task execution should follow this format:
 - Instructions:
   - Before changing workflow or application behavior, inspect the actual failure logs and confirm the root cause.
   - Keep unrelated configuration unchanged and avoid speculative fixes.
+
+[Project Knowledge Summary]
+- Date: 2026-08-20
+- Context: Discovered by Agent while pushing branch `260819-feat-texture-rendering-weather` and creating PR for pl-town
+- Category: Environment Configuration
+- Instructions:
+  - GitHub repository `wsxiaolin/pl-town` is cloned via HTTPS, but the default git credential helper (`/app/agent/bin/agent git-credential-helper`) returns HTTP 500 for any host and cannot provide GitHub credentials.
+  - To push or create PRs, authenticate via GitHub CLI device flow: run `gh auth login --hostname github.com --git-protocol https --web --skip-ssh-key` in a background terminal, read the one-time code from the log, have the user complete the browser flow, then run `gh auth setup-git`.
+  - Git identity for this repo: `user.name=wsxiaolin`, `user.email=xiegushi2022@outlook.com` (set locally in the repo).
+  - PR for the texture/weather branch is https://github.com/wsxiaolin/pl-town/pull/100.

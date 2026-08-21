@@ -6,6 +6,60 @@
   height: 100%;
   display: block;
 }
+.weather-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  overflow: hidden;
+}
+body[data-weather="rain"] .weather-overlay {
+  opacity: 0.2;
+  background: radial-gradient(ellipse at 50% 0%, rgba(184, 202, 222, 0.12), transparent 62%);
+}
+body[data-weather="rain"] .weather-overlay::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  opacity: 0.65;
+  filter: blur(1.2px);
+  background-image:
+    radial-gradient(ellipse 1px 7px at 8% 15%, rgba(205, 223, 244, 0.4) 0 45%, transparent 58%),
+    radial-gradient(ellipse 1px 5px at 31% 68%, rgba(205, 223, 244, 0.28) 0 45%, transparent 58%),
+    radial-gradient(ellipse 1px 8px at 67% 37%, rgba(205, 223, 244, 0.34) 0 45%, transparent 58%),
+    radial-gradient(ellipse 1px 6px at 91% 82%, rgba(205, 223, 244, 0.25) 0 45%, transparent 58%);
+  background-size: 180px 240px, 230px 310px, 260px 360px, 210px 280px;
+  animation: weatherRain 2.4s linear infinite;
+}
+body[data-weather="rain"] .weather-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.42;
+  background-image:
+    radial-gradient(ellipse 2px 1px at 18% 28%, rgba(214, 229, 246, 0.46) 0 45%, transparent 60%),
+    radial-gradient(ellipse 2px 1px at 54% 74%, rgba(214, 229, 246, 0.35) 0 45%, transparent 60%),
+    radial-gradient(ellipse 1px 1px at 82% 46%, rgba(214, 229, 246, 0.4) 0 45%, transparent 60%);
+  background-size: 310px 260px, 390px 330px, 270px 300px;
+  animation: weatherDrizzle 4.5s ease-in-out infinite alternate;
+}
+body[data-weather="snow"] .weather-overlay {
+  opacity: 0.58;
+  background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.85) 0 2px, transparent 3px), radial-gradient(circle at 60% 40%, rgba(255,255,255,0.8) 0 3px, transparent 4px), radial-gradient(circle at 35% 80%, rgba(255,255,255,0.75) 0 2px, transparent 3px);
+  background-size: 170px 170px, 230px 230px, 190px 190px;
+  animation: weatherSnow 5s linear infinite;
+}
+body[data-weather="snow-deep"] .weather-overlay {
+  opacity: 0.72;
+  background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.9) 0 3px, transparent 4px), radial-gradient(circle at 60% 40%, rgba(255,255,255,0.86) 0 4px, transparent 5px), radial-gradient(circle at 35% 80%, rgba(255,255,255,0.82) 0 3px, transparent 4px);
+  background-size: 145px 145px, 200px 200px, 165px 165px;
+  animation: weatherSnow 5s linear infinite;
+}
+@keyframes weatherRain { from { background-position: 0 -120px, 0 -160px, 0 -220px, 0 -140px; } to { background-position: -18px 180px, -24px 210px, -28px 260px, -14px 190px; } }
+@keyframes weatherDrizzle { from { transform: translate3d(0, -5px, 0); } to { transform: translate3d(-4px, 8px, 0); } }
+@keyframes weatherSnow { from { background-position: 0 -160px, 30px -210px, -20px -120px; } to { background-position: 40px 160px, -20px 210px, 30px 120px; } }
 .movement-control {
   display: none;
   position: fixed;

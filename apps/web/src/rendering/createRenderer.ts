@@ -6,6 +6,7 @@ export type RenderSettings = {
   anisotropy: number;
   shadows: boolean;
   exposure: number;
+  textureRendering: boolean;
 };
 
 export const RENDER_SETTINGS_KEY = 'minicityRenderSettings';
@@ -17,6 +18,7 @@ const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   anisotropy: 16,
   shadows: false,
   exposure: 1.18,
+  textureRendering: false,
 };
 
 export function readRenderSettings(): RenderSettings {
@@ -29,6 +31,7 @@ export function readRenderSettings(): RenderSettings {
         anisotropy: [1, 4, 8, 16].includes(Number(saved.anisotropy)) ? Number(saved.anisotropy) : 16,
         shadows: Boolean(saved.shadows),
         exposure: Math.max(0.8, Math.min(1.5, Number(saved.exposure) || 1.18)),
+        textureRendering: Boolean(saved.textureRendering),
       };
     }
   } catch { /* Use defaults when storage contains invalid data. */ }

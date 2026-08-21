@@ -10,7 +10,7 @@ import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
-import type { ClientMessage, Position, ServerMessage, User } from './types.js';
+import type { ClientMessage, Position, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
@@ -45,6 +45,7 @@ const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // budget used by WebSocket `hello` logins. Password sign-ins still use the
 // global limiter to stay consistent with the game login path.
 const npcEditTokenRestoreRate = new FixedWindowRateLimiter(20, 60_000);
+let serverWeather: Weather = 'clear';
 // The edit page only needs the identity fields for its dropdown; the full
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
@@ -66,6 +67,8 @@ function broadcastHousingState() {
   }, 50);
   housingBroadcastTimer.unref();
 }
+function broadcastWeather() { broadcast({ type: 'world.weather', weather: serverWeather }); }
+setInterval(broadcastWeather, 60_000).unref();
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;
@@ -143,7 +146,7 @@ async function handle(client: Client, raw: string) {
     if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
-    send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), ...progressState(client.user.id) });
+    send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
     broadcast({ type: 'player.joined', player: client.user }, client.user.id); client.authInProgress = false; return;
   }
   requireReady(client, () => {
@@ -323,6 +326,8 @@ const http = createServer(async (request, response) => {
     disconnectAll: () => { for (const client of clients.values()) client.socket.close(4003, 'Database restored'); },
     broadcastHousing: broadcastHousingState,
     startedAt,
+    getWeather: () => serverWeather,
+    setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
   })) return;
   const headers = jsonSecurityHeaders;
   if (request.url === '/healthz') { response.writeHead(200, headers); response.end(JSON.stringify({ ok: true })); return; }
