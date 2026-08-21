@@ -3,6 +3,7 @@ import type { QuestProgressView } from '../quests/types';
 export type PlayerProgress = {
   currency: number;
   inventory: Record<string, number>;
+  repeatableRewardClaims: Record<string, number>;
   achievements: string[];
   unlockedBuildings: string[];
   visitedBuildings: string[];
@@ -27,12 +28,15 @@ export type ProgressionEvent = {
   quantity?: number;
   purchased?: boolean;
   claimed?: boolean;
+  accepted?: boolean;
+  claimSequence?: number;
   welcomeItemsGranted?: boolean;
 };
 
 export const EMPTY_PLAYER_PROGRESS: PlayerProgress = {
   currency: 0,
   inventory: {},
+  repeatableRewardClaims: {},
   achievements: [],
   unlockedBuildings: [],
   visitedBuildings: [],
@@ -68,17 +72,24 @@ const validStringArray = (value: unknown): string[] => Array.isArray(value)
   : [];
 
 export function normalizePlayerProgress(value: unknown): PlayerProgress {
-  if (!value || typeof value !== 'object') return { ...EMPTY_PLAYER_PROGRESS, inventory: {} };
+  if (!value || typeof value !== 'object') return { ...EMPTY_PLAYER_PROGRESS, inventory: {}, repeatableRewardClaims: {} };
   const input = value as Partial<PlayerProgress>;
   const inventory: Record<string, number> = {};
+  const repeatableRewardClaims: Record<string, number> = {};
   if (input.inventory && typeof input.inventory === 'object') {
     Object.entries(input.inventory).forEach(([itemId, quantity]) => {
       if (Number.isInteger(quantity) && Number(quantity) > 0) inventory[itemId] = Number(quantity);
     });
   }
+  if (input.repeatableRewardClaims && typeof input.repeatableRewardClaims === 'object') {
+    Object.entries(input.repeatableRewardClaims).forEach(([rewardId, count]) => {
+      if (Number.isSafeInteger(count) && Number(count) >= 0) repeatableRewardClaims[rewardId] = Number(count);
+    });
+  }
   return {
     currency: Number.isInteger(input.currency) && Number(input.currency) >= 0 ? Number(input.currency) : 0,
     inventory,
+    repeatableRewardClaims,
     achievements: validStringArray(input.achievements),
     unlockedBuildings: validStringArray(input.unlockedBuildings),
     visitedBuildings: validStringArray(input.visitedBuildings),

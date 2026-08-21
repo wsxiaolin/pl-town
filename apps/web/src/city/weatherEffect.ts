@@ -1,8 +1,7 @@
 import * as THREE from 'three';
+import type { Weather } from './weather';
 
-export type CityWeather = 'rain' | 'sunny' | null;
-
-export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: () => THREE.Object3D | null }) {
+export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: () => THREE.Object3D | null; restoreSky: () => void }) {
   const rain = new THREE.Points(
     new THREE.BufferGeometry(),
     new THREE.PointsMaterial({ color: 0x9bc4d8, size: 0.09, transparent: true, opacity: 0.7, depthWrite: false }),
@@ -17,15 +16,19 @@ export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: ()
   rain.visible = false;
   rain.frustumCulled = false;
   options.scene.add(rain);
-  let weather: CityWeather = null;
+  let weather: Weather = 'clear';
 
-  function set(next: Exclude<CityWeather, null>): void {
+  function set(next: Weather): void {
     weather = next;
     rain.visible = next === 'rain';
     document.body.dataset.cityWeather = next;
-    options.scene.background = new THREE.Color(next === 'rain' ? 0x778f9e : 0xbddbf3);
-    if (next === 'rain') options.scene.fog = new THREE.Fog(0x9eb7bc, 24, 95);
-    else options.scene.fog = null;
+    if (next === 'rain') {
+      options.scene.background = new THREE.Color(0x778f9e);
+      options.scene.fog = new THREE.Fog(0x9eb7bc, 24, 95);
+      return;
+    }
+    options.scene.fog = null;
+    options.restoreSky();
   }
 
   function update(delta: number): void {
@@ -42,9 +45,12 @@ export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: ()
   }
 
   function dispose(): void {
+    rain.visible = false;
     rain.removeFromParent();
     rain.geometry.dispose();
     (rain.material as THREE.Material).dispose();
+    options.scene.fog = null;
+    options.restoreSky();
     delete document.body.dataset.cityWeather;
   }
 

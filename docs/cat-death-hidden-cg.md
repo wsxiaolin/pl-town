@@ -9,13 +9,13 @@
 打开 MiniCity 页面，等待城市加载完成，然后在浏览器开发者工具的 Console 中执行：
 
 ```js
-window.__mini?.().cinematics.playCatDeath()
+window._mini?.cinematics.playCatDeath()
 ```
 
 命令会返回播放句柄，可监听结束原因：
 
 ```js
-const cg = window.__mini?.().cinematics.playCatDeath()
+const cg = window._mini?.cinematics.playCatDeath()
 cg?.finished.then(reason => console.log('CG ended:', reason))
 ```
 
@@ -26,13 +26,13 @@ cg?.finished.then(reason => console.log('CG ended:', reason))
 播放中按 `Esc`、点击右上角“跳过”，或者执行：
 
 ```js
-window.__mini?.().cinematics.stopCatDeath()
+window._mini?.cinematics.stopCatDeath()
 ```
 
 查询当前是否正在播放：
 
 ```js
-window.__mini?.().cinematics.isCatDeathActive()
+window._mini?.cinematics.isCatDeathActive()
 ```
 
 ## 剧情补全
@@ -44,4 +44,4 @@ window.__mini?.().cinematics.isCatDeathActive()
 - CG 使用单个 Canvas 2D 和一条约 88 秒的连续时间轴，长对白与关键旁白保留 4–5 秒阅读时间；原野、猫咖、风暴和雨后荒野通过叠化权重交接，最后用 5 秒黑幕淡入并缓慢返回地图。
 - 相邻字幕有重叠时间，使用两个字幕平面交叉淡化，切换过程中没有空白字幕帧。
 - 草浪、蒲公英、暖阳、尘埃、雨线、雷光、猫的动作、墓地土丘和远去脚印均为程序绘制，没有新增图片资源。
-- 正常入口是猫咖馆后方冰墙；隐藏调试对象 `window.__mini()` 仅用于开发验收，没有顶层全局快捷函数。
+- 正常入口是猫咖馆后方冰墙；隐藏调试对象 `window._mini` 仅用于开发验收，没有顶层全局快捷函数。

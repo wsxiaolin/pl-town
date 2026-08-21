@@ -164,10 +164,14 @@ export function createCityDialogController(options: CityDialogControllerOptions)
 
   const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default'): number => {
     const line = getElement<HTMLParagraphElement>(document, 'npcLine');
-    const characters = Array.from(text);
     const iceDialog = document.body.classList.contains('ice-sanctum-active');
-    const timingScale = iceDialog ? 1.5 : 1;
-    const stepMs = Math.min(90, 3600 / Math.max(characters.length - 1, 1)) * timingScale;
+    line.style.color = tone === 'green' ? '#3f8a4f' : '';
+    if (!iceDialog) {
+      line.textContent = text;
+      return 0;
+    }
+    const characters = Array.from(text);
+    const stepMs = Math.min(90, 3600 / Math.max(characters.length - 1, 1)) * 1.5;
     line.replaceChildren(...characters.map((character, index) => {
       if (character === '\n') return document.createElement('br');
       const span = document.createElement('span');
@@ -176,10 +180,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       span.style.animationDelay = `${index * stepMs}ms`;
       return span;
     }));
-    line.style.color = tone === 'green' ? '#3f8a4f' : '';
     if (characters.length === 0) return 0;
-    const characterAnimationMs = iceDialog ? 975 : 650;
-    return (characters.length - 1) * stepMs + characterAnimationMs;
+    return (characters.length - 1) * stepMs + 975;
   };
 
   const renderNode = (node: LegacyDialogueNode): void => {
@@ -419,14 +421,15 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       overlay.classList.toggle('blackout-mode', story.variant === 'blackout');
       overlay.style.setProperty('--story-cg-image', story.image ? `url("${story.image}")` : 'none');
       overlay.classList.add('open');
-      renderLine(story.text, story.tone);
+      const lineRevealMs = renderLine(story.text, story.tone);
       const storyLine = getElement<HTMLParagraphElement>(document, 'npcLine');
       storyLine.onclick = null;
       storyLine.style.cursor = story.onAdvance ? 'pointer' : '';
+      const revealOptionsAfterLine = document.body.classList.contains('ice-sanctum-active');
       renderOptions((story.options ?? []).map((item) => ({
         text: item.text,
         onPick: () => { void item.onPick(); },
-      })));
+      })), revealOptionsAfterLine ? lineRevealMs : 0, revealOptionsAfterLine ? 180 : 0);
     },
     closeNpc() {
       if (!npcOpen) return;

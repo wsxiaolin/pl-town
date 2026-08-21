@@ -47,6 +47,16 @@ export function createThemeClock(options: ThemeClockOptions) {
     options.getLampGlobes().forEach(m => gsap.to(m, { emissiveIntensity: night ? 0.60 : 0.05, duration: d }));
   }
 
+  function restoreSky(): void {
+    const scene = options.getScene();
+    const palette = options.getPalette();
+    const textures = options.getSkyTextures();
+    const night = options.getIsNight();
+    scene.background = textures.skyDay && textures.skyNight
+      ? (night ? textures.skyNight : textures.skyDay)
+      : new THREE.Color(night ? palette.NIGHT_BG : palette.DAY_BG);
+  }
+
   function syncTimeAndTheme() {
     const gameClock = townGameHour();
     options.setGameClock(gameClock);
@@ -73,5 +83,5 @@ export function createThemeClock(options: ThemeClockOptions) {
     options.updateNpcSchedules();
   }
 
-  return { applyTheme, syncTimeAndTheme };
+  return { applyTheme, restoreSky, syncTimeAndTheme };
 }

@@ -13,7 +13,7 @@ type NavigationApi = {
   nearestRoadCoord: (value: number) => number;
 };
 
-type IceSanctumApi = {
+type IceSanctumController = {
   enter: () => boolean;
   hasEntered: () => boolean;
   isActive: () => boolean;
@@ -130,7 +130,7 @@ export type DebugApiOptions = {
   stopInvasionCG: () => void;
   getWeather: () => Weather;
   setWeather: (weather: Weather) => void;
-  getIceSanctum: () => IceSanctumApi | null;
+  getIceSanctum: () => IceSanctumController | null;
 };
 
 export function installDebugApi(options: DebugApiOptions) {

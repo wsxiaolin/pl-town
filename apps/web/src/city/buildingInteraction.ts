@@ -44,7 +44,6 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   function navigateUnlocked(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
     if (b.id === 'kingice' && options.canEnterIceSanctum && !options.canEnterIceSanctum()) {
-      options.trackInteraction(b.id);
       options.onIceSanctumLocked?.();
       return;
     }

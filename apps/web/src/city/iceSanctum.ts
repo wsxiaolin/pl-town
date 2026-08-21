@@ -16,6 +16,8 @@ export type IceSanctumOptions = {
   dialogs: () => CityDialogController | null;
   claimReward: (rewardId: string) => Promise<boolean>;
   onEnter: () => void;
+  onEnterUnavailable: () => void;
+  onRewardFailure: () => void;
   onReturn: (weather: 'rain' | 'sunny') => void;
   setCameraTarget: (x: number, z: number, instant?: boolean) => void;
   focusCamera: (x: number, z: number, focusOptions?: CameraFocusOptions) => void;
@@ -527,7 +529,11 @@ export function createIceSanctum(options: IceSanctumOptions) {
 
   function enter(): boolean {
     const cursor = options.getCursor();
-    if (!cursor || active || hasEntered()) return false;
+    if (!cursor) {
+      options.onEnterUnavailable();
+      return false;
+    }
+    if (active || hasEntered()) return false;
     if (!navigation) buildNavigation();
     cancelCinematic();
     removeTimeSkipFadeOverlay();
@@ -554,8 +560,10 @@ export function createIceSanctum(options: IceSanctumOptions) {
 
   async function finish(weather: 'rain' | 'sunny', rewardId: string): Promise<void> {
     const resident = iceResidentId();
-    if (typeof localStorage !== 'undefined') localStorage.setItem(iceChoiceKey(resident), weather === 'rain' ? 'reject' : 'accept');
-    void options.claimReward(rewardId);
+    const rewardConfirmed = await options.claimReward(rewardId).catch(() => false);
+    if (rewardConfirmed && typeof localStorage !== 'undefined') {
+      localStorage.setItem(iceChoiceKey(resident), weather === 'rain' ? 'reject' : 'accept');
+    }
     options.dialogs()?.closeNpc();
     cancelCinematic();
     removeTimeSkipFadeOverlay();
@@ -567,6 +575,7 @@ export function createIceSanctum(options: IceSanctumOptions) {
     const cursor = options.getCursor();
     if (cursor) cursor.position.set(20, 0, 26);
     options.onReturn(weather);
+    if (!rewardConfirmed) options.onRewardFailure();
   }
 
   function returnThroughBlackout(weather: 'rain' | 'sunny', rewardId: string): void {

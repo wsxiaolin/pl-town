@@ -12,6 +12,7 @@ function assert(condition: unknown, message: string): asserts condition {
 const normalized = normalizePlayerProgress({
   currency: 85,
   inventory: { dragonwell_tea: 2, mandarin: 1, invalid: -3, fraction: 1.5 },
+  repeatableRewardClaims: { ice_accept: 2, invalid: -1 },
   achievements: ['first_building', 'first_building', 42],
   unlockedBuildings: ['mall_south', 'mall_south'],
   visitedBuildings: ['activity', null],
@@ -20,6 +21,7 @@ const normalized = normalizePlayerProgress({
 assert(normalized.currency === 85, 'currency should be preserved');
 assert(normalized.inventory.dragonwell_tea === 2 && normalized.inventory.invalid === undefined, 'inventory should only contain positive integer counts');
 assert(normalized.achievements.length === 1, 'achievement IDs should be deduplicated');
+assert(normalized.repeatableRewardClaims.ice_accept === 2 && normalized.repeatableRewardClaims.invalid === undefined, 'repeatable reward claim counts should be normalized');
 assert(canInteractWithBuilding(normalized, 'mall_south'), 'unlocked buildings should be interactive');
 assert(!canInteractWithBuilding(normalized, 'library'), 'locked buildings should not be interactive');
 

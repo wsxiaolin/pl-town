@@ -33,7 +33,7 @@ test('King Ice building does not reopen its audience prompt after the sanctum st
   interaction.navigateUnlocked({ id: 'kingice' } as BuildingEntity);
   assert.equal(promptOpens, 0);
   assert.equal(lockedNotices, 1);
-  assert.equal(tracked, 1);
+  assert.equal(tracked, 0);
 });
 
 test('Ice sanctum has no walls, separates Ice from the desk, and includes floating islands', () => {
@@ -50,6 +50,8 @@ test('Ice sanctum has no walls, separates Ice from the desk, and includes floati
     dialogs: () => null,
     claimReward: async () => true,
     onEnter: () => undefined,
+    onEnterUnavailable: () => undefined,
+    onRewardFailure: () => undefined,
     onReturn: () => undefined,
     setCameraTarget: () => undefined,
     focusCamera: () => undefined,
@@ -140,6 +142,8 @@ test('Ice cinematic starts immediately when the player enters the sanctum', () =
     dialogs: () => null,
     claimReward: async () => true,
     onEnter: () => undefined,
+    onEnterUnavailable: () => undefined,
+    onRewardFailure: () => undefined,
     onReturn: () => undefined,
     setCameraTarget: () => undefined,
     focusCamera: () => undefined,
@@ -152,6 +156,76 @@ test('Ice cinematic starts immediately when the player enters the sanctum', () =
   assert.equal(bodyClasses.has('ice-sanctum-cinematic-active'), true);
   assert.equal(overlays.length, 1);
   assert.equal(cameraFocusStops, 1);
+  sanctum.dispose();
+});
+
+test('a failed Ice reward claim leaves the ending unlocked for a retry', async () => {
+  const bodyClasses = new Set<string>();
+  const storage = new Map<string, string>([['minicityUser', 'retry-tester']]);
+  const callbacks: Array<() => void> = [];
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    },
+  });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      setTimeout: (callback: () => void) => { callbacks.push(callback); return callbacks.length; },
+      clearTimeout: () => undefined,
+    },
+  });
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      body: {
+        classList: {
+          add: (name: string) => bodyClasses.add(name),
+          remove: (name: string) => bodyClasses.delete(name),
+        },
+        append: () => undefined,
+      },
+      createElement: () => ({
+        className: '',
+        setAttribute: () => undefined,
+        append: () => undefined,
+        remove: () => undefined,
+      }),
+    },
+  });
+  const scene = new THREE.Scene();
+  const cursor = new THREE.Group();
+  let returned = 0;
+  let failures = 0;
+  const sanctum = createIceSanctum({
+    scene,
+    makeMaterial: () => new THREE.MeshStandardMaterial(),
+    makeCharacter: () => new THREE.Group(),
+    getCursor: () => cursor,
+    dialogs: () => ({ closeNpc: () => undefined, openStory: () => undefined } as unknown as CityDialogController),
+    claimReward: async () => false,
+    onEnter: () => undefined,
+    onEnterUnavailable: () => undefined,
+    onRewardFailure: () => { failures += 1; },
+    onReturn: () => { returned += 1; },
+    setCameraTarget: () => undefined,
+    focusCamera: () => undefined,
+    stopCameraFocus: () => undefined,
+    isMobile: () => false,
+  });
+
+  assert.equal(sanctum.enter(), true);
+  sanctum.handleAction('ice:reject');
+  while (callbacks.length) callbacks.shift()?.();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(returned, 1);
+  assert.equal(failures, 1);
+  assert.equal(storage.has('minicityIceChoice:retry-tester'), false);
+  assert.equal(sanctum.hasEntered(), false);
   sanctum.dispose();
 });
 

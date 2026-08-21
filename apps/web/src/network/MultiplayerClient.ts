@@ -17,7 +17,7 @@ export type HousingRequest = {
   kind: 'invite' | 'application';
   createdAt: string;
 };
-export type NetPlayerProgress = { currency: number; inventory: Record<string, number>; achievements: string[]; unlockedBuildings: string[]; visitedBuildings: string[] };
+export type NetPlayerProgress = { currency: number; inventory: Record<string, number>; repeatableRewardClaims: Record<string, number>; achievements: string[]; unlockedBuildings: string[]; visitedBuildings: string[] };
 export type NetProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;

@@ -231,8 +231,18 @@ async function handle(client: Client, raw: string) {
       const repeatableReward = REPEATABLE_REWARDS[message.rewardId as keyof typeof REPEATABLE_REWARDS];
       const reward = dailyReward ?? oneTimeReward ?? repeatableReward;
       if (!reward) return fail(client.socket, 'Reward is not available');
-      const claimKey = repeatableReward ? randomUUID() : oneTimeReward ? 'once' : shanghaiDayKey();
-      const result = db.claimReward(userId, message.rewardId, claimKey, reward.itemId, reward.quantity);
+      if (repeatableReward) {
+        if (!Number.isSafeInteger(message.claimSequence) || Number(message.claimSequence) < 1) return fail(client.socket, 'Invalid reward claim sequence');
+        const result = db.claimRepeatableReward(userId, message.rewardId, Number(message.claimSequence), reward.itemId, reward.quantity);
+        send(client.socket, {
+          type: 'progress.updated',
+          progress: result.progress,
+          catalog: getProgressionCatalog(),
+          event: { type: 'reward.claimed', rewardId: message.rewardId, claimSequence: message.claimSequence, claimed: result.claimed, accepted: result.accepted },
+        });
+        return;
+      }
+      const result = db.claimReward(userId, message.rewardId, oneTimeReward ? 'once' : shanghaiDayKey(), reward.itemId, reward.quantity);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
       return;
     }

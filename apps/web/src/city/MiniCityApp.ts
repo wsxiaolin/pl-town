@@ -373,8 +373,7 @@ function init() {
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
   window.addEventListener('minicity:textures-ready', () => {
-    refreshWeather();
-    proceduralTextures.refreshWeather();
+    refreshWeather(); proceduralTextures.refreshWeather(); weatherEffect?.set(weather);
   }, { once: true, signal: eventController.signal });
   worldDecorations = createWorldDecorations({
     scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
@@ -607,12 +606,14 @@ function init() {
     signal: eventController.signal,
   });
   cityDialogs.setup();
-  weatherEffect = createWeatherEffect({ scene, getCursor: () => cursorChar });
+  weatherEffect = createWeatherEffect({ scene, getCursor: () => cursorChar,
+    restoreSky: () => themeClock.restoreSky() }); weatherEffect.set(weather);
   iceSanctum = createIceSanctum({
     scene, makeCharacter,
     makeMaterial: (parameters) => resources.material({ kind: 'ice-sanctum', ...parameters }, () => stdMat(parameters)),
     getCursor: () => cursorChar, dialogs: () => cityDialogs,
     claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId),
+    onEnterUnavailable: () => showUnlockToast('城市仍在准备，请稍后再试'), onRewardFailure: () => showUnlockToast('奖励领取失败，可以再次进入皇冠建筑重试'),
     onEnter: () => {
       if (mapController?.isOpen()) mapController.toggle();
       setPhoneOpen(false); statsPanelController?.close(); eventBindings.closeRenderSettings();
@@ -622,7 +623,6 @@ function init() {
     },
     onReturn: (weather) => {
       document.body.classList.remove('ice-sanctum-active');
-      weatherEffect?.set(weather === 'rain' ? 'rain' : 'sunny');
       updateWeatherState(weather === 'rain' ? 'rain' : 'clear');
       cameraZoom = preIceCameraZoom; updateCameraProjection(cameraZoom);
       mapController?.invalidateShot();
@@ -824,13 +824,15 @@ function closeModal() { buildingInteraction.closeModal(); }
 function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionPointer.interactWithSceneInterestPoint(id); }
 
 function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
-function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
+function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); weatherEffect?.set(weather); }
 
 function updateWeatherState(next: Weather): void {
   if (!isWeather(next)) return;
   document.body.dataset.weather = next;
-  if (next === weather) return;
+  const changed = next !== weather;
   weather = next;
+  weatherEffect?.set(next);
+  if (!changed) return;
   refreshWeather();
   proceduralTextures.refreshWeather();
 }
