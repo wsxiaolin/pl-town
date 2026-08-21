@@ -10,10 +10,41 @@ const viewports = [
 test('resident phone switches between housing and chat', async ({ page }) => {
   await waitForCityReady(page, 'tester');
   await page.locator('#onlinePanelToggle').click({ force: true });
-  await page.locator('[data-online-tab="houses"]').click({ force: true });
+  await page.locator('[data-online-tab="houses"]').dispatchEvent('click');
   await expect(page.locator('#onlineHousesView')).toHaveClass(/active/);
-  await page.locator('[data-online-tab="chat"]').click({ force: true });
+  await page.locator('[data-online-tab="chat"]').dispatchEvent('click');
   await expect(page.locator('#onlineChatView')).toHaveClass(/active/);
+});
+
+test('neighborhood landmarks render their plots and open building details', async ({ page }) => {
+  await waitForCityReady(page, 'landmark-tester');
+
+  const landmarks = [
+    ['television_tower', '电视塔'],
+    ['fried_chicken_shop', '炸鸡店'],
+    ['tavern', '酒馆'],
+  ] as const;
+
+  for (const [buildingId, title] of landmarks) {
+    const result = await page.evaluate((id) => {
+      const mini = (window as any)._mini;
+      let plot: any;
+      let buildingMesh: any;
+      mini.scene.traverse((object: any) => {
+        if (object.userData?.buildingId !== id) return;
+        if (object.geometry?.type === 'PlaneGeometry') plot = object;
+        else buildingMesh = object;
+      });
+      return { hasBuilding: Boolean(buildingMesh), plotSize: plot?.geometry?.parameters?.width };
+    }, buildingId);
+    expect(result.hasBuilding).toBe(true);
+    expect(result.plotSize).toBeGreaterThan(3.5);
+
+    await page.evaluate((id) => (window as any)._mini.openBuildingDialog(id), buildingId);
+    await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
+    await expect(page.locator('#modalTitle')).toHaveText(title);
+    await page.locator('#modalClose').click();
+  }
 });
 
 test('render settings use the available width and keep controls responsive', async ({ page }) => {
