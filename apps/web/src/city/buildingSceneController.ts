@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
+import { footprintOverlapsMainRoad } from './data/cityConfig';
 import type { MaterialParameters } from '../rendering/meshFactory';
 import type { BuildingEntity, BuildingDefinition } from './buildingEntity';
 
@@ -21,6 +22,7 @@ export function createBuildingSceneController(options: {
 }) {
   function addPlot(x: number, z: number, shape: string, buildingId: string): void {
     const p = PLOT_MAP[shape] ?? { tex:'ground5', size:3.5, color:0xE4E3E0 };
+    if (footprintOverlapsMainRoad(x, z, p.size / 2)) return;
     const material = options.material({ color: options.isNight() ? Math.floor(p.color * 0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,p.size/2), ry:Math.max(1,p.size/2) });
     material.depthWrite = false;
     const plot = new THREE.Mesh(new THREE.PlaneGeometry(p.size, p.size), material);

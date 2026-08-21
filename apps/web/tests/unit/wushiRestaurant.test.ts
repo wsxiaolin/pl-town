@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as THREE from 'three';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { isNpcHiddenAtHour } from '../../src/city/npcSystem';
 import { createBuildingInteraction } from '../../src/city/buildingInteraction';
 import { createWildMushroomRestaurant } from '../../src/city/wildMushroomRestaurant';
-import type { BuildingEntity } from '../../src/city/buildingEntity';
+import { buildWildMushroomRestaurant } from '../../src/rendering/wildMushroomRestaurant';
+import type { BuildingDefinition, BuildingEntity } from '../../src/city/buildingEntity';
 import type { CityDialogController } from '../../src/adapters/ui/cityDialogController';
 
 const stubDialogs = (onOpen: () => void): CityDialogController =>
@@ -20,9 +22,40 @@ test('Wushi restaurant is a fixed unique building with a complete dialogue tree'
   const wildMushroomRestaurant = BUILDING_DEFS.find((building) => building.id === 'writingclub_outer');
   assert.ok(wildMushroomRestaurant);
   assert.equal(wildMushroomRestaurant.shape, 'wild_mushroom_restaurant');
-  assert.deepEqual([wildMushroomRestaurant.x, wildMushroomRestaurant.z], [-33, 3]);
+  assert.deepEqual([wildMushroomRestaurant.x, wildMushroomRestaurant.z], [-31.5, -15.125]);
   assert.ok(Math.hypot(wildMushroomRestaurant.x + 30, wildMushroomRestaurant.z - 30) > 20, 'restaurant stays clear of Bunala');
   assert.equal(BUILDING_DEFS.filter((building) => building.x === wildMushroomRestaurant.x && building.z === wildMushroomRestaurant.z).length, 1);
+  const roadCoords = [-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36];
+  const roadHalfWidth = (position: number) => position === 0 ? 1.2 : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 0.75 : 0.5);
+  const restaurantHalfWidth = 3;
+  const restaurantHalfDepth = 2.3;
+  roadCoords.forEach((position) => {
+    assert.ok(Math.abs(wildMushroomRestaurant.x - position) > restaurantHalfWidth + roadHalfWidth(position), `restaurant stays clear of x=${position} road`);
+    assert.ok(Math.abs(wildMushroomRestaurant.z - position) > restaurantHalfDepth + roadHalfWidth(position), `restaurant stays clear of z=${position} road`);
+  });
+  BUILDING_DEFS.filter((building) => building.id !== wildMushroomRestaurant.id).forEach((building) => {
+    const outsideRestaurantFootprint = Math.abs(building.x - wildMushroomRestaurant.x) > restaurantHalfWidth + 0.5
+      || Math.abs(building.z - wildMushroomRestaurant.z) > restaurantHalfDepth + 0.5;
+    assert.ok(outsideRestaurantFootprint, `restaurant stays clear of ${building.id}`);
+  });
+  const makeMaterial = () => new THREE.MeshStandardMaterial();
+  const restaurantMesh = buildWildMushroomRestaurant({
+    platformHeight: 0.3,
+    makeMaterial,
+    makeMesh: (geometry, material) => new THREE.Mesh(geometry, material),
+    addPart: (group, geometry, material, position) => {
+      const mesh = new THREE.Mesh(geometry, material instanceof THREE.Material ? material : makeMaterial());
+      mesh.position.set(...position);
+      group?.add(mesh);
+      return mesh;
+    },
+  }, wildMushroomRestaurant as BuildingDefinition);
+  const bounds = new THREE.Box3().setFromObject(restaurantMesh.group);
+  roadCoords.forEach((position) => {
+    const halfWidth = roadHalfWidth(position);
+    assert.ok(bounds.max.x <= position - halfWidth || bounds.min.x >= position + halfWidth, `restaurant mesh stays clear of x=${position} road`);
+    assert.ok(bounds.max.z <= position - halfWidth || bounds.min.z >= position + halfWidth, `restaurant mesh stays clear of z=${position} road`);
+  });
   assert.notEqual(wildMushroomRestaurant.shape, restaurant.shape);
   assert.equal(BUILDING_DEFS.filter((building) => building.x === restaurant.x && building.z === restaurant.z).length, 1);
 

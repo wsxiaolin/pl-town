@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
+import { footprintOverlapsMainRoad } from '../../src/city/data/cityConfig';
 import { createRoadNavigationSystem } from '../../src/city/navigation/roadNavigation';
 
 function navigationWithBuilding() {
@@ -17,6 +18,13 @@ function navigationWithBuilding() {
   navigation.cacheBuildingBoxes();
   return navigation;
 }
+
+test('main-road clearance rejects road furniture and overlapping foundations only inside the city', () => {
+  assert.equal(footprintOverlapsMainRoad(38, 0, 0.13), true);
+  assert.equal(footprintOverlapsMainRoad(1.65, 9, 1.1), true);
+  assert.equal(footprintOverlapsMainRoad(2.4, 2.8, 0.13), false);
+  assert.equal(footprintOverlapsMainRoad(44, 1.3, 0.13), false);
+});
 
 test('manual movement cannot cross a building and can slide beside it', () => {
   const navigation = navigationWithBuilding();

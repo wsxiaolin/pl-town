@@ -4,7 +4,7 @@ import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createResidenceModel } from './residenceStyles';
-import { isFilmCityClearing } from '../city/data/cityConfig';
+import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
@@ -44,7 +44,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   const residenceRoots: RetainedStaticMeshRoot[] = [];
   const interactiveDecorationRoots = new Set<THREE.Object3D>();
   const orangeGroveCenter={x:-15,z:-3};
-  const roadWidth=(position: number)=>position===0?2.4:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
+  const roadWidth=(position: number)=>position===0?MAIN_ROAD_WIDTH:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
 
   function treeCenterIsOnRoad(x: number, z: number) {
     return ROAD_COORDS.some((position)=>
@@ -70,7 +70,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addPlanter(-2.8,0,-5.3); addPlanter(-2.0,0,-5.8);
     addBollards(2.0,0,-2.8); addBench(5.1,0,-1.8,Math.PI/2);
     addStackedColumn(-5.5,0,2.0); addWallSection(5.5,0,-2.0,0);
-    addBushCluster(-4.8,0,-0.5); addPavers();
+    addPavers();
     // (Original two addPond calls at (-18,18) and (18,-18) removed — positions were wrong.)
     addFlowerbed(-3.0, 0, 4.0); addFlowerbed(3.0, 0, -4.0);
     addLamps([[0+1.9,0,-18.9],[0-1.9,0,18.9],[-18.9,0,0+1.9],[18.9,0,0-1.9]]);
@@ -84,8 +84,6 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addEdgeGrassAndPond();
     // Inner-city greenery — boulevard trees and one city grass patch
     addInnerCityGreenery();
-    // City gate lamp pillars at the cardinal entrances (where new malls/schools sit)
-    addLamps([[0,0,-22],[0,0,22],[-22,0,0],[22,0,0],[0,0,-38],[0,0,38],[-38,0,0],[38,0,0]]);
     // ── 外环装饰 ──
     addTrees([[-15,0,-15],[-21,0,-21],[-27,0,-27],[-12,0,-27],[-27,0,-12],
               [27,0,27],[21,0,21],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],
@@ -98,7 +96,6 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
               [-30,0,-6],[-30,0,6],[30,0,-6],[30,0,6],
               [-6,0,-30],[6,0,-30],[-6,0,30],[6,0,30]]);
     addArch(-21,0,-21,Math.PI/6); addArch(21,0,21,-Math.PI/5);
-    addGazebo(-21,0,0); addGazebo(21,0,0);
     addBench(-15,0,-15,0); addBench(15,0,15,Math.PI/2);
     addBench(-15,0,15,Math.PI/3); addBench(15,0,-15,Math.PI);
     addSphereStack(-15,0,15); addSphereStack(15,0,-15);
@@ -198,6 +195,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         const lx=x+dx, lz=z+dz;
         if(isFilmCityClearing(lx,lz))return;
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
+        if(footprintOverlapsMainRoad(lx,lz,1.1))return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
         const blocked=buildingBounds.some(box=>{
@@ -260,6 +258,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     const bounds = decorationObstacleBounds ?? (decorationObstacleBounds=[...buildings,...residences]
         .map((entry)=>new THREE.Box3().setFromObject(entry.group)));
     positions.forEach(([x,,z]) => {
+      if(footprintOverlapsMainRoad(x,z,0.13))return;
       const blocked=bounds.some(box=>{
         return x>=box.min.x-0.8&&x<=box.max.x+0.8&&z>=box.min.z-0.8&&z<=box.max.z+0.8;
       });
@@ -360,13 +359,6 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     part(g,new THREE.BoxGeometry(2.2,0.42,0.22),{color:0xE8E7E4,roughness:0.85,tex:'stone',rx:2,ry:1},[0,0.21,0]);
     part(g,new THREE.BoxGeometry(2.2,0.1,0.28),{color:0xEEEDEB,roughness:0.7,tex:'stone',rx:2,ry:1},[0,0.42+0.05,0]);
     g.position.set(x,y,z); g.rotation.y=rotY; scene.add(g);
-  }
-  function addBushCluster(x: number, y: number, z: number) {
-    const bushes: Array<[number, number, number]> = [[0,0,0.28],[0.5,0,0.24],[0.25,0,0.32]];
-    bushes.forEach(([dx,,r])=>{
-      const b=mk(new THREE.SphereGeometry(r,10,10),stdMat({color:0xEAE9E6,roughness:0.9}));
-      b.position.set(x+dx,r*0.7,z); b.castShadow=true; scene.add(b);
-    });
   }
   function addPavers() {
     const paverPositions: Array<[number, number, number]> = [[-1.9,0,-1.9],[1.9,0,-1.9],[-1.9,0,1.9],[1.9,0,1.9]];
