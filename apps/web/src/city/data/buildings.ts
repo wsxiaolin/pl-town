@@ -561,6 +561,33 @@ export const BUILDING_DEFS = [
     shape: "restaurant",
     icon: I(`<path d="M4 20V7h16v13"/><path d="M7 20v-7h4v7"/><path d="M14 11h3"/><path d="M6 4h12v3H6z"/>`),
   },
+  {
+    id: "television_tower",
+    num: "50",
+    label: "电视塔",
+    x: 32,
+    z: -8,
+    shape: "television_tower",
+    icon: I(`<path d="M12 3v18"/><path d="M8 21h8"/><path d="M7 9h10"/><path d="M5 5c2 2 2 5 0 7"/><path d="M19 5c-2 2-2 5 0 7"/>`),
+  },
+  {
+    id: "fried_chicken_shop",
+    num: "51",
+    label: "炸鸡店",
+    x: 28,
+    z: 2,
+    shape: "fried_chicken_shop",
+    icon: I(`<path d="M4 20V9h16v11"/><path d="M3 9h18"/><path d="M6 5h12v4"/><path d="M9 14h6"/>`),
+  },
+  {
+    id: "tavern",
+    num: "52",
+    label: "酒馆",
+    x: 33,
+    z: 3,
+    shape: "tavern",
+    icon: I(`<path d="M5 20V8l7-4 7 4v12"/><path d="M9 20v-6h6v6"/><path d="M7 11h10"/>`),
+  },
 ];
 
 // Buildings with an entry here become configurable Physics Lab work queries.
@@ -1236,5 +1263,20 @@ export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
     name: "野生菌餐馆",
     slogan: "一年总要吃两次野生菌火锅。",
     dialog: ["门头挂着几串风干的菌子，锅底翻滚着奶白色的汤。", "老板笑眯眯地说：「吃完保准看见点新东西。」"],
+  },
+  television_tower: {
+    name: "电视塔",
+    slogan: "把城市的声音送往更远处。",
+    dialog: ["观景层的玻璃映着街区与道路。", "天线在风里轻轻转动，把每一段讯号送向远方。"],
+  },
+  fried_chicken_shop: {
+    name: "炸鸡店",
+    slogan: "酥脆的香气从街角一路飘来。",
+    dialog: ["橱窗后的保温灯把每一块炸鸡照得金黄。", "店员把纸袋折好，递出一份刚出锅的热气。"],
+  },
+  tavern: {
+    name: "酒馆",
+    slogan: "故事在木桌边慢慢发酵。",
+    dialog: ["门口的木桶带着淡淡的麦芽香。", "暖黄的灯透过窗格，里面有人正低声交谈。"],
   },
 };
