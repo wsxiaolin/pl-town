@@ -19,7 +19,8 @@ docs/        隐私政策、使用条款等文档
 ## 环境与启动
 
 - 需要 Node.js 20 或更高版本。
-- 在仓库根目录执行 `npm install` 安装 workspace 依赖。
+- 拿到项目第一步先安装依赖，且安装与脚本准备要并发进行（后台跑安装的同时并行阅读文档、准备构建/测试/启动脚本）。
+- 依赖安装优先使用 `scripts/setup-deps.sh`：它会按运行环境自动选择最快镜像（国内 npmmirror / 清华 PyPI / goproxy.cn，海外官方源），按锁文件执行 `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` 等，并初始化 submodule。也可在仓库根目录直接 `npm install`。
 - `npm run dev` 同时启动前端（默认 `http://localhost:5173`）和服务端（默认 `http://localhost:8787`）。
 - 只启动前端：`npm run dev -w @minicity/web`。
 - 只启动服务端：`npm run dev -w @minicity/server`。
@@ -138,6 +139,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 ## Git 与命令执行边界
 
 - 严禁代理擅自 `git commit`、`git push`、创建 PR 或修改远程仓库；只有用户明确提出时才可执行提交相关操作。
+- 所有 `gh` 操作（push、PR 创建等）必须通过 Git credential helper 认证：先 `git credential fill` 取凭据，再经 `gh auth login --with-token` 注入 gh CLI，token 只走标准输入、不得硬编码或打印。严禁使用未认证的 GitHub 网络 API（如不带 token 调用 `api.github.com`）。详见 `.monkeycode/docs/agent-setup-guide.md`。
 - 没有必要或用户明确要求时，不运行 Playwright。优先运行 `typecheck`、`build` 或服务端测试；只有涉及浏览器交互、布局、WebGL、端到端流程时才运行对应的 Playwright 测试。
 - 启动任何 `server`、`vite`、`npm run dev`、预览或测试 Web 服务进程后，任务结束前必须停止自己启动的进程，并确认端口不再被该进程占用。不要杀掉用户或其他 agent 已启动的同名服务；启动前先检查端口和进程归属。
 
