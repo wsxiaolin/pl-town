@@ -15,6 +15,7 @@ import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
+import { destroyMusterCG } from './musterCg';
 import { startInvasionCG, stopInvasionCG } from './invasionCg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
@@ -952,6 +953,7 @@ export function destroyMiniCity() {
   multiplayerHousing?.destroy();
   destroyCG();
   stopInvasionCG();
+  destroyMusterCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
   npcSystem?.destroy();
