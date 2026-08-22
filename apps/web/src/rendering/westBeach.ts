@@ -1,11 +1,20 @@
 import * as THREE from 'three';
+import { Water } from 'three/examples/jsm/objects/Water.js';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { WEST_BEACH } from '../city/data/cityConfig';
+import waterNormalsUrl from '../assets/textures/waternormals.jpg';
+
+const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
+const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
+const DAY_SUN_COLOR = new THREE.Color(0xbdd4e6);
+const NIGHT_SUN_COLOR = new THREE.Color(0x3a4a6a);
+const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 
 type BeachOptions = {
   scene: THREE.Scene;
   materialFor: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
+  waterRendering: boolean;
 };
 
 export const WEST_BEACH_EVENT_POSITION = new THREE.Vector3(-39.2, 0, 11.5);
@@ -14,10 +23,10 @@ function addMesh(
   group: THREE.Group,
   options: BeachOptions,
   geometry: THREE.BufferGeometry,
-  material: Record<string, unknown>,
+  material: Record<string, unknown> | THREE.Material,
   position: readonly [number, number, number],
 ): THREE.Mesh {
-  const mesh = options.makeMesh(geometry, options.materialFor(material));
+  const mesh = options.makeMesh(geometry, material instanceof THREE.Material ? material : options.materialFor(material));
   mesh.position.set(...position);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -67,46 +76,139 @@ function createSeaGod(options: BeachOptions): THREE.Group {
   return god;
 }
 
+function shorelineX(z: number): number {
+  // Amplitude stays below the gap between coastlineX and deepWaterX so the
+  // walkable-sand / deep-water gameplay bounds still match the visible shore.
+  return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * 0.85 + Math.sin(z * 0.47 + 1.4) * 0.35;
+}
+
+// Water-level displacement for the whole sea plane. Two layered sine fields
+// (one along z, one diagonal) give an organic random-up/down motion without
+// any temporal locality — the waterline at the beach rises and falls.
+function surfaceHeight(elapsedSeconds: number, x: number, z: number): number {
+  return (
+    Math.sin(elapsedSeconds * 0.9 + z * 0.31 + x * 0.17) * 0.14 +
+    Math.sin(elapsedSeconds * 0.43 + x * 0.23 - z * 0.12) * 0.1 +
+    Math.sin(elapsedSeconds * 1.6 + z * 0.55) * 0.05
+  );
+}
+
+function animateWaterSurface(geometry: THREE.BufferGeometry, elapsedSeconds: number): void {
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const array = position.array as Float32Array;
+  for (let i = 0; i < array.length; i += 3) {
+    const x = array[i] as number;
+    const z = array[i + 2] as number;
+    array[i + 1] = surfaceHeight(elapsedSeconds, x, z);
+  }
+  position.needsUpdate = true;
+}
+
+function createShoreRibbonGeometry(
+  innerX: (z: number) => number,
+  outerX: (z: number) => number,
+  minZ: number,
+  maxZ: number,
+  columns = 18,
+  rows = 72,
+): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const z = minZ + (maxZ - minZ) * row / rows;
+    for (let column = 0; column <= columns; column += 1) {
+      const t = column / columns;
+      positions.push(THREE.MathUtils.lerp(innerX(z), outerX(z), t), 0, z);
+      uvs.push(t, row / rows);
+    }
+  }
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const a = row * (columns + 1) + column;
+      const b = a + 1;
+      const c = a + columns + 1;
+      const d = c + 1;
+      indices.push(a, c, d, a, d, b);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createAnimatedWater(geometry: THREE.BufferGeometry): Water {
+  const waterNormals = new THREE.TextureLoader().load(waterNormalsUrl);
+  waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+  const water = new Water(geometry, {
+    waterNormals,
+    sunDirection: SUN_DIRECTION.clone(),
+    sunColor: DAY_SUN_COLOR.clone(),
+    waterColor: DAY_WATER_COLOR.clone(),
+    distortionScale: 3.7,
+    side: THREE.DoubleSide,
+    fog: false,
+  });
+  water.renderOrder = 3;
+  water.castShadow = false;
+  const material = water.material as THREE.ShaderMaterial;
+  // The stock Water shader reflects the sky almost entirely (rf0 = 0.3, 0.9
+  // reflection weight), which washes the sea white. Real water has a fresnel
+  // base near 0.02, so lower both to let the deep water color dominate.
+  material.fragmentShader = material.fragmentShader
+    .replace('float rf0 = 0.3;', 'float rf0 = 0.02;')
+    .replace(
+      'vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight',
+      'vec3( 0.08 ) + reflectionSample * 0.45 + reflectionSample * specularLight',
+    );
+  material.needsUpdate = true;
+  water.userData.dynamicMaterial = material;
+  return water;
+}
+
 export function createWestBeach(options: BeachOptions): {
   entity: SceneInterestPointEntity;
   update(elapsedSeconds: number): void;
   setPhase(phase: 'hidden' | 'revealed' | 'reward'): void;
+  setDaylight(daylight: number, instant?: boolean): void;
 } {
   const object = new THREE.Group();
   object.name = 'west-beach';
   object.userData.autoTrigger = true;
 
-  const sand = addMesh(object, options, new THREE.PlaneGeometry(9, 58), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [-39.4, 0.07, 10]);
-  sand.rotation.x = -Math.PI / 2;
+  const minZ = WEST_BEACH.minZ - 14;
+  const maxZ = WEST_BEACH.maxZ + 14;
+  const sand = addMesh(object, options, createShoreRibbonGeometry(shorelineX, (z) => shorelineX(z) + 10, minZ, maxZ, 8, 96), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [0, 0.07, 0]);
   sand.renderOrder = 4;
-  const waterWidth = 66;
-  const waterLength = 140;
-  const water = addMesh(object, options, new THREE.BoxGeometry(waterWidth, 0.1, waterLength), { color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }, [WEST_BEACH.coastlineX-waterWidth/2, -0.02, 10]);
-  water.castShadow = false;
-  water.renderOrder = 3;
-  const coastLine = addMesh(object, options, new THREE.BoxGeometry(0.12, 0.02, waterLength), { color: 0xf3e9d4, roughness: 0.55, transparent: true, opacity: 0.9, depthWrite: false }, [WEST_BEACH.coastlineX + 0.03, 0.095, 10]);
-  coastLine.castShadow = false;
-  coastLine.renderOrder = 5;
+  // The sea must sit above the city base ground plane (y = 0) or it is hidden
+  // underneath it, and it spans past the ground edge so no land shows beyond.
+  const waterMinZ = -112;
+  const waterMaxZ = 112;
+  const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
+  const water = options.waterRendering
+    ? createAnimatedWater(waterGeometry)
+    : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
+  water.position.set(0, 0.06, 0);
+  if (!options.waterRendering) {
+    water.castShadow = false;
+    water.renderOrder = 3;
+  }
+  object.add(water);
+  const waterMaterial = options.waterRendering ? (water.material as THREE.ShaderMaterial) : null;
   const foams: THREE.Mesh[] = [];
-  for (let index = 0; index < 4; index += 1) {
-    const foam = addMesh(object, options, new THREE.BoxGeometry(0.1, 0.025, waterLength), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.72, depthWrite: false }, [WEST_BEACH.coastlineX - 0.55 - index * 0.72, 0.09, 10]);
+  for (let index = 0; index < 28; index += 1) {
+    const z = minZ + ((maxZ - minZ) * (index + 0.5)) / 28;
+    const foam = addMesh(object, options, new THREE.PlaneGeometry(0.8 + (index % 3) * 0.35, 0.16 + (index % 4) * 0.05), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.58, depthWrite: false }, [shorelineX(z) - 0.16, 0.1, z]);
+    foam.rotation.x = -Math.PI / 2;
+    foam.rotation.z = Math.sin(index * 2.1) * 0.25;
+    foam.renderOrder = 5;
     foam.userData.foamIndex = index;
+    foam.userData.foamZ = z;
     foams.push(foam);
   }
-  const palms = [-1, 1].map((side) => {
-    const palm = new THREE.Group();
-    addMesh(palm, options, new THREE.CylinderGeometry(0.09, 0.14, 1.8, 9), { color: 0x765139, roughness: 0.9, tex: 'wood', rx: 1, ry: 2 }, [0, 0.9, 0]);
-    for (let leaf = 0; leaf < 6; leaf += 1) {
-      const frond = addMesh(palm, options, new THREE.BoxGeometry(0.75, 0.035, 0.16), { color: 0x4f843f, roughness: 0.92, tex: 'grass', rx: 2, ry: 1 }, [Math.cos(leaf) * 0.3, 1.78, Math.sin(leaf) * 0.3]);
-      frond.rotation.y = leaf * Math.PI / 3;
-      frond.rotation.z = 0.28;
-    }
-    palm.position.set(-38.4, 0, 2 + side * 8.5);
-    object.add(palm);
-    return palm;
-  });
-  void palms;
-
   const bismarck = createWarship(options, 0x5d666b, 1.05);
   bismarck.name = 'bismarck-model';
   bismarck.position.set(-61, 0.18, -4);
@@ -127,6 +229,11 @@ export function createWestBeach(options: BeachOptions): {
   const seaGod = createSeaGod(options);
   seaGod.position.set(-41.2, 0, 11.5);
   object.add(seaGod);
+  // Daylight eases toward the theme-clock target inside update(), so the
+  // unlit water shader follows the day/night transition smoothly.
+  let daylight = 1;
+  let daylightTarget = 1;
+  let lastElapsed = 0;
   const rewardCard = addMesh(object, options, new THREE.BoxGeometry(0.44, 0.58, 0.045), { color: 0x445466, roughness: 0.45, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [-40.65, 1.05, 11.5]);
   rewardCard.visible = false;
   const cardStripe = addMesh(object, options, new THREE.BoxGeometry(0.35, 0.07, 0.052), { color: 0xe0c06b, roughness: 0.48, metalness: 0.25 }, [-40.65, 1.18, 11.5]);
@@ -144,9 +251,29 @@ export function createWestBeach(options: BeachOptions): {
         bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       }
+      animateWaterSurface(waterGeometry, elapsedSeconds);
       for (const foam of foams) {
         const index = foam.userData.foamIndex as number;
-        foam.position.x = WEST_BEACH.coastlineX - 0.55 - index * 0.72 + Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
+        const z = foam.userData.foamZ as number;
+        const height = surfaceHeight(elapsedSeconds, foam.position.x, z);
+        foam.position.y = 0.1 + height * 0.55;
+        const foamMaterial = foam.material as THREE.MeshStandardMaterial;
+        foamMaterial.opacity = 0.4 + Math.min(0.6, Math.max(0, height) * 0.5);
+      }
+      if (waterMaterial) {
+        const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
+        lastElapsed = elapsedSeconds;
+        daylight += (daylightTarget - daylight) * Math.min(1, dt * 2.5);
+        const uniforms = waterMaterial.uniforms;
+        if (uniforms.time) uniforms.time.value = elapsedSeconds;
+        if (uniforms.waterColor) {
+          const waterColor = uniforms.waterColor.value as THREE.Color;
+          waterColor.copy(DAY_WATER_COLOR).lerp(NIGHT_WATER_COLOR, 1 - daylight);
+        }
+        if (uniforms.sunColor) {
+          const sunColor = uniforms.sunColor.value as THREE.Color;
+          sunColor.copy(DAY_SUN_COLOR).lerp(NIGHT_SUN_COLOR, 1 - daylight);
+        }
       }
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
@@ -158,6 +285,10 @@ export function createWestBeach(options: BeachOptions): {
       seaGod.visible = phase !== 'hidden';
       rewardCard.visible = phase === 'reward';
       cardStripe.visible = phase === 'reward';
+    },
+    setDaylight(value, instant = false) {
+      daylightTarget = value;
+      if (instant) daylight = value;
     },
   };
 }

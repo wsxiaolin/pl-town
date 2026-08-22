@@ -450,7 +450,7 @@ function init() {
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => stdMat(parameters)),
   }).forEach(group => roadNavigation.registerObstacleGroup(group));
   cacheBuildingBoxes(); addDecorations(); addCharacters();
-  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
+  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk, waterRendering: readRenderSettings().waterRendering });
   sceneInterestPoints.obstacleRoots.forEach((root) => roadNavigation.registerObstacleGroup(root));
   addRealBuildingModels(scene, buildings)
     .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
@@ -831,7 +831,10 @@ function closeModal() { buildingInteraction.closeModal(); }
 
 function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionPointer.interactWithSceneInterestPoint(id); }
 
-function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
+function applyTheme(night: boolean, instant?: boolean) {
+  themeClock.applyTheme(night, instant);
+  sceneInterestPoints?.setWaterDaylight(night ? 0 : 1, instant);
+}
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); weatherEffect?.set(weather); }
 
 function updateWeatherState(next: Weather): void {
