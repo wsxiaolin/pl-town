@@ -796,7 +796,10 @@ function closeModal() { buildingInteraction.closeModal(); }
 
 function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionPointer.interactWithSceneInterestPoint(id); }
 
-function applyTheme(night: boolean, instant?: boolean) { themeClock.applyTheme(night, instant); }
+function applyTheme(night: boolean, instant?: boolean) {
+  themeClock.applyTheme(night, instant);
+  sceneInterestPoints?.setWaterDaylight(night ? 0 : 1, instant);
+}
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); }
 
 function updateWeatherState(next: Weather): void {

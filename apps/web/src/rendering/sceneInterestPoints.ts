@@ -27,6 +27,7 @@ export interface SceneInterestPoints {
   update(elapsedSeconds: number): void;
   setWellPhase(phase: 'idle' | 'focus' | 'engulf' | 'recede'): void;
   setBeachEncounterPhase(phase: 'hidden' | 'revealed' | 'reward'): void;
+  setWaterDaylight(daylight: number, instant?: boolean): void;
   setActiveStoryPoints(ids: readonly SceneInterestPointId[]): void;
   dispose(): void;
 }
@@ -443,6 +444,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       wellStaticDirty = true;
     },
     setBeachEncounterPhase(phase) { westBeach.setPhase(phase); },
+    setWaterDaylight(daylight, instant) { westBeach.setDaylight(daylight, instant); },
     setActiveStoryPoints(ids) {
       const active = new Set(ids);
       activeInvestigationMarkers.length = 0;

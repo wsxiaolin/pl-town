@@ -112,21 +112,31 @@ function createShoreRibbonGeometry(
 
 function createAnimatedWaterMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
+    uniforms: {
+      uTime: { value: 0 },
+      uDaylight: { value: 1 },
+    },
+    // Directional sine waves shared by the vertex displacement and the
+    // fragment normal, so the lighting always matches the visible surface.
+    // Broad-swell amplitudes sum to 0.05: troughs stay above the city ground
+    // plane (y = 0) that extends beneath the sea.
+    // Everything downstream is derived from vWorldPos in the fragment shader:
+    // both the uv attribute and extra varyings interpolate unreliably on this
+    // large hand-built ribbon mesh, while vWorldPos provably interpolates
+    // correctly, so shore proximity is recomputed per pixel (mirrors
+    // shorelineX in JS).
     vertexShader: `
       uniform float uTime;
-      varying vec2 vUv;
       varying vec3 vWorldPos;
-      varying float vWave;
       void main() {
-        vUv = uv;
         vec3 transformed = position;
-        // uv.x == 1 at the shoreline: flatten waves there so they lap the sand.
-        float calm = 1.0 - smoothstep(0.82, 1.0, uv.x) * 0.75;
-        float waveA = sin(position.z * 0.48 + uTime * 1.15) * 0.035;
-        float waveB = sin(position.x * 0.78 - position.z * 0.22 + uTime * 0.8) * 0.02;
-        transformed.y += (waveA + waveB) * calm;
-        vWave = (waveA + waveB) * calm;
+        float shoreX = ${WEST_BEACH.coastlineX.toFixed(1)} + sin(position.z * 0.19) * 0.85 + sin(position.z * 0.47 + 1.4) * 0.35;
+        float shore = clamp((position.x - (shoreX - 96.0)) / 96.0, 0.0, 1.0);
+        // shore == 1 at the shoreline: flatten waves there so they lap the sand.
+        float calm = 1.0 - smoothstep(0.75, 1.0, shore) * 0.8;
+        float height = sin(dot(position.xz, vec2(0.97, 0.24)) * 0.5 + uTime * 1.05) * 0.033
+                     + sin(dot(position.xz, vec2(0.86, -0.5)) * 0.95 + uTime * 0.75) * 0.017;
+        transformed.y += height * calm;
         vec4 worldPos = modelMatrix * vec4(transformed, 1.0);
         vWorldPos = worldPos.xyz;
         gl_Position = projectionMatrix * viewMatrix * worldPos;
@@ -134,28 +144,61 @@ function createAnimatedWaterMaterial(): THREE.ShaderMaterial {
     `,
     fragmentShader: `
       uniform float uTime;
-      varying vec2 vUv;
+      uniform float uDaylight;
       varying vec3 vWorldPos;
-      varying float vWave;
+
+      // Surface gradient of the wave sum: broad swell plus two fine-chop
+      // components that only exist as per-pixel normals.
+      vec2 waterGradient(vec2 p) {
+        vec2 g = vec2(0.0);
+        g += vec2(0.97, 0.24) * (0.5 * 0.033 * cos(dot(p, vec2(0.97, 0.24)) * 0.5 + uTime * 1.05));
+        g += vec2(0.86, -0.5) * (0.95 * 0.017 * cos(dot(p, vec2(0.86, -0.5)) * 0.95 + uTime * 0.75));
+        g += vec2(-0.45, 0.89) * (2.6 * 0.014 * cos(dot(p, vec2(-0.45, 0.89)) * 2.6 - uTime * 1.7));
+        g += vec2(0.63, 0.78) * (5.1 * 0.008 * cos(dot(p, vec2(0.63, 0.78)) * 5.1 + uTime * 2.3));
+        return g;
+      }
+
       void main() {
-        vec2 flow = vWorldPos.xz * 0.55;
-        float rippleA = sin(flow.y * 1.3 + sin(flow.x * 1.7 + uTime * 0.6) * 1.8 - uTime * 1.7);
-        float rippleB = sin(flow.y * 2.1 - flow.x * 2.2 + uTime * 1.1);
-        float ripples = (rippleA + rippleB) * 0.25 + 0.5;
-        vec3 normal = normalize(vec3((rippleA - rippleB) * 0.12, 1.0, (rippleA + rippleB) * 0.12));
         vec3 viewDir = normalize(cameraPosition - vWorldPos);
-        vec3 deep = vec3(0.02, 0.23, 0.38);
-        vec3 shallow = vec3(0.10, 0.48, 0.60);
-        vec3 color = mix(deep, shallow, 0.22 + ripples * 0.3 + vUv.x * 0.22);
-        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
-        color += vec3(0.45, 0.62, 0.68) * fresnel * 0.55;
+        float shoreX = ${WEST_BEACH.coastlineX.toFixed(1)} + sin(vWorldPos.z * 0.19) * 0.85 + sin(vWorldPos.z * 0.47 + 1.4) * 0.35;
+        float shoreT = clamp((vWorldPos.x - (shoreX - 96.0)) / 96.0, 0.0, 1.0);
+        // Fade the fine chop with distance so the far sea does not shimmer.
+        float dist = length(cameraPosition - vWorldPos);
+        vec2 grad = waterGradient(vWorldPos.xz) * (1.0 - clamp((dist - 45.0) / 150.0, 0.0, 0.8));
+        vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
+
         vec3 sunDir = normalize(vec3(0.5, 0.8, 0.35));
-        float spec = pow(max(dot(reflect(-sunDir, normal), viewDir), 0.0), 90.0);
-        color += vec3(1.0, 0.95, 0.8) * spec * 0.9;
-        float shoreFoam = smoothstep(0.86, 0.985, vUv.x + sin(vUv.y * 90.0 + uTime * 1.6) * 0.02);
-        color = mix(color, vec3(0.9, 0.96, 0.95), shoreFoam * (0.35 + ripples * 0.3));
-        color += vec3(0.72, 0.9, 0.86) * smoothstep(0.02, 0.05, abs(vWave)) * 0.15;
+        float diffuse = max(dot(normal, sunDir), 0.0);
+
+        // Water body color: deep marine blue out at sea, turquoise at the
+        // sand. Colors are authored dark because the renderer applies
+        // exposure 1.18 + ACES, which lifts mid-tones strongly.
+        float shore = smoothstep(0.4, 1.0, shoreT);
+        vec3 color = mix(vec3(0.006, 0.09, 0.17), vec3(0.02, 0.22, 0.3), shore);
+        color *= 0.6 + 0.4 * diffuse;
+
+        // Schlick fresnel (water F0 ~ 0.02): mostly body color, sky reflection
+        // only at the grazing angles on the far side of the sea.
+        float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
+        color = mix(color, vec3(0.3, 0.44, 0.55), clamp(fresnel, 0.0, 1.0) * 0.45);
+
+        // Tight sun glints riding the wave normals.
+        vec3 halfDir = normalize(sunDir + viewDir);
+        float spec = pow(max(dot(normal, halfDir), 0.0), 240.0);
+        color += vec3(1.0, 0.97, 0.88) * spec * 0.6;
+
+        // Animated foam line hugging the sand, plus a fainter trailing band.
+        float wobble = sin(vWorldPos.z * 0.62 + uTime * 2.0) * 0.012;
+        float foamEdge = smoothstep(0.955, 0.995, shoreT + wobble);
+        float foamTrail = smoothstep(0.86, 0.9, shoreT + wobble * 2.0 + sin(uTime * 0.7) * 0.015)
+                        * (1.0 - smoothstep(0.93, 0.97, shoreT));
+        color = mix(color, vec3(0.9, 0.95, 0.94), clamp(foamEdge + foamTrail * 0.5, 0.0, 1.0) * 0.7);
+
+        // Theme-clock dimming keeps the unlit shader dark at night.
+        color *= mix(0.14, 1.0, uDaylight);
         gl_FragColor = vec4(color, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }
     `,
   });
@@ -165,6 +208,7 @@ export function createWestBeach(options: BeachOptions): {
   entity: SceneInterestPointEntity;
   update(elapsedSeconds: number): void;
   setPhase(phase: 'hidden' | 'revealed' | 'reward'): void;
+  setDaylight(daylight: number, instant?: boolean): void;
 } {
   const object = new THREE.Group();
   object.name = 'west-beach';
@@ -231,6 +275,11 @@ export function createWestBeach(options: BeachOptions): {
   const seaGod = createSeaGod(options);
   seaGod.position.set(-41.2, 0, 11.5);
   object.add(seaGod);
+  // Daylight eases toward the theme-clock target inside update(), so the
+  // unlit water shader follows the day/night transition smoothly.
+  let daylight = 1;
+  let daylightTarget = 1;
+  let lastElapsed = 0;
   const rewardCard = addMesh(object, options, new THREE.BoxGeometry(0.44, 0.58, 0.045), { color: 0x445466, roughness: 0.45, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [-40.65, 1.05, 11.5]);
   rewardCard.visible = false;
   const cardStripe = addMesh(object, options, new THREE.BoxGeometry(0.35, 0.07, 0.052), { color: 0xe0c06b, roughness: 0.48, metalness: 0.25 }, [-40.65, 1.18, 11.5]);
@@ -254,7 +303,13 @@ export function createWestBeach(options: BeachOptions): {
         foam.position.x = shorelineX(z) - 0.16 - Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
       }
       const uniforms = waterMaterial instanceof THREE.ShaderMaterial ? waterMaterial.uniforms : null;
-      if (uniforms?.uTime) uniforms.uTime.value = elapsedSeconds;
+      if (uniforms?.uTime) {
+        const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
+        lastElapsed = elapsedSeconds;
+        daylight += (daylightTarget - daylight) * Math.min(1, dt * 2.5);
+        uniforms.uTime.value = elapsedSeconds;
+        if (uniforms.uDaylight) uniforms.uDaylight.value = daylight;
+      }
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
         rewardCard.rotation.y = elapsedSeconds * 0.8;
@@ -265,6 +320,10 @@ export function createWestBeach(options: BeachOptions): {
       seaGod.visible = phase !== 'hidden';
       rewardCard.visible = phase === 'reward';
       cardStripe.visible = phase === 'reward';
+    },
+    setDaylight(value, instant = false) {
+      daylightTarget = value;
+      if (instant) daylight = value;
     },
   };
 }
