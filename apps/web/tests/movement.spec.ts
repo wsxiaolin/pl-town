@@ -2,6 +2,27 @@ import { expect, test } from '@playwright/test';
 
 async function enterCity(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
+    // Keep movement tests deterministic without requiring a live multiplayer socket.
+    class OfflineWebSocket extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      readyState = OfflineWebSocket.CONNECTING;
+      constructor() {
+        super();
+        queueMicrotask(() => {
+          this.readyState = OfflineWebSocket.OPEN;
+          this.dispatchEvent(new Event('open'));
+        });
+      }
+      send() {}
+      close() {
+        this.readyState = OfflineWebSocket.CLOSED;
+        this.dispatchEvent(new Event('close'));
+      }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: OfflineWebSocket });
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'movement-tester');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
@@ -43,6 +64,96 @@ test('canvas click keeps automatic movement and produces a collision-safe route'
   });
   expect(result.length).toBeGreaterThan(0);
   expect(result.safe).toBe(true);
+});
+
+test('long press drags the camera, suppresses walking, and returns after three idle seconds', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const before = await page.evaluate(() => ({
+    camera: (window as any)._mini.camera.position.clone().toArray(),
+    player: (window as any)._mini.player.position.clone().toArray(),
+  }));
+
+  await page.mouse.move(640, 400);
+  await page.mouse.down();
+  await page.waitForTimeout(500);
+  await page.mouse.move(760, 430, { steps: 4 });
+  await page.mouse.up();
+
+  await expect.poll(async () => page.evaluate((initial) => {
+    const mini = (window as any)._mini;
+    return Math.hypot(mini.camera.position.x - initial[0], mini.camera.position.z - initial[2]);
+  }, before.camera), { timeout: 2_000, intervals: [50, 100] }).toBeGreaterThan(1);
+  const afterDrag = await page.evaluate(() => ({
+    camera: (window as any)._mini.camera.position.clone().toArray(),
+    player: (window as any)._mini.player.position.clone().toArray(),
+    pathLength: (window as any)._mini.getPlayerPath().length,
+  }));
+  expect(afterDrag.player).toEqual(before.player);
+  expect(afterDrag.pathLength).toBe(0);
+
+  await expect.poll(async () => page.evaluate((initial) => {
+    const camera = (window as any)._mini.camera.position;
+    return Math.hypot(camera.x - initial[0], camera.z - initial[2]);
+  }, before.camera), { timeout: 6_000, intervals: [200, 300] }).toBeLessThan(0.1);
+});
+
+test('canvas click marks the selected route target with expanding orange pulses', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const initial = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    const world = new mini.THREE.Vector3(0, 0, -20);
+    const point = world.clone().project(mini.camera);
+    const event = new MouseEvent('click', {
+      bubbles: true,
+      clientX: (point.x + 1) * innerWidth / 2,
+      clientY: (1 - point.y) * innerHeight / 2,
+    });
+    document.querySelector('#c')!.dispatchEvent(event);
+    const raycaster = new mini.THREE.Raycaster();
+    raycaster.setFromCamera(new mini.THREE.Vector2(
+      event.clientX / innerWidth * 2 - 1,
+      -(event.clientY / innerHeight) * 2 + 1,
+    ), mini.camera);
+    const expectedPosition = new mini.THREE.Vector3();
+    raycaster.ray.intersectPlane(
+      new mini.THREE.Plane(new mini.THREE.Vector3(0, 1, 0), 0),
+      expectedPosition,
+    );
+    const marker = mini.scene.getObjectByName('navigation-target-marker');
+    const pulse = marker?.getObjectByName('navigation-target-pulse-1');
+    const octahedron = marker?.getObjectByName('navigation-target-octahedron');
+    return {
+      visible: marker?.visible,
+      position: marker?.position.toArray(),
+      expectedPosition: expectedPosition.toArray(),
+      pulseCount: marker?.children.filter((child: any) => child.userData.navigationTargetPulse !== undefined).length,
+      pulseOpacity: pulse?.material.opacity,
+      pulseScale: pulse?.scale.x,
+      octahedronColor: octahedron?.material.color.getHex(),
+      octahedronScale: octahedron?.scale.toArray(),
+      octahedronRotation: octahedron?.rotation.y,
+    };
+  });
+  expect(initial.visible).toBe(true);
+  expect(initial.position?.[0]).toBeCloseTo(initial.expectedPosition[0], 4);
+  expect(initial.position?.[1]).toBeCloseTo(initial.expectedPosition[1], 4);
+  expect(initial.position?.[2]).toBeCloseTo(initial.expectedPosition[2], 4);
+  expect(initial.pulseCount).toBe(3);
+  expect(initial.pulseOpacity).toBeCloseTo(0.5, 5);
+  expect(initial.pulseScale).toBeCloseTo(1, 5);
+  expect(initial.octahedronColor).toBe(0xf28c28);
+  expect(initial.octahedronScale).toEqual([1, 1.65, 1]);
+
+  await expect.poll(async () => page.evaluate((start) => {
+    const marker = (window as any)._mini.scene.getObjectByName('navigation-target-marker');
+    const pulse = marker.getObjectByName('navigation-target-pulse-1');
+    const octahedron = marker.getObjectByName('navigation-target-octahedron');
+    return pulse.scale.x > start.pulseScale + 0.05
+      && pulse.material.opacity < start.pulseOpacity
+      && Math.abs(octahedron.rotation.y - start.octahedronRotation) > 0.05;
+  }, initial), { timeout: 5_000, intervals: [50, 100, 200] }).toBe(true);
 });
 
 test('Wushi restaurant model, dialogue, and Shinian teleport are available', async ({ page }) => {
@@ -181,6 +292,36 @@ test.describe('touch-capable tablet', () => {
     }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.3);
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await expect(base).toHaveCSS('opacity', '0');
+  });
+
+  test('long touch drags the camera without starting a walking route', async ({ page }) => {
+    await enterCity(page);
+    const start = await page.evaluate(() => {
+      const canvas = document.querySelector('#c');
+      for (let y = 220; y < innerHeight - 120; y += 40) {
+        for (let x = Math.floor(innerWidth * 0.45); x < innerWidth - 80; x += 40) {
+          if (document.elementFromPoint(x, y) === canvas) return { x, y };
+        }
+      }
+      throw new Error('No unobstructed canvas point found');
+    });
+    const before = await page.evaluate(() => (window as any)._mini.camera.position.clone().toArray());
+    const client = await page.context().newCDPSession(page);
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }],
+    });
+    await expect(page.locator('body')).toHaveClass(/camera-pan-active/, { timeout: 2_000 });
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchMove', touchPoints: [{ x: start.x + 90, y: start.y + 24, id: 1, radiusX: 2, radiusY: 2 }],
+    });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+    await expect.poll(async () => page.evaluate((initial) => {
+      const mini = (window as any)._mini;
+      return Math.hypot(mini.camera.position.x - initial[0], mini.camera.position.z - initial[2]);
+    }, before), { timeout: 2_000, intervals: [50, 100] }).toBeGreaterThan(1);
+    await expect(page.locator('body')).not.toHaveClass(/camera-pan-active/);
+    expect(await page.evaluate(() => (window as any)._mini.getPlayerPath().length)).toBe(0);
   });
 
   test('camera keeps the city orientation while approaching Linche', async ({ page }) => {

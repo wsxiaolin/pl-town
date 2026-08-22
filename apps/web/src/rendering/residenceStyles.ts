@@ -12,7 +12,7 @@ type Part = (
 type ResidenceStyleOptions = {
   x: number;
   z: number;
-  index: number;
+  variationSeed: number;
   lotType: number;
   isNight: boolean;
   part: Part;
@@ -38,13 +38,17 @@ export function residenceStyleFor(x: number, z: number, index: number): number {
   return family * 2 + alternate;
 }
 
+export function residenceStyleSeedForLot(x: number, z: number): number {
+  return Math.abs(Math.round(x * 31 + z));
+}
+
 export function createResidenceModel(options: ResidenceStyleOptions): { group: THREE.Group; body: THREE.Mesh; styleId: number; styleName: string } {
-  const { x, z, index, lotType, isNight, part } = options;
+  const { x, z, variationSeed, lotType, isNight, part } = options;
   const group = new THREE.Group();
-  const styleId = residenceStyleFor(x, z, index);
+  const styleId = residenceStyleFor(x, z, residenceStyleSeedForLot(x, z));
   const width = lotType === 2 ? 1.25 : 1.6;
   const depth = lotType === 1 ? 1.15 : 1.5;
-  const height = 0.92 + (index % 4) * 0.18 + (styleId === 8 ? 0.42 : 0);
+  const height = 0.92 + (variationSeed % 4) * 0.18 + (styleId === 8 ? 0.42 : 0);
   const families = [
     { wall: 0xf2eee4, wallTex: 'facade_residence_cream', roof: 0x9b5a48, roofTex: 'rooftile' },
     { wall: 0xd6c2a0, wallTex: 'residence_redbrick', roof: 0x59656f, roofTex: 'residence_slate_roof' },

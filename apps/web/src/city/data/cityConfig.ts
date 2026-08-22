@@ -32,6 +32,7 @@ export const PALETTE = Object.freeze({
 });
 
 export const ROAD_COORDS = Object.freeze([-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36]);
+export const MAIN_ROAD_WIDTH = 2.4;
 export const CITY_LIMIT = 42;
 export const BUILDING_PLATFORM_HEIGHT = 0.3;
 export const FILM_CITY_CLEARINGS = Object.freeze([
@@ -41,6 +42,24 @@ export const FILM_CITY_CLEARINGS = Object.freeze([
 
 export function isFilmCityClearing(x: number, z: number): boolean {
   return FILM_CITY_CLEARINGS.some(([clearingX, clearingZ]) => x === clearingX && z === clearingZ);
+}
+
+export function footprintOverlapsMainRoad(x: number, z: number, halfWidth = 0, halfDepth = halfWidth): boolean {
+  const roadHalfWidth = MAIN_ROAD_WIDTH / 2;
+  const roadExtent = CITY_LIMIT + roadHalfWidth;
+  const overlapsEastWest = Math.abs(x) - halfWidth <= roadExtent && Math.abs(z) - halfDepth <= roadHalfWidth;
+  const overlapsNorthSouth = Math.abs(z) - halfDepth <= roadExtent && Math.abs(x) - halfWidth <= roadHalfWidth;
+  return overlapsEastWest || overlapsNorthSouth;
+}
+
+export function clipPlotToMainRoad(x: number, z: number, halfWidth: number, halfDepth: number): { halfWidth: number; halfDepth: number } {
+  const roadHalfWidth = MAIN_ROAD_WIDTH / 2;
+  const maxHalfX = Math.abs(x) > roadHalfWidth ? Math.abs(x) - roadHalfWidth : 0;
+  const maxHalfZ = Math.abs(z) > roadHalfWidth ? Math.abs(z) - roadHalfWidth : 0;
+  return {
+    halfWidth: Math.min(halfWidth, maxHalfX),
+    halfDepth: Math.min(halfDepth, maxHalfZ),
+  };
 }
 export const WEST_BEACH = Object.freeze({
   coastlineX: -43.2,
