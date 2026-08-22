@@ -82,6 +82,28 @@ function shorelineX(z: number): number {
   return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * 0.85 + Math.sin(z * 0.47 + 1.4) * 0.35;
 }
 
+// Water-level displacement for the whole sea plane. Two layered sine fields
+// (one along z, one diagonal) give an organic random-up/down motion without
+// any temporal locality — the waterline at the beach rises and falls.
+function surfaceHeight(elapsedSeconds: number, x: number, z: number): number {
+  return (
+    Math.sin(elapsedSeconds * 0.9 + z * 0.31 + x * 0.17) * 0.14 +
+    Math.sin(elapsedSeconds * 0.43 + x * 0.23 - z * 0.12) * 0.1 +
+    Math.sin(elapsedSeconds * 1.6 + z * 0.55) * 0.05
+  );
+}
+
+function animateWaterSurface(geometry: THREE.BufferGeometry, elapsedSeconds: number): void {
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const array = position.array as Float32Array;
+  for (let i = 0; i < array.length; i += 3) {
+    const x = array[i] as number;
+    const z = array[i + 2] as number;
+    array[i + 1] = surfaceHeight(elapsedSeconds, x, z);
+  }
+  position.needsUpdate = true;
+}
+
 function createShoreRibbonGeometry(
   innerX: (z: number) => number,
   outerX: (z: number) => number,
@@ -187,39 +209,6 @@ export function createWestBeach(options: BeachOptions): {
     foam.userData.foamZ = z;
     foams.push(foam);
   }
-  // A tidal band whose shoreward edge oscillates every frame, so the
-  // waterline visibly advances onto the sand and retreats — the signature of
-  // waves lapping at the beach.
-  const tidalColumns = 6;
-  const tidalRows = 100;
-  const tidalPositions: number[] = [];
-  const tidalUvs: number[] = [];
-  const tidalIndices: number[] = [];
-  for (let row = 0; row <= tidalRows; row += 1) {
-    const z = minZ - 2 + ((maxZ - minZ + 4) * row) / tidalRows;
-    for (let column = 0; column <= tidalColumns; column += 1) {
-      tidalPositions.push(0, 0, z);
-      tidalUvs.push(column / tidalColumns, row / tidalRows);
-    }
-  }
-  for (let row = 0; row < tidalRows; row += 1) {
-    for (let column = 0; column < tidalColumns; column += 1) {
-      const a = row * (tidalColumns + 1) + column;
-      const b = a + 1;
-      const c = a + tidalColumns + 1;
-      const d = c + 1;
-      tidalIndices.push(a, c, d, a, d, b);
-    }
-  }
-  const tidalGeometry = new THREE.BufferGeometry();
-  const tidalAttr = new THREE.Float32BufferAttribute(tidalPositions, 3);
-  tidalGeometry.setAttribute('position', tidalAttr);
-  tidalGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(tidalUvs, 2));
-  tidalGeometry.setIndex(tidalIndices);
-  tidalGeometry.computeVertexNormals();
-  const tidalMesh = addMesh(object, options, tidalGeometry, options.materialFor({ color: 0x0d3b5e, roughness: 0.24, metalness: 0.1, transparent: true, opacity: 0.82, tex: 'water', rx: 6, ry: 30, depthWrite: false }), [0, 0.06, 0]);
-  tidalMesh.renderOrder = 4;
-  tidalMesh.castShadow = false;
   const bismarck = createWarship(options, 0x5d666b, 1.05);
   bismarck.name = 'bismarck-model';
   bismarck.position.set(-61, 0.18, -4);
@@ -262,31 +251,14 @@ export function createWestBeach(options: BeachOptions): {
         bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       }
-      const tidalPhase = elapsedSeconds * 0.45;
-      const tideHeight = (z: number) => {
-        const wave = Math.sin(tidalPhase + z * 0.22) * 0.5 + Math.sin(tidalPhase * 1.7 + z * 0.13) * 0.5;
-        return Math.max(0, wave) * 1.9;
-      };
-      const tidalArray = tidalAttr.array as Float32Array;
-      for (let row = 0; row <= tidalRows; row += 1) {
-        const z = minZ - 2 + ((maxZ - minZ + 4) * row) / tidalRows;
-        const inner = shorelineX(z) - 2.2;
-        const outer = shorelineX(z) + tideHeight(z);
-        for (let column = 0; column <= tidalColumns; column += 1) {
-          const t = column / tidalColumns;
-          tidalArray[(row * (tidalColumns + 1) + column) * 3] = THREE.MathUtils.lerp(inner, outer, t);
-        }
-      }
-      tidalAttr.needsUpdate = true;
-      tidalGeometry.computeVertexNormals();
+      animateWaterSurface(waterGeometry, elapsedSeconds);
       for (const foam of foams) {
         const index = foam.userData.foamIndex as number;
         const z = foam.userData.foamZ as number;
-        const height = tideHeight(z);
-        foam.position.x = shorelineX(z) + height - 0.2;
-        foam.position.y = 0.1 + height * 0.04;
+        const height = surfaceHeight(elapsedSeconds, foam.position.x, z);
+        foam.position.y = 0.1 + height * 0.55;
         const foamMaterial = foam.material as THREE.MeshStandardMaterial;
-        foamMaterial.opacity = Math.min(1, 0.32 + height * 0.55);
+        foamMaterial.opacity = 0.4 + Math.min(0.6, Math.max(0, height) * 0.5);
       }
       if (waterMaterial) {
         const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
