@@ -51,6 +51,16 @@ export function footprintOverlapsMainRoad(x: number, z: number, halfWidth = 0, h
   const overlapsNorthSouth = Math.abs(z) - halfDepth <= roadExtent && Math.abs(x) - halfWidth <= roadHalfWidth;
   return overlapsEastWest || overlapsNorthSouth;
 }
+
+export function clipPlotToMainRoad(x: number, z: number, halfWidth: number, halfDepth: number): { halfWidth: number; halfDepth: number } {
+  const roadHalfWidth = MAIN_ROAD_WIDTH / 2;
+  const maxHalfX = Math.abs(x) > roadHalfWidth ? Math.abs(x) - roadHalfWidth : 0;
+  const maxHalfZ = Math.abs(z) > roadHalfWidth ? Math.abs(z) - roadHalfWidth : 0;
+  return {
+    halfWidth: Math.min(halfWidth, maxHalfX),
+    halfDepth: Math.min(halfDepth, maxHalfZ),
+  };
+}
 export const WEST_BEACH = Object.freeze({
   coastlineX: -43.2,
   deepWaterX: -44.5,

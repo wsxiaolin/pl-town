@@ -5,6 +5,7 @@ const IDLE_RETURN_MS = 3_000;
 const PRESS_MOVE_TOLERANCE = 10;
 const RETURN_SPEED = 8;
 const RETURN_EPSILON = 0.02;
+const CLICK_SUPPRESS_MS = 800;
 
 export type CameraPanControllerOptions = {
   canvas: HTMLElement;
@@ -14,6 +15,7 @@ export type CameraPanControllerOptions = {
   getCamera: () => THREE.OrthographicCamera | null;
   getCameraTarget: () => THREE.Vector3;
   getPlayerPosition: () => THREE.Vector3 | null;
+  cityLimit: number;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
   stopCameraMotion: () => void;
   isBlocked: () => boolean;
@@ -24,6 +26,7 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const previousGround = new THREE.Vector3();
   const currentGround = new THREE.Vector3();
+  const pointerNdc = new THREE.Vector2();
   let pointerId: number | null = null;
   let startX = 0;
   let startY = 0;
@@ -68,10 +71,11 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
     const rect = options.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
     camera.updateMatrixWorld();
-    raycaster.setFromCamera(new THREE.Vector2(
+    pointerNdc.set(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
-    ), camera);
+    );
+    raycaster.setFromCamera(pointerNdc, camera);
     return raycaster.ray.intersectPlane(groundPlane, result) !== null;
   }
 
@@ -83,7 +87,7 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
     returning = false;
     clearIdleTimer();
     setDragging(true);
-    suppressClickUntil = options.window.performance.now() + 800;
+    suppressClickUntil = options.window.performance.now() + CLICK_SUPPRESS_MS;
     try { options.canvas.setPointerCapture(pointerId); } catch { /* Pointer may have ended between timer ticks. */ }
   }
 
@@ -98,7 +102,7 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
     clearLongPressTimer();
     pointerId = null;
     if (dragging) {
-      suppressClickUntil = options.window.performance.now() + 800;
+      suppressClickUntil = options.window.performance.now() + CLICK_SUPPRESS_MS;
       setDragging(false);
     }
     if (detached) scheduleReturn();
@@ -116,7 +120,11 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
   }
 
   options.canvas.addEventListener('pointerdown', (event) => {
-    if (pointerId !== null || !event.isPrimary) {
+    if (!event.isPrimary) {
+      cancelDetachedView();
+      return;
+    }
+    if (pointerId !== null) {
       finishPointer(true);
       return;
     }
@@ -138,11 +146,9 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
     event.preventDefault();
     if (groundPoint(previousX, previousY, previousGround) && groundPoint(event.clientX, event.clientY, currentGround)) {
       const target = options.getCameraTarget();
-      options.setCameraTarget(
-        target.x + previousGround.x - currentGround.x,
-        target.z + previousGround.z - currentGround.z,
-        true,
-      );
+      const nextX = THREE.MathUtils.clamp(target.x + previousGround.x - currentGround.x, -options.cityLimit, options.cityLimit);
+      const nextZ = THREE.MathUtils.clamp(target.z + previousGround.z - currentGround.z, -options.cityLimit, options.cityLimit);
+      options.setCameraTarget(nextX, nextZ, true);
     }
     previousX = event.clientX;
     previousY = event.clientY;

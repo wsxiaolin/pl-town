@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
-import { footprintOverlapsMainRoad } from '../../src/city/data/cityConfig';
+import { clipPlotToMainRoad, footprintOverlapsMainRoad } from '../../src/city/data/cityConfig';
+import { BUILDING_PLOT_MAP } from '../../src/city/data/buildingPlots';
+import { BUILDING_DEFS } from '../../src/city/data/buildings';
 import { createRoadNavigationSystem } from '../../src/city/navigation/roadNavigation';
 
 function navigationWithBuilding() {
@@ -24,6 +26,20 @@ test('main-road clearance rejects road furniture and overlapping foundations onl
   assert.equal(footprintOverlapsMainRoad(1.65, 9, 1.1), true);
   assert.equal(footprintOverlapsMainRoad(2.4, 2.8, 0.13), false);
   assert.equal(footprintOverlapsMainRoad(44, 1.3, 0.13), false);
+});
+
+test('every enabled building keeps a renderable ground plot clear of the main road', () => {
+  BUILDING_DEFS.filter((building) => !building.disabled).forEach((building) => {
+    const plotSpec = BUILDING_PLOT_MAP[building.shape] ?? { tex: 'ground5', size: 3.5, color: 0xE4E3E0 };
+    const halfSize = plotSpec.size / 2;
+    const clipped = clipPlotToMainRoad(building.x, building.z, halfSize, halfSize);
+    assert.ok(clipped.halfWidth >= 0.05 && clipped.halfDepth >= 0.05, `${building.id} plot stays renderable`);
+    assert.equal(
+      footprintOverlapsMainRoad(building.x, building.z, clipped.halfWidth - 0.001, clipped.halfDepth - 0.001),
+      false,
+      `${building.id} plot stays clear of the main road`,
+    );
+  });
 });
 
 test('manual movement cannot cross a building and can slide beside it', () => {

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 async function enterCity(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
+    // Keep movement tests deterministic without requiring a live multiplayer socket.
     class OfflineWebSocket extends EventTarget {
       static readonly CONNECTING = 0;
       static readonly OPEN = 1;

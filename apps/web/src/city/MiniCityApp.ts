@@ -537,7 +537,7 @@ function init() {
   cameraPanController=createCameraPanController({
     canvas: document.getElementById('c') as HTMLElement, document, window, signal: eventController.signal,
     getCamera: () => camera, getCameraTarget: () => cameraTarget,
-    getPlayerPosition: () => cursorChar?.position ?? null,
+    getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
     setCameraTarget, stopCameraMotion: () => cameraController?.stop(),
     isBlocked: () => filmCityCinematicActive || Boolean(mapController?.isOpen())
       || Boolean(cityDialogs?.isOpen()) || Boolean(echoStoryController?.isInteriorView()),

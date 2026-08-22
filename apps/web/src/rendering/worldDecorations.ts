@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { createResidenceModel } from './residenceStyles';
+import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
 import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
@@ -209,14 +209,15 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         if(!blocked) lots.push([lx,lz,(Math.abs(Math.round(lx+lz))+k)%3]);
       });
     }));
-    lots.forEach(([x,z,t],i)=>addSmallBlock(x,0,z,t,i));
+    lots.forEach(([x,z,t])=>addSmallBlock(x,0,z,t));
     decorationObstacleBounds=null;
   }
   
-  function addSmallBlock(x: number, y: number, z: number, type: number, i: number) {
-    const { group:g, body, styleId, styleName } = createResidenceModel({x,z,index:i,lotType:type,isNight:getIsNight(),part});
+  function addSmallBlock(x: number, y: number, z: number, type: number) {
+    const variationSeed = residenceStyleSeedForLot(x, z);
+    const { group:g, body, styleId, styleName } = createResidenceModel({x,z,variationSeed,lotType:type,isNight:getIsNight(),part});
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
-    g.position.set(x,y,z); g.rotation.y=(i%4)*Math.PI/2;
+    g.position.set(x,y,z); g.rotation.y=(variationSeed%4)*Math.PI/2;
     g.traverse((object: THREE.Object3D)=>{ if('isMesh' in object && object.isMesh) { object.userData.residenceId=residenceId; object.userData.residenceStyleId=styleId; } });
     scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
     residenceRoots.push({key:residenceId,root:g});
