@@ -340,6 +340,9 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   await expect(page.locator('.map-icon[data-building-id="litreview"]')).toHaveCount(0);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.locator('.map-icon[data-building-id="echo-observatory"]')).toHaveCount(0);
+  await page.locator('#mapSearchInput').fill('文学审核部');
+  await expect(page.locator('.map-search-result')).toHaveCount(0);
+  await expect(page.locator('.map-search-empty')).toHaveText('没有找到建筑');
   expect(await page.evaluate(() => (window as any)._mini.interactBuilding('litreview'))).toBe(false);
 
   const lockedAudit = await page.evaluate(() => {
@@ -355,6 +358,35 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
     return { storyLocked, emissiveIntensity };
   });
   expect(lockedAudit).toEqual({ storyLocked: true, emissiveIntensity: 0 });
+});
+
+test('map search fuzzily finds a building and keeps the existing teleport flow', async ({ page }) => {
+  await seedCityStorage(page, 'map-search-tester');
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityStats', JSON.stringify({ achievements: ['walker_100'] }));
+  });
+  await waitForCityBooted(page);
+  const before = await page.evaluate(() => {
+    const position = (window as any)._mini.player.position;
+    return { x: position.x, z: position.z };
+  });
+
+  await page.locator('#mapToggle').click({ force: true });
+  const search = page.locator('#mapSearchInput');
+  await search.fill('图馆');
+  await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+  await search.press('Enter');
+  await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
+  await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveClass(/is-selected/);
+  await expect(page.locator('#mapTipTele')).toBeEnabled();
+  await page.locator('#mapTipTele').click();
+  await expect(page.locator('#mapOverlay')).not.toHaveClass(/show/);
+
+  const after = await page.evaluate(() => {
+    const position = (window as any)._mini.player.position;
+    return { x: position.x, z: position.z };
+  });
+  expect(after).not.toEqual(before);
 });
 
 test('renamed mall buildings surface their new store names', async ({ page }) => {
