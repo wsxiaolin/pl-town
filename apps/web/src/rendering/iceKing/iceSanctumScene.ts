@@ -1,31 +1,17 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
-import { createEchoCabinNavigation, type EchoCabinNavigation } from './navigation/echoCabinNavigation';
-import type { CameraFocusOptions } from './navigation/cameraController';
-import type { CityDialogController, NpcEntityLike, StoryDialogModel } from '../adapters/ui/cityDialogController';
 
 type Cursor = THREE.Object3D & { position: THREE.Vector3; rotation: THREE.Euler; visible: boolean };
 type IslandBlock = readonly [number, number, number, number, number, number, THREE.Material];
 type IslandShape = 'citadel' | 'mesa' | 'spire' | 'crescent' | 'twin' | 'stair';
 
-export type IceSanctumOptions = {
+export type IceSanctumSceneOptions = {
   scene: THREE.Scene;
   makeMaterial: (parameters: Record<string, unknown>) => THREE.Material;
   makeCharacter: (head: number, body: number) => THREE.Group;
-  getCursor: () => Cursor | null;
-  dialogs: () => CityDialogController | null;
-  claimReward: (rewardId: string) => Promise<boolean>;
-  onEnter: () => void;
-  onEnterUnavailable: () => void;
-  onRewardFailure: () => void;
-  onReturn: (weather: 'rain' | 'sunny') => void;
-  setCameraTarget: (x: number, z: number, instant?: boolean) => void;
-  focusCamera: (x: number, z: number, focusOptions?: CameraFocusOptions) => void;
-  stopCameraFocus: () => void;
-  isMobile: () => boolean;
 };
 
-const CENTER: readonly [number, number] = [220, 40];
+export const ICE_SANCTUM_CENTER: readonly [number, number] = [220, 40];
 const ROOM_WIDTH = 34;
 const ROOM_DEPTH = 24;
 export const ICE_SANCTUM_CORRIDOR_LENGTH = 40;
@@ -37,20 +23,6 @@ const NAVIGATION_FLOOR_Z = ROOM_AREA_Z / 2;
 const TABLE_Z = -ROOM_DEPTH / 2 + 5.7;
 const ICE_Z = -ROOM_DEPTH / 2 + 3.15;
 const INTERACTION_Z = TABLE_Z + 2;
-const CINEMATIC_PAUSE_DURATION = 1;
-const CINEMATIC_FOCUS_DURATION = 1.8;
-const CINEMATIC_HOLD_DURATION = 0.9;
-const CINEMATIC_RETURN_DURATION = 1.6;
-const CINEMATIC_EXIT_AT = CINEMATIC_PAUSE_DURATION + CINEMATIC_FOCUS_DURATION + CINEMATIC_HOLD_DURATION;
-const ICE_REPEATABLE_RESIDENT = 'ice';
-
-function iceResidentId(): string {
-  return typeof localStorage === 'undefined' ? 'visitor' : localStorage.getItem('minicityUser') || 'visitor';
-}
-
-function iceChoiceKey(resident = iceResidentId()): string {
-  return `minicityIceChoice:${resident}`;
-}
 
 function box(material: THREE.Material, width: number, height: number, depth: number, x: number, y: number, z: number): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
@@ -60,16 +32,16 @@ function box(material: THREE.Material, width: number, height: number, depth: num
   return mesh;
 }
 
-export function createIceSanctum(options: IceSanctumOptions) {
+export function createIceSanctumScene(options: IceSanctumSceneOptions) {
   const root = new THREE.Group();
   root.name = 'ice-sanctum-interior';
-  root.userData.echoInteriorWalkable = {
+  root.userData.interiorWalkableBounds = {
     minX: -ROOM_WIDTH / 2 + 0.9,
     maxX: ROOM_WIDTH / 2 - 0.9,
     minZ: ROOM_AREA_Z - ROOM_DEPTH / 2 + 0.9,
     maxZ: ROOM_DEPTH / 2 - 0.9,
   };
-  root.position.set(CENTER[0], 0, CENTER[1]);
+  root.position.set(ICE_SANCTUM_CENTER[0], 0, ICE_SANCTUM_CENTER[1]);
   const floorMat = options.makeMaterial({ color: 0xb9e9e7, roughness: 0.62, tex: 'ground5', rx: 12, ry: 10 });
   const connectorMat = options.makeMaterial({ color: 0xb3e5e3, roughness: 0.6, tex: 'ground5', rx: 4, ry: 16 });
   const trimMat = options.makeMaterial({ color: 0x9bd3d2, roughness: 0.45, metalness: 0.12 });
@@ -218,20 +190,20 @@ export function createIceSanctum(options: IceSanctumOptions) {
 
   const floor = box(floorMat, ROOM_WIDTH, 0.18, ROOM_DEPTH, 0, -0.09, 0);
   floor.name = 'ice-sanctum-room-floor';
-  floor.userData.echoInteriorFloor = true;
+  floor.userData.interiorFloor = true;
   originalArea.add(floor);
 
   const connectorFloor = box(connectorMat, CONNECTOR_WIDTH, 0.18, ICE_SANCTUM_CORRIDOR_LENGTH, 0, -0.09, CONNECTOR_CENTER_Z);
   connectorFloor.name = 'ice-sanctum-connector-floor';
-  connectorFloor.userData.echoCabinWalkable = true;
-  connectorFloor.userData.echoInteriorObstacle = false;
+  connectorFloor.userData.interiorWalkableSurface = true;
+  connectorFloor.userData.interiorObstacle = false;
   root.add(connectorFloor);
 
   const navigationFloor = box(floorMat, ROOM_WIDTH, 0.18, NAVIGATION_FLOOR_DEPTH, 0, -0.09, NAVIGATION_FLOOR_Z);
   navigationFloor.name = 'ice-sanctum-navigation-floor';
   navigationFloor.visible = false;
-  navigationFloor.userData.echoInteriorFloor = true;
-  navigationFloor.userData.echoInteriorObstacle = false;
+  navigationFloor.userData.interiorFloor = true;
+  navigationFloor.userData.interiorObstacle = false;
   root.add(navigationFloor);
 
   const sideVoidWidth = (ROOM_WIDTH - CONNECTOR_WIDTH) / 2;
@@ -247,7 +219,7 @@ export function createIceSanctum(options: IceSanctumOptions) {
     );
     sideBlocker.name = `ice-sanctum-connector-boundary-${side < 0 ? 'left' : 'right'}`;
     sideBlocker.visible = false;
-    sideBlocker.userData.echoInteriorObstacle = true;
+    sideBlocker.userData.interiorObstacle = true;
     root.add(sideBlocker);
   }
   const floatingIslands = new THREE.Group();
@@ -300,7 +272,7 @@ export function createIceSanctum(options: IceSanctumOptions) {
       batch.castShadow = false;
       batch.receiveShadow = false;
       batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-      batch.userData.echoInteriorObstacle = false;
+      batch.userData.interiorObstacle = false;
       batch.userData.iceSanctumIslandBatch = true;
       batch.userData.iceSanctumIceBatch = material === islandIceMat;
       batch.raycast = () => undefined;
@@ -335,26 +307,24 @@ export function createIceSanctum(options: IceSanctumOptions) {
 
   const table = box(woodMat, 6.8, 0.82, 2.2, 0, 0.7, TABLE_Z);
   table.name = 'ice-sanctum-desk';
-  table.userData.echoInteriorObstacle = true;
+  table.userData.interiorObstacle = true;
   originalArea.add(table);
   for (const x of [-2.7, 2.7]) originalArea.add(box(woodMat, 0.26, 0.82, 1.8, x, 0.29, TABLE_Z));
   const tableTop = box(trimMat, 6.95, 0.08, 2.28, 0, 1.15, TABLE_Z);
-  tableTop.userData.echoInteriorObstacle = true;
+  tableTop.userData.interiorObstacle = true;
   originalArea.add(tableTop);
 
   const iceMesh = options.makeCharacter(0xc8ffff, 0x5aa8a7);
   iceMesh.name = 'ice-sanctum-npc';
   iceMesh.position.set(0, 0.82, ICE_Z);
   iceMesh.rotation.y = Math.PI;
-  iceMesh.traverse((child) => { child.userData.iceSanctumNpc = true; child.userData.echoInteriorObstacle = false; });
+  iceMesh.traverse((child) => { child.userData.iceSanctumNpc = true; child.userData.interiorObstacle = false; });
   originalArea.add(iceMesh);
-  const npcHitMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1.1, 16, 10),
-    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
-  );
+  const npcHitMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const npcHitMesh = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 10), npcHitMaterial);
   npcHitMesh.name = 'ice-sanctum-npc-hit-area';
   npcHitMesh.position.set(0, 0.43, ICE_Z);
-  npcHitMesh.userData.echoInteriorObstacle = false;
+  npcHitMesh.userData.interiorObstacle = false;
   originalArea.add(npcHitMesh);
   const crown = new THREE.Group();
   const crownMat = options.makeMaterial({ color: 0xe8c25f, roughness: 0.25, metalness: 0.55 });
@@ -371,248 +341,24 @@ export function createIceSanctum(options: IceSanctumOptions) {
   root.visible = false;
   options.scene.add(root);
 
-  let navigation: EchoCabinNavigation | null = null;
-  let active = false;
-  let cinematic = false;
-  let cinematicOverlay: HTMLElement | null = null;
-  let cinematicTimeline: ReturnType<typeof gsap.timeline> | null = null;
-  let timeSkipFadeOverlay: HTMLElement | null = null;
   let hiddenObjects: THREE.Object3D[] = [];
 
-  const postNpc = (dialog: readonly { speaker?: string; text: string; options: readonly { text: string; next: number | null; action?: string }[] }[]): NpcEntityLike => ({
-    profile: { id: 'ice-sanctum', name: 'Ice', head: 0xc8ffff, body: 0x5aa8a7, transitionDelayMs: 1000, dialog },
-    mesh: iceMesh,
-  });
 
-  const openingNpc = postNpc([
-    { speaker: '？？？', text: '……', options: [{ text: '你是……', next: 1 }] },
-    { speaker: '？？？', text: '冰', options: [
-      { text: '哦，你在这做什么', next: 2 },
-      { text: '我的天哪冰块大人', next: 2 },
-      { text: '呜呜呜我不该来这里的对不起对不起对不起不要惩罚我冰块大人呜呜呜', next: 2 },
-    ] },
-    { speaker: 'Ice', text: '……', options: [{ text: '？？', next: 3 }] },
-    { speaker: 'Ice', text: '你……愿意陪我坐一会吗？', options: [
-      { text: '……行？', next: null, action: 'ice:accept' },
-      { text: '我的荣幸冰块大人', next: null, action: 'ice:accept' },
-      { text: '不……', next: null, action: 'ice:reject' },
-    ] },
-  ]);
-
-  const afterTimeSkipNpc = postNpc([
-    { speaker: 'Ice', text: '你喜欢我的皇冠吗？', options: [
-      { text: '喜欢', next: 1 },
-      { text: '呃……挺好的', next: 1 },
-    ] },
-    { speaker: 'Ice', text: '谢谢，我很喜欢你陪着我的感觉。', options: [{ text: '什么？', next: 2 }] },
-    { speaker: 'Ice', text: '没什么，希望你喜欢这杯柠檬茶', options: [{ text: '收下', next: null, action: 'ice:finish-accept' }] },
-  ]);
-
-  function buildNavigation(): void {
-    navigation = createEchoCabinNavigation({
-      getInterior: () => root,
-      fallbackBounds: {
-        minX: CENTER[0] - ROOM_WIDTH / 2 + 1,
-        maxX: CENTER[0] + ROOM_WIDTH / 2 - 1,
-        minZ: CENTER[1] + ROOM_AREA_Z - ROOM_DEPTH / 2 + 1,
-        maxZ: CENTER[1] + ROOM_DEPTH / 2 - 1,
-      },
-    });
-    navigation.refresh();
-  }
-
-  function removeCinematicOverlay(): void {
-    cinematicOverlay?.remove();
-    cinematicOverlay = null;
-    document.body.classList.remove('ice-sanctum-cinematic-active');
-  }
-
-  function removeTimeSkipFadeOverlay(): void {
-    timeSkipFadeOverlay?.remove();
-    timeSkipFadeOverlay = null;
-  }
-
-  function fadeOutTimeSkipBlackout(): void {
-    removeTimeSkipFadeOverlay();
-    const overlay = document.createElement('div');
-    overlay.className = 'ice-sanctum-time-skip-fade';
-    overlay.setAttribute('aria-hidden', 'true');
-    document.body.append(overlay);
-    timeSkipFadeOverlay = overlay;
-    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('is-fading')));
-    window.setTimeout(() => {
-      if (timeSkipFadeOverlay === overlay) timeSkipFadeOverlay = null;
-      overlay.remove();
-    }, 2100);
-  }
-
-  function cancelCinematic(): void {
-    cinematicTimeline?.kill();
-    cinematicTimeline = null;
-    options.stopCameraFocus();
-    removeCinematicOverlay();
-    cinematic = false;
-  }
-
-  function completeCinematic(): void {
-    cinematicTimeline = null;
-    removeCinematicOverlay();
-    cinematic = false;
-    const cursor = options.getCursor();
-    if (cursor) options.setCameraTarget(cursor.position.x, cursor.position.z, true);
-  }
-
-  function startCinematic(): void {
-    const cursor = options.getCursor();
-    if (!cursor) return;
-    cinematic = true;
-    document.body.classList.add('ice-sanctum-cinematic-active');
-
-    const overlay = document.createElement('div');
-    overlay.className = 'ice-sanctum-cinematic';
-    overlay.setAttribute('aria-hidden', 'true');
-    const topMask = document.createElement('div');
-    topMask.className = 'ice-sanctum-cinematic-mask ice-sanctum-cinematic-mask-top';
-    const bottomMask = document.createElement('div');
-    bottomMask.className = 'ice-sanctum-cinematic-mask ice-sanctum-cinematic-mask-bottom';
-    overlay.append(topMask, bottomMask);
-    document.body.append(overlay);
-    cinematicOverlay = overlay;
-
-    const playerPosition = cursor.position.clone();
-    const icePosition = npcWorldPosition();
-    const timelineClock = { progress: 0 };
-    options.setCameraTarget(playerPosition.x, playerPosition.z, true);
-    gsap.set(topMask, { yPercent: -100 });
-    gsap.set(bottomMask, { yPercent: 100 });
-
-    cinematicTimeline = gsap.timeline({ onComplete: completeCinematic });
-    cinematicTimeline.call(() => {
-      options.focusCamera(icePosition.x, icePosition.z, {
-        duration: CINEMATIC_FOCUS_DURATION,
-        ease: 'power3.out',
-      });
-    }, [], CINEMATIC_PAUSE_DURATION);
-    cinematicTimeline.to([topMask, bottomMask], {
-      yPercent: 0,
-      duration: 0.9,
-      ease: 'power3.out',
-    }, CINEMATIC_PAUSE_DURATION);
-    cinematicTimeline.call(() => {
-      const currentCursor = options.getCursor();
-      if (!currentCursor) return;
-      options.focusCamera(currentCursor.position.x, currentCursor.position.z, {
-        duration: CINEMATIC_RETURN_DURATION,
-        ease: 'power3.out',
-      });
-    }, [], CINEMATIC_EXIT_AT);
-    cinematicTimeline.to(topMask, {
-      yPercent: -100,
-      duration: 1.2,
-      ease: 'power3.inOut',
-    }, CINEMATIC_EXIT_AT);
-    cinematicTimeline.to(bottomMask, {
-      yPercent: 100,
-      duration: 1.2,
-      ease: 'power3.inOut',
-    }, CINEMATIC_EXIT_AT);
-    cinematicTimeline.to(timelineClock, {
-      progress: 1,
-      duration: CINEMATIC_RETURN_DURATION,
-      ease: 'none',
-    }, CINEMATIC_EXIT_AT);
-  }
-
-  function hasEntered(): boolean {
-    if (typeof localStorage === 'undefined') return false;
-    if (iceResidentId() === ICE_REPEATABLE_RESIDENT) return false;
-    return localStorage.getItem(iceChoiceKey()) !== null;
-  }
-
-  function enter(): boolean {
-    const cursor = options.getCursor();
-    if (!cursor) {
-      options.onEnterUnavailable();
-      return false;
-    }
-    if (active || hasEntered()) return false;
-    if (!navigation) buildNavigation();
-    cancelCinematic();
-    removeTimeSkipFadeOverlay();
-    active = true;
-    options.onEnter();
+  function activate(cursor: Cursor): void {
     root.visible = true;
-    document.body.classList.add('ice-sanctum-active');
     hiddenObjects = [];
     options.scene.children.forEach((object) => {
       if (object === root || object === cursor || object instanceof THREE.Light) return;
       if (object.visible) { hiddenObjects.push(object); object.visible = false; }
     });
-    cursor.position.set(CENTER[0], 0, CENTER[1] + ROOM_DEPTH / 2 - 2.2);
+    cursor.position.set(ICE_SANCTUM_CENTER[0], 0, ICE_SANCTUM_CENTER[1] + ROOM_DEPTH / 2 - 2.2);
     cursor.visible = true;
-    cursor.position.copy(navigation?.clampToWalkable(cursor.position) ?? cursor.position);
-    options.dialogs()?.closeNpc();
-    startCinematic();
-    return true;
   }
 
-  function openIceDialog(npc: NpcEntityLike): void {
-    options.dialogs()?.openNpc(npc);
-  }
-
-  async function finish(weather: 'rain' | 'sunny', rewardId: string): Promise<void> {
-    const resident = iceResidentId();
-    const rewardConfirmed = await options.claimReward(rewardId).catch(() => false);
-    if (rewardConfirmed && typeof localStorage !== 'undefined') {
-      localStorage.setItem(iceChoiceKey(resident), weather === 'rain' ? 'reject' : 'accept');
-    }
-    options.dialogs()?.closeNpc();
-    cancelCinematic();
-    removeTimeSkipFadeOverlay();
-    active = false;
+  function deactivate(): void {
     root.visible = false;
     hiddenObjects.forEach((object) => { object.visible = true; });
     hiddenObjects = [];
-    document.body.classList.remove('ice-sanctum-active');
-    const cursor = options.getCursor();
-    if (cursor) cursor.position.set(20, 0, 26);
-    options.onReturn(weather);
-    if (!rewardConfirmed) options.onRewardFailure();
-  }
-
-  function returnThroughBlackout(weather: 'rain' | 'sunny', rewardId: string): void {
-    document.body.classList.add('ice-sanctum-returning');
-    window.setTimeout(() => void finish(weather, rewardId), 1500);
-    window.setTimeout(() => document.body.classList.remove('ice-sanctum-returning'), 3000);
-  }
-
-  function handleAction(action: string): void {
-    if (!active) return;
-    if (action === 'ice:reject') window.setTimeout(() => {
-      options.dialogs()?.openStory({ title: 'Ice', text: '……抱歉', variant: 'story' });
-      window.setTimeout(() => returnThroughBlackout('rain', 'ice_reject'), 2000);
-    }, 0);
-    if (action === 'ice:accept') window.setTimeout(() => {
-      options.dialogs()?.openStory({ title: 'Ice', text: '……谢谢', variant: 'story' });
-      window.setTimeout(() => {
-        options.dialogs()?.openStory({ title: '', text: '', variant: 'blackout' });
-        window.setTimeout(() => {
-          const model: StoryDialogModel = { title: '', text: '一段时间后……', variant: 'blackout' };
-          options.dialogs()?.openStory(model);
-          window.setTimeout(() => {
-            fadeOutTimeSkipBlackout();
-            openIceDialog(afterTimeSkipNpc);
-          }, 2500);
-        }, 2000);
-      }, 2400);
-    }, 0);
-    if (action === 'ice:finish-accept') window.setTimeout(() => returnThroughBlackout('sunny', 'ice_accept'), 300);
-  }
-
-  function interactNpc(): boolean {
-    if (!active || cinematic) return false;
-    openIceDialog(openingNpc);
-    return true;
   }
 
   function npcWorldPosition(target = new THREE.Vector3()): THREE.Vector3 {
@@ -624,39 +370,40 @@ export function createIceSanctum(options: IceSanctumOptions) {
     return originalArea.localToWorld(target);
   }
 
+  function exitPosition(target = new THREE.Vector3()): THREE.Vector3 {
+    return target.set(20, 0, 26);
+  }
+
   function dispose(): void {
-    cancelCinematic();
-    removeTimeSkipFadeOverlay();
     islandTweens.forEach((tween) => tween.kill());
-    hiddenObjects.forEach((object) => { object.visible = true; });
-    hiddenObjects = [];
-    active = false;
-    document.body.classList.remove('ice-sanctum-active');
-    document.body.classList.remove('ice-sanctum-returning');
+    deactivate();
     const geometries = new Set<THREE.BufferGeometry>();
     root.traverse((object) => {
-      if (object instanceof THREE.Mesh) geometries.add(object.geometry);
+      if (object instanceof THREE.Mesh && !object.userData.iceSanctumNpc) geometries.add(object.geometry);
     });
     geometries.forEach((geometry) => geometry.dispose());
+    npcHitMaterial.dispose();
     root.removeFromParent();
   }
 
   return {
     root,
-    enter,
-    handleAction,
-    interactNpc,
+    activate,
+    deactivate,
     npcMesh: iceMesh,
     npcHitMesh,
     npcWorldPosition,
     interactionPosition,
-    hasEntered,
-    isActive: () => active,
-    isCinematic: () => cinematic,
-    isMovementLocked: () => cinematic,
-    isInteractionLocked: () => cinematic,
-    navigation: () => navigation,
-    center: CENTER,
+    exitPosition,
+    walkBounds: {
+      minX: ICE_SANCTUM_CENTER[0] - ROOM_WIDTH / 2 + 1,
+      maxX: ICE_SANCTUM_CENTER[0] + ROOM_WIDTH / 2 - 1,
+      minZ: ICE_SANCTUM_CENTER[1] + ROOM_AREA_Z - ROOM_DEPTH / 2 + 1,
+      maxZ: ICE_SANCTUM_CENTER[1] + ROOM_DEPTH / 2 - 1,
+    },
+    center: ICE_SANCTUM_CENTER,
     dispose,
   };
 }
+
+export type IceSanctumScene = ReturnType<typeof createIceSanctumScene>;

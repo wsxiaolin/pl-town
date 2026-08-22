@@ -10,6 +10,7 @@ import {
   type ProgressionCatalog,
   type ProgressionEvent,
 } from '../../gameplay/progression/playerProgress';
+import { ICE_KING_ITEMS, ICE_KING_REWARDS } from '../../gameplay/content/stories/iceKing/iceKingContent';
 
 type ProgressionCommand =
   | { type: 'progress.get' }
@@ -35,7 +36,8 @@ const PRODUCT_PRESENTATIONS: Readonly<Record<string, { icon: string; detail: str
   radish: { icon: '萝', detail: '新鲜萝卜 · 林澈遗愿所需食材' },
   music_box: { icon: '音', detail: '经典旋律音乐盒 · 林澈遗愿所需物品' },
 });
-const repeatableRewardIds: ReadonlySet<string> = new Set(['ice_reject', 'ice_accept']);
+const repeatableRewardIds: ReadonlySet<string> = new Set(Object.values(ICE_KING_REWARDS).map((reward) => reward.id));
+const iceRewardById = new Map(Object.values(ICE_KING_REWARDS).map((reward) => [reward.id, reward]));
 
 export type CloudProgressionController = ReturnType<typeof createCloudProgressionController>;
 
@@ -51,7 +53,11 @@ export function createCloudProgressionController(options: Options) {
   let shopCurrencyValue: HTMLElement | null = null;
   let shopArea: HTMLElement | null = null;
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
-  const pendingRewards = new Map<string, { claimSequence?: number; resolve: (claimed: boolean) => void }>();
+  const pendingRewards = new Map<string, {
+    claimSequence?: number;
+    resolve: (claimed: boolean) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }>();
   let pendingFilmCity: ((purchased: boolean) => void) | null = null;
 
   function pendingRewardStorageKey(rewardId: string): string {
@@ -122,6 +128,7 @@ export function createCloudProgressionController(options: Options) {
       if (pending && sequenceMatches) {
         const accepted = pending.claimSequence === undefined ? Boolean(event.claimed) : event.accepted === true || event.claimed === true;
         if (accepted && pending.claimSequence !== undefined) clearPendingRewardSequence(event.rewardId);
+        clearTimeout(pending.timeout);
         pending.resolve(accepted);
         pendingRewards.delete(event.rewardId);
       }
@@ -151,8 +158,10 @@ else if (event.type === 'shop.purchased') {
       options.showToast(`${productName ?? '商品'}已放入背包`);
     }
     else if (event.type === 'reward.claimed' && event.rewardId === 'tirpitz_beach') options.showToast(event.claimed ? '皮尔皮茨号已放入背包' : '皮尔皮茨号已经领取过了');
-    else if (event.type === 'reward.claimed' && event.rewardId === 'ice_reject') options.showToast(event.claimed ? '湿湿的皇冠已放入背包' : event.accepted ? '湿湿的皇冠领取状态已确认' : '湿湿的皇冠领取失败');
-    else if (event.type === 'reward.claimed' && event.rewardId === 'ice_accept') options.showToast(event.claimed ? '冰镇柠檬水已放入背包' : event.accepted ? '冰镇柠檬水领取状态已确认' : '冰镇柠檬水领取失败');
+    else if (event.type === 'reward.claimed' && event.rewardId && iceRewardById.has(event.rewardId)) {
+      const reward = iceRewardById.get(event.rewardId)!;
+      options.showToast(event.claimed ? reward.claimedMessage : event.accepted ? reward.confirmedMessage : reward.failedMessage);
+    }
     else if (event.type === 'reward.claimed') options.showToast(event.claimed ? '今日沃柑已放入背包' : '今天已经领取过沃柑了');
   }
 
@@ -167,7 +176,7 @@ else if (event.type === 'shop.purchased') {
         row.dataset.itemId = entry.itemId;
         const icon = options.document.createElement('span');
         icon.className = 'inventory-item-icon';
-        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : entry.itemId === 'tirpitz_card' ? '舰' : entry.itemId === 'ice_wet_crown' ? '冠' : entry.itemId === 'ice_lemonade' ? '柠' : '册';
+        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : entry.itemId === 'tirpitz_card' ? '舰' : entry.itemId === ICE_KING_ITEMS.wetCrown.id ? ICE_KING_ITEMS.wetCrown.icon : entry.itemId === ICE_KING_ITEMS.lemonade.id ? ICE_KING_ITEMS.lemonade.icon : '册';
         const name = options.document.createElement('span');
         name.className = 'sp-ul-name';
         name.textContent = entry.name;
@@ -296,16 +305,29 @@ else if (event.type === 'shop.purchased') {
     });
   }
 
-  function claimReward(rewardId: string): Promise<boolean> {
+  function nextRewardClaimSequence(rewardId: string): number | null {
+    if (!repeatableRewardIds.has(rewardId)) return null;
+    return pendingRewardSequence(rewardId) ?? (progress.repeatableRewardClaims[rewardId] ?? 0) + 1;
+  }
+
+  function claimReward(rewardId: string, requestedSequence?: number): Promise<boolean> {
     if (!online) { offlineNotice(); return Promise.resolve(false); }
     if (pendingRewards.has(rewardId)) return Promise.resolve(false);
     const claimSequence = repeatableRewardIds.has(rewardId)
-      ? pendingRewardSequence(rewardId) ?? (progress.repeatableRewardClaims[rewardId] ?? 0) + 1
+      ? requestedSequence ?? nextRewardClaimSequence(rewardId) ?? undefined
       : undefined;
     if (claimSequence !== undefined) storePendingRewardSequence(rewardId, claimSequence);
     return new Promise((resolve) => {
-      pendingRewards.set(rewardId, { claimSequence, resolve });
+      const timeout = setTimeout(() => {
+        const pending = pendingRewards.get(rewardId);
+        if (!pending || pending.resolve !== resolve) return;
+        pendingRewards.delete(rewardId);
+        resolve(false);
+      }, 10_000);
+      pendingRewards.set(rewardId, { claimSequence, resolve, timeout });
       if (!options.send({ type: 'progress.reward.claim', rewardId, claimSequence })) {
+        const pending = pendingRewards.get(rewardId);
+        if (pending) clearTimeout(pending.timeout);
         pendingRewards.delete(rewardId);
         resolve(false);
       }
@@ -332,7 +354,7 @@ else if (event.type === 'shop.purchased') {
   function handleError(): void {
     pendingBuilding = null;
     pendingConsumption.forEach((resolve) => resolve(false));
-    pendingRewards.forEach(({ resolve }) => resolve(false));
+    pendingRewards.forEach(({ resolve, timeout }) => { clearTimeout(timeout); resolve(false); });
     pendingConsumption.clear();
     pendingRewards.clear();
     pendingFilmCity?.(false);
@@ -343,7 +365,7 @@ else if (event.type === 'shop.purchased') {
 
   return {
     setup, setConnection, applySnapshot, interactBuilding, unlockAchievement, syncAchievements,
- buyProduct, consumeItem, purchaseFilmCityExperience, claimReward, openInventory, openShop,
+ buyProduct, consumeItem, purchaseFilmCityExperience, nextRewardClaimSequence, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),
     isOnline: () => online, handleError,

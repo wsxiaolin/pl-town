@@ -113,7 +113,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
       cursorChar.position.x - b.group.position.x,
       cursorChar.position.z - b.group.position.z,
     ) : Infinity;
-    const interactionRadius = b.id === 'kingice' ? 3.6 : CONFIG.buildingInteractRadius;
+    const interactionRadius = b.interactionRadius ?? CONFIG.buildingInteractRadius;
     if (cursorChar && buildingDistance <= interactionRadius) {
       pendingBuilding = null;
       options.navigateTo(b);
@@ -237,7 +237,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     if (pendingBuilding && cursorChar) {
       const b = pendingBuilding;
       const distance = Math.hypot(cursorChar.position.x - b.group.position.x, cursorChar.position.z - b.group.position.z);
-      const interactionRadius = b.id === 'kingice' ? 3.6 : CONFIG.buildingInteractRadius;
+      const interactionRadius = b.interactionRadius ?? CONFIG.buildingInteractRadius;
       if (distance <= interactionRadius) { pendingBuilding = null; liftForClick(b); options.navigateTo(b); }
     }
     if (pendingSceneInterestPoint && cursorChar) {

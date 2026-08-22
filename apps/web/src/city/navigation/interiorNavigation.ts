@@ -9,14 +9,14 @@ type WalkBounds = {
 
 type ObstacleRect = WalkBounds;
 
-export type EchoCabinNavigation = {
+export type InteriorNavigation = {
   buildPath(from: THREE.Vector3, rawTarget: THREE.Vector3): THREE.Vector3[];
   contains(point: THREE.Vector3, padding?: number): boolean;
   clampToWalkable(point: THREE.Vector3): THREE.Vector3;
   refresh(): void;
 };
 
-export type EchoCabinNavigationOptions = {
+export type InteriorNavigationOptions = {
   getInterior: () => THREE.Object3D | null | undefined;
   fallbackBounds: WalkBounds;
   playerRadius?: number;
@@ -74,7 +74,7 @@ function segmentIntersectsRect(from: THREE.Vector3, to: THREE.Vector3, rect: Obs
     && near <= 1;
 }
 
-export function createEchoCabinNavigation(options: EchoCabinNavigationOptions): EchoCabinNavigation {
+export function createInteriorNavigation(options: InteriorNavigationOptions): InteriorNavigation {
   const playerRadius = options.playerRadius ?? 0.52;
   const meshBox = new THREE.Box3();
   let bounds = { ...options.fallbackBounds };
@@ -97,24 +97,24 @@ export function createEchoCabinNavigation(options: EchoCabinNavigationOptions): 
     interior.updateWorldMatrix(true, true);
     const meshes: Array<{ object: THREE.Mesh; box: THREE.Box3 }> = [];
     interior.traverse((object) => {
-      if (!(object instanceof THREE.Mesh) || object.userData.echoInteriorRoof) return;
+      if (!(object instanceof THREE.Mesh) || object.userData.interiorNavigationIgnore) return;
       meshBox.setFromObject(object);
       if (meshBox.isEmpty()) return;
       meshes.push({ object, box: meshBox.clone() });
     });
 
     const floor = meshes
-      .filter(({ object, box }) => object.userData.echoInteriorFloor || box.max.y <= 0.25)
+      .filter(({ object, box }) => object.userData.interiorFloor || box.max.y <= 0.25)
       .sort((left, right) => {
-        const leftExplicit = left.object.userData.echoInteriorFloor ? 1 : 0;
-        const rightExplicit = right.object.userData.echoInteriorFloor ? 1 : 0;
+        const leftExplicit = left.object.userData.interiorFloor ? 1 : 0;
+        const rightExplicit = right.object.userData.interiorFloor ? 1 : 0;
         if (leftExplicit !== rightExplicit) return rightExplicit - leftExplicit;
         const leftArea = (left.box.max.x - left.box.min.x) * (left.box.max.z - left.box.min.z);
         const rightArea = (right.box.max.x - right.box.min.x) * (right.box.max.z - right.box.min.z);
         return rightArea - leftArea;
       })[0];
 
-    const configuredBounds = interior.userData.echoInteriorWalkable;
+    const configuredBounds = interior.userData.interiorWalkableBounds;
     if (configuredBounds
       && Number.isFinite(configuredBounds.minX)
       && Number.isFinite(configuredBounds.maxX)
@@ -157,15 +157,15 @@ export function createEchoCabinNavigation(options: EchoCabinNavigationOptions): 
     const rawObstacles: ObstacleRect[] = [];
 
     meshes.forEach(({ object, box }) => {
-      if (object === floor?.object || object.userData.echoCabinWalkable || object.userData.echoInteriorWall) return;
-      if (object.userData.echoInteriorObstacle === false) return;
+      if (object === floor?.object || object.userData.interiorWalkableSurface || object.userData.interiorWall) return;
+      if (object.userData.interiorObstacle === false) return;
       if (box.max.y <= 0.05 || box.min.y > PLAYER_COLLISION_HEIGHT) return;
 
       const width = box.max.x - box.min.x;
       const depth = box.max.z - box.min.z;
       const spansRoom = width >= roomWidth * 0.78 || depth >= roomDepth * 0.78;
       const wallLike = spansRoom && Math.min(width, depth) <= 0.85;
-      if (wallLike && object.userData.echoInteriorObstacle !== true) return;
+      if (wallLike && object.userData.interiorObstacle !== true) return;
 
       const obstacle = {
         minX: Math.max(bounds.minX, box.min.x - playerRadius),

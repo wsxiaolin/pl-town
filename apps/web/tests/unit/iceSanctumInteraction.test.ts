@@ -1,21 +1,86 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
-import {
-  createIceSanctum,
-  ICE_SANCTUM_CORRIDOR_LENGTH,
-} from '../../src/city/iceSanctum';
+import { createIceSanctumExperience as createIceSanctum } from '../../src/city/iceKing/createIceSanctumExperience';
+import { createIceSanctumScene, ICE_SANCTUM_CORRIDOR_LENGTH } from '../../src/rendering/iceKing/iceSanctumScene';
 import { createInteractionPointer } from '../../src/city/interactionPointer';
 import { createCameraController } from '../../src/city/navigation/cameraController';
 import { createPlayerController } from '../../src/city/navigation/playerController';
 import { createBuildingInteraction } from '../../src/city/buildingInteraction';
 import type { BuildingEntity } from '../../src/city/buildingEntity';
 import type { CityDialogController } from '../../src/adapters/ui/cityDialogController';
+import { createBuildingFeatureRegistry } from '../../src/city/buildingFeatures/buildingFeatureRegistry';
+import { createIceKingBuildingFeature } from '../../src/city/iceKing/createIceKingBuildingFeature';
+import { createIceSanctumController } from '../../src/city/iceKing/iceSanctumController';
+import { createLocalStorageIceSanctumProgressStore } from '../../src/adapters/storage/iceKing/LocalStorageIceSanctumStoryRepository';
+import type { IceSanctumProgressStore } from '../../src/city/iceKing/iceSanctumPorts';
+
+function createRewardTestSanctum(options: {
+  progress: IceSanctumProgressStore;
+  nextSequence?: number;
+  claimReward: (sequence: number) => Promise<boolean>;
+  onProgressFailure?: () => void;
+}) {
+  const cursor = new THREE.Group();
+  const root = new THREE.Group();
+  const npc = new THREE.Group();
+  return createIceSanctumController({
+    scene: {
+      root,
+      npcMesh: npc,
+      npcHitMesh: npc,
+      center: [0, 0],
+      walkBounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+      activate: () => undefined,
+      deactivate: () => undefined,
+      npcWorldPosition: (target = new THREE.Vector3()) => target,
+      interactionPosition: (target = new THREE.Vector3()) => target,
+      exitPosition: (target = new THREE.Vector3()) => target,
+      dispose: () => undefined,
+    },
+    presentation: {
+      enter: () => undefined,
+      leave: () => undefined,
+      fadeOutTimeSkipBlackout: () => undefined,
+      returnThroughBlackout: async (onCovered) => { await onCovered(); },
+      schedule: (callback) => { callback(); return 1; },
+      isCinematic: () => false,
+      dispose: () => undefined,
+    },
+    progress: options.progress,
+    getCursor: () => cursor,
+    dialogs: () => ({ openStory: () => undefined, close: () => undefined }),
+    nextRewardClaimSequence: () => options.nextSequence ?? 1,
+    claimReward: (_rewardId, sequence) => options.claimReward(sequence),
+    onEnter: () => undefined,
+    onEnterUnavailable: () => undefined,
+    onProgressFailure: options.onProgressFailure ?? (() => undefined),
+    onRewardFailure: () => undefined,
+    onReturn: () => undefined,
+  });
+}
+
+function chooseRejectEnding(sanctum: ReturnType<typeof createRewardTestSanctum>): void {
+  sanctum.selectChoice('ask-identity');
+  sanctum.selectChoice('ask-purpose');
+  sanctum.selectChoice('confused');
+  sanctum.selectChoice('reject-invitation');
+}
+
+async function flushPromises(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 
 test('King Ice building does not reopen its audience prompt after the sanctum story was completed', () => {
   let promptOpens = 0;
   let lockedNotices = 0;
   let tracked = 0;
+  const features = createBuildingFeatureRegistry();
+  features.register(createIceKingBuildingFeature({
+    getSanctum: () => ({ enter: () => false, hasEntered: () => true }),
+    showLocked: () => { lockedNotices += 1; },
+  }));
   const interaction = createBuildingInteraction({
     isBuildingUnavailable: () => false,
     getMultiplayerHousing: () => null,
@@ -26,37 +91,21 @@ test('King Ice building does not reopen its audience prompt after the sanctum st
     getWriterCatalogController: () => null,
     getNewsstandController: () => null,
     trackInteraction: () => { tracked += 1; },
-    canEnterIceSanctum: () => false,
-    onIceSanctumLocked: () => { lockedNotices += 1; },
+    interactWithFeature: features.interact,
   });
 
-  interaction.navigateUnlocked({ id: 'kingice' } as BuildingEntity);
+  interaction.navigateUnlocked({ id: 'kingice', featureIds: ['ice-sanctum'] } as unknown as BuildingEntity);
   assert.equal(promptOpens, 0);
   assert.equal(lockedNotices, 1);
   assert.equal(tracked, 0);
 });
 
 test('Ice sanctum has no walls, separates Ice from the desk, and includes floating islands', () => {
-  Object.defineProperty(globalThis, 'document', {
-    configurable: true,
-    value: { body: { classList: { remove: () => undefined } } },
-  });
   const scene = new THREE.Scene();
-  const sanctum = createIceSanctum({
+  const sanctum = createIceSanctumScene({
     scene,
     makeMaterial: () => new THREE.MeshStandardMaterial(),
     makeCharacter: () => new THREE.Group(),
-    getCursor: () => null,
-    dialogs: () => null,
-    claimReward: async () => true,
-    onEnter: () => undefined,
-    onEnterUnavailable: () => undefined,
-    onRewardFailure: () => undefined,
-    onReturn: () => undefined,
-    setCameraTarget: () => undefined,
-    focusCamera: () => undefined,
-    stopCameraFocus: () => undefined,
-    isMobile: () => false,
   });
 
   const boxHeights = sanctum.root.children
@@ -109,6 +158,32 @@ test('Ice sanctum has no walls, separates Ice from the desk, and includes floati
   sanctum.dispose();
 });
 
+test('Ice sanctum disposes owned hit resources without disposing pooled character geometry', () => {
+  const scene = new THREE.Scene();
+  const characterGeometry = new THREE.BoxGeometry();
+  const character = new THREE.Group();
+  character.add(new THREE.Mesh(characterGeometry, new THREE.MeshBasicMaterial()));
+  let characterGeometryDisposals = 0;
+  let hitGeometryDisposals = 0;
+  let hitMaterialDisposals = 0;
+  characterGeometry.addEventListener('dispose', () => { characterGeometryDisposals += 1; });
+  const sanctum = createIceSanctumScene({
+    scene,
+    makeMaterial: () => new THREE.MeshStandardMaterial(),
+    makeCharacter: () => character,
+  });
+  const hitMesh = sanctum.npcHitMesh as THREE.Mesh;
+  hitMesh.geometry.addEventListener('dispose', () => { hitGeometryDisposals += 1; });
+  (hitMesh.material as THREE.Material).addEventListener('dispose', () => { hitMaterialDisposals += 1; });
+
+  sanctum.dispose();
+
+  assert.equal(characterGeometryDisposals, 0);
+  assert.equal(hitGeometryDisposals, 1);
+  assert.equal(hitMaterialDisposals, 1);
+  characterGeometry.dispose();
+});
+
 test('Ice cinematic starts immediately when the player enters the sanctum', () => {
   const bodyClasses = new Set<string>();
   const overlays: unknown[] = [];
@@ -140,18 +215,19 @@ test('Ice cinematic starts immediately when the player enters the sanctum', () =
     makeCharacter: () => new THREE.Group(),
     getCursor: () => cursor,
     dialogs: () => null,
+    nextRewardClaimSequence: () => 1,
     claimReward: async () => true,
     onEnter: () => undefined,
     onEnterUnavailable: () => undefined,
     onRewardFailure: () => undefined,
+    onProgressFailure: () => undefined,
     onReturn: () => undefined,
     setCameraTarget: () => undefined,
     focusCamera: () => undefined,
     stopCameraFocus: () => { cameraFocusStops += 1; },
-    isMobile: () => false,
   });
 
-  sanctum.enter();
+  assert.equal(sanctum.enter(), true);
   assert.equal(sanctum.isCinematic(), true);
   assert.equal(bodyClasses.has('ice-sanctum-cinematic-active'), true);
   assert.equal(overlays.length, 1);
@@ -205,27 +281,122 @@ test('a failed Ice reward claim leaves the ending unlocked for a retry', async (
     makeCharacter: () => new THREE.Group(),
     getCursor: () => cursor,
     dialogs: () => ({ closeNpc: () => undefined, openStory: () => undefined } as unknown as CityDialogController),
+    nextRewardClaimSequence: () => 1,
     claimReward: async () => false,
     onEnter: () => undefined,
     onEnterUnavailable: () => undefined,
     onRewardFailure: () => { failures += 1; },
+    onProgressFailure: () => undefined,
     onReturn: () => { returned += 1; },
     setCameraTarget: () => undefined,
     focusCamera: () => undefined,
     stopCameraFocus: () => undefined,
-    isMobile: () => false,
   });
 
   assert.equal(sanctum.enter(), true);
-  sanctum.handleAction('ice:reject');
+  sanctum.selectChoice('ask-identity');
+  sanctum.selectChoice('ask-purpose');
+  sanctum.selectChoice('confused');
+  sanctum.selectChoice('reject-invitation');
   while (callbacks.length) callbacks.shift()?.();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
 
   assert.equal(returned, 1);
   assert.equal(failures, 1);
   assert.equal(storage.has('minicityIceChoice:retry-tester'), false);
   assert.equal(sanctum.hasEntered(), false);
+  sanctum.dispose();
+});
+
+test('Ice reward is not requested when the pending checkpoint cannot be stored', async () => {
+  const values = new Map<string, string>([['minicityUser', 'storage-failure']]);
+  const progress = createLocalStorageIceSanctumProgressStore({
+    storage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => {
+        if (value.includes('reward-pending')) throw new Error('storage full');
+        values.set(key, value);
+      },
+    },
+  });
+  let claims = 0;
+  let progressFailures = 0;
+  const sanctum = createRewardTestSanctum({
+    progress,
+    claimReward: async () => { claims += 1; return true; },
+    onProgressFailure: () => { progressFailures += 1; },
+  });
+
+  assert.equal(sanctum.enter(), true);
+  chooseRejectEnding(sanctum);
+  await flushPromises();
+
+  assert.equal(claims, 0);
+  assert.equal(progressFailures, 1);
+  assert.equal(progress.hasCompleted(), false);
+  sanctum.dispose();
+});
+
+test('Ice completion retry reuses the persisted reward sequence', async () => {
+  const values = new Map<string, string>([['minicityUser', 'completion-retry']]);
+  let failCompletionWrite = true;
+  const progress = createLocalStorageIceSanctumProgressStore({
+    storage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => {
+        if (failCompletionWrite && value.includes('reject-complete')) {
+          failCompletionWrite = false;
+          throw new Error('temporary write failure');
+        }
+        values.set(key, value);
+      },
+    },
+  });
+  const sequences: number[] = [];
+  const claimReward = async (sequence: number) => { sequences.push(sequence); return true; };
+  const first = createRewardTestSanctum({ progress, nextSequence: 7, claimReward });
+  assert.equal(first.enter(), true);
+  chooseRejectEnding(first);
+  await flushPromises();
+  assert.equal(failCompletionWrite, false);
+  assert.equal(progress.hasCompleted(), false);
+  first.dispose();
+
+  const retry = createRewardTestSanctum({ progress, nextSequence: 8, claimReward });
+  assert.equal(retry.enter(), true);
+  await flushPromises();
+
+  assert.deepEqual(sequences, [7, 7]);
+  assert.equal(progress.hasCompleted(), true);
+  retry.dispose();
+});
+
+test('Ice accept ending advances through the declarative story and completes', async () => {
+  const values = new Map<string, string>([['minicityUser', 'accept-ending']]);
+  const progress = createLocalStorageIceSanctumProgressStore({
+    storage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+    },
+  });
+  const sequences: number[] = [];
+  const sanctum = createRewardTestSanctum({
+    progress,
+    nextSequence: 3,
+    claimReward: async (sequence) => { sequences.push(sequence); return true; },
+  });
+  assert.equal(sanctum.enter(), true);
+  sanctum.selectChoice('ask-identity');
+  sanctum.selectChoice('ask-purpose');
+  sanctum.selectChoice('confused');
+  sanctum.selectChoice('accept-casual');
+  sanctum.selectChoice('like-crown');
+  sanctum.selectChoice('ask-meaning');
+  sanctum.selectChoice('receive-lemonade');
+  await flushPromises();
+
+  assert.deepEqual(sequences, [3]);
+  assert.equal(progress.hasCompleted(), true);
   sanctum.dispose();
 });
 
@@ -268,15 +439,16 @@ test('the resident named ice can re-enter after completing the sanctum story', (
     makeCharacter: () => new THREE.Group(),
     getCursor: () => cursor,
     dialogs: () => null,
+    nextRewardClaimSequence: () => 1,
     claimReward: async () => true,
     onEnter: () => undefined,
     onEnterUnavailable: () => undefined,
     onRewardFailure: () => undefined,
+    onProgressFailure: () => undefined,
     onReturn: () => undefined,
     setCameraTarget: () => undefined,
     focusCamera: () => undefined,
     stopCameraFocus: () => undefined,
-    isMobile: () => false,
   });
 
   assert.equal(sanctum.hasEntered(), false);
@@ -367,8 +539,8 @@ test('Ice sanctum camera follows the player while keeping a fixed look direction
     getZoom: () => 10,
     setZoom: () => {},
     getTarget: () => target,
-    isEchoInterior: () => true,
-    echoInterior: [110, 0],
+    isInteriorActive: () => true,
+    defaultInteriorCenter: [110, 0],
     getInteriorCenter: () => [220, 40],
     getInteriorCameraOffset: () => [13, 22, 17],
     getInteriorFollowsTarget: () => true,
@@ -391,8 +563,8 @@ test('Ice cinematic camera focus keeps the fixed interior camera direction', () 
     getZoom: () => 10,
     setZoom: () => {},
     getTarget: () => target,
-    isEchoInterior: () => true,
-    echoInterior: [110, 0],
+    isInteriorActive: () => true,
+    defaultInteriorCenter: [110, 0],
     getInteriorCenter: () => [220, 40],
     getInteriorCameraOffset: () => [13, 22, 17],
     getInteriorFollowsTarget: () => true,

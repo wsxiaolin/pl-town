@@ -3,6 +3,8 @@ import test from 'node:test';
 import type { StoryDialogModel } from '../../src/adapters/ui/cityDialogController';
 import { getNpcType } from '../../src/city/data/npcTypes';
 import { createSceneInterestPointController } from '../../src/city/sceneInterestPointController';
+import { createCatCafeIceWallInteraction } from '../../src/city/iceKing/catCafeIceWallInteraction';
+import { CAT_CAFE_ICE_WALL, ICE_KING_ITEMS } from '../../src/gameplay/content/stories/iceKing/iceKingContent';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { residenceStyleFor } from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
@@ -10,7 +12,6 @@ import { isFilmCityClearing } from '../../src/city/data/cityConfig';
 import { FILM_CITY_EXPERIENCE_PRICE, FILM_CITY_SHOTS } from '../../src/city/filmCity/filmCityExperienceController';
 import { MUSIC_HALL_LYRICS } from '../../src/city/data/musicHallLyrics';
 import {
-  CAT_CAFE_ICE_WALL_COPY,
   beijingDayKey,
   evaluateDailyOrange,
   getWellStoryNode,
@@ -110,14 +111,11 @@ test('cat cafe ice wall awards remembrance only after Cat Death CG completes', a
   const consumed: string[] = [];
   const awards: string[] = [];
   const toasts: string[] = [];
-  const controller = createSceneInterestPointController({
+  const controller = createCatCafeIceWallInteraction({
     dialogs: { openStory: (story) => { activeStory = story; } },
     inventory: {
-      isOnline: () => true,
-      hasItem: (itemId) => hasLemonade && itemId === WORLD_ITEM_IDS.iceLemonade,
+      hasItem: (itemId) => hasLemonade && itemId === ICE_KING_ITEMS.lemonade.id,
       consumeItem: async (itemId) => { consumed.push(itemId); return consumeSucceeds; },
-      claimReward: () => false,
-      hasAchievement: () => false,
     },
     awardAchievement: (achievementId) => { awards.push(achievementId); },
     showToast: (message) => { toasts.push(message); },
@@ -125,10 +123,10 @@ test('cat cafe ice wall awards remembrance only after Cat Death CG completes', a
   });
 
   await controller.interact('cat-cafe-ice-wall');
-  assert.equal(activeStory?.text, CAT_CAFE_ICE_WALL_COPY);
+  assert.equal(activeStory?.text, CAT_CAFE_ICE_WALL.copy);
   assert.equal(activeStory?.options?.[0]?.text, '#放上冰镇柠檬水');
   await activeStory?.options?.[0]?.onPick();
-  assert.deepEqual(consumed, [WORLD_ITEM_IDS.iceLemonade]);
+  assert.deepEqual(consumed, [ICE_KING_ITEMS.lemonade.id]);
   assert.equal(cgStarts, 1);
   assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.catDeathRemembrance.id]);
 
@@ -146,7 +144,7 @@ test('cat cafe ice wall awards remembrance only after Cat Death CG completes', a
 
   hasLemonade = false;
   await controller.interact('cat-cafe-ice-wall');
-  assert.equal(activeStory?.text, CAT_CAFE_ICE_WALL_COPY);
+  assert.equal(activeStory?.text, CAT_CAFE_ICE_WALL.copy);
   assert.equal(activeStory?.role, null);
   assert.deepEqual(activeStory?.options, []);
 });

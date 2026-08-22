@@ -4,7 +4,7 @@ import type { Npc } from './npcSystem';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
 import { isWeather, type Weather } from './weather';
-import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from './catDeathCG';
+import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
 
 type NpcEntity = Npc;
 

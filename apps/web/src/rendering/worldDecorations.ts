@@ -190,7 +190,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     // buildingBounds below also blocks their current building footprints.
     const reservedSpecialLots = new Set(['32,-8', '28,2', '33,3']);
     const buildingBounds=buildings.map((building)=>({
-      id: building.id,
+      building,
       box: new THREE.Box3().setFromObject(building.group),
     }));
     centers.forEach(x=>centers.forEach(z=>{
@@ -207,8 +207,8 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         if(reservedSpecialLots.has(`${Math.round(lx)},${Math.round(lz)}`))return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
-        const blocked=buildingBounds.some(({id,box})=>{
-          const clearance=id==='kingice'?2:1.35;
+        const blocked=buildingBounds.some(({building,box})=>{
+          const clearance=building.decorationClearance ?? 1.35;
           return lx>=box.min.x-clearance&&lx<=box.max.x+clearance
             &&lz>=box.min.z-clearance&&lz<=box.max.z+clearance;
         });

@@ -70,9 +70,12 @@ import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { isWeather, type Weather } from './weather';
 import { preloadTextureResources } from './textureResourcePreloader';
-import { createIceSanctum } from './iceSanctum';
-import { createWeatherEffect } from './weatherEffect';
-import { playCatDeathCGAfterBlackout, stopCatDeathCG } from './catDeathCG';
+import { createIceSanctumExperience } from './iceKing/createIceSanctumExperience';
+import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
+import { createCatCafeIceWallFeature } from './iceKing/catCafeIceWallInteraction';
+import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatureRegistry';
+import { createWeatherEffect } from '../rendering/weatherEffect';
+import { playCatDeathCGAfterBlackout, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -130,7 +133,13 @@ let worldDecorations: ReturnType<typeof createWorldDecorations>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
-let iceSanctum: ReturnType<typeof createIceSanctum> | null = null;
+let iceSanctum: ReturnType<typeof createIceSanctumExperience> | null = null;
+let catCafeIceWallFeature: ReturnType<typeof createCatCafeIceWallFeature> | null = null;
+const buildingFeatureRegistry = createBuildingFeatureRegistry();
+buildingFeatureRegistry.register(createIceKingBuildingFeature({
+  getSanctum: () => iceSanctum,
+  showLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
+}));
 let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
@@ -315,8 +324,7 @@ const buildingInteraction = createBuildingInteraction({
   trackInteraction,
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
-  canEnterIceSanctum: () => !(iceSanctum?.hasEntered() ?? false),
-  onIceSanctumLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
+  interactWithFeature: buildingFeatureRegistry.interact,
 });
 
 const eventBindings = createEventBindings({
@@ -363,8 +371,8 @@ function init() {
     getZoom: () => cameraZoom,
     setZoom: (zoom) => { cameraZoom = zoom; },
     getTarget: () => cameraTarget,
-    isEchoInterior: () => Boolean(echoStoryController?.isInteriorView() || iceSanctum?.isActive()),
-    echoInterior: ECHO_OBSERVATORY_AREA.interior,
+    isInteriorActive: () => Boolean(echoStoryController?.isInteriorView() || iceSanctum?.isActive()),
+    defaultInteriorCenter: ECHO_OBSERVATORY_AREA.interior,
     getInteriorCenter: () => iceSanctum?.isActive() ? iceSanctum.center : ECHO_OBSERVATORY_AREA.interior,
     getInteriorCameraOffset: () => iceSanctum?.isActive() ? [13, 22, 17] : null,
     getInteriorFollowsTarget: () => Boolean(iceSanctum?.isActive()),
@@ -435,7 +443,7 @@ function init() {
   }).forEach(group => roadNavigation.registerObstacleGroup(group));
   cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
-  roadNavigation.registerObstacleGroup(sceneInterestPoints.entities.get('cat-cafe-ice-wall')?.object ?? null);
+  sceneInterestPoints.obstacleRoots.forEach((root) => roadNavigation.registerObstacleGroup(root));
   addRealBuildingModels(scene, buildings)
     .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
     .catch(error => console.error('3D model loading failed', error));
@@ -594,8 +602,7 @@ function init() {
     onDialogueAction: (action)=>{
       if(action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if(action.startsWith('open-url:')) window.location.href=action.slice(9);
-      if(action === 'ice:enter') iceSanctum?.enter();
-      if(action === 'ice:accept' || action === 'ice:reject' || action === 'ice:finish-accept') iceSanctum?.handleAction(action);
+      buildingFeatureRegistry.handleDialogueAction(action, 'city-dialog');
     },
     pauseNpcs,
     resumeNpcs,
@@ -606,13 +613,15 @@ function init() {
   });
   cityDialogs.setup();
   weatherEffect = createWeatherEffect({ scene, getCursor: () => cursorChar,
-    restoreSky: () => themeClock.restoreSky() }); weatherEffect.set(weather);
-  iceSanctum = createIceSanctum({
+    restoreSky: () => themeClock.restoreSky(), onWeatherChanged: (next) => { if (next) document.body.dataset.cityWeather = next; else delete document.body.dataset.cityWeather; } }); weatherEffect.set(weather);
+  iceSanctum = createIceSanctumExperience({
     scene, makeCharacter,
     makeMaterial: (parameters) => resources.material({ kind: 'ice-sanctum', ...parameters }, () => stdMat(parameters)),
     getCursor: () => cursorChar, dialogs: () => cityDialogs,
-    claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId),
+    nextRewardClaimSequence: (rewardId) => multiplayerHousing.progression.nextRewardClaimSequence(rewardId),
+    claimReward: (rewardId, claimSequence) => multiplayerHousing.progression.claimReward(rewardId, claimSequence),
     onEnterUnavailable: () => showUnlockToast('城市仍在准备，请稍后再试'), onRewardFailure: () => showUnlockToast('奖励领取失败，可以再次进入皇冠建筑重试'),
+    onProgressFailure: () => showUnlockToast('皇冠剧情进度保存失败，请检查浏览器存储设置'),
     onEnter: () => {
       if (mapController?.isOpen()) mapController.toggle();
       setPhoneOpen(false); statsPanelController?.close(); eventBindings.closeRenderSettings();
@@ -621,7 +630,6 @@ function init() {
       playerPath = []; interactionPointer.clearPending();
     },
     onReturn: (weather) => {
-      document.body.classList.remove('ice-sanctum-active');
       updateWeatherState(weather === 'rain' ? 'rain' : 'clear');
       cameraZoom = preIceCameraZoom; updateCameraProjection(cameraZoom);
       mapController?.invalidateShot();
@@ -630,7 +638,15 @@ function init() {
     },
     setCameraTarget: (x, z, instant) => cameraController?.setTarget(x, z, instant),
     focusCamera: (x, z, focusOptions) => cameraController?.focus(x, z, focusOptions),
-    stopCameraFocus: () => cameraController?.stop(), isMobile: MOBILE,
+    stopCameraFocus: () => cameraController?.stop(),
+  });
+  catCafeIceWallFeature = createCatCafeIceWallFeature({
+    dialogs: cityDialogs,
+    progression: multiplayerHousing.progression,
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
+    startCatDeathCG: async () => (await playCatDeathCGAfterBlackout())?.finished ?? null,
+    stopCatDeathCG,
   });
   sceneInterestPointController=createSceneInterestPointController({
     dialogs: cityDialogs,
@@ -644,6 +660,7 @@ function init() {
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     interactWithStory: (id) => cityDialogs ? echoStoryController.interactInterestPoint(id, cityDialogs) : false,
+    interactWithFeature: catCafeIceWallFeature.interact,
     setWellPhase: (phase) => {
       sceneInterestPoints?.setWellPhase(phase);
       if (!camera) return;
@@ -663,7 +680,6 @@ function init() {
       updateCameraProjection(cameraZoom);
       cameraController?.focus(-41.2, 11.5);
     },
-    startCatDeathCG: async () => { cityDialogs?.closeNpc(); const handle = await playCatDeathCGAfterBlackout(); return handle?.finished ?? null; },
   });
   setupEvents(); setupFilter();
   applyTheme(isNight, true);
@@ -745,7 +761,6 @@ function addTrees(positions: readonly (readonly [number, number, number])[]) { w
 function addLamps(positions: readonly (readonly [number, number, number])[]) { worldDecorations.addLamps(positions); }
 function addArch(x: number, y: number, z: number, rotY: number) { worldDecorations.addArch(x, y, z, rotY); }
 function addBench(x: number, y: number, z: number, rotY: number) { worldDecorations.addBench(x, y, z, rotY); }
-
 function makeCharacter(headHex: number, bodyHex: number) { return npcSystem.makeCharacter(headHex, bodyHex); }
 function addCharacters() { npcSystem.addCharacters(); }
 function onYouClick() { npcSystem.onYouClick(); }
@@ -755,48 +770,35 @@ function pauseNpcs() { npcSystem.pauseNpcs(); }
 function resumeNpcs() { npcSystem.resumeNpcs(); }
 function nearestNpcTo(position: THREE.Vector3, radius: number) { return npcSystem.nearestNpcTo(position, radius); }
 function npcForRaycast() { return npcSystem.npcForRaycast(); }
-
 function setupEvents() { eventBindings.setupEvents(); }
-
 function isStoryLockedBuilding(building: BuildingEntity) { return STORY_LOCKED_BUILDINGS.has(building.id); }
-
 function isBuildingUnavailable(building: BuildingEntity) {
   return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
 }
-
 export function destroyBuilding(buildingId: string): boolean {
   return buildingDamageController?.destroyBuilding(buildingId) ?? false;
 }
-
 export function destroyResidence(residenceId: string): boolean {
   return buildingDamageController?.destroyResidence(residenceId) ?? false;
 }
-
 export function destroyAll(): number {
   return buildingDamageController?.destroyAll() ?? 0;
 }
-
 export function restoreBuilding(buildingId: string): boolean {
   return buildingDamageController?.restoreBuilding(buildingId) ?? false;
 }
-
 export function restoreResidence(residenceId: string): boolean {
   return buildingDamageController?.restoreResidence(residenceId) ?? false;
 }
-
 export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
-
 function isResidenceUnavailable(residenceId: string): boolean {
   const residence = residences.find((item) => item.id === residenceId);
   return !residence || isBuildingDestroyed(residence);
 }
-
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
-
 function onMouseMove(e: MouseEvent) { interactionPointer.onMouseMove(e); }
-
 function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
 function setupMultiplayer(nickname: string, password?: string) { multiplayerHousing.connect(nickname, password); }
 function showLoginEntry() { loginController?.showLoginEntry(); }
@@ -971,9 +973,9 @@ export function destroyMiniCity() {
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
   multiplayerHousing?.destroy();
-  iceSanctum?.dispose(); weatherEffect?.dispose();
-  iceSanctum=null; weatherEffect=null;
-  destroyCG(); stopInvasionCG(); stopCatDeathCG();
+  iceSanctum?.dispose(); catCafeIceWallFeature?.dispose(); weatherEffect?.dispose();
+  iceSanctum=null; catCafeIceWallFeature=null; weatherEffect=null;
+  destroyCG(); stopInvasionCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
   npcSystem?.destroy();

@@ -13,6 +13,10 @@ export type BuildingDefinition = {
   facade?: string;
   storyLocked?: boolean;
   contentQuery?: Record<string, unknown>;
+  interactionRadius?: number;
+  decorationClearance?: number;
+  hasPlot?: boolean;
+  featureIds?: readonly string[];
 };
 
 export type BuildingEntity = BuildingDefinition & {

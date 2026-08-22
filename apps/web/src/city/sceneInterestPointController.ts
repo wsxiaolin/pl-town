@@ -1,14 +1,13 @@
 import type { CityDialogController, StoryDialogModel } from '../adapters/ui/cityDialogController';
 import {
-  CAT_CAFE_ICE_WALL_COPY,
   getWellStoryNode,
   ORANGE_TREE_COPY,
   WELL_STORY,
-  WORLD_ACHIEVEMENTS,
   WORLD_ITEM_IDS,
   type InventoryPort,
   type SceneInterestPointId,
 } from '../gameplay/world/sceneInteractions';
+import { WORLD_ACHIEVEMENTS } from '../gameplay/progression/worldAchievements';
 
 interface SceneInterestPointControllerOptions {
   dialogs: Pick<CityDialogController, 'openStory'>;
@@ -19,7 +18,7 @@ interface SceneInterestPointControllerOptions {
   setBeachEncounterPhase?: (phase: 'hidden' | 'revealed' | 'reward') => void;
   focusBeachEncounter?: () => void;
   interactWithStory?: (id: SceneInterestPointId) => boolean;
-  startCatDeathCG?: () => 'completed' | 'skipped' | 'restarted' | null | Promise<'completed' | 'skipped' | 'restarted' | null>;
+  interactWithFeature?: (id: SceneInterestPointId) => boolean | Promise<boolean>;
 }
 
 export interface SceneInterestPointController {
@@ -167,35 +166,11 @@ export function createSceneInterestPointController(
     armBeachEncounter() { beachTriggerArmed = true; },
     async interact(id) {
       if (options.interactWithStory?.(id)) return;
+      if (await options.interactWithFeature?.(id)) return;
       if (id === 'cat-cafe-note') {
         options.dialogs.openStory({ title: '掉落的纸', role: '猫咖馆旁', text: '' });
         const achievement = WORLD_ACHIEVEMENTS.catCafeNote;
         await options.awardAchievement(achievement.id, achievement.name);
-        return;
-      }
-
-      if (id === 'cat-cafe-ice-wall') {
-        const hasLemonade = await options.inventory.hasItem(WORLD_ITEM_IDS.iceLemonade, 1);
-        options.dialogs.openStory({
-          title: '不会融化的冰墙',
-          role: hasLemonade ? '背包里的冰镇柠檬水似乎有了反应' : null,
-          text: CAT_CAFE_ICE_WALL_COPY,
-          options: hasLemonade ? [{
-            text: '#放上冰镇柠檬水',
-            onPick: async () => {
-              const consumed = await options.inventory.consumeItem(WORLD_ITEM_IDS.iceLemonade, 1);
-              if (!consumed) {
-                options.showToast('冰镇柠檬水已经不在背包里了');
-                return;
-              }
-              const result = await options.startCatDeathCG?.();
-              if (result === 'completed') {
-                const achievement = WORLD_ACHIEVEMENTS.catDeathRemembrance;
-                await options.awardAchievement(achievement.id, achievement.name);
-              }
-            },
-          }] : [],
-        });
         return;
       }
 

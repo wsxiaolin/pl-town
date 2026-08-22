@@ -109,7 +109,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     await expect(page.locator('body')).not.toHaveClass(/ice-sanctum-returning/, { timeout: 5_000 });
     await expect(page.locator('body')).toHaveAttribute('data-city-weather', 'rain');
     await expect(page.locator('#unlockToast')).toContainText('湿湿的皇冠已放入背包');
-    expect(await page.evaluate(() => localStorage.getItem('minicityIceChoice:ice-tester'))).toBe('reject');
+    expect(await page.evaluate(() => {
+      const saved = localStorage.getItem('minicityStory.main.ice-king.sanctum.v1:ice-tester');
+      return saved ? JSON.parse(saved).ending : null;
+    })).toBe('reject');
     expect(await page.evaluate(() => (window as any)._mini.iceSanctum.hasEntered())).toBe(true);
     expect(await page.evaluate(() => (window as any)._mini.iceSanctum.enter())).toBe(false);
   });

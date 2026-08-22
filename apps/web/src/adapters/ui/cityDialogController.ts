@@ -60,6 +60,11 @@ export interface StoryDialogModel {
   options?: readonly StoryDialogOption[];
   onAdvance?: () => void;
   onClose?: () => void;
+  presentation?: {
+    typewriter?: boolean;
+    optionStaggerMs?: number;
+    selectionDelayMs?: number;
+  };
 }
 
 export interface LyricsLineLike {
@@ -162,11 +167,10 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     });
   };
 
-  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default'): number => {
+  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default', typewriter = false): number => {
     const line = getElement<HTMLParagraphElement>(document, 'npcLine');
-    const iceDialog = document.body.classList.contains('ice-sanctum-active');
     line.style.color = tone === 'green' ? '#3f8a4f' : '';
-    if (!iceDialog) {
+    if (!typewriter) {
       line.textContent = text;
       return 0;
     }
@@ -187,8 +191,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const renderNode = (node: LegacyDialogueNode): void => {
     if (!activeNpc) return;
     setIdentityField(document, 'npcName', node.speaker ?? activeNpc.profile.name);
-    const lineRevealMs = renderLine(node.text);
-    const revealOptionsAfterLine = document.body.classList.contains('ice-sanctum-active');
+    renderLine(node.text);
     const visitor = options.document.defaultView?.localStorage.getItem('minicityUser') || '旅人';
     const dialogOptions = node.options.map((option) => ({
       text: option.text,
@@ -225,7 +228,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         });
       }
     }
-    renderOptions(dialogOptions, revealOptionsAfterLine ? lineRevealMs : 0, revealOptionsAfterLine ? 180 : 0);
+    renderOptions(dialogOptions);
   };
 
   const renderQuestAction = (action: NpcQuestAction): void => {
@@ -421,15 +424,20 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       overlay.classList.toggle('blackout-mode', story.variant === 'blackout');
       overlay.style.setProperty('--story-cg-image', story.image ? `url("${story.image}")` : 'none');
       overlay.classList.add('open');
-      const lineRevealMs = renderLine(story.text, story.tone);
+      const lineRevealMs = renderLine(story.text, story.tone, story.presentation?.typewriter);
       const storyLine = getElement<HTMLParagraphElement>(document, 'npcLine');
       storyLine.onclick = null;
       storyLine.style.cursor = story.onAdvance ? 'pointer' : '';
-      const revealOptionsAfterLine = document.body.classList.contains('ice-sanctum-active');
       renderOptions((story.options ?? []).map((item) => ({
         text: item.text,
-        onPick: () => { void item.onPick(); },
-      })), revealOptionsAfterLine ? lineRevealMs : 0, revealOptionsAfterLine ? 180 : 0);
+        onPick: (selectedButton: HTMLButtonElement) => {
+          const selectionDelayMs = story.presentation?.selectionDelayMs ?? 0;
+          if (selectionDelayMs <= 0) { void item.onPick(); return; }
+          selectedButton.classList.add('npc-opt-selected');
+          selectedButton.parentElement?.classList.add('npc-options-waiting');
+          window.setTimeout(() => { void item.onPick(); }, selectionDelayMs);
+        },
+      })), story.presentation?.typewriter ? lineRevealMs : 0, story.presentation?.optionStaggerMs ?? 0);
     },
     closeNpc() {
       if (!npcOpen) return;

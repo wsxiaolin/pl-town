@@ -1,4 +1,9 @@
 import type { BuildingContentLike } from '../../adapters/ui/cityDialogController';
+import {
+  ICE_KING_BUILDING_ID,
+  ICE_SANCTUM_ACTIONS,
+  ICE_SANCTUM_FEATURE_ID,
+} from '../../gameplay/content/stories/iceKing/iceKingContent';
 
 const I = (svg: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="#3B6FE0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
@@ -346,12 +351,16 @@ export const BUILDING_DEFS = [
     ),
   },
   {
-    id: "kingice",
+    id: ICE_KING_BUILDING_ID,
     num: "30",
     label: "King Ice",
     x: 20,
     z: 20,
     shape: "crown",
+    interactionRadius: 3.6,
+    decorationClearance: 2,
+    hasPlot: false,
+    featureIds: [ICE_SANCTUM_FEATURE_ID],
     icon: I(`<path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/>`),
   },
   // ── 外环扩展建筑 ──
@@ -927,7 +936,7 @@ export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
       "「一座城若不再产生提问，便已开始衰老。」",
     ],
   },
-  kingice: {
+  [ICE_KING_BUILDING_ID]: {
     name: "King Ice",
     slogan: "皇冠落座之处，冰与光交界。",
     dialog: ["这段话是ice自己写的，他直接推送到我代码仓库里面了"],
@@ -935,7 +944,7 @@ export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
       {
         text: "是否觐见【冰】",
         options: [
-          { text: "是", next: null, action: "ice:enter" },
+          { text: "是", next: null, action: ICE_SANCTUM_ACTIONS.enter },
           { text: "否", next: null },
         ],
       },

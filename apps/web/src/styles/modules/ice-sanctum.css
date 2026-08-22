@@ -75,15 +75,13 @@ body.ice-sanctum-returning::before {
   z-index: 580;
   pointer-events: all;
   background: #000;
-  animation: ice-room-return 3s ease both;
+  animation: ice-room-cover 1.5s ease forwards;
 }
 
-@keyframes ice-room-return {
-  0% { opacity: 0; }
-  46% { opacity: 1; }
-  54% { opacity: 1; }
-  100% { opacity: 0; }
-}
+body.ice-sanctum-return-revealing::before { animation: ice-room-reveal 1.5s ease forwards; }
+
+@keyframes ice-room-cover { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ice-room-reveal { from { opacity: 1; } to { opacity: 0; } }
 
 body[data-city-weather='rain']::after {
   content: '';

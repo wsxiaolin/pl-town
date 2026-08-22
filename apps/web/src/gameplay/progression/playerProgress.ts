@@ -1,4 +1,5 @@
 import type { QuestProgressView } from '../quests/types';
+import { ICE_KING_ITEMS } from '../content/stories/iceKing/iceKingContent';
 
 export type PlayerProgress = {
   currency: number;
@@ -58,13 +59,13 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   music_box: '音乐盒',
   mandarin: '沃柑',
   tirpitz_card: '皮尔皮茨号',
-  ice_wet_crown: '湿湿的皇冠',
-  ice_lemonade: '冰镇柠檬水',
+  [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.name,
+  [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.name,
 });
 
 export const ITEM_DETAILS: Readonly<Record<string, string>> = Object.freeze({
-  ice_wet_crown: '真奇怪，明明没淋到雨的',
-  ice_lemonade: '冰镇柠檬水，可作为任意一种道具提交。\n真奇怪，这里头的冰块似乎怎么都不会化',
+  [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.detail,
+  [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.detail,
 });
 
 const validStringArray = (value: unknown): string[] => Array.isArray(value)

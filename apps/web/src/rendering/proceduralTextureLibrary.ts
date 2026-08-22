@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { ICE_KING_BUILDING_ID } from '../gameplay/content/stories/iceKing/iceKingContent';
+import { drawIceKingCrownFacade } from './iceKing/crownFacadeTexture';
 import type { ResourcePool } from '../core/ResourcePool';
 import groundCityColor from '../assets/textures/ground_city_color.png';
 import groundDistrictColor from '../assets/textures/ground_district_color.png';
@@ -807,40 +809,7 @@ export function createProceduralTextureLibrary(
     });
   
     // --- KingIce: golden crown surface with "King Ice" text ---
-    _canvas('kingice', 512, (ctx, s) => {
-      const g = ctx.createLinearGradient(0, 0, s, s);
-      g.addColorStop(0, '#E8A838');
-      g.addColorStop(0.3, '#F0C050');
-      g.addColorStop(0.5, '#FFF1C0');
-      g.addColorStop(0.7, '#F0C050');
-      g.addColorStop(1, '#D49028');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-      // Subtle diamond pattern
-      for (let y = 0; y < s; y += 48) {
-        for (let x = 0; x < s; x += 48) {
-          ctx.fillStyle = 'rgba(255,255,255,0.06)';
-          ctx.beginPath(); ctx.moveTo(x+24, y); ctx.lineTo(x+48, y+24);
-          ctx.lineTo(x+24, y+48); ctx.lineTo(x, y+24); ctx.closePath(); ctx.fill();
-        }
-      }
-      // Horizontal band lines
-      ctx.fillStyle = 'rgba(180,120,20,0.18)';
-      ctx.fillRect(0, s*0.22, s, 4);
-      ctx.fillRect(0, s*0.78, s, 4);
-      // "King Ice" text — large, bold, white with gold outline
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = 'bold 96px "Segoe UI", Arial, sans-serif';
-      // Gold outline/shadow
-      ctx.strokeStyle = 'rgba(140,80,0,0.5)'; ctx.lineWidth = 8;
-      ctx.strokeText('King Ice', s/2, s/2);
-      // White fill
-      ctx.fillStyle = '#FFFFFF';
-      ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
-      ctx.fillText('King Ice', s/2, s/2);
-      ctx.shadowColor = 'transparent';
-      _noise(ctx, s, 0.02);
-    });
+    _canvas(ICE_KING_BUILDING_ID, 512, (ctx, s) => drawIceKingCrownFacade(ctx, s, _noise));
   
     // --- Suburb: small house wall texture ---
     _canvas('suburb', 256, (ctx, s) => {

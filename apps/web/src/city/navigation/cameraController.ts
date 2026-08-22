@@ -6,8 +6,8 @@ export type CameraControllerOptions = {
   getZoom: () => number;
   setZoom: (zoom: number) => void;
   getTarget: () => THREE.Vector3;
-  isEchoInterior: () => boolean;
-  echoInterior: readonly [number, number];
+  isInteriorActive: () => boolean;
+  defaultInteriorCenter: readonly [number, number];
   getInteriorCenter?: () => readonly [number, number];
   getInteriorCameraOffset?: () => readonly [number, number, number] | null;
   getInteriorFollowsTarget?: () => boolean;
@@ -29,8 +29,12 @@ export function createCameraController(options: CameraControllerOptions) {
   function apply(target: THREE.Vector3): void {
     const camera = options.getCamera();
     if (!camera) return;
-    if (options.isEchoInterior()) {
-      camera.position.set(options.echoInterior[0] + interiorAnchor.x, interiorAnchor.y, options.echoInterior[1] + interiorAnchor.z);
+    if (options.isInteriorActive()) {
+      camera.position.set(
+        options.defaultInteriorCenter[0] + interiorAnchor.x,
+        interiorAnchor.y,
+        options.defaultInteriorCenter[1] + interiorAnchor.z,
+      );
       camera.lookAt(target.x, 0.75, target.z);
       return;
     }
@@ -42,8 +46,8 @@ export function createCameraController(options: CameraControllerOptions) {
     const camera = options.getCamera();
     if (!camera) return;
     const target = options.getTarget();
-    if (options.isEchoInterior()) {
-      const center = options.getInteriorCenter?.() ?? options.echoInterior;
+    if (options.isInteriorActive()) {
+      const center = options.getInteriorCenter?.() ?? options.defaultInteriorCenter;
       const offset = options.getInteriorCameraOffset?.();
       const followsTarget = Boolean(offset && options.getInteriorFollowsTarget?.());
       camera.position.set(

@@ -1,7 +1,12 @@
 import * as THREE from 'three';
-import type { Weather } from './weather';
+import type { Weather } from '../city/weather';
 
-export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: () => THREE.Object3D | null; restoreSky: () => void }) {
+export function createWeatherEffect(options: {
+  scene: THREE.Scene;
+  getCursor: () => THREE.Object3D | null;
+  restoreSky: () => void;
+  onWeatherChanged?: (weather: Weather | null) => void;
+}) {
   const rain = new THREE.Points(
     new THREE.BufferGeometry(),
     new THREE.PointsMaterial({ color: 0x9bc4d8, size: 0.09, transparent: true, opacity: 0.7, depthWrite: false }),
@@ -21,7 +26,7 @@ export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: ()
   function set(next: Weather): void {
     weather = next;
     rain.visible = next === 'rain';
-    document.body.dataset.cityWeather = next;
+    options.onWeatherChanged?.(next);
     if (next === 'rain') {
       options.scene.background = new THREE.Color(0x778f9e);
       options.scene.fog = new THREE.Fog(0x9eb7bc, 24, 95);
@@ -51,7 +56,7 @@ export function createWeatherEffect(options: { scene: THREE.Scene; getCursor: ()
     (rain.material as THREE.Material).dispose();
     options.scene.fog = null;
     options.restoreSky();
-    delete document.body.dataset.cityWeather;
+    options.onWeatherChanged?.(null);
   }
 
   return { set, update, dispose, current: () => weather };
