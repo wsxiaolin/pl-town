@@ -69,7 +69,9 @@ function createSeaGod(options: BeachOptions): THREE.Group {
 }
 
 function shorelineX(z: number): number {
-  return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * 1.25 + Math.sin(z * 0.47 + 1.4) * 0.42;
+  // Amplitude stays below the gap between coastlineX and deepWaterX so the
+  // walkable-sand / deep-water gameplay bounds still match the visible shore.
+  return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * 0.85 + Math.sin(z * 0.47 + 1.4) * 0.35;
 }
 
 function createShoreRibbonGeometry(
@@ -114,41 +116,48 @@ function createAnimatedWaterMaterial(): THREE.ShaderMaterial {
     vertexShader: `
       uniform float uTime;
       varying vec2 vUv;
+      varying vec3 vWorldPos;
       varying float vWave;
-      varying vec3 vNormal;
       void main() {
         vUv = uv;
-        vNormal = normalize(normalMatrix * normal);
         vec3 transformed = position;
-        float waveA = sin(position.z * 0.48 + uTime * 1.15) * 0.045;
-        float waveB = sin(position.x * 0.78 - position.z * 0.22 + uTime * 0.8) * 0.025;
-        transformed.y += waveA + waveB;
-        vWave = waveA + waveB;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+        // uv.x == 1 at the shoreline: flatten waves there so they lap the sand.
+        float calm = 1.0 - smoothstep(0.82, 1.0, uv.x) * 0.75;
+        float waveA = sin(position.z * 0.48 + uTime * 1.15) * 0.035;
+        float waveB = sin(position.x * 0.78 - position.z * 0.22 + uTime * 0.8) * 0.02;
+        transformed.y += (waveA + waveB) * calm;
+        vWave = (waveA + waveB) * calm;
+        vec4 worldPos = modelMatrix * vec4(transformed, 1.0);
+        vWorldPos = worldPos.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
     `,
     fragmentShader: `
       uniform float uTime;
       varying vec2 vUv;
+      varying vec3 vWorldPos;
       varying float vWave;
-      varying vec3 vNormal;
       void main() {
-        vec2 flow = vUv * vec2(5.0, 18.0);
-        float rippleA = sin(flow.y + sin(flow.x * 1.7) * 1.8 - uTime * 1.7);
-        float rippleB = sin(flow.y * 1.8 - flow.x * 2.2 + uTime * 1.1);
-        float ripples = smoothstep(0.25, 0.95, (rippleA + rippleB) * 0.25 + 0.5);
-        vec3 deep = vec3(0.025, 0.24, 0.39);
-        vec3 shallow = vec3(0.08, 0.46, 0.58);
-        vec3 color = mix(deep, shallow, 0.32 + ripples * 0.28 + vUv.x * 0.16);
-        float fresnel = pow(1.0 - abs(dot(normalize(vNormal), vec3(0.0, 1.0, 0.0))), 2.0);
-        color += vec3(0.34, 0.58, 0.62) * fresnel * 0.42;
-        color += vec3(0.72, 0.9, 0.86) * smoothstep(0.035, 0.06, abs(vWave)) * 0.18;
-        gl_FragColor = vec4(color, 0.94);
+        vec2 flow = vWorldPos.xz * 0.55;
+        float rippleA = sin(flow.y * 1.3 + sin(flow.x * 1.7 + uTime * 0.6) * 1.8 - uTime * 1.7);
+        float rippleB = sin(flow.y * 2.1 - flow.x * 2.2 + uTime * 1.1);
+        float ripples = (rippleA + rippleB) * 0.25 + 0.5;
+        vec3 normal = normalize(vec3((rippleA - rippleB) * 0.12, 1.0, (rippleA + rippleB) * 0.12));
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        vec3 deep = vec3(0.02, 0.23, 0.38);
+        vec3 shallow = vec3(0.10, 0.48, 0.60);
+        vec3 color = mix(deep, shallow, 0.22 + ripples * 0.3 + vUv.x * 0.22);
+        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+        color += vec3(0.45, 0.62, 0.68) * fresnel * 0.55;
+        vec3 sunDir = normalize(vec3(0.5, 0.8, 0.35));
+        float spec = pow(max(dot(reflect(-sunDir, normal), viewDir), 0.0), 90.0);
+        color += vec3(1.0, 0.95, 0.8) * spec * 0.9;
+        float shoreFoam = smoothstep(0.86, 0.985, vUv.x + sin(vUv.y * 90.0 + uTime * 1.6) * 0.02);
+        color = mix(color, vec3(0.9, 0.96, 0.95), shoreFoam * (0.35 + ripples * 0.3));
+        color += vec3(0.72, 0.9, 0.86) * smoothstep(0.02, 0.05, abs(vWave)) * 0.15;
+        gl_FragColor = vec4(color, 1.0);
       }
     `,
-    transparent: true,
-    depthWrite: true,
-    side: THREE.DoubleSide,
   });
 }
 
@@ -165,21 +174,25 @@ export function createWestBeach(options: BeachOptions): {
   const maxZ = WEST_BEACH.maxZ + 14;
   const sand = addMesh(object, options, createShoreRibbonGeometry(shorelineX, (z) => shorelineX(z) + 10, minZ, maxZ, 8, 96), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [0, 0.07, 0]);
   sand.renderOrder = 4;
-  const waterLength = maxZ - minZ;
-  const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 92, shorelineX, minZ, maxZ, options.waterRendering ? 48 : 12, options.waterRendering ? 160 : 72);
+  // The sea must sit above the city base ground plane (y = 0) or it is hidden
+  // underneath it, and it spans past the ground edge so no land shows beyond.
+  const waterMinZ = -112;
+  const waterMaxZ = 112;
+  const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
   const waterMaterial = options.waterRendering
     ? createAnimatedWaterMaterial()
     : options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 });
-  const water = addMesh(object, options, waterGeometry, waterMaterial, [0, -0.02, 0]);
+  const water = addMesh(object, options, waterGeometry, waterMaterial, [0, 0.06, 0]);
   water.userData.dynamicMaterial = options.waterRendering ? waterMaterial : null;
   water.castShadow = false;
   water.renderOrder = 3;
   const foams: THREE.Mesh[] = [];
   for (let index = 0; index < 28; index += 1) {
-    const z = minZ + (waterLength * (index + 0.5)) / 28;
+    const z = minZ + ((maxZ - minZ) * (index + 0.5)) / 28;
     const foam = addMesh(object, options, new THREE.PlaneGeometry(0.8 + (index % 3) * 0.35, 0.16 + (index % 4) * 0.05), { color: 0xe9f3ef, roughness: 0.5, transparent: true, opacity: 0.58, depthWrite: false }, [shorelineX(z) - 0.16, 0.1, z]);
     foam.rotation.x = -Math.PI / 2;
     foam.rotation.z = Math.sin(index * 2.1) * 0.25;
+    foam.renderOrder = 5;
     foam.userData.foamIndex = index;
     foam.userData.foamZ = z;
     foams.push(foam);

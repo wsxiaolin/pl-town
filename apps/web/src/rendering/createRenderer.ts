@@ -20,7 +20,7 @@ const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   shadows: false,
   exposure: 1.18,
   textureRendering: false,
-  waterRendering: false,
+  waterRendering: true,
 };
 
 export function readRenderSettings(): RenderSettings {
@@ -34,7 +34,8 @@ export function readRenderSettings(): RenderSettings {
         shadows: Boolean(saved.shadows),
         exposure: Math.max(0.8, Math.min(1.5, Number(saved.exposure) || 1.18)),
         textureRendering: Boolean(saved.textureRendering),
-        waterRendering: Boolean(saved.waterRendering),
+        // Older saved settings predate the toggle; keep the new default instead of forcing it off.
+        waterRendering: saved.waterRendering === undefined ? DEFAULT_RENDER_SETTINGS.waterRendering : Boolean(saved.waterRendering),
       };
     }
   } catch { /* Use defaults when storage contains invalid data. */ }

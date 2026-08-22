@@ -17,7 +17,9 @@ export class ResourcePool {
 
   geometry<T extends THREE.BufferGeometry>(geometry: T): T {
     const parameters = 'parameters' in geometry ? geometry.parameters : undefined;
-    const key = `${geometry.type}:${stableStringify(parameters)}`;
+    // Hand-built geometries carry no parameters, so fall back to the uuid;
+    // keying them all by "type:" would return whichever custom geometry was cached first.
+    const key = parameters ? `${geometry.type}:${stableStringify(parameters)}` : `${geometry.type}:${geometry.uuid}`;
     const cached = this.geometries.get(key);
     if (cached) {
       geometry.dispose();
