@@ -186,6 +186,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   
   function addDistrictBuildings() {
     const centers=[-33,-27,-21,-15,-9,-3,3,9,15,21,27,33], lots: Array<[number, number, number]> = [];
+    const reservedLotLabels = new Set(['22:2', '20:4']);
     const buildingBounds=buildings.map((building)=>new THREE.Box3().setFromObject(building.group));
     centers.forEach(x=>centers.forEach(z=>{
       if(Math.hypot(x,z)<4.8)return;
@@ -196,6 +197,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         const seeded=Math.abs(Math.round((x+41)*97+(z+43)*193+k*389))%1000/1000;
         if(seeded>density)return;
         const lx=x+dx, lz=z+dz;
+        if(reservedLotLabels.has(`${Math.round(lx)}:${Math.round(lz)}`))return;
         if(isFilmCityClearing(lx,lz))return;
         if(Math.abs(lx)>CITY_LIMIT||Math.abs(lz)>CITY_LIMIT)return;
         // Reserve a complete clearing for the interactive mandarin tree.
