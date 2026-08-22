@@ -1,6 +1,14 @@
 import * as THREE from 'three';
+import { Water } from 'three/examples/jsm/objects/Water.js';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { WEST_BEACH } from '../city/data/cityConfig';
+import waterNormalsUrl from '../assets/textures/waternormals.jpg';
+
+const DAY_WATER_COLOR = new THREE.Color(0x165a7d);
+const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
+const DAY_SUN_COLOR = new THREE.Color(0xffffff);
+const NIGHT_SUN_COLOR = new THREE.Color(0x3a4a6a);
+const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 
 type BeachOptions = {
   scene: THREE.Scene;
@@ -110,98 +118,22 @@ function createShoreRibbonGeometry(
   return geometry;
 }
 
-function createAnimatedWaterMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: { value: 0 },
-      uDaylight: { value: 1 },
-    },
-    // Directional sine waves shared by the vertex displacement and the
-    // fragment normal, so the lighting always matches the visible surface.
-    // Broad-swell amplitudes sum to 0.05: troughs stay above the city ground
-    // plane (y = 0) that extends beneath the sea.
-    // Everything downstream is derived from vWorldPos in the fragment shader:
-    // both the uv attribute and extra varyings interpolate unreliably on this
-    // large hand-built ribbon mesh, while vWorldPos provably interpolates
-    // correctly, so shore proximity is recomputed per pixel (mirrors
-    // shorelineX in JS).
-    vertexShader: `
-      uniform float uTime;
-      varying vec3 vWorldPos;
-      void main() {
-        vec3 transformed = position;
-        float shoreX = ${WEST_BEACH.coastlineX.toFixed(1)} + sin(position.z * 0.19) * 0.85 + sin(position.z * 0.47 + 1.4) * 0.35;
-        float shore = clamp((position.x - (shoreX - 96.0)) / 96.0, 0.0, 1.0);
-        // shore == 1 at the shoreline: flatten waves there so they lap the sand.
-        float calm = 1.0 - smoothstep(0.75, 1.0, shore) * 0.8;
-        float height = sin(dot(position.xz, vec2(0.97, 0.24)) * 0.5 + uTime * 1.05) * 0.033
-                     + sin(dot(position.xz, vec2(0.86, -0.5)) * 0.95 + uTime * 0.75) * 0.017;
-        transformed.y += height * calm;
-        vec4 worldPos = modelMatrix * vec4(transformed, 1.0);
-        vWorldPos = worldPos.xyz;
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      uniform float uDaylight;
-      varying vec3 vWorldPos;
-
-      // Surface gradient of the wave sum: broad swell plus two fine-chop
-      // components that only exist as per-pixel normals.
-      vec2 waterGradient(vec2 p) {
-        vec2 g = vec2(0.0);
-        g += vec2(0.97, 0.24) * (0.5 * 0.033 * cos(dot(p, vec2(0.97, 0.24)) * 0.5 + uTime * 1.05));
-        g += vec2(0.86, -0.5) * (0.95 * 0.017 * cos(dot(p, vec2(0.86, -0.5)) * 0.95 + uTime * 0.75));
-        g += vec2(-0.45, 0.89) * (2.6 * 0.014 * cos(dot(p, vec2(-0.45, 0.89)) * 2.6 - uTime * 1.7));
-        g += vec2(0.63, 0.78) * (5.1 * 0.008 * cos(dot(p, vec2(0.63, 0.78)) * 5.1 + uTime * 2.3));
-        return g;
-      }
-
-      void main() {
-        vec3 viewDir = normalize(cameraPosition - vWorldPos);
-        float shoreX = ${WEST_BEACH.coastlineX.toFixed(1)} + sin(vWorldPos.z * 0.19) * 0.85 + sin(vWorldPos.z * 0.47 + 1.4) * 0.35;
-        float shoreT = clamp((vWorldPos.x - (shoreX - 96.0)) / 96.0, 0.0, 1.0);
-        // Fade the fine chop with distance so the far sea does not shimmer.
-        float dist = length(cameraPosition - vWorldPos);
-        vec2 grad = waterGradient(vWorldPos.xz) * (1.0 - clamp((dist - 45.0) / 150.0, 0.0, 0.8));
-        vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
-
-        vec3 sunDir = normalize(vec3(0.5, 0.8, 0.35));
-        float diffuse = max(dot(normal, sunDir), 0.0);
-
-        // Water body color: deep marine blue out at sea, turquoise at the
-        // sand. Colors are authored dark because the renderer applies
-        // exposure 1.18 + ACES, which lifts mid-tones strongly.
-        float shore = smoothstep(0.4, 1.0, shoreT);
-        vec3 color = mix(vec3(0.006, 0.09, 0.17), vec3(0.02, 0.22, 0.3), shore);
-        color *= 0.6 + 0.4 * diffuse;
-
-        // Schlick fresnel (water F0 ~ 0.02): mostly body color, sky reflection
-        // only at the grazing angles on the far side of the sea.
-        float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
-        color = mix(color, vec3(0.3, 0.44, 0.55), clamp(fresnel, 0.0, 1.0) * 0.45);
-
-        // Tight sun glints riding the wave normals.
-        vec3 halfDir = normalize(sunDir + viewDir);
-        float spec = pow(max(dot(normal, halfDir), 0.0), 240.0);
-        color += vec3(1.0, 0.97, 0.88) * spec * 0.6;
-
-        // Animated foam line hugging the sand, plus a fainter trailing band.
-        float wobble = sin(vWorldPos.z * 0.62 + uTime * 2.0) * 0.012;
-        float foamEdge = smoothstep(0.955, 0.995, shoreT + wobble);
-        float foamTrail = smoothstep(0.86, 0.9, shoreT + wobble * 2.0 + sin(uTime * 0.7) * 0.015)
-                        * (1.0 - smoothstep(0.93, 0.97, shoreT));
-        color = mix(color, vec3(0.9, 0.95, 0.94), clamp(foamEdge + foamTrail * 0.5, 0.0, 1.0) * 0.7);
-
-        // Theme-clock dimming keeps the unlit shader dark at night.
-        color *= mix(0.14, 1.0, uDaylight);
-        gl_FragColor = vec4(color, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
+function createAnimatedWater(geometry: THREE.BufferGeometry): Water {
+  const waterNormals = new THREE.TextureLoader().load(waterNormalsUrl);
+  waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+  const water = new Water(geometry, {
+    waterNormals,
+    sunDirection: SUN_DIRECTION.clone(),
+    sunColor: DAY_SUN_COLOR.clone(),
+    waterColor: DAY_WATER_COLOR.clone(),
+    distortionScale: 3.7,
+    side: THREE.DoubleSide,
+    fog: false,
   });
+  water.renderOrder = 3;
+  water.castShadow = false;
+  water.userData.dynamicMaterial = water.material;
+  return water;
 }
 
 export function createWestBeach(options: BeachOptions): {
@@ -223,13 +155,16 @@ export function createWestBeach(options: BeachOptions): {
   const waterMinZ = -112;
   const waterMaxZ = 112;
   const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
-  const waterMaterial = options.waterRendering
-    ? createAnimatedWaterMaterial()
-    : options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 });
-  const water = addMesh(object, options, waterGeometry, waterMaterial, [0, 0.06, 0]);
-  water.userData.dynamicMaterial = options.waterRendering ? waterMaterial : null;
-  water.castShadow = false;
-  water.renderOrder = 3;
+  const water = options.waterRendering
+    ? createAnimatedWater(waterGeometry)
+    : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
+  water.position.set(0, 0.06, 0);
+  if (!options.waterRendering) {
+    water.castShadow = false;
+    water.renderOrder = 3;
+  }
+  object.add(water);
+  const waterMaterial = options.waterRendering ? (water.material as THREE.ShaderMaterial) : null;
   const foams: THREE.Mesh[] = [];
   for (let index = 0; index < 28; index += 1) {
     const z = minZ + ((maxZ - minZ) * (index + 0.5)) / 28;
@@ -302,13 +237,20 @@ export function createWestBeach(options: BeachOptions): {
         const z = foam.userData.foamZ as number;
         foam.position.x = shorelineX(z) - 0.16 - Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
       }
-      const uniforms = waterMaterial instanceof THREE.ShaderMaterial ? waterMaterial.uniforms : null;
-      if (uniforms?.uTime) {
+      if (waterMaterial) {
         const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
         lastElapsed = elapsedSeconds;
         daylight += (daylightTarget - daylight) * Math.min(1, dt * 2.5);
-        uniforms.uTime.value = elapsedSeconds;
-        if (uniforms.uDaylight) uniforms.uDaylight.value = daylight;
+        const uniforms = waterMaterial.uniforms;
+        if (uniforms.time) uniforms.time.value = elapsedSeconds;
+        if (uniforms.waterColor) {
+          const waterColor = uniforms.waterColor.value as THREE.Color;
+          waterColor.copy(DAY_WATER_COLOR).lerp(NIGHT_WATER_COLOR, 1 - daylight);
+        }
+        if (uniforms.sunColor) {
+          const sunColor = uniforms.sunColor.value as THREE.Color;
+          sunColor.copy(DAY_SUN_COLOR).lerp(NIGHT_SUN_COLOR, 1 - daylight);
+        }
       }
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
