@@ -14,6 +14,7 @@ interface SceneInterestPointOptionsInput {
   scene: THREE.Scene;
   makeMaterial: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
+  waterRendering: boolean;
 }
 
 interface SceneInterestPointOptions extends SceneInterestPointOptionsInput {
@@ -465,6 +466,11 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       );
     },
     dispose() {
+      westBeach.entity.object.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.userData.dynamicMaterial instanceof THREE.Material) {
+          child.userData.dynamicMaterial.dispose();
+        }
+      });
       materialCache.forEach((material) => material.dispose());
       materialCache.clear();
     },

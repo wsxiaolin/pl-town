@@ -431,7 +431,7 @@ function init() {
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => stdMat(parameters)),
   }).forEach(group => roadNavigation.registerObstacleGroup(group));
   cacheBuildingBoxes(); addDecorations(); addCharacters();
-  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk });
+  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk, waterRendering: readRenderSettings().waterRendering });
   addRealBuildingModels(scene, buildings)
     .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
     .catch(error => console.error('3D model loading failed', error));
