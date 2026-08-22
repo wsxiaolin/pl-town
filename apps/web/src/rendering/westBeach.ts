@@ -187,6 +187,20 @@ export function createWestBeach(options: BeachOptions): {
     foam.userData.foamZ = z;
     foams.push(foam);
   }
+  // Breaking-wave bands that periodically surge from deep water onto the sand,
+  // then recede — this reads as waves crashing against the shore.
+  const surges: THREE.Mesh[] = [];
+  const surgeCount = 14;
+  for (let index = 0; index < surgeCount; index += 1) {
+    const z = minZ + ((maxZ - minZ) * (index + 0.5)) / surgeCount;
+    const surge = addMesh(object, options, new THREE.PlaneGeometry(1.7, 0.42), { color: 0xf4fbf9, roughness: 0.4, transparent: true, opacity: 0, depthWrite: false }, [shorelineX(z), 0.09, z]);
+    surge.rotation.x = -Math.PI / 2;
+    surge.rotation.z = Math.sin(index * 1.7) * 0.22;
+    surge.renderOrder = 5;
+    surge.userData.surgeIndex = index;
+    surge.userData.surgeZ = z;
+    surges.push(surge);
+  }
   const palms = [-1, 1].map((side) => {
     const palm = new THREE.Group();
     addMesh(palm, options, new THREE.CylinderGeometry(0.09, 0.14, 1.8, 9), { color: 0x765139, roughness: 0.9, tex: 'wood', rx: 1, ry: 2 }, [0, 0.9, 0]);
@@ -246,7 +260,22 @@ export function createWestBeach(options: BeachOptions): {
       for (const foam of foams) {
         const index = foam.userData.foamIndex as number;
         const z = foam.userData.foamZ as number;
-        foam.position.x = shorelineX(z) - 0.16 - Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
+        const phase = ((elapsedSeconds * 0.5) + (index / foams.length)) % 1;
+        const surge = Math.sin(phase * Math.PI);
+        foam.position.x = shorelineX(z) - 0.16 + surge * 0.55;
+        foam.position.y = 0.1 + surge * 0.06;
+        const foamMaterial = foam.material as THREE.MeshStandardMaterial;
+        foamMaterial.opacity = 0.32 + surge * 0.5;
+      }
+      for (const surge of surges) {
+        const index = surge.userData.surgeIndex as number;
+        const z = surge.userData.surgeZ as number;
+        const phase = ((elapsedSeconds * 0.5) + (index / surges.length)) % 1;
+        const rush = Math.sin(phase * Math.PI);
+        surge.position.x = shorelineX(z) + 0.45 - rush * 1.9;
+        surge.position.y = 0.09 + rush * 0.05;
+        const surgeMaterial = surge.material as THREE.MeshStandardMaterial;
+        surgeMaterial.opacity = rush * 0.85;
       }
       if (waterMaterial) {
         const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
