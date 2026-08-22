@@ -21,6 +21,7 @@ export type BuildingInteractionOptions = {
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
+  interactWithFeature?: (building: BuildingEntity) => boolean;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
@@ -41,6 +42,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
 
   function navigateUnlocked(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
+    if (options.interactWithFeature?.(b)) return;
     if (b.id === 'film_city') {
       options.getFilmCityController?.()?.interact();
       options.trackInteraction(b.id);

@@ -232,7 +232,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
   expect(Math.abs(worldAudit.projected.x)).toBeLessThan(0.001);
   expect(Math.abs(worldAudit.projected.y)).toBeLessThan(0.001);
-  expect(worldAudit.interestIds).toEqual(['cat-cafe-note', 'longjing-well', 'origin-orange-tree']);
+  expect(worldAudit.interestIds).toEqual(['cat-cafe-ice-wall', 'cat-cafe-note', 'longjing-well', 'origin-orange-tree']);
   expect(worldAudit.interactivePlot).toBe(true);
   expect(worldAudit.hasStoryNpc).toBe(true);
 

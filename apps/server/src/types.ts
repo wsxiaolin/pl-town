@@ -11,6 +11,7 @@ export type User = {
 export type PlayerProgress = {
   currency: number;
   inventory: Record<string, number>;
+  repeatableRewardClaims: Record<string, number>;
   achievements: string[];
   unlockedBuildings: string[];
   visitedBuildings: string[];
@@ -56,7 +57,7 @@ export type ClientMessage =
   | { type: 'progress.shop.buy'; productId: string; quantity?: number }
   | { type: 'progress.item.consume'; itemId: string; quantity?: number }
   | { type: 'progress.filmCity.experience' }
-  | { type: 'progress.reward.claim'; rewardId: string }
+  | { type: 'progress.reward.claim'; rewardId: string; claimSequence?: number }
   | { type: 'story.get'; storyId: string }
   | { type: 'story.update'; storyId: string; definitionVersion?: number; nodeId?: string; flags?: Record<string, StoryFlagValue>; ending?: string | null; visit?: boolean }
   | { type: 'housing.list' }
