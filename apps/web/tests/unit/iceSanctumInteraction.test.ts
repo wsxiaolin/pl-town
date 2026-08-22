@@ -508,6 +508,8 @@ test('clicking Ice walks to the desk and opens the dialog on arrival', () => {
     openResidence: () => undefined,
     onYouClick: () => undefined,
     movePlayerTo: (target) => { moveTarget = target.clone(); },
+    selectNavigationTarget: () => undefined,
+    clearNavigationTarget: () => undefined,
     navigateTo: () => undefined,
     interactWithSceneInterestPoint: () => undefined,
     interactWithInterestPointController: () => undefined,

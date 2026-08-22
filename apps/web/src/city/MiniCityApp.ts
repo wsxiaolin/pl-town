@@ -43,6 +43,7 @@ import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
 import { createCameraController } from './navigation/cameraController';
+import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
 import { createBuildingSceneController } from './buildingSceneController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
@@ -70,12 +71,11 @@ import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { isWeather, type Weather } from './weather';
 import { preloadTextureResources } from './textureResourcePreloader';
-import { createIceSanctumExperience } from './iceKing/createIceSanctumExperience';
+import { createIceKingFeatureExperience } from './iceKing/createIceKingFeatureExperience';
 import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
-import { createCatCafeIceWallFeature } from './iceKing/catCafeIceWallInteraction';
 import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatureRegistry';
 import { createWeatherEffect } from '../rendering/weatherEffect';
-import { playCatDeathCGAfterBlackout, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
+import { createNavigationTargetMarker } from '../rendering/navigationTargetMarker';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -123,6 +123,7 @@ let loginController: ReturnType<typeof createLoginController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
+let cameraPanController: ReturnType<typeof createCameraPanController>;
 let filmCityCinematicActive = false;
 let progressionController: ReturnType<typeof createProgressionController>;
 let buildingSceneController: ReturnType<typeof createBuildingSceneController>;
@@ -133,14 +134,14 @@ let worldDecorations: ReturnType<typeof createWorldDecorations>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
-let iceSanctum: ReturnType<typeof createIceSanctumExperience> | null = null;
-let catCafeIceWallFeature: ReturnType<typeof createCatCafeIceWallFeature> | null = null;
+let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
 const buildingFeatureRegistry = createBuildingFeatureRegistry();
 buildingFeatureRegistry.register(createIceKingBuildingFeature({
-  getSanctum: () => iceSanctum,
+  getSanctum: () => iceKingFeature?.sanctum ?? null,
   showLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
 }));
 let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
+let navigationTargetMarker: ReturnType<typeof createNavigationTargetMarker> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
 let echoActiveActors = new Set<string>();
@@ -210,10 +211,12 @@ const interactionPointer = createInteractionPointer({
   openResidence,
   onYouClick,
   movePlayerTo,
+  selectNavigationTarget,
+  clearNavigationTarget,
   navigateTo,
   interactWithSceneInterestPoint,
   interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
-  getSpecialInterior: () => iceSanctum?.isActive() ? iceSanctum : null,
+  getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
 });
 
 const interactionTracker = createInteractionTracker({
@@ -244,15 +247,17 @@ const frameLoop = createFrameLoop({
   getLabelWorldPosition: () => labelWorldPosition,
   getNpcList: () => npcSystem?.getAvoidanceNpcs() ?? npcList,
   getPlayerController: () => playerController,
+  getCameraPanController: () => cameraPanController,
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
   getSceneInterestPointController: () => sceneInterestPointController,
   getMapController: () => mapController,
+  getNavigationTargetMarker: () => navigationTargetMarker,
   getBurnOverlay: () => burnCityEffect,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
-  getSpecialInterior: () => iceSanctum?.isActive() ? iceSanctum : null,
+  getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
   updateWeather: (delta) => weatherEffect?.update(delta),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
@@ -333,6 +338,8 @@ const eventBindings = createEventBindings({
   getRenderer: () => renderer,
   onMouseMove,
   onCanvasClick,
+  consumeSuppressedCanvasClick: () => cameraPanController?.consumeSuppressedClick() ?? false,
+  onViewInteraction: () => cameraPanController?.notifyViewInteraction(),
   clamp,
   getCameraZoom: () => cameraZoom,
   setCameraZoom: (value) => { cameraZoom = value; },
@@ -349,7 +356,7 @@ const eventBindings = createEventBindings({
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog,
   getLoginController: () => loginController,
-  isMovementOnlyMode: () => Boolean(iceSanctum?.isActive()),
+  isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
 });
 
 // Unlock tiers reference world decoration helpers, which are created during init().
@@ -371,14 +378,15 @@ function init() {
     getZoom: () => cameraZoom,
     setZoom: (zoom) => { cameraZoom = zoom; },
     getTarget: () => cameraTarget,
-    isInteriorActive: () => Boolean(echoStoryController?.isInteriorView() || iceSanctum?.isActive()),
+    isInteriorActive: () => Boolean(echoStoryController?.isInteriorView() || iceKingFeature?.sanctum.isActive()),
     defaultInteriorCenter: ECHO_OBSERVATORY_AREA.interior,
-    getInteriorCenter: () => iceSanctum?.isActive() ? iceSanctum.center : ECHO_OBSERVATORY_AREA.interior,
-    getInteriorCameraOffset: () => iceSanctum?.isActive() ? [13, 22, 17] : null,
-    getInteriorFollowsTarget: () => Boolean(iceSanctum?.isActive()),
+    getInteriorCenter: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum.center : ECHO_OBSERVATORY_AREA.interior,
+    getInteriorCameraOffset: () => iceKingFeature?.sanctum.isActive() ? [13, 22, 17] : null,
+    getInteriorFollowsTarget: () => Boolean(iceKingFeature?.sanctum.isActive()),
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
+  navigationTargetMarker = createNavigationTargetMarker(scene);
   window.addEventListener('minicity:textures-ready', () => {
     refreshWeather(); proceduralTextures.refreshWeather(); weatherEffect?.set(weather);
   }, { once: true, signal: eventController.signal });
@@ -545,7 +553,15 @@ function init() {
     openResidence: () => undefined,
   });
   mapController.setup(eventController.signal);
-  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];interactionPointer.clearPending();}});
+  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];interactionPointer.clearPending();clearNavigationTarget();}});
+  cameraPanController=createCameraPanController({
+    canvas: document.getElementById('c') as HTMLElement, document, window, signal: eventController.signal,
+    getCamera: () => camera, getCameraTarget: () => cameraTarget,
+    getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
+    setCameraTarget, stopCameraMotion: () => cameraController?.stop(),
+    isBlocked: () => filmCityCinematicActive || Boolean(mapController?.isOpen())
+      || Boolean(cityDialogs?.isOpen()) || Boolean(echoStoryController?.isInteriorView()),
+  });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
   }, { signal: eventController.signal });
@@ -563,7 +579,7 @@ function init() {
     playerSpeed: CONFIG.playerSpeed,
     getNpcs: () => npcList,
     getEcho: () => echoStoryController,
-    getSpecialInterior: () => iceSanctum?.isActive() ? iceSanctum : null,
+    getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
     onIdle: handlePlayerIdle,
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
@@ -572,6 +588,7 @@ function init() {
     resolveMovement: (from, target, result) => roadNavigation.resolveMovement(from, target, result),
     isInputLocked: () => filmCityCinematicActive,
     isCinematicCameraActive: () => filmCityCinematicActive,
+    isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
   });
   loginController = createLoginController({
     getStats,
@@ -614,14 +631,13 @@ function init() {
   cityDialogs.setup();
   weatherEffect = createWeatherEffect({ scene, getCursor: () => cursorChar,
     restoreSky: () => themeClock.restoreSky(), onWeatherChanged: (next) => { if (next) document.body.dataset.cityWeather = next; else delete document.body.dataset.cityWeather; } }); weatherEffect.set(weather);
-  iceSanctum = createIceSanctumExperience({
+  iceKingFeature = createIceKingFeatureExperience({
     scene, makeCharacter,
     makeMaterial: (parameters) => resources.material({ kind: 'ice-sanctum', ...parameters }, () => stdMat(parameters)),
     getCursor: () => cursorChar, dialogs: () => cityDialogs,
-    nextRewardClaimSequence: (rewardId) => multiplayerHousing.progression.nextRewardClaimSequence(rewardId),
-    claimReward: (rewardId, claimSequence) => multiplayerHousing.progression.claimReward(rewardId, claimSequence),
-    onEnterUnavailable: () => showUnlockToast('城市仍在准备，请稍后再试'), onRewardFailure: () => showUnlockToast('奖励领取失败，可以再次进入皇冠建筑重试'),
-    onProgressFailure: () => showUnlockToast('皇冠剧情进度保存失败，请检查浏览器存储设置'),
+    progression: multiplayerHousing.progression,
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
     onEnter: () => {
       if (mapController?.isOpen()) mapController.toggle();
       setPhoneOpen(false); statsPanelController?.close(); eventBindings.closeRenderSettings();
@@ -640,14 +656,6 @@ function init() {
     focusCamera: (x, z, focusOptions) => cameraController?.focus(x, z, focusOptions),
     stopCameraFocus: () => cameraController?.stop(),
   });
-  catCafeIceWallFeature = createCatCafeIceWallFeature({
-    dialogs: cityDialogs,
-    progression: multiplayerHousing.progression,
-    awardAchievement: awardDirectAchievement,
-    showToast: showUnlockToast,
-    startCatDeathCG: async () => (await playCatDeathCGAfterBlackout())?.finished ?? null,
-    stopCatDeathCG,
-  });
   sceneInterestPointController=createSceneInterestPointController({
     dialogs: cityDialogs,
     inventory: {
@@ -660,7 +668,7 @@ function init() {
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     interactWithStory: (id) => cityDialogs ? echoStoryController.interactInterestPoint(id, cityDialogs) : false,
-    interactWithFeature: catCafeIceWallFeature.interact,
+    interactWithFeature: (id) => iceKingFeature?.iceWall.interact(id) ?? false,
     setWellPhase: (phase) => {
       sceneInterestPoints?.setWellPhase(phase);
       if (!camera) return;
@@ -740,7 +748,7 @@ function setupScene() {
     stopInvasionCG,
     getWeather: () => weather,
     setWeather: (value) => updateWeatherState(value),
-    getIceSanctum: () => iceSanctum,
+    getIceSanctum: () => iceKingFeature?.sanctum ?? null,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -841,35 +849,23 @@ function entranceAnimation() { sceneAnimations.entranceAnimation(); }
 function initAnimations() { sceneAnimations.initAnimations(); }
 function updateLabels() { frameLoop.updateLabels(); }
 
-function toggleMapMode() {
-  mapController?.toggle();
-}
-
-function updateCameraProjection(vs: number) {
-  cameraController?.updateProjection(vs);
-}
+function toggleMapMode() { mapController?.toggle(); }
+function updateCameraProjection(vs: number) { cameraController?.updateProjection(vs); }
 
 function setCameraTarget(x: number, z: number, instant?: boolean) { cameraController?.setTarget(x,z,instant); }
 
 function movePlayerTo(target: THREE.Vector3) { playerController?.moveTo(target); }
 
+function selectNavigationTarget(target: THREE.Vector3) { if (playerController?.moveTo(target)) navigationTargetMarker?.show(target); }
+
+function clearNavigationTarget() { navigationTargetMarker?.hide(); }
+
 function handlePlayerIdle() { interactionPointer.handlePlayerIdle(); }
 
 function flushDistance(amount: number) { interactionTracker.flushDistance(amount); }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// STATS / PROGRESSION SYSTEM
-// ══════════════════════════════════════════════════════════════════════════════
-
 function trackInteraction(buildingId: string) { interactionTracker.trackInteraction(buildingId); }
-
-function updateWelcome() {
-  // Cloud progression owns the unique-building threshold and inventory entry.
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// LOGIN
-// ══════════════════════════════════════════════════════════════════════════════
+function updateWelcome() { /* Cloud progression owns the unique-building threshold and inventory entry. */ }
 
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string) {
   entranceAnimation();
@@ -879,14 +875,6 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
   setupMultiplayer(nickname, password);
   checkAchievements();
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// STATS PANEL
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ══════════════════════════════════════════════════════════════════════════════
-// POPULATION FILTER
-// ══════════════════════════════════════════════════════════════════════════════
 
 function setupFilter() {
   document.querySelectorAll('.pf-btn').forEach(btn=>{
@@ -902,10 +890,6 @@ function setFilter(filter: string) {
     showUnlockToast('no friends online yet — invite someone!');
   }
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// MODAL SYSTEM — ancient paper dialog
-// ══════════════════════════════════════════════════════════════════════════════
 
 function getQuestProgressView() {
   return multiplayerHousing?.progression.getQuestProgressView() ?? {
@@ -973,14 +957,16 @@ export function destroyMiniCity() {
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
   multiplayerHousing?.destroy();
-  iceSanctum?.dispose(); catCafeIceWallFeature?.dispose(); weatherEffect?.dispose();
-  iceSanctum=null; catCafeIceWallFeature=null; weatherEffect=null;
+  iceKingFeature?.dispose(); weatherEffect?.dispose();
+  iceKingFeature=null; weatherEffect=null;
   destroyCG(); stopInvasionCG();
   eventController.abort();
   npcList.forEach(npc=>npc.tween?.kill());
   npcSystem?.destroy();
   gsap.globalTimeline.clear();
   mapController?.destroy();
+  navigationTargetMarker?.dispose();
+  navigationTargetMarker=null;
   renderer?.dispose();
   renderer?.forceContextLoss();
   sceneInterestPoints?.dispose();

@@ -34,6 +34,7 @@ export type PlayerControllerOptions = {
   resolveMovement: (from: THREE.Vector3, target: THREE.Vector3, result?: THREE.Vector3) => THREE.Vector3;
   isInputLocked?: () => boolean;
   isCinematicCameraActive?: () => boolean;
+  isCameraFollowSuspended?: () => boolean;
 };
 
 export function createPlayerController(options: PlayerControllerOptions) {
@@ -41,29 +42,32 @@ export function createPlayerController(options: PlayerControllerOptions) {
   const manualTarget = new THREE.Vector3();
   const resolvedMovement = new THREE.Vector3();
 
-  function moveTo(target: THREE.Vector3): void {
-    if (options.isInputLocked?.()) return;
+  function moveTo(target: THREE.Vector3): boolean {
+    if (options.isInputLocked?.()) return false;
     const cursor = options.getCursor();
     const specialInterior = options.getSpecialInterior?.();
-    if (!cursor || options.isDialogOpen() || specialInterior?.isMovementLocked?.()) return;
+    if (!cursor || options.isDialogOpen() || specialInterior?.isMovementLocked?.()) return false;
     cursor.visible = true;
     const echo = options.getEcho();
     const specialNavigation = specialInterior?.navigation();
     if (specialNavigation) {
-      options.setPlayerPath(specialNavigation.buildPath(cursor.position, target));
-      return;
+      const path = specialNavigation.buildPath(cursor.position, target);
+      options.setPlayerPath(path);
+      return path.length > 0;
     }
     if (echo?.isInteriorView()) {
       const navigation = echo.navigation();
-      options.setPlayerPath(navigation ? navigation.buildPath(cursor.position, target) : [new THREE.Vector3(
+      const path = navigation ? navigation.buildPath(cursor.position, target) : [new THREE.Vector3(
         options.clamp(target.x, options.echoInterior[0] - 14, options.echoInterior[0] + 14),
         0,
         options.clamp(target.z, options.echoInterior[1] - 9.5, options.echoInterior[1] + 9.5),
-      )]);
-      return;
+      )];
+      options.setPlayerPath(path);
+      return path.length > 0;
     }
     const candidate = options.buildRoadPath(cursor.position, target);
     options.setPlayerPath(retainPathOnFailedReroute(options.getPlayerPath(), candidate));
+    return candidate.length > 0;
   }
 
   function updateMovement(delta: number): void {
@@ -185,7 +189,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
     }
     if (inside && !echo?.isInteriorView()) echo?.setInteriorView(true);
     if (!inside && echo?.isInteriorView()) echo?.setInteriorView(false);
-    options.setCameraTarget(cursor.position.x, cursor.position.z, true);
+    if (!options.isCameraFollowSuspended?.()) options.setCameraTarget(cursor.position.x, cursor.position.z, true);
   }
 
   return { moveTo, updateMovement, updateCamera };

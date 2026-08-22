@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
+import { clipPlotToMainRoad } from './data/cityConfig';
 import type { MaterialParameters } from '../rendering/meshFactory';
 import type { BuildingEntity, BuildingDefinition } from './buildingEntity';
 import { BUILDING_PLOT_MAP } from './data/buildingPlots';
@@ -18,9 +19,12 @@ export function createBuildingSceneController(options: {
 }) {
   function addPlot(x: number, z: number, shape: string, buildingId: string): void {
     const p = BUILDING_PLOT_MAP[shape] ?? { tex:'ground5', size:3.5, color:0xE4E3E0 };
-    const material = options.material({ color: options.isNight() ? Math.floor(p.color * 0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,p.size/2), ry:Math.max(1,p.size/2) });
+    const halfSize = p.size / 2;
+    const clipped = clipPlotToMainRoad(x, z, halfSize, halfSize);
+    if (clipped.halfWidth < 0.05 || clipped.halfDepth < 0.05) return;
+    const material = options.material({ color: options.isNight() ? Math.floor(p.color * 0.7) : p.color, roughness:0.9, tex:p.tex, rx:Math.max(1,clipped.halfWidth), ry:Math.max(1,clipped.halfDepth) });
     material.depthWrite = false;
-    const plot = new THREE.Mesh(new THREE.PlaneGeometry(p.size, p.size), material);
+    const plot = new THREE.Mesh(new THREE.PlaneGeometry(clipped.halfWidth * 2, clipped.halfDepth * 2), material);
     plot.userData.buildingId = buildingId;
     plot.rotation.x = -Math.PI / 2;
     plot.position.set(x, SURFACE_Y.buildingPlot + (Math.abs(Math.round(x * 7 + z * 13)) % 8) * 0.0015, z);

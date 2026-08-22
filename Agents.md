@@ -19,7 +19,8 @@ docs/        隐私政策、使用条款等文档
 ## 环境与启动
 
 - 需要 Node.js 20 或更高版本。
-- 在仓库根目录执行 `npm install` 安装 workspace 依赖。
+- 拿到项目第一步先安装依赖，且安装与脚本准备要并发进行（后台跑安装的同时并行阅读文档、准备构建/测试/启动脚本）。
+- 依赖安装优先使用 `scripts/setup-deps.sh`：它会按运行环境自动选择最快镜像（国内 npmmirror / 清华 PyPI / goproxy.cn，海外官方源），按锁文件执行 `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` 等，并初始化 submodule。检测到 Playwright 项目时还会安装完整版 Chromium 及 WebGL 测试所需系统库（`xvfb`、`mesa-vulkan-drivers`、`libgbm1` 等，需 root/apt；`--skip-browser` 可跳过）。也可在仓库根目录直接 `npm install`。
 - `npm run dev` 同时启动前端（默认 `http://localhost:5173`）和服务端（默认 `http://localhost:8787`）。
 - 只启动前端：`npm run dev -w @minicity/web`。
 - 只启动服务端：`npm run dev -w @minicity/server`。
@@ -116,7 +117,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 - **Auto-Fix（`.github/workflows/autofix.yml`）**：当 Issue 被打上 `autofix` 标签时触发。AI 代理按本指南修改代码、运行校验（`npm run typecheck` / `build` / `test:domain` / `test:server`，必要时 `test:web`），生成根目录 `conclusion.md`，随后由工作流自动创建 `autofix/issue-<n>-<run_id>` 分支、提交并以 `Resolves #<n>` 打开 PR。代理本身不得执行 `git commit` / `git push` / 创建 PR，这些由工作流统一完成。
 - **AI PR Reviewer（`.github/workflows/auto-review.yml`）**：PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。
 
-`skills-lock.json` 声明了 `plweb-skill`（Physics Lab 社区 API 文档，来自 `NetLogo-Mobile/plweb-skill`）和 `code-review-skill`（来自 `awesome-skills/code-review-skill`）两个只读技能，为上述代理提供上下文。模型与推理强度当前固定为 `opencode/deepseek-v4-flash-free` / `variant high`；如需更换为 AGENTS.md 提到的 `gptsol` / `terra` 等模型，应同步修改这两个工作流，并保持只读技能的来源不变。
+`skills-lock.json` 声明了 `plweb-skill`（Physics Lab 社区 API 文档，来自 `NetLogo-Mobile/plweb-skill`）和 `code-review-skill`（来自 `awesome-skills/code-review-skill`）两个只读技能，为上述代理提供上下文。AI PR Reviewer 按 `opencode/deepseek-v4-flash-free`、`opencode/big-pickle`、`opencode/hy3-free` 的顺序尝试模型，统一使用 `variant high`；如需更换模型，应同步修改对应工作流，并保持只读技能的来源不变。
 
 ## 不确定事项
 
@@ -138,6 +139,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 ## Git 与命令执行边界
 
 - 严禁代理擅自 `git commit`、`git push`、创建 PR 或修改远程仓库；只有用户明确提出时才可执行提交相关操作。
+- 所有 `gh` 操作（push、PR 创建等）必须通过 Git credential helper 认证：先 `git credential fill` 取凭据，再经 `gh auth login --with-token` 注入 gh CLI，token 只走标准输入、不得硬编码或打印。严禁使用未认证的 GitHub 网络 API（如不带 token 调用 `api.github.com`）。详见 `.monkeycode/docs/agent-setup-guide.md`。
 - 没有必要或用户明确要求时，不运行 Playwright。优先运行 `typecheck`、`build` 或服务端测试；只有涉及浏览器交互、布局、WebGL、端到端流程时才运行对应的 Playwright 测试。
 - 启动任何 `server`、`vite`、`npm run dev`、预览或测试 Web 服务进程后，任务结束前必须停止自己启动的进程，并确认端口不再被该进程占用。不要杀掉用户或其他 agent 已启动的同名服务；启动前先检查端口和进程归属。
 
