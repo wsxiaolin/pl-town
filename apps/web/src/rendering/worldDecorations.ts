@@ -86,7 +86,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addInnerCityGreenery();
     // ── 外环装饰 ──
     addTrees([[-15,0,-15],[-21,0,-21],[-27,0,-27],[-12,0,-27],[-27,0,-12],
-              [27,0,27],[21,0,21],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],
+              [27,0,27],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],
               [-27,0,27],[-21,0,27],[-27,0,0],[27,0,0],[0,0,-27],[0,0,27],
               [-30,0,0],[30,0,0],[0,0,-30],[0,0,30],
               [-36,0,-36],[36,0,36],[36,0,-36],[-36,0,36]]);
@@ -95,12 +95,13 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
               [-6,0,-24],[6,0,-24],[-6,0,24],[6,0,24],
               [-30,0,-6],[-30,0,6],[30,0,-6],[30,0,6],
               [-6,0,-30],[6,0,-30],[-6,0,30],[6,0,30]]);
-    addArch(-21,0,-21,Math.PI/6); addArch(21,0,21,-Math.PI/5);
+    addArch(-21,0,-21,Math.PI/6);
+    addGazebo(-21,0,0); addGazebo(21,0,0);
     addBench(-15,0,-15,0); addBench(15,0,15,Math.PI/2);
     addBench(-15,0,15,Math.PI/3); addBench(15,0,-15,Math.PI);
     addSphereStack(-15,0,15); addSphereStack(15,0,-15);
     addStoneRing(-21,0,12); addStoneRing(21,0,-12);
-    addMonolith(21,0,21,-0.3); addMonolith(-21,0,-21,0.5);
+    addMonolith(-21,0,-21,0.5);
     addPond(-24, -24, 3.0); addPond(24, 24, 2.5);
     addFlowerbed(-15, 0, 15); addFlowerbed(15, 0, -15);
     for(let v of [-27,-21,-15,15,21,27]) {
@@ -186,7 +187,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     // Keep these landmark coordinates reserved as an explicit intent marker;
     // buildingBounds below also blocks their current building footprints.
     const reservedSpecialLots = new Set(['32,-8', '28,2', '33,3']);
-    const buildingBounds=buildings.map((building)=>new THREE.Box3().setFromObject(building.group));
+    const buildingBounds=buildings.map((building)=>({
+      building,
+      box: new THREE.Box3().setFromObject(building.group),
+    }));
     centers.forEach(x=>centers.forEach(z=>{
       if(Math.hypot(x,z)<4.8)return;
       const dist=Math.max(Math.abs(x),Math.abs(z));
@@ -202,9 +206,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         if(footprintOverlapsMainRoad(lx,lz,1.1))return;
         // Reserve a complete clearing for the interactive mandarin tree.
         if(Math.hypot(lx-orangeGroveCenter.x,lz-orangeGroveCenter.z)<2.4)return;
-        const blocked=buildingBounds.some(box=>{
-          return lx>=box.min.x-1.35&&lx<=box.max.x+1.35
-            &&lz>=box.min.z-1.35&&lz<=box.max.z+1.35;
+        const blocked=buildingBounds.some(({building,box})=>{
+          const clearance=building.decorationClearance ?? 1.35;
+          return lx>=box.min.x-clearance&&lx<=box.max.x+clearance
+            &&lz>=box.min.z-clearance&&lz<=box.max.z+clearance;
         });
         if(!blocked) lots.push([lx,lz,(Math.abs(Math.round(lx+lz))+k)%3]);
       });

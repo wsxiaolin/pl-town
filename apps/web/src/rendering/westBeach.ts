@@ -4,9 +4,9 @@ import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { WEST_BEACH } from '../city/data/cityConfig';
 import waterNormalsUrl from '../assets/textures/waternormals.jpg';
 
-const DAY_WATER_COLOR = new THREE.Color(0x165a7d);
+const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
-const DAY_SUN_COLOR = new THREE.Color(0xffffff);
+const DAY_SUN_COLOR = new THREE.Color(0xbdd4e6);
 const NIGHT_SUN_COLOR = new THREE.Color(0x3a4a6a);
 const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 
@@ -132,7 +132,18 @@ function createAnimatedWater(geometry: THREE.BufferGeometry): Water {
   });
   water.renderOrder = 3;
   water.castShadow = false;
-  water.userData.dynamicMaterial = water.material;
+  const material = water.material as THREE.ShaderMaterial;
+  // The stock Water shader reflects the sky almost entirely (rf0 = 0.3, 0.9
+  // reflection weight), which washes the sea white. Real water has a fresnel
+  // base near 0.02, so lower both to let the deep water color dominate.
+  material.fragmentShader = material.fragmentShader
+    .replace('float rf0 = 0.3;', 'float rf0 = 0.02;')
+    .replace(
+      'vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight',
+      'vec3( 0.08 ) + reflectionSample * 0.45 + reflectionSample * specularLight',
+    );
+  material.needsUpdate = true;
+  water.userData.dynamicMaterial = material;
   return water;
 }
 

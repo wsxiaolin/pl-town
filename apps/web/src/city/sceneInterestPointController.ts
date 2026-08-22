@@ -3,11 +3,11 @@ import {
   getWellStoryNode,
   ORANGE_TREE_COPY,
   WELL_STORY,
-  WORLD_ACHIEVEMENTS,
   WORLD_ITEM_IDS,
   type InventoryPort,
   type SceneInterestPointId,
 } from '../gameplay/world/sceneInteractions';
+import { WORLD_ACHIEVEMENTS } from '../gameplay/progression/worldAchievements';
 
 interface SceneInterestPointControllerOptions {
   dialogs: Pick<CityDialogController, 'openStory'>;
@@ -18,6 +18,7 @@ interface SceneInterestPointControllerOptions {
   setBeachEncounterPhase?: (phase: 'hidden' | 'revealed' | 'reward') => void;
   focusBeachEncounter?: () => void;
   interactWithStory?: (id: SceneInterestPointId) => boolean;
+  interactWithFeature?: (id: SceneInterestPointId) => boolean | Promise<boolean>;
 }
 
 export interface SceneInterestPointController {
@@ -165,6 +166,7 @@ export function createSceneInterestPointController(
     armBeachEncounter() { beachTriggerArmed = true; },
     async interact(id) {
       if (options.interactWithStory?.(id)) return;
+      if (await options.interactWithFeature?.(id)) return;
       if (id === 'cat-cafe-note') {
         options.dialogs.openStory({ title: '掉落的纸', role: '猫咖馆旁', text: '' });
         const achievement = WORLD_ACHIEVEMENTS.catCafeNote;

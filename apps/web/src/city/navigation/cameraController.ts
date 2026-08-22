@@ -6,12 +6,20 @@ export type CameraControllerOptions = {
   getZoom: () => number;
   setZoom: (zoom: number) => void;
   getTarget: () => THREE.Vector3;
-  isEchoInterior: () => boolean;
-  echoInterior: readonly [number, number];
+  isInteriorActive: () => boolean;
+  defaultInteriorCenter: readonly [number, number];
+  getInteriorCenter?: () => readonly [number, number];
+  getInteriorCameraOffset?: () => readonly [number, number, number] | null;
+  getInteriorFollowsTarget?: () => boolean;
   cameraOffset: THREE.Vector3;
 };
 
-export type CameraFocusOptions = { duration?: number; zoom?: number };
+export type CameraFocusOptions = {
+  duration?: number;
+  zoom?: number;
+  ease?: string;
+  onComplete?: () => void;
+};
 
 export function createCameraController(options: CameraControllerOptions) {
   const interiorAnchor = new THREE.Vector3(8.2, 15.5, -8.2);
@@ -21,8 +29,32 @@ export function createCameraController(options: CameraControllerOptions) {
   function apply(target: THREE.Vector3): void {
     const camera = options.getCamera();
     if (!camera) return;
-    if (options.isEchoInterior()) {
-      camera.position.set(options.echoInterior[0] + interiorAnchor.x, interiorAnchor.y, options.echoInterior[1] + interiorAnchor.z);
+    if (options.isInteriorActive()) {
+      camera.position.set(
+        options.defaultInteriorCenter[0] + interiorAnchor.x,
+        interiorAnchor.y,
+        options.defaultInteriorCenter[1] + interiorAnchor.z,
+      );
+      camera.lookAt(target.x, 0.75, target.z);
+      return;
+    }
+    camera.position.copy(target).add(options.cameraOffset);
+    camera.lookAt(target);
+  }
+
+  function applyCameraTarget(): void {
+    const camera = options.getCamera();
+    if (!camera) return;
+    const target = options.getTarget();
+    if (options.isInteriorActive()) {
+      const center = options.getInteriorCenter?.() ?? options.defaultInteriorCenter;
+      const offset = options.getInteriorCameraOffset?.();
+      const followsTarget = Boolean(offset && options.getInteriorFollowsTarget?.());
+      camera.position.set(
+        (followsTarget ? target.x : center[0]) + (offset?.[0] ?? interiorAnchor.x),
+        offset?.[1] ?? interiorAnchor.y,
+        (followsTarget ? target.z : center[1]) + (offset?.[2] ?? interiorAnchor.z),
+      );
       camera.lookAt(target.x, 0.75, target.z);
       return;
     }
@@ -47,10 +79,10 @@ export function createCameraController(options: CameraControllerOptions) {
     if (instant) {
       gsap.killTweensOf(target);
       target.set(x, 0, z);
-      apply(target);
+      applyCameraTarget();
       return;
     }
-    gsap.to(target, { x, z, duration: 0.55, ease: 'power2.out', onUpdate: () => apply(target) });
+    gsap.to(target, { x, z, duration: 0.55, ease: 'power2.out', onUpdate: applyCameraTarget });
   }
 
   function focus(x: number, z: number, focusOptions: CameraFocusOptions = {}): void {
@@ -59,7 +91,14 @@ export function createCameraController(options: CameraControllerOptions) {
     if (!camera) return;
     const duration = focusOptions.duration ?? 0.8;
     gsap.killTweensOf(target);
-    gsap.to(target, { x, z, duration, ease: 'power2.out', onUpdate: () => apply(target) });
+    gsap.to(target, {
+      x,
+      z,
+      duration,
+      ease: focusOptions.ease ?? 'power2.out',
+      onUpdate: applyCameraTarget,
+      onComplete: focusOptions.onComplete,
+    });
     if (focusOptions.zoom !== undefined) {
       zoomTween.value = options.getZoom();
       gsap.to(zoomTween, { value: focusOptions.zoom, duration, ease: 'power2.inOut', onUpdate: () => updateProjection(zoomTween.value) });

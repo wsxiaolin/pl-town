@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../data/cityConfig';
-import { createEchoCabinNavigation, type EchoCabinNavigation } from '../navigation/echoCabinNavigation';
+import { createInteriorNavigation, type InteriorNavigation } from '../navigation/interiorNavigation';
 import { ECHO_STORY } from '../../gameplay/content/stories/echo/echoStory';
 import type { StoryConditionContext, StoryEffect, StoryEvent } from '../../gameplay/stories/types';
 import { LocalStorageStoryRepository } from '../../adapters/storage/stories/LocalStorageStoryRepository';
@@ -57,7 +57,7 @@ export type EchoStoryControllerOptions = {
 export type EchoStoryController = ReturnType<typeof createEchoStoryController>;
 
 export function createEchoStoryController(options: EchoStoryControllerOptions) {
-  let navigation: EchoCabinNavigation | null = null;
+  let navigation: InteriorNavigation | null = null;
   let guide: ReturnType<typeof createEchoObservatoryGuide> | null = null;
   let echoExteriorCameraZoom = 7;
   let echoInteriorView = false;
@@ -93,7 +93,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   }
 
   function setupScene(scene: THREE.Scene): void {
-    navigation = createEchoCabinNavigation({
+    navigation = createInteriorNavigation({
       getInterior: () => scene.getObjectByName('linche-home-interior'),
       fallbackBounds: {
         minX: ECHO_OBSERVATORY_AREA.interior[0] - 14.4,
