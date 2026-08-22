@@ -20,7 +20,7 @@ docs/        隐私政策、使用条款等文档
 
 - 需要 Node.js 20 或更高版本。
 - 拿到项目第一步先安装依赖，且安装与脚本准备要并发进行（后台跑安装的同时并行阅读文档、准备构建/测试/启动脚本）。
-- 依赖安装优先使用 `scripts/setup-deps.sh`：它会按运行环境自动选择最快镜像（国内 npmmirror / 清华 PyPI / goproxy.cn，海外官方源），按锁文件执行 `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` 等，并初始化 submodule。也可在仓库根目录直接 `npm install`。
+- 依赖安装优先使用 `scripts/setup-deps.sh`：它会按运行环境自动选择最快镜像（国内 npmmirror / 清华 PyPI / goproxy.cn，海外官方源），按锁文件执行 `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` 等，并初始化 submodule。检测到 Playwright 项目时还会安装完整版 Chromium 及 WebGL 测试所需系统库（`xvfb`、`mesa-vulkan-drivers`、`libgbm1` 等，需 root/apt；`--skip-browser` 可跳过）。也可在仓库根目录直接 `npm install`。
 - `npm run dev` 同时启动前端（默认 `http://localhost:5173`）和服务端（默认 `http://localhost:8787`）。
 - 只启动前端：`npm run dev -w @minicity/web`。
 - 只启动服务端：`npm run dev -w @minicity/server`。

@@ -6,6 +6,8 @@
 #   1. 探测运行环境所在区域（国内 cn / 海外 intl），为各包管理器选择最快可用镜像
 #   2. 按项目锁文件自动安装依赖（npm / yarn / pnpm / pip / go / cargo）
 #   3. 初始化 Git submodule
+#   4. 检测到 Playwright 项目时，安装完整版 Chromium 浏览器及 Xvfb /
+#      Vulkan/SwiftShader 软件 GL 系统库（WebGL 测试需要，普通 headless shell 不行）
 #
 # 用法：
 #   scripts/setup-deps.sh                   # 自动探测区域并安装依赖
@@ -13,6 +15,7 @@
 #   scripts/setup-deps.sh --region intl     # 强制使用海外官方源
 #   scripts/setup-deps.sh --project <目录>  # 指定项目目录（默认当前目录）
 #   scripts/setup-deps.sh --skip-install    # 仅配置镜像并打印结果，不执行安装
+#   scripts/setup-deps.sh --skip-browser    # 跳过 Playwright 浏览器与系统库安装
 #
 # 环境变量覆盖（优先级高于区域自动选择）：
 #   AGENT_REGION    cn | intl，直接指定区域
@@ -20,6 +23,8 @@
 #   PIP_INDEX_URL   pip 索引地址
 #   GO_PROXY        Go module 代理地址（逗号分隔可带 direct）
 #   CARGO_MIRROR    Cargo 镜像 registry 名（cn 下默认 rsproxy）
+#   PLAYWRIGHT_DOWNLOAD_HOST   Playwright 浏览器下载镜像（cn 下默认 npmmirror CDN）
+#   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1  跳过浏览器下载（打包镜像中已预装）
 #
 # 区域探测逻辑：
 #   1. 若提供 --region 或 AGENT_REGION，直接采用
@@ -31,6 +36,7 @@ set -euo pipefail
 PROJECT_DIR="${PWD}"
 REGION=""
 SKIP_INSTALL=0
+SKIP_BROWSER=0
 
 usage() {
   sed -n '2,40p' "$0"
@@ -49,6 +55,10 @@ parse_args() {
         ;;
       --skip-install)
         SKIP_INSTALL=1
+        shift
+        ;;
+      --skip-browser)
+        SKIP_BROWSER=1
         shift
         ;;
       -h|--help)
@@ -111,6 +121,14 @@ set_mirrors() {
   export npm_config_registry="${NPM_REGISTRY}"
   export PIP_INDEX_URL
   export GOPROXY="${GO_PROXY}"
+
+  if [ -z "${PLAYWRIGHT_DOWNLOAD_HOST:-}" ]; then
+    if [ "$REGION" = "cn" ]; then
+      export PLAYWRIGHT_DOWNLOAD_HOST="https://cdn.npmmirror.com/binaries/playwright"
+    else
+      export PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.azureedge.net"
+    fi
+  fi
 }
 
 install_npm() {
@@ -171,6 +189,55 @@ init_submodules() {
   fi
 }
 
+install_playwright() {
+  local has_pw=0
+  if [ -x node_modules/.bin/playwright ] || [ -x "${PROJECT_DIR}/node_modules/.bin/playwright" ]; then
+    has_pw=1
+  elif find . -maxdepth 3 \( -name "playwright.config.ts" -o -name "playwright.config.js" -o -name "playwright.config.mjs" -o -name "playwright.config.cjs" \) 2>/dev/null | grep -q .; then
+    has_pw=1
+  fi
+  if [ "$has_pw" = "0" ]; then
+    return
+  fi
+
+  echo "==> [playwright] 检测到 Playwright 项目，准备 WebGL 测试浏览器环境"
+
+  if [ "$SKIP_BROWSER" = "1" ] || [ "${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-0}" = "1" ]; then
+    echo "==> [playwright] 跳过浏览器下载（--skip-browser / PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1）"
+  else
+    echo "==> [playwright] 安装完整版 Chromium（WebGL 渲染需要完整 build，普通 headless shell 不行）"
+    npx --yes playwright install chromium
+  fi
+
+  install_playwright_system_deps
+}
+
+install_playwright_system_deps() {
+  if [ -n "${PLAYWRIGHT_SKIP_SYSTEM_DEPS:-}" ]; then
+    return
+  fi
+  if [ "$(id -u)" != "0" ]; then
+    echo "==> [playwright] 非 root，跳过系统库安装；需手动安装 xvfb / Vulkan/SwiftShader 栈，或使用 docker/test.Dockerfile 镜像" >&2
+    return
+  fi
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "==> [playwright] 无 apt-get，跳过系统库安装" >&2
+    return
+  fi
+
+  export DEBIAN_FRONTEND=noninteractive
+  echo "==> [playwright] 安装 Xvfb 与 Vulkan/SwiftShader 软件 GL 系统库"
+  apt-get update -y >/dev/null 2>&1 || true
+  apt-get install -y --no-install-recommends \
+    xvfb xauth \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+    libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+    libxrandr2 libgbm1 libasound2 libatspi2.0-0 libxshmfence1 \
+    libgl1 libegl1 libgles2 mesa-vulkan-drivers vulkan-tools \
+    fonts-noto-cjk fonts-noto-color-emoji \
+    ca-certificates
+}
+
 run_installs() {
   cd "${PROJECT_DIR}"
   init_submodules
@@ -178,6 +245,7 @@ run_installs() {
   install_pip
   install_go
   install_cargo
+  install_playwright
 }
 
 main() {

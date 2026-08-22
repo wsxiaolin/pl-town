@@ -27,6 +27,9 @@ scripts/setup-deps.sh --project /path/to/project
 
 # 只查看镜像配置，不安装
 scripts/setup-deps.sh --skip-install
+
+# 跳过 Playwright 浏览器与系统库安装（已预装或不需要 Web 测试时）
+scripts/setup-deps.sh --skip-browser
 ```
 
 ### 脚本行为
@@ -35,6 +38,7 @@ scripts/setup-deps.sh --skip-install
 2. **镜像选择**：国内选用 npmmirror、清华 PyPI、goproxy.cn；海外使用官方源。
 3. **按锁文件安装**：`package-lock.json` → `npm ci`；`pnpm-lock.yaml` → `pnpm install --frozen-lockfile`；`yarn.lock` → `yarn install --frozen-lockfile`；`requirements.txt` / `pyproject.toml` → pip；`go.mod` → `go mod download`；`Cargo.toml` → `cargo fetch`。
 4. **submodule 初始化**：存在 `.gitmodules` 时执行 `git submodule update --init --recursive --depth 1`。
+5. **Playwright 浏览器与 WebGL 测试环境**：检测到 Playwright 项目（存在 `playwright.config.*` 或 `node_modules/.bin/playwright`）时，安装完整版 Chromium，并用 apt 安装 WebGL 测试所需的系统库。当前仓库的 Web 测试用 Three.js/WebGL 渲染，普通 headless shell 无法创建 WebGL 上下文，必须用 **headed Chromium + Xvfb + Vulkan/SwiftShader 软件渲染**，因此系统库含 `xvfb`、`mesa-vulkan-drivers`、`libgbm1` 等。需要 `root` 与 `apt-get`；非 root 或打包镜像场景可用 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`、`PLAYWRIGHT_SKIP_SYSTEM_DEPS=1` 或 `--skip-browser` 跳过。
 
 ### 环境变量覆盖（优先级最高）
 
@@ -43,6 +47,9 @@ export AGENT_REGION=cn                 # 直接指定区域
 export NPM_REGISTRY=https://registry.npmmirror.com
 export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 export GO_PROXY=https://goproxy.cn,direct
+export PLAYWRIGHT_DOWNLOAD_HOST=...    # 浏览器下载镜像（国内默认 npmmirror CDN）
+export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1   # 跳过浏览器下载（打包镜像已预装）
+export PLAYWRIGHT_SKIP_SYSTEM_DEPS=1   # 跳过 apt 系统库安装
 ```
 
 ## 二、手动镜像配置速查
