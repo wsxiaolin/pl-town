@@ -45,6 +45,9 @@ window._mini.cinematics.stopLanYuPrelude()
 window._mini.cinematics.isLanYuPreludeActive()
 window._mini.invasionCG()
 window._mini.stopInvasionCG()
+window._mini.cinematics.startMuster()
+window._mini.cinematics.stopMuster()
+window._mini.cinematics.musterActive()
 ```
 
 ## 天气
