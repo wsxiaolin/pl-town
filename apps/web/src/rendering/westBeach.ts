@@ -241,7 +241,7 @@ export function createWestBeach(options: BeachOptions): {
         foam.position.x = shorelineX(z) - 0.16 - Math.sin(elapsedSeconds * 0.8 + index) * 0.14;
       }
       const uniforms = waterMaterial instanceof THREE.ShaderMaterial ? waterMaterial.uniforms : null;
-      if (uniforms) uniforms.uTime.value = elapsedSeconds;
+      if (uniforms?.uTime) uniforms.uTime.value = elapsedSeconds;
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
         rewardCard.rotation.y = elapsedSeconds * 0.8;
