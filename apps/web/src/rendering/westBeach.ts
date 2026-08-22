@@ -187,34 +187,39 @@ export function createWestBeach(options: BeachOptions): {
     foam.userData.foamZ = z;
     foams.push(foam);
   }
-  // Breaking-wave bands that periodically surge from deep water onto the sand,
-  // then recede — this reads as waves crashing against the shore.
-  const surges: THREE.Mesh[] = [];
-  const surgeCount = 14;
-  for (let index = 0; index < surgeCount; index += 1) {
-    const z = minZ + ((maxZ - minZ) * (index + 0.5)) / surgeCount;
-    const surge = addMesh(object, options, new THREE.PlaneGeometry(1.7, 0.42), { color: 0xf4fbf9, roughness: 0.4, transparent: true, opacity: 0, depthWrite: false }, [shorelineX(z), 0.09, z]);
-    surge.rotation.x = -Math.PI / 2;
-    surge.rotation.z = Math.sin(index * 1.7) * 0.22;
-    surge.renderOrder = 5;
-    surge.userData.surgeIndex = index;
-    surge.userData.surgeZ = z;
-    surges.push(surge);
-  }
-  const palms = [-1, 1].map((side) => {
-    const palm = new THREE.Group();
-    addMesh(palm, options, new THREE.CylinderGeometry(0.09, 0.14, 1.8, 9), { color: 0x765139, roughness: 0.9, tex: 'wood', rx: 1, ry: 2 }, [0, 0.9, 0]);
-    for (let leaf = 0; leaf < 6; leaf += 1) {
-      const frond = addMesh(palm, options, new THREE.BoxGeometry(0.75, 0.035, 0.16), { color: 0x4f843f, roughness: 0.92, tex: 'grass', rx: 2, ry: 1 }, [Math.cos(leaf) * 0.3, 1.78, Math.sin(leaf) * 0.3]);
-      frond.rotation.y = leaf * Math.PI / 3;
-      frond.rotation.z = 0.28;
+  // A tidal band whose shoreward edge oscillates every frame, so the
+  // waterline visibly advances onto the sand and retreats — the signature of
+  // waves lapping at the beach.
+  const tidalColumns = 6;
+  const tidalRows = 100;
+  const tidalPositions: number[] = [];
+  const tidalUvs: number[] = [];
+  const tidalIndices: number[] = [];
+  for (let row = 0; row <= tidalRows; row += 1) {
+    const z = minZ - 2 + ((maxZ - minZ + 4) * row) / tidalRows;
+    for (let column = 0; column <= tidalColumns; column += 1) {
+      tidalPositions.push(0, 0, z);
+      tidalUvs.push(column / tidalColumns, row / tidalRows);
     }
-    palm.position.set(-38.4, 0, 2 + side * 8.5);
-    object.add(palm);
-    return palm;
-  });
-  void palms;
-
+  }
+  for (let row = 0; row < tidalRows; row += 1) {
+    for (let column = 0; column < tidalColumns; column += 1) {
+      const a = row * (tidalColumns + 1) + column;
+      const b = a + 1;
+      const c = a + tidalColumns + 1;
+      const d = c + 1;
+      tidalIndices.push(a, c, d, a, d, b);
+    }
+  }
+  const tidalGeometry = new THREE.BufferGeometry();
+  const tidalAttr = new THREE.Float32BufferAttribute(tidalPositions, 3);
+  tidalGeometry.setAttribute('position', tidalAttr);
+  tidalGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(tidalUvs, 2));
+  tidalGeometry.setIndex(tidalIndices);
+  tidalGeometry.computeVertexNormals();
+  const tidalMesh = addMesh(object, options, tidalGeometry, options.materialFor({ color: 0x0d3b5e, roughness: 0.24, metalness: 0.1, transparent: true, opacity: 0.82, tex: 'water', rx: 6, ry: 30, depthWrite: false }), [0, 0.06, 0]);
+  tidalMesh.renderOrder = 4;
+  tidalMesh.castShadow = false;
   const bismarck = createWarship(options, 0x5d666b, 1.05);
   bismarck.name = 'bismarck-model';
   bismarck.position.set(-61, 0.18, -4);
@@ -257,25 +262,31 @@ export function createWestBeach(options: BeachOptions): {
         bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       }
+      const tidalPhase = elapsedSeconds * 0.45;
+      const tideHeight = (z: number) => {
+        const wave = Math.sin(tidalPhase + z * 0.22) * 0.5 + Math.sin(tidalPhase * 1.7 + z * 0.13) * 0.5;
+        return Math.max(0, wave) * 1.9;
+      };
+      const tidalArray = tidalAttr.array as Float32Array;
+      for (let row = 0; row <= tidalRows; row += 1) {
+        const z = minZ - 2 + ((maxZ - minZ + 4) * row) / tidalRows;
+        const inner = shorelineX(z) - 2.2;
+        const outer = shorelineX(z) + tideHeight(z);
+        for (let column = 0; column <= tidalColumns; column += 1) {
+          const t = column / tidalColumns;
+          tidalArray[(row * (tidalColumns + 1) + column) * 3] = THREE.MathUtils.lerp(inner, outer, t);
+        }
+      }
+      tidalAttr.needsUpdate = true;
+      tidalGeometry.computeVertexNormals();
       for (const foam of foams) {
         const index = foam.userData.foamIndex as number;
         const z = foam.userData.foamZ as number;
-        const phase = ((elapsedSeconds * 0.5) + (index / foams.length)) % 1;
-        const surge = Math.sin(phase * Math.PI);
-        foam.position.x = shorelineX(z) - 0.16 + surge * 0.55;
-        foam.position.y = 0.1 + surge * 0.06;
+        const height = tideHeight(z);
+        foam.position.x = shorelineX(z) + height - 0.2;
+        foam.position.y = 0.1 + height * 0.04;
         const foamMaterial = foam.material as THREE.MeshStandardMaterial;
-        foamMaterial.opacity = 0.32 + surge * 0.5;
-      }
-      for (const surge of surges) {
-        const index = surge.userData.surgeIndex as number;
-        const z = surge.userData.surgeZ as number;
-        const phase = ((elapsedSeconds * 0.5) + (index / surges.length)) % 1;
-        const rush = Math.sin(phase * Math.PI);
-        surge.position.x = shorelineX(z) + 0.45 - rush * 1.9;
-        surge.position.y = 0.09 + rush * 0.05;
-        const surgeMaterial = surge.material as THREE.MeshStandardMaterial;
-        surgeMaterial.opacity = rush * 0.85;
+        foamMaterial.opacity = Math.min(1, 0.32 + height * 0.55);
       }
       if (waterMaterial) {
         const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
