@@ -4,7 +4,7 @@ import type { StoryDialogModel } from '../../src/adapters/ui/cityDialogControlle
 import { getNpcType } from '../../src/city/data/npcTypes';
 import { createSceneInterestPointController } from '../../src/city/sceneInterestPointController';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
-import { residenceStyleFor } from '../../src/rendering/residenceStyles';
+import { residenceStyleFor, residenceStyleSeedForLot } from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { isFilmCityClearing } from '../../src/city/data/cityConfig';
 import { FILM_CITY_EXPERIENCE_PRICE, FILM_CITY_SHOTS } from '../../src/city/filmCity/filmCityExperienceController';
@@ -114,7 +114,7 @@ test('亦航 keeps the requested schedule, park spawn, and dialogue branches', (
 test('residence styles cover twelve models while neighboring lots share a family', () => {
   const styles = new Set<number>();
   for (let x = -39; x <= 39; x += 3) {
-    for (let z = -39; z <= 39; z += 3) styles.add(residenceStyleFor(x, z, Math.abs(x * 31 + z)));
+    for (let z = -39; z <= 39; z += 3) styles.add(residenceStyleFor(x, z, residenceStyleSeedForLot(x, z)));
   }
   assert.deepEqual([...styles].sort((a, b) => a - b), [0,1,2,3,4,5,6,7,8,9,10,11]);
   const family = Math.floor(residenceStyleFor(-30, -30, 0) / 2);

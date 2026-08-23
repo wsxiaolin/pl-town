@@ -98,11 +98,32 @@ jobs:
 
           # 代理运行期间移除令牌，避免模型自行下发评论或修改 PR；评论步骤单独注入 GH_TOKEN
           unset GITHUB_TOKEN GH_TOKEN
-          opencode run \
-            --model opencode/deepseek-v4-flash-free \
-            --variant high \
-            --dangerously-skip-permissions \
-            "$(cat review_prompt.txt)" > review_report.md
+          review_succeeded=false
+          for model in \
+            opencode/deepseek-v4-flash-free \
+            opencode/big-pickle \
+            opencode/hy3-free; do
+            echo "Running OpenCode review with $model"
+            if opencode run \
+              --model "$model" \
+              --variant high \
+              --dangerously-skip-permissions \
+              "$(cat review_prompt.txt)" > review_report.md; then
+              if [ -s review_report.md ]; then
+                review_succeeded=true
+                echo "OpenCode review succeeded with $model"
+                break
+              fi
+              echo "OpenCode returned an empty review with $model" >&2
+            else
+              echo "OpenCode failed with $model; trying the next fallback" >&2
+            fi
+          done
+
+          if [ "$review_succeeded" != true ]; then
+            echo "All configured OpenCode review models failed." >&2
+            exit 1
+          fi
 
       - name: Post PR review comment
         env:

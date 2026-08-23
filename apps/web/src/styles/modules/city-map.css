@@ -201,6 +201,8 @@
   .map-search { margin-bottom: 6px; }
   .map-search-input { height: 34px; font-size: 11px; }
   .map-search-result-meta { max-width: 110px; }
+  .map-icon:not(.is-confirmed),
+  .map-house-tag { display: none; }
 }
 .map-image-wrap img {
   display: block;

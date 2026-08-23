@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
+import { ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
@@ -123,7 +123,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
   function addPaths(): void {
     const pathColor = isNight ? colors.nightPath : colors.dayPath;
-    const roadWidth = (position: number) => position === 0 ? 2.4 : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
+    const roadWidth = (position: number) => position === 0 ? MAIN_ROAD_WIDTH : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
     const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road', district = '') => {
       const material = createLayerMaterial({
         color: main ? colors.asphalt : pathColor,
@@ -141,12 +141,12 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       scene.add(road);
     };
 
-    addRoadSegment(2.4, 35.8, 0, -21.1, true, 'asphalt');
-    addRoadSegment(2.4, 35.8, 0, 21.1, true, 'asphalt');
-    addRoadSegment(38.8, 2.4, -23.6, 0, false, 'pavement');
-    addRoadSegment(38.8, 2.4, 23.6, 0, false, 'pavement');
-    addRoadSegment(2.4, 2.0, 0, -39.0, false, 'pavement');
-    addRoadSegment(2.4, 2.0, 0, 39.0, false, 'pavement');
+    addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, -21.1, true, 'asphalt');
+    addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, 21.1, true, 'asphalt');
+    addRoadSegment(38.8, MAIN_ROAD_WIDTH, -23.6, 0, true, 'asphalt');
+    addRoadSegment(38.8, MAIN_ROAD_WIDTH, 23.6, 0, true, 'asphalt');
+    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -39.0, false, 'pavement');
+    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, 39.0, false, 'pavement');
 
     ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
@@ -206,12 +206,12 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     for (const x of crosswalkRoadCoords) {
       const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalkRotated', rx: 1, ry: 1 });
       trackPathMaterial(material);
-      addMarking(new THREE.BoxGeometry(roadWidth(x), 0.005, 2.4), material, x, 0);
+      addMarking(new THREE.BoxGeometry(roadWidth(x), 0.005, MAIN_ROAD_WIDTH), material, x, 0);
     }
     for (const z of crosswalkRoadCoords) {
       const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
       trackPathMaterial(material);
-      addMarking(new THREE.BoxGeometry(2.4, 0.005, roadWidth(z)), material, 0, z);
+      addMarking(new THREE.BoxGeometry(MAIN_ROAD_WIDTH, 0.005, roadWidth(z)), material, 0, z);
     }
 
     const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });

@@ -29,6 +29,8 @@ export type InteractionPointerOptions = {
   openResidence: (residenceId: string) => void;
   onYouClick: () => void;
   movePlayerTo: (target: THREE.Vector3) => void;
+  selectNavigationTarget: (target: THREE.Vector3) => void;
+  clearNavigationTarget: () => void;
   navigateTo: (building: BuildingEntity) => void;
   interactWithSceneInterestPoint: (id: SceneInterestPointId) => void;
   interactWithInterestPointController: (id: SceneInterestPointId) => Promise<void> | void;
@@ -72,6 +74,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
   }
 
   function talkToOrWalk(npc: NpcEntity) {
+    options.clearNavigationTarget();
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
     if (cursorChar && cursorChar.position.distanceTo(npc.mesh.position) <= CONFIG.npcTalkRadius) {
@@ -92,6 +95,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
 
   function interactOrWalk(b: BuildingEntity) {
     if (options.isBuildingUnavailable(b)) return;
+    options.clearNavigationTarget();
     liftForClick(b);
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
@@ -109,6 +113,7 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
   }
 
   function interactWithSceneInterestPoint(id: SceneInterestPointId) {
+    options.clearNavigationTarget();
     const points = options.getSceneInterestPoints();
     const entity = points?.entities.get(id);
     const cursorChar = options.getCursorChar();
@@ -170,10 +175,11 @@ export function createInteractionPointer(options: InteractionPointerOptions) {
     }
     const near = options.nearestNpcTo(options.getCursorWorld(), options.getConfig().npcTalkRadius);
     if (near) { talkToOrWalk(near); return; }
-    options.movePlayerTo(options.getCursorWorld());
+    options.selectNavigationTarget(options.getCursorWorld());
   }
 
   function handlePlayerIdle() {
+    options.clearNavigationTarget();
     const cursorChar = options.getCursorChar();
     const CONFIG = options.getConfig();
     if (pendingBuilding && cursorChar) {

@@ -43,6 +43,7 @@ import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
 import { createCameraController } from './navigation/cameraController';
+import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
 import { createBuildingSceneController } from './buildingSceneController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
@@ -55,7 +56,6 @@ import { createLoginController } from '../adapters/ui/loginController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
-import { BUILDING_PLOT_MAP } from './data/buildingPlots';
 import { createMeshHelpers, type MeshHelpers } from '../rendering/meshFactory';
 import { createThemeClock } from './themeClock';
 import { createInteractionPointer } from './interactionPointer';
@@ -71,6 +71,7 @@ import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { isWeather, type Weather } from './weather';
 import { preloadTextureResources } from './textureResourcePreloader';
+import { createNavigationTargetMarker } from '../rendering/navigationTargetMarker';
 const resources = new ResourcePool();
 let clockInterval = 0, trackingInterval = 0;
 let started = false;
@@ -117,6 +118,7 @@ let loginController: ReturnType<typeof createLoginController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
+let cameraPanController: ReturnType<typeof createCameraPanController>;
 let filmCityCinematicActive = false;
 let progressionController: ReturnType<typeof createProgressionController>;
 let buildingSceneController: ReturnType<typeof createBuildingSceneController>;
@@ -127,6 +129,7 @@ let worldDecorations: ReturnType<typeof createWorldDecorations>;
 let npcSystem: ReturnType<typeof createNpcSystem>;
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
+let navigationTargetMarker: ReturnType<typeof createNavigationTargetMarker> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
 let questEventSequence = 0, activeStoryActorIds = new Set<string>();
 let echoActiveActors = new Set<string>();
@@ -196,6 +199,8 @@ const interactionPointer = createInteractionPointer({
   openResidence,
   onYouClick,
   movePlayerTo,
+  selectNavigationTarget,
+  clearNavigationTarget,
   navigateTo,
   interactWithSceneInterestPoint,
   interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
@@ -229,10 +234,12 @@ const frameLoop = createFrameLoop({
   getLabelWorldPosition: () => labelWorldPosition,
   getNpcList: () => npcSystem?.getAvoidanceNpcs() ?? npcList,
   getPlayerController: () => playerController,
+  getCameraPanController: () => cameraPanController,
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
   getSceneInterestPointController: () => sceneInterestPointController,
   getMapController: () => mapController,
+  getNavigationTargetMarker: () => navigationTargetMarker,
   getBurnOverlay: () => burnCityEffect,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
@@ -315,6 +322,8 @@ const eventBindings = createEventBindings({
   getRenderer: () => renderer,
   onMouseMove,
   onCanvasClick,
+  consumeSuppressedCanvasClick: () => cameraPanController?.consumeSuppressedClick() ?? false,
+  onViewInteraction: () => cameraPanController?.notifyViewInteraction(),
   clamp,
   getCameraZoom: () => cameraZoom,
   setCameraZoom: (value) => { cameraZoom = value; },
@@ -357,6 +366,7 @@ function init() {
     cameraOffset: CAMERA_OFFSET,
   });
   setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
+  navigationTargetMarker = createNavigationTargetMarker(scene);
   window.addEventListener('minicity:textures-ready', () => {
     refreshWeather();
     proceduralTextures.refreshWeather();
@@ -523,7 +533,15 @@ function init() {
     openResidence: () => undefined,
   });
   mapController.setup(eventController.signal);
-  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];interactionPointer.clearPending();}});
+  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];interactionPointer.clearPending();clearNavigationTarget();}});
+  cameraPanController=createCameraPanController({
+    canvas: document.getElementById('c') as HTMLElement, document, window, signal: eventController.signal,
+    getCamera: () => camera, getCameraTarget: () => cameraTarget,
+    getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
+    setCameraTarget, stopCameraMotion: () => cameraController?.stop(),
+    isBlocked: () => filmCityCinematicActive || Boolean(mapController?.isOpen())
+      || Boolean(cityDialogs?.isOpen()) || Boolean(echoStoryController?.isInteriorView()),
+  });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
   }, { signal: eventController.signal });
@@ -549,6 +567,7 @@ function init() {
     resolveMovement: (from, target, result) => roadNavigation.resolveMovement(from, target, result),
     isInputLocked: () => filmCityCinematicActive,
     isCinematicCameraActive: () => filmCityCinematicActive,
+    isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
   });
   loginController = createLoginController({
     getStats,
@@ -694,7 +713,6 @@ const buildingMeshFactory = createBuildingMeshFactory({
   addPart: part,
 });
 
-const PLOT_MAP = BUILDING_PLOT_MAP;
 const SHAPE_FNS = buildingMeshFactory.builders;
 
 function addDecorations() { worldDecorations.addDecorations(); }
@@ -805,6 +823,12 @@ function updateCameraProjection(vs: number) {
 function setCameraTarget(x: number, z: number, instant?: boolean) { cameraController?.setTarget(x,z,instant); }
 
 function movePlayerTo(target: THREE.Vector3) { playerController?.moveTo(target); }
+
+function selectNavigationTarget(target: THREE.Vector3) {
+  if (playerController?.moveTo(target)) navigationTargetMarker?.show(target);
+}
+
+function clearNavigationTarget() { navigationTargetMarker?.hide(); }
 
 function handlePlayerIdle() { interactionPointer.handlePlayerIdle(); }
 
@@ -933,6 +957,8 @@ export function destroyMiniCity() {
   npcSystem?.destroy();
   gsap.globalTimeline.clear();
   mapController?.destroy();
+  navigationTargetMarker?.dispose();
+  navigationTargetMarker=null;
   renderer?.dispose();
   renderer?.forceContextLoss();
   sceneInterestPoints?.dispose();

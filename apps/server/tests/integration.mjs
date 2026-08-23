@@ -86,6 +86,10 @@ const server = spawn(process.execPath, ['dist/index.js'], {
   },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
+let serverStartupOutput = '';
+server.stdout.on('data', (chunk) => {
+  serverStartupOutput = `${serverStartupOutput}${chunk}`.slice(-16_384);
+});
 
 const connect = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -145,12 +149,34 @@ const waitFor = (client, type, predicate = () => true) => new Promise((resolve, 
 
 const send = (client, message) => client.socket.send(JSON.stringify(message));
 const waitForServer = () => new Promise((resolve, reject) => {
-  const timeout = setTimeout(() => reject(new Error('Server did not start')), 5_000);
-  server.stdout.on('data', (chunk) => {
-    if (!chunk.toString().includes('listening')) return;
-    clearTimeout(timeout);
+  if (serverStartupOutput.includes('listening')) {
     resolve();
-  });
+    return;
+  }
+  const cleanup = () => {
+    clearTimeout(timeout);
+    server.stdout.off('data', onData);
+    server.off('exit', onExit);
+  };
+  const onData = (chunk) => {
+    if (!chunk.toString().includes('listening')) return;
+    cleanup();
+    resolve();
+  };
+  const onExit = (code, signal) => {
+    cleanup();
+    reject(new Error(`Server exited before startup (code=${code}, signal=${signal}): ${serverStartupOutput}`));
+  };
+  const timeout = setTimeout(() => {
+    cleanup();
+    reject(new Error(`Server did not start: ${serverStartupOutput}`));
+  }, 5_000);
+  server.stdout.on('data', onData);
+  server.once('exit', onExit);
+  if (serverStartupOutput.includes('listening')) {
+    cleanup();
+    resolve();
+  }
 });
 
 const poll = async (operation, predicate, description) => {

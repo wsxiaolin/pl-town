@@ -835,6 +835,85 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY: top+0.3+0.25+0.5};
   }
 
+  // Neighborhood landmarks: a broadcast tower, takeaway restaurant, and tavern.
+  function buildTelevisionTower(cfg: BuildingDefinition): BuildingEntity {
+    const g = new THREE.Group();
+    const baseY = 0.22;
+    part(g, new THREE.CylinderGeometry(2.15, 2.35, baseY, 32), {color:0xc8d0d4, roughness:0.72, tex:'stone', rx:2, ry:2}, [0, baseY / 2, 0]);
+    const bodyMat = stdMat({color:0xdce7ec, roughness:0.28, metalness:0.24, tex:'metal', rx:1, ry:4});
+    bodyMat.emissive = new THREE.Color(0x8aaed0); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.CylinderGeometry(0.38, 0.74, 5.25, 16), bodyMat);
+    body.position.y = baseY + 2.625 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const deckY = baseY + 3.25;
+    part(g, new THREE.CylinderGeometry(1.33, 1.33, 0.16, 24), {color:0x4f6570, roughness:0.38, metalness:0.42, tex:'metal', rx:2, ry:1}, [0, deckY, 0]);
+    part(g, new THREE.CylinderGeometry(1.05, 1.1, 0.55, 24), {color:0x9fc6df, roughness:0.12, metalness:0.38, tex:'glass', rx:2, ry:1, emissive:0x6a9fc8, emissiveIntensity:0.08}, [0, deckY + 0.34, 0]);
+    part(g, new THREE.CylinderGeometry(1.17, 1.17, 0.12, 24), {color:0x3f5560, roughness:0.35, metalness:0.48, tex:'metal', rx:2, ry:1}, [0, deckY + 0.67, 0]);
+    const antennaBase = baseY + 5.25;
+    part(g, new THREE.CylinderGeometry(0.12, 0.24, 1.55, 12), {color:0x607985, roughness:0.28, metalness:0.65, tex:'metal', rx:1, ry:2}, [0, antennaBase + 0.775, 0]);
+    part(g, new THREE.ConeGeometry(0.12, 0.62, 10), {color:0xe5eef2, roughness:0.2, metalness:0.55, tex:'metal', rx:1, ry:1}, [0, antennaBase + 1.55 + 0.31, 0]);
+    [-1, 1].forEach((side) => {
+      const dish = part(g, new THREE.SphereGeometry(0.38, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), {color:0xe1e9ec, roughness:0.2, metalness:0.52, tex:'metal', rx:1, ry:1}, [side * 0.66, antennaBase + 0.42, 0]);
+      dish.rotation.z = side * Math.PI / 2;
+      part(g, new THREE.CylinderGeometry(0.025, 0.025, 0.42, 6), {color:0x455a64, roughness:0.34, metalness:0.5, tex:'metal', rx:1, ry:1}, [side * 0.9, antennaBase + 0.42, 0]).rotation.z = side * Math.PI / 2;
+    });
+    part(g, new THREE.SphereGeometry(0.1, 12, 12), {color:0xe85858, emissive:0xe85858, emissiveIntensity:0.5, roughness:0.18}, [0, antennaBase + 2.18, 0], false);
+    part(g, new THREE.CylinderGeometry(0.16, 0.16, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, baseY + 0.05, 0], false);
+    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:antennaBase + 2.7};
+  }
+
+  function buildFriedChickenShop(cfg: BuildingDefinition): BuildingEntity {
+    const g = new THREE.Group();
+    const width = 3.25, depth = 2.35, height = 1.52, baseY = 0.2;
+    part(g, new THREE.BoxGeometry(width + 0.55, baseY, depth + 0.55), {color:0xd6c9b9, roughness:0.82, tex:'pavement', rx:2, ry:2}, [0, baseY / 2, 0]);
+    const bodyMat = stdMat({color:0xe95e3f, roughness:0.42, tex:'wall', rx:2, ry:1});
+    bodyMat.emissive = new THREE.Color(0xc83f2d); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(width, height, depth), bodyMat);
+    body.position.y = baseY + height / 2 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = baseY + height;
+    part(g, new THREE.BoxGeometry(width + 0.24, 0.16, depth + 0.24), {color:0xf1c54a, roughness:0.38, tex:'metal', rx:2, ry:2}, [0, top + 0.08, 0]);
+    const glass = {color:0x9ac7dc, emissive:0x5b92bd, emissiveIntensity:0.08, roughness:0.14, metalness:0.25, tex:'glass', rx:1, ry:1};
+    [-0.92, 0.92].forEach((x) => part(g, new THREE.BoxGeometry(0.64, 0.66, 0.035), glass, [x, baseY + 0.88, depth / 2 + 0.022], false));
+    part(g, new THREE.BoxGeometry(0.5, 1.05, 0.04), {color:0x394d55, roughness:0.35, tex:'metal', rx:1, ry:1}, [0, baseY + 0.525, depth / 2 + 0.025], false);
+    for (let index = 0; index < 7; index += 1) {
+      part(g, new THREE.BoxGeometry(0.42, 0.18, 0.42), {color:index % 2 ? 0xf7e7bd : 0xd64032, roughness:0.66, tex:'fabric', rx:1, ry:1}, [-1.26 + index * 0.42, top - 0.02, depth / 2 + 0.22], false);
+    }
+    part(g, new THREE.CylinderGeometry(0.42, 0.5, 0.62, 16), {color:0xf1c54a, roughness:0.4, metalness:0.1, tex:'metal', rx:1, ry:1}, [0, top + 0.45, 0]);
+    part(g, new THREE.TorusGeometry(0.25, 0.07, 8, 16), {color:0xd64032, roughness:0.35, tex:'metal', rx:1, ry:1}, [0, top + 0.75, 0], false).rotation.x = Math.PI / 2;
+    [-0.18, 0, 0.18].forEach((x) => part(g, new THREE.SphereGeometry(0.095, 10, 8), {color:0xb96e2a, roughness:0.78}, [x, top + 0.75, 0.12], false));
+    [-1.3, 1.3].forEach((x) => part(g, new THREE.CylinderGeometry(0.06, 0.08, 1.0, 8), {color:0x4d5d61, roughness:0.45, metalness:0.46, tex:'metal', rx:1, ry:1}, [x, baseY + 0.5, depth / 2 + 0.38], false));
+    part(g, new THREE.BoxGeometry(2.75, 0.42, 0.06), {color:0xf4cf5b, emissive:0xf1b93c, emissiveIntensity:0.12, roughness:0.34, tex:'metal', rx:2, ry:1}, [0, top + 0.33, depth / 2 + 0.32], false);
+    part(g, new THREE.CylinderGeometry(0.16, 0.16, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, baseY + 0.05, 0], false);
+    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top + 1.3};
+  }
+
+  function buildTavern(cfg: BuildingDefinition): BuildingEntity {
+    const g = new THREE.Group();
+    const width = 3.0, depth = 2.55, height = 2.35, baseY = 0.2;
+    part(g, new THREE.BoxGeometry(width + 0.62, baseY, depth + 0.62), {color:0xbda68a, roughness:0.86, tex:'stone', rx:2, ry:2}, [0, baseY / 2, 0]);
+    const bodyMat = stdMat({color:0x7a5238, roughness:0.63, tex:'residence_wood', rx:2, ry:2});
+    bodyMat.emissive = new THREE.Color(0x3d2418); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(width, height, depth), bodyMat);
+    body.position.y = baseY + height / 2 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
+    const top = baseY + height;
+    const roof = part(g, new THREE.ConeGeometry(2.22, 1.08, 4), {color:0x36534e, roughness:0.54, tex:'residence_tile', rx:2, ry:1}, [0, top + 0.54, 0]);
+    roof.rotation.y = Math.PI / 4;
+    [-1.16, 0, 1.16].forEach((x) => part(g, new THREE.BoxGeometry(0.12, height + 0.04, 0.08), {color:0x3d2b21, roughness:0.78, tex:'wood', rx:1, ry:2}, [x, baseY + height / 2, depth / 2 + 0.045], false));
+    part(g, new THREE.BoxGeometry(width + 0.08, 0.11, 0.1), {color:0x3d2b21, roughness:0.78, tex:'wood', rx:2, ry:1}, [0, baseY + 1.2, depth / 2 + 0.05], false);
+    const windowMat = {color:0xe0a451, emissive:0xd78535, emissiveIntensity:0.28, roughness:0.2, tex:'glass', rx:1, ry:1};
+    [-0.78, 0.78].forEach((x) => part(g, new THREE.BoxGeometry(0.44, 0.52, 0.035), windowMat, [x, baseY + 0.73, depth / 2 + 0.06], false));
+    part(g, new THREE.BoxGeometry(0.52, 1.05, 0.05), {color:0x2e453f, roughness:0.72, tex:'wood', rx:1, ry:1}, [0, baseY + 0.525, depth / 2 + 0.065], false);
+    part(g, new THREE.BoxGeometry(1.08, 0.16, 0.62), {color:0x7a2530, roughness:0.7, tex:'fabric', rx:2, ry:1}, [0, baseY + 1.34, depth / 2 + 0.31], false);
+    part(g, new THREE.BoxGeometry(0.17, 1.02, 0.17), {color:0x795445, roughness:0.8, tex:'brick', rx:1, ry:1}, [width * 0.3, top + 0.42, -depth * 0.18]);
+    part(g, new THREE.CylinderGeometry(0.38, 0.38, 0.12, 16), {color:0x3d2b21, roughness:0.75, tex:'wood', rx:1, ry:1}, [-width / 2 - 0.25, baseY + 0.35, depth / 2 + 0.1], false);
+    part(g, new THREE.CylinderGeometry(0.34, 0.34, 0.4, 16), {color:0x93633f, roughness:0.82, tex:'wood', rx:1, ry:1}, [-width / 2 - 0.25, baseY + 0.6, depth / 2 + 0.1], false);
+    part(g, new THREE.TorusGeometry(0.35, 0.035, 6, 14), {color:0x4b3526, roughness:0.6, tex:'metal', rx:1, ry:1}, [-width / 2 - 0.25, baseY + 0.58, depth / 2 + 0.1], false).rotation.x = Math.PI / 2;
+    part(g, new THREE.CylinderGeometry(0.16, 0.16, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, baseY + 0.05, 0], false);
+    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
+    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top + 1.85};
+  }
+
   const builders = {
     bank: buildBank, board: buildBoard, tower: buildTower, darktower: buildDarkTower,
     pavilion: buildPavilion, library: buildLibrary, ruins: buildRuins,
@@ -844,6 +923,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     clocktower: buildClockTower, temple: buildTemple, factory: buildFactory,
     mall: buildMall, school: buildSchool, academy: buildAcademy, crown: buildCrown,
     banana: buildBanana, qipai: buildQipai,
+    television_tower: buildTelevisionTower, fried_chicken_shop: buildFriedChickenShop, tavern: buildTavern,
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     film_city: buildFilmCity,

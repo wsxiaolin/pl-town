@@ -8,6 +8,7 @@ export const SURFACE_Y = Object.freeze({
   roadSurface: 0.10,
   roadMarking: 0.11,
   water: 0.105,
+  navigationTarget: 0.145,
 });
 
 export const RENDER_ORDER = Object.freeze({

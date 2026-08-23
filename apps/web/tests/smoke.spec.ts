@@ -10,10 +10,41 @@ const viewports = [
 test('resident phone switches between housing and chat', async ({ page }) => {
   await waitForCityReady(page, 'tester');
   await page.locator('#onlinePanelToggle').click({ force: true });
-  await page.locator('[data-online-tab="houses"]').click({ force: true });
+  await page.locator('[data-online-tab="houses"]').dispatchEvent('click');
   await expect(page.locator('#onlineHousesView')).toHaveClass(/active/);
-  await page.locator('[data-online-tab="chat"]').click({ force: true });
+  await page.locator('[data-online-tab="chat"]').dispatchEvent('click');
   await expect(page.locator('#onlineChatView')).toHaveClass(/active/);
+});
+
+test('neighborhood landmarks render their plots and open building details', async ({ page }) => {
+  await waitForCityReady(page, 'landmark-tester');
+
+  const landmarks = [
+    ['television_tower', '电视塔'],
+    ['fried_chicken_shop', '炸鸡店'],
+    ['tavern', '酒馆'],
+  ] as const;
+
+  for (const [buildingId, title] of landmarks) {
+    const result = await page.evaluate((id) => {
+      const mini = (window as any)._mini;
+      let plot: any;
+      let buildingMesh: any;
+      mini.scene.traverse((object: any) => {
+        if (object.userData?.buildingId !== id) return;
+        if (object.geometry?.type === 'PlaneGeometry') plot = object;
+        else buildingMesh = object;
+      });
+      return { hasBuilding: Boolean(buildingMesh), plotSize: plot?.geometry?.parameters?.width };
+    }, buildingId);
+    expect(result.hasBuilding).toBe(true);
+    expect(result.plotSize).toBeGreaterThan(3.5);
+
+    await page.evaluate((id) => (window as any)._mini.openBuildingDialog(id), buildingId);
+    await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
+    await expect(page.locator('#modalTitle')).toHaveText(title);
+    await page.locator('#modalClose').click();
+  }
 });
 
 test('render settings use the available width and keep controls responsive', async ({ page }) => {
@@ -356,6 +387,46 @@ test('map search fuzzily finds a building and keeps the existing teleport flow',
     return { x: position.x, z: position.z };
   });
   expect(after).not.toEqual(before);
+});
+
+test('mobile map only shows the last confirmed building icon', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await seedCityStorage(page, 'mobile-map-search-tester');
+  await waitForCityBooted(page);
+
+  await page.locator('#mapToggle').click({ force: true });
+  const visibleIcons = page.locator('.map-icon:visible');
+  await expect(visibleIcons).toHaveCount(0);
+  await expect(page.locator('.map-house-tag:visible')).toHaveCount(0);
+
+  const search = page.locator('#mapSearchInput');
+  await search.fill('图馆');
+  await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+  await expect(visibleIcons).toHaveCount(0);
+  await search.press('Enter');
+
+  const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
+  await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
+  await expect(libraryIcon).toBeVisible();
+  await expect(libraryIcon).toHaveClass(/is-confirmed/);
+  await expect(visibleIcons).toHaveCount(1);
+
+  await page.locator('#mapTipClose').click();
+  await search.fill('物实学院');
+  await expect(page.locator('.map-search-result').first()).toContainText('物实学院');
+  await expect(visibleIcons).toHaveCount(1);
+  await search.press('Enter');
+
+  const academyIcon = page.locator('.map-icon[data-building-id="academy"]');
+  await expect(academyIcon).toBeVisible();
+  await expect(academyIcon).toHaveClass(/is-confirmed/);
+  await expect(libraryIcon).not.toBeVisible();
+  await expect(visibleIcons).toHaveCount(1);
+
+  await page.locator('#mapClose').click();
+  await page.locator('#mapToggle').click({ force: true });
+  await expect(academyIcon).toBeVisible();
+  await expect(visibleIcons).toHaveCount(1);
 });
 
 test('renamed mall buildings surface their new store names', async ({ page }) => {

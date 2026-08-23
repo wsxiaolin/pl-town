@@ -64,3 +64,12 @@ Entries discovered by the Agent during task execution should follow this format:
   - To push or create PRs, authenticate via GitHub CLI device flow: run `gh auth login --hostname github.com --git-protocol https --web --skip-ssh-key` in a background terminal, read the one-time code from the log, have the user complete the browser flow, then run `gh auth setup-git`.
   - Git identity for this repo: `user.name=wsxiaolin`, `user.email=xiegushi2022@outlook.com` (set locally in the repo).
   - PR for the texture/weather branch is https://github.com/wsxiaolin/pl-town/pull/100.
+
+[User Instruction Summary]
+- Date: 2026-08-22
+- Context: 用户要求为所有 agent 建立依赖安装与 GitHub 提交的统一约定，配套文档在 `.monkeycode/docs/agent-setup-guide.md`，脚本在 `scripts/setup-deps.sh`
+- Instructions:
+  - 拿到项目第一步先装好依赖，依赖安装与脚本准备要并发进行：后台终端跑安装的同时并行阅读文档、准备构建/测试/启动脚本，装完先验证环境可用再改代码。
+  - 依赖安装必须按运行环境自动选择合适镜像（国内 agent 用 npmmirror / 清华 PyPI / goproxy.cn，海外 agent 用官方源），优先调用 `scripts/setup-deps.sh`。
+  - 所有 gh 操作（push、PR 创建等）必须走 Git credential helper：`git credential fill` 取凭据，再经 `gh auth login --with-token` 注入 gh CLI，凭据只走标准输入、不得硬编码或打印。
+  - 严禁使用未认证的 GitHub 网络 API（如不带 token 调用 api.github.com）。

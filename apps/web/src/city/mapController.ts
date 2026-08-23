@@ -53,6 +53,7 @@ export function createMapController(options: MapControllerOptions) {
   let markerTop = Number.NaN;
   let searchResults: MapSearchResult[] = [];
   let activeSearchIndex = -1;
+  let confirmedBuildingId: string | null = null;
 
   function toggle(): void {
     open = !open;
@@ -124,6 +125,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function updateMarker(): void {
+    if (open && !iconsBuilt) renderIcons();
     const marker = options.document.getElementById('mapMarker') as HTMLElement | null;
     const cursor = options.getCursor();
     if (!marker || !cursor) return;
@@ -142,23 +144,44 @@ export function createMapController(options: MapControllerOptions) {
     }
   }
 
+  function syncIconState(): void {
+    const wrap = options.document.getElementById('mapIcons');
+    if (!wrap) return;
+    wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
+      const building = options.getBuildings().find((item) => item.id === icon.dataset.buildingId);
+      const available = Boolean(building && !options.isStoryLocked(building));
+      icon.hidden = !available;
+      icon.classList.toggle('is-confirmed', available && building?.id === confirmedBuildingId);
+    });
+  }
+
   function renderIcons(): void {
     const wrap = options.document.getElementById('mapIcons');
     if (!wrap) return;
-    if (iconsBuilt) {
-      wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
-        const building = options.getBuildings().find((item) => item.id === icon.dataset.buildingId);
-        icon.hidden = !building || options.isStoryLocked(building);
-      });
+    const buildings = options.getBuildings();
+    if (buildings.length === 0) {
+      iconsBuilt = false;
       return;
     }
-    iconsBuilt = true;
-    options.getBuildings().filter((building) => !options.isStoryLocked(building)).forEach((building) => {
+
+    const availableBuildings = buildings.filter((building) => !options.isStoryLocked(building));
+    const availableIds = new Set(availableBuildings.map((building) => building.id));
+    const existingIcons = new Map<string, HTMLButtonElement>();
+    wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
+      const buildingId = icon.dataset.buildingId;
+      if (!buildingId || !availableIds.has(buildingId)) {
+        icon.remove();
+        return;
+      }
+      existingIcons.set(buildingId, icon);
+    });
+
+    availableBuildings.forEach((building) => {
+      if (existingIcons.has(building.id)) return;
       const icon = options.document.createElement('button');
       icon.type = 'button';
       icon.className = 'map-icon';
       icon.dataset.buildingId = building.id;
-      icon.hidden = options.isStoryLocked(building);
       icon.title = building.label ?? building.id;
       icon.innerHTML = building.icon ?? '';
       icon.style.left = `${((building.group.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;
@@ -166,7 +189,10 @@ export function createMapController(options: MapControllerOptions) {
       icon.addEventListener('click', () => openTip(building));
       wrap.appendChild(icon);
     });
+
+    iconsBuilt = true;
     options.renderMapHouseTags();
+    syncIconState();
   }
 
   function canTeleport(): boolean {
@@ -177,6 +203,8 @@ export function createMapController(options: MapControllerOptions) {
     if (options.isStoryLocked(building)) return;
     closeSearchResults();
     tipBuilding = building;
+    confirmedBuildingId = building.id;
+    renderIcons();
     const content = options.getBuildingContent(building.id);
     options.document.getElementById('mapTipTitle')!.textContent = content?.name ?? building.label ?? building.id;
     options.document.getElementById('mapTipSlogan')!.textContent = content?.slogan ?? '这座小城的一角。';
@@ -377,6 +405,7 @@ export function createMapController(options: MapControllerOptions) {
     tipBuilding = null;
     searchResults = [];
     activeSearchIndex = -1;
+    confirmedBuildingId = null;
     open = false;
     options.document.getElementById('mapIcons')?.replaceChildren();
     options.document.getElementById('mapSearchResults')?.replaceChildren();

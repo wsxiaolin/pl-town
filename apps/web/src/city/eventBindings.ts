@@ -7,6 +7,8 @@ export type EventBindingsOptions = {
   getRenderer: () => { capabilities: { getMaxAnisotropy: () => number; maxTextureSize: number }; setSize: (w: number, h: number) => void };
   onMouseMove: (e: MouseEvent) => void;
   onCanvasClick: (e: MouseEvent) => void;
+  consumeSuppressedCanvasClick?: () => boolean;
+  onViewInteraction?: () => void;
   clamp: (value: number, min: number, max: number) => number;
   getCameraZoom: () => number;
   setCameraZoom: (value: number) => void;
@@ -47,7 +49,14 @@ export function createEventBindings(options: EventBindingsOptions) {
     const canvas = options.getCanvas();
     const signal = options.getSignal();
     canvas.addEventListener('mousemove', options.onMouseMove, { signal });
-    canvas.addEventListener('click', options.onCanvasClick, { signal });
+    canvas.addEventListener('click', (event) => {
+      if (options.consumeSuppressedCanvasClick?.()) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      options.onCanvasClick(event);
+    }, { signal });
     canvas.addEventListener('mouseenter', () => {}, { signal });
     canvas.addEventListener('mouseleave', () => {}, { signal });
 
@@ -57,6 +66,7 @@ export function createEventBindings(options: EventBindingsOptions) {
       const zoom = options.clamp(options.getCameraZoom() * factor, options.getConfig().cameraZoomMin, options.getConfig().cameraZoomMax);
       options.setCameraZoom(zoom);
       options.updateCameraProjection(zoom);
+      options.onViewInteraction?.();
     }, { passive: false, signal });
 
     let pinchDist = 0;
@@ -76,6 +86,7 @@ export function createEventBindings(options: EventBindingsOptions) {
           const zoom = options.clamp(options.getCameraZoom() * pinchDist / d, options.getConfig().cameraZoomMin, options.getConfig().cameraZoomMax);
           options.setCameraZoom(zoom);
           options.updateCameraProjection(zoom);
+          options.onViewInteraction?.();
         }
         pinchDist = d;
       }
