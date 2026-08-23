@@ -1,6 +1,7 @@
 const PAUSE_MS = 260;
 const FADE_MS = 620;
 const HOLD_MS = 280;
+const ACTIVE_SETTLE_MS = 180;
 
 type PendingBlackout = {
   root: HTMLElement;
@@ -23,15 +24,20 @@ export async function playCatDeathBlackout<T>(start: () => T): Promise<T | null>
 
   if (!await wait(blackout, PAUSE_MS)) return null;
   root.classList.add('is-active');
+  root.style.opacity = '1';
   if (!await wait(blackout, FADE_MS + HOLD_MS)) return null;
 
   const result = start();
-  root.classList.remove('is-active');
-  root.classList.add('is-leaving');
+  window.setTimeout(() => {
+    if (blackout.cancelled) return;
+    root.style.opacity = '';
+    root.classList.remove('is-active');
+    root.classList.add('is-leaving');
+  }, ACTIVE_SETTLE_MS);
   blackout.timerId = window.setTimeout(() => {
     root.remove();
     if (pendingBlackout === blackout) pendingBlackout = null;
-  }, FADE_MS + 60);
+  }, ACTIVE_SETTLE_MS + FADE_MS + 60);
   return result;
 }
 

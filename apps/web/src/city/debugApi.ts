@@ -3,6 +3,7 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
+import { musterCGActive, startMusterCG, stopMusterCG } from './musterCg';
 import { isWeather, type Weather } from './weather';
 import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
 
@@ -75,6 +76,9 @@ function createMiniCityApi(options: DebugApiOptions) {
       playLanYuPrelude: () => playLanYuPreludeCG(),
       stopLanYuPrelude: () => stopLanYuPreludeCG(),
       isLanYuPreludeActive: () => isLanYuPreludeCGActive(),
+      startMuster: () => startMusterCG(),
+      stopMuster: () => stopMusterCG(),
+      musterActive: () => musterCGActive(),
       playCatDeath: () => playCatDeathCG(),
       stopCatDeath: () => stopCatDeathCG(),
       isCatDeathActive: () => isCatDeathCGActive(),
