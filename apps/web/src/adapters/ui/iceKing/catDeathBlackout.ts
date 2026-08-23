@@ -23,9 +23,11 @@ export async function playCatDeathBlackout<T>(start: () => T): Promise<T | null>
 
   if (!await wait(blackout, PAUSE_MS)) return null;
   root.classList.add('is-active');
+  root.style.opacity = '1';
   if (!await wait(blackout, FADE_MS + HOLD_MS)) return null;
 
   const result = start();
+  root.style.opacity = '';
   root.classList.remove('is-active');
   root.classList.add('is-leaving');
   blackout.timerId = window.setTimeout(() => {
