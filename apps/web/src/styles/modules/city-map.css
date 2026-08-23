@@ -146,6 +146,7 @@
   padding: 3px;
   box-sizing: border-box;
 }
+.map-icon[hidden] { display: none; }
 .map-icon svg {
   display: block;
   width: 100%;

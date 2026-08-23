@@ -373,11 +373,29 @@ test('map search fuzzily finds a building and keeps the existing teleport flow',
 
   await page.locator('#mapToggle').click({ force: true });
   const search = page.locator('#mapSearchInput');
+  const searchResults = page.locator('.map-search-result');
+  await search.fill('mall');
+  await expect(searchResults.nth(1)).toBeVisible();
+  await expect(searchResults.first()).toHaveClass(/is-active/);
+  await search.press('ArrowDown');
+  await expect(searchResults.nth(1)).toHaveClass(/is-active/);
+  await expect(search).toHaveAttribute('aria-activedescendant', 'mapSearchResult-1');
+  await search.press('ArrowUp');
+  await expect(searchResults.first()).toHaveClass(/is-active/);
+  await search.press('Escape');
+  await expect(page.locator('#mapSearchResults')).toBeHidden();
+  await expect(search).toHaveAttribute('aria-expanded', 'false');
+
   await search.fill('图馆');
   await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
   await search.press('Enter');
   await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
-  await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveClass(/is-selected/);
+  const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
+  await expect(libraryIcon).toHaveClass(/is-selected/);
+  await libraryIcon.evaluate((icon) => { (icon as HTMLButtonElement).hidden = true; });
+  await expect(libraryIcon).toBeHidden();
+  await libraryIcon.evaluate((icon) => { (icon as HTMLButtonElement).hidden = false; });
+  await expect(libraryIcon).toBeVisible();
   await expect(page.locator('#mapTipTele')).toBeEnabled();
   await page.locator('#mapTipTele').click();
   await expect(page.locator('#mapOverlay')).not.toHaveClass(/show/);

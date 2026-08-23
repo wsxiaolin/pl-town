@@ -8,7 +8,6 @@ type Cursor = { position: THREE.Vector3; visible: boolean };
 type MapSearchResult = {
   building: BuildingEntity;
   name: string;
-  slogan: string;
   score: number;
 };
 
@@ -239,7 +238,6 @@ export function createMapController(options: MapControllerOptions) {
         return {
           building,
           name,
-          slogan,
           score: termScores.every((score) => score >= 0) ? termScores.reduce((sum, score) => sum + score, 0) : -1,
         };
       })
