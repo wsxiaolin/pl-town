@@ -21,6 +21,7 @@ jobs:
     # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -104,7 +105,10 @@ jobs:
             opencode/big-pickle \
             opencode/hy3-free; do
             echo "Running OpenCode review with $model"
-            if opencode run \
+            # Free models can occasionally hang without returning an error. Bound each
+            # attempt so the fallback chain can advance and the required check cannot stay
+            # pending indefinitely.
+            if timeout --signal=TERM --kill-after=30s 15m opencode run \
               --model "$model" \
               --variant high \
               --dangerously-skip-permissions \
