@@ -58,7 +58,9 @@
   border-radius: 6px;
   background: rgba(255,253,245,0.92);
   color: #4E3B1F;
-  font: 12px/1.4 inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
   letter-spacing: 0;
   padding: 0 12px;
   outline: none;
@@ -202,6 +204,8 @@
   .map-search { margin-bottom: 6px; }
   .map-search-input { height: 34px; font-size: 11px; }
   .map-search-result-meta { max-width: 110px; }
+}
+@media (max-width: 680px), (max-height: 540px) and (pointer: coarse) {
   .map-icon:not(.is-confirmed),
   .map-house-tag { display: none; }
 }

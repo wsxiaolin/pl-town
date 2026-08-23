@@ -146,8 +146,9 @@ export function createMapController(options: MapControllerOptions) {
   function syncIconState(): void {
     const wrap = options.document.getElementById('mapIcons');
     if (!wrap) return;
+    const buildingsById = new Map(options.getBuildings().map((building) => [building.id, building]));
     wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
-      const building = options.getBuildings().find((item) => item.id === icon.dataset.buildingId);
+      const building = buildingsById.get(icon.dataset.buildingId ?? '');
       const available = Boolean(building && !options.isStoryLocked(building));
       icon.hidden = !available;
       icon.classList.toggle('is-confirmed', available && building?.id === confirmedBuildingId);
@@ -203,7 +204,9 @@ export function createMapController(options: MapControllerOptions) {
     closeSearchResults();
     tipBuilding = building;
     confirmedBuildingId = building.id;
-    renderIcons();
+    const iconSelector = `.map-icon[data-building-id="${CSS.escape(building.id)}"]`;
+    if (!iconsBuilt || !options.document.querySelector(iconSelector)) renderIcons();
+    else syncIconState();
     const content = options.getBuildingContent(building.id);
     options.document.getElementById('mapTipTitle')!.textContent = content?.name ?? building.label ?? building.id;
     options.document.getElementById('mapTipSlogan')!.textContent = content?.slogan ?? '这座小城的一角。';
@@ -213,7 +216,7 @@ export function createMapController(options: MapControllerOptions) {
     options.document.getElementById('mapTipLock')?.classList.toggle('hidden', unlocked);
     options.document.getElementById('mapTip')?.classList.add('open');
     options.document.querySelectorAll('.map-icon.is-selected').forEach((icon) => icon.classList.remove('is-selected'));
-    options.document.querySelector(`.map-icon[data-building-id="${CSS.escape(building.id)}"]`)?.classList.add('is-selected');
+    options.document.querySelector(iconSelector)?.classList.add('is-selected');
   }
 
   function closeTip(): void {

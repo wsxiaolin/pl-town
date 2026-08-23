@@ -407,44 +407,61 @@ test('map search fuzzily finds a building and keeps the existing teleport flow',
   expect(after).not.toEqual(before);
 });
 
-test('mobile map only shows the last confirmed building icon', async ({ page }) => {
+test('short desktop map keeps available building icons visible', async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
-  await seedCityStorage(page, 'mobile-map-search-tester');
+  await seedCityStorage(page, 'short-desktop-map-tester');
   await waitForCityBooted(page);
 
   await page.locator('#mapToggle').click({ force: true });
-  const visibleIcons = page.locator('.map-icon:visible');
-  await expect(visibleIcons).toHaveCount(0);
-  await expect(page.locator('.map-house-tag:visible')).toHaveCount(0);
+  await expect.poll(() => page.locator('.map-icon:visible').count()).toBeGreaterThan(0);
+});
 
-  const search = page.locator('#mapSearchInput');
-  await search.fill('图馆');
-  await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
-  await expect(visibleIcons).toHaveCount(0);
-  await search.press('Enter');
+test.describe('mobile map', () => {
+  test.use({
+    viewport: { width: 844, height: 390 },
+    screen: { width: 844, height: 390 },
+    hasTouch: true,
+    isMobile: true,
+  });
 
-  const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
-  await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
-  await expect(libraryIcon).toBeVisible();
-  await expect(libraryIcon).toHaveClass(/is-confirmed/);
-  await expect(visibleIcons).toHaveCount(1);
+  test('only shows the last confirmed building icon', async ({ page }) => {
+    await seedCityStorage(page, 'mobile-map-search-tester');
+    await waitForCityBooted(page);
 
-  await page.locator('#mapTipClose').click();
-  await search.fill('物实学院');
-  await expect(page.locator('.map-search-result').first()).toContainText('物实学院');
-  await expect(visibleIcons).toHaveCount(1);
-  await search.press('Enter');
+    await page.locator('#mapToggle').click({ force: true });
+    const visibleIcons = page.locator('.map-icon:visible');
+    await expect(visibleIcons).toHaveCount(0);
+    await expect(page.locator('.map-house-tag:visible')).toHaveCount(0);
 
-  const academyIcon = page.locator('.map-icon[data-building-id="academy"]');
-  await expect(academyIcon).toBeVisible();
-  await expect(academyIcon).toHaveClass(/is-confirmed/);
-  await expect(libraryIcon).not.toBeVisible();
-  await expect(visibleIcons).toHaveCount(1);
+    const search = page.locator('#mapSearchInput');
+    await search.fill('图馆');
+    await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+    await expect(visibleIcons).toHaveCount(0);
+    await search.press('Enter');
 
-  await page.locator('#mapClose').click();
-  await page.locator('#mapToggle').click({ force: true });
-  await expect(academyIcon).toBeVisible();
-  await expect(visibleIcons).toHaveCount(1);
+    const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
+    await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
+    await expect(libraryIcon).toBeVisible();
+    await expect(libraryIcon).toHaveClass(/is-confirmed/);
+    await expect(visibleIcons).toHaveCount(1);
+
+    await page.locator('#mapTipClose').click();
+    await search.fill('物实学院');
+    await expect(page.locator('.map-search-result').first()).toContainText('物实学院');
+    await expect(visibleIcons).toHaveCount(1);
+    await search.press('Enter');
+
+    const academyIcon = page.locator('.map-icon[data-building-id="academy"]');
+    await expect(academyIcon).toBeVisible();
+    await expect(academyIcon).toHaveClass(/is-confirmed/);
+    await expect(libraryIcon).not.toBeVisible();
+    await expect(visibleIcons).toHaveCount(1);
+
+    await page.locator('#mapClose').click();
+    await page.locator('#mapToggle').click({ force: true });
+    await expect(academyIcon).toBeVisible();
+    await expect(visibleIcons).toHaveCount(1);
+  });
 });
 
 test('renamed mall buildings surface their new store names', async ({ page }) => {
