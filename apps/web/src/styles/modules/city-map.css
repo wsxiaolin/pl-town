@@ -139,8 +139,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Stay proportional to the rendered map. When a mobile keyboard reduces
-     the visual viewport, map and markers shrink together instead of piling up. */
+  /* Stay proportional to the rendered map across compact viewports. */
   width: clamp(9px, 4.25cqi, 24px);
   height: clamp(9px, 4.25cqi, 24px);
   border-radius: 50%;
@@ -220,6 +219,7 @@
   .map-search-result-meta { max-width: 110px; }
 }
 @media (max-width: 680px) and (pointer: coarse), (max-height: 540px) and (pointer: coarse) {
+  .map-overlay.is-mobile-search-active .map-icon,
   .map-house-tag { display: none; }
 }
 .map-image-wrap img {

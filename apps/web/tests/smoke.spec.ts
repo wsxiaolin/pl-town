@@ -448,9 +448,13 @@ test.describe('mobile map', () => {
   });
 
   test('shows scaled building icons and shrinks them with the rendered map', async ({ page }) => {
-    await seedCityStorage(page, 'mobile-map-search-tester');
+    await seedCityStorage(page, 'mobilemapscale');
     await waitForCityBooted(page);
-    await page.locator('#mapToggle').click({ force: true });
+    await expect.poll(() => page.evaluate(() => {
+      const overlay = document.getElementById('mapOverlay');
+      if (!overlay?.classList.contains('show')) document.getElementById('mapToggle')?.click();
+      return overlay?.classList.contains('show') ?? false;
+    }), { timeout: 10_000, intervals: [200, 300, 500] }).toBe(true);
     const visibleIcons = page.locator('.map-icon:visible');
     await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
     await expect(page.locator('.map-house-tag:visible')).toHaveCount(0);
@@ -478,7 +482,64 @@ test.describe('mobile map', () => {
     expect(compressed).not.toBeNull();
     expect(compressedMap).not.toBeNull();
     expect(compressedMap!.width).toBeLessThan(initialMap!.width);
-    expect(compressed!.width).toBeLessThan(initial!.width);
+    expect(compressed!.width).toBeLessThan(highlighted!.width);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+  });
+
+  test('hides icons for mobile search and restores them when the keyboard closes', async ({ page }) => {
+    await seedCityStorage(page, 'mobilemapsearch');
+    await waitForCityBooted(page);
+    await expect.poll(() => page.evaluate(() => {
+      const overlay = document.getElementById('mapOverlay');
+      if (!overlay?.classList.contains('show')) document.getElementById('mapToggle')?.click();
+      return overlay?.classList.contains('show') ?? false;
+    }), { timeout: 10_000, intervals: [200, 300, 500] }).toBe(true);
+
+    const overlay = page.locator('#mapOverlay');
+    const visibleIcons = page.locator('.map-icon:visible');
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+    const search = page.locator('#mapSearchInput');
+    await search.focus();
+    await expect(overlay).toHaveClass(/is-mobile-search-active/);
+    await expect(visibleIcons).toHaveCount(0);
+    await search.fill('图馆');
+    await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+    await expect(visibleIcons).toHaveCount(0);
+
+    await search.press('Escape');
+    await expect(page.locator('#mapSearchResults')).toBeHidden();
+    await expect(overlay).toHaveClass(/show/);
+    await search.press('Escape');
+    await expect(overlay).not.toHaveClass(/show/);
+    await expect(search).not.toBeFocused();
+
+    await page.locator('#mapToggle').click({ force: true });
+    await search.focus();
+    await search.fill('图馆');
+    await search.press('Enter');
+
+    const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
+    await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
+    await expect(libraryIcon).toBeVisible();
+    await expect(libraryIcon).toHaveClass(/is-confirmed/);
+    await expect(overlay).not.toHaveClass(/is-mobile-search-active/);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+
+    await page.locator('#mapTipClose').click({ force: true });
+    await search.focus();
+    await search.fill('物实学院');
+    await expect(page.locator('.map-search-result').first()).toContainText('物实学院');
+    await expect(visibleIcons).toHaveCount(0);
+    await page.setViewportSize({ width: 844, height: 220 });
+    await expect(overlay).toHaveClass(/is-mobile-search-active/);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(search).toBeFocused();
+    await expect(overlay).not.toHaveClass(/is-mobile-search-active/);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+    await search.blur();
+
+    await page.locator('#mapClose').click({ force: true });
+    await page.locator('#mapToggle').click({ force: true });
     await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
   });
 });

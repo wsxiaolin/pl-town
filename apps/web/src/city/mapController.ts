@@ -53,6 +53,55 @@ export function createMapController(options: MapControllerOptions) {
   let searchResults: MapSearchResult[] = [];
   let activeSearchIndex = -1;
   let confirmedBuildingId: string | null = null;
+  let mobileViewportBaseline = 0;
+  let mobileKeyboardWasOpen = false;
+
+  function getWindow(): Window | null {
+    return options.document.defaultView;
+  }
+
+  function getViewportHeight(): number {
+    const view = getWindow();
+    return view?.visualViewport?.height ?? view?.innerHeight ?? 0;
+  }
+
+  function isMobileMapViewport(): boolean {
+    const view = getWindow();
+    if (!view) return false;
+    const compact = view.matchMedia('(max-width: 680px), (max-height: 540px)').matches;
+    return compact && view.matchMedia('(pointer: coarse)').matches;
+  }
+
+  function setMobileSearchActive(active: boolean): void {
+    options.document.getElementById('mapOverlay')?.classList.toggle(
+      'is-mobile-search-active',
+      active && open && isMobileMapViewport(),
+    );
+  }
+
+  function syncMobileKeyboardState(): void {
+    const input = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
+    const viewportHeight = getViewportHeight();
+    if (!open || !input || options.document.activeElement !== input || !isMobileMapViewport()) {
+      setMobileSearchActive(false);
+      mobileKeyboardWasOpen = false;
+      mobileViewportBaseline = Math.max(mobileViewportBaseline, viewportHeight);
+      return;
+    }
+
+    mobileViewportBaseline = Math.max(mobileViewportBaseline, viewportHeight);
+    const keyboardThreshold = Math.max(80, mobileViewportBaseline * 0.15);
+    const keyboardOpen = viewportHeight <= mobileViewportBaseline - keyboardThreshold;
+    if (keyboardOpen) {
+      mobileKeyboardWasOpen = true;
+      setMobileSearchActive(true);
+    } else if (mobileKeyboardWasOpen) {
+      // Some mobile browsers keep the input focused after their keyboard is
+      // dismissed. Restore the icons as soon as the visual viewport expands.
+      mobileKeyboardWasOpen = false;
+      setMobileSearchActive(false);
+    }
+  }
 
   function toggle(): void {
     open = !open;
@@ -60,9 +109,15 @@ export function createMapController(options: MapControllerOptions) {
     const overlay = options.document.getElementById('mapOverlay');
     if (open) {
       overlay?.classList.add('show');
+      mobileViewportBaseline = getViewportHeight();
+      mobileKeyboardWasOpen = false;
+      setMobileSearchActive(false);
       updateImage();
     } else {
       overlay?.classList.remove('show');
+      setMobileSearchActive(false);
+      mobileKeyboardWasOpen = false;
+      (options.document.getElementById('mapSearchInput') as HTMLInputElement | null)?.blur();
       closeTip();
       resetSearch();
     }
@@ -367,9 +422,21 @@ export function createMapController(options: MapControllerOptions) {
     const searchInput = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
     searchInput?.addEventListener('input', renderSearchResults, { signal });
     searchInput?.addEventListener('focus', () => {
+      if (isMobileMapViewport()) {
+        mobileViewportBaseline = Math.max(mobileViewportBaseline, getViewportHeight());
+        mobileKeyboardWasOpen = false;
+        // Hide immediately while the software keyboard animates in. A later
+        // visualViewport resize restores the icons if the keyboard is closed
+        // without blurring the input.
+        setMobileSearchActive(true);
+      }
       if (searchInput.value.trim()) renderSearchResults();
     }, { signal });
-    searchInput?.addEventListener('blur', closeSearchResults, { signal });
+    searchInput?.addEventListener('blur', () => {
+      closeSearchResults();
+      setMobileSearchActive(false);
+      mobileKeyboardWasOpen = false;
+    }, { signal });
     searchInput?.addEventListener('keydown', (event) => {
       if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'ArrowDown' && searchResults.length > 0) {
@@ -384,10 +451,16 @@ export function createMapController(options: MapControllerOptions) {
         event.preventDefault();
         selectSearchResult(activeSearchIndex);
       } else if (event.key === 'Escape') {
-        event.stopPropagation();
-        closeSearchResults();
+        const results = options.document.getElementById('mapSearchResults');
+        if (results && !results.hidden) {
+          event.stopPropagation();
+          closeSearchResults();
+        }
       }
     }, { signal });
+    const view = getWindow();
+    view?.visualViewport?.addEventListener('resize', syncMobileKeyboardState, { signal });
+    view?.addEventListener('resize', syncMobileKeyboardState, { signal });
     options.document.getElementById('mapTipTele')?.addEventListener('click', () => {
       if (!tipBuilding || !canTeleport()) return;
       const building = tipBuilding;
@@ -413,7 +486,10 @@ export function createMapController(options: MapControllerOptions) {
     searchResults = [];
     activeSearchIndex = -1;
     confirmedBuildingId = null;
+    mobileViewportBaseline = 0;
+    mobileKeyboardWasOpen = false;
     open = false;
+    options.document.getElementById('mapOverlay')?.classList.remove('is-mobile-search-active');
     options.document.getElementById('mapIcons')?.replaceChildren();
     options.document.getElementById('mapSearchResults')?.replaceChildren();
   }
