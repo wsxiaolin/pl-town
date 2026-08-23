@@ -3,6 +3,7 @@ import test from 'node:test';
 import { MAGI_STORY } from '../../src/gameplay/content/stories/magi/magiStory';
 import { OVERCOAT_STORY } from '../../src/gameplay/content/stories/overcoat/overcoatStory';
 import { YESTERDAY_SONG } from '../../src/gameplay/content/stories/yesterday/yesterdaySong';
+import { ICE_SANCTUM_STORY } from '../../src/gameplay/content/stories/iceKing/iceSanctumStory';
 import type { StoryDefinition } from '../../src/gameplay/stories/types';
 
 function assertInteractionsResolve(story: StoryDefinition): void {
@@ -25,7 +26,7 @@ test('side story world interactions reference existing choices', () => {
 });
 
 test('side story nodes reference existing destinations', () => {
-  for (const story of [MAGI_STORY, OVERCOAT_STORY, YESTERDAY_SONG]) {
+  for (const story of [MAGI_STORY, OVERCOAT_STORY, YESTERDAY_SONG, ICE_SANCTUM_STORY]) {
     for (const node of Object.values(story.nodes)) {
       for (const choice of node.choices ?? []) assert(story.nodes[choice.next], `${story.id}: missing destination ${choice.next}`);
     }

@@ -112,6 +112,13 @@ db.exec(`
     claimed_at TEXT NOT NULL,
     PRIMARY KEY (user_id, reward_id, claim_key)
   );
+  CREATE TABLE IF NOT EXISTS player_repeatable_reward_claims (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reward_id TEXT NOT NULL,
+    claim_count INTEGER NOT NULL CHECK (claim_count >= 0),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, reward_id)
+  );
   CREATE TABLE IF NOT EXISTS story_progress (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     story_id TEXT NOT NULL,
@@ -194,6 +201,19 @@ db.exec(`
   if (!columns.some((column) => column.name === 'moderation_error')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderation_error TEXT');
   if (!columns.some((column) => column.name === 'moderated_at')) db.exec('ALTER TABLE chat_messages ADD COLUMN moderated_at TEXT');
 }
+if (existingSchemaVersion < 5) {
+  db.exec(`
+    INSERT INTO player_repeatable_reward_claims (user_id, reward_id, claim_count, updated_at)
+    SELECT user_id, reward_id, COUNT(*), MAX(claimed_at)
+    FROM player_reward_claims
+    WHERE reward_id IN ('ice_reject', 'ice_accept')
+    GROUP BY user_id, reward_id
+    ON CONFLICT(user_id, reward_id) DO UPDATE SET
+      claim_count = MAX(claim_count, excluded.claim_count),
+      updated_at = excluded.updated_at;
+    DELETE FROM player_reward_claims WHERE reward_id IN ('ice_reject', 'ice_accept');
+  `);
+}
 // Existing achievements may already have paid their legacy reward. Recording
 // them prevents an upgrade from paying those rewards a second time.
 db.prepare(`
@@ -254,10 +274,12 @@ export function getPlayerProgress(userId: string): PlayerProgress {
   const currency = (db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(userId) as { currency: number }).currency;
   const inventoryRows = db.prepare('SELECT item_id, quantity FROM player_inventory WHERE user_id = ? ORDER BY item_id').all(userId) as Array<{ item_id: string; quantity: number }>;
   const inventory = Object.fromEntries(inventoryRows.map((row) => [row.item_id, row.quantity]));
+  const repeatableRewardRows = db.prepare('SELECT reward_id, claim_count FROM player_repeatable_reward_claims WHERE user_id = ? ORDER BY reward_id').all(userId) as Array<{ reward_id: string; claim_count: number }>;
+  const repeatableRewardClaims = Object.fromEntries(repeatableRewardRows.map((row) => [row.reward_id, row.claim_count]));
   const achievements = (db.prepare('SELECT achievement_id FROM player_achievements WHERE user_id = ? ORDER BY unlocked_at, achievement_id').all(userId) as Array<{ achievement_id: string }>).map((row) => row.achievement_id);
   const unlockedBuildings = (db.prepare('SELECT building_id FROM player_building_unlocks WHERE user_id = ? ORDER BY unlocked_at, building_id').all(userId) as Array<{ building_id: string }>).map((row) => row.building_id);
   const visitedBuildings = (db.prepare('SELECT building_id FROM player_building_visits WHERE user_id = ? ORDER BY first_visited_at, building_id').all(userId) as Array<{ building_id: string }>).map((row) => row.building_id);
-  return { currency, inventory, achievements, unlockedBuildings, visitedBuildings };
+  return { currency, inventory, repeatableRewardClaims, achievements, unlockedBuildings, visitedBuildings };
 }
 
 export function recordBuildingVisit(userId: string, buildingId: string): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
@@ -348,6 +370,29 @@ export function claimReward(userId: string, rewardId: string, claimKey: string, 
     claimed = true;
   })();
   return { progress: getPlayerProgress(userId), claimed };
+}
+
+export function claimRepeatableReward(userId: string, rewardId: string, claimSequence: number, itemId: string, quantity: number): { progress: PlayerProgress; claimed: boolean; accepted: boolean } {
+  let claimed = false;
+  let accepted = false;
+  db.transaction(() => {
+    ensureProgress(db, userId, now());
+    const row = db.prepare('SELECT claim_count FROM player_repeatable_reward_claims WHERE user_id = ? AND reward_id = ?').get(userId, rewardId) as { claim_count: number } | undefined;
+    const claimCount = row?.claim_count ?? 0;
+    if (claimSequence <= claimCount) {
+      accepted = true;
+      return;
+    }
+    if (claimSequence !== claimCount + 1) throw new Error('Invalid reward claim sequence');
+    db.prepare(`
+      INSERT INTO player_repeatable_reward_claims (user_id, reward_id, claim_count, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, reward_id) DO UPDATE SET claim_count = excluded.claim_count, updated_at = excluded.updated_at
+    `).run(userId, rewardId, claimSequence, now());
+    addInventory(db, userId, itemId, quantity, now());
+    claimed = true;
+    accepted = true;
+  })();
+  return { progress: getPlayerProgress(userId), claimed, accepted };
 }
 
 const STORY_DEFAULT_NODE = 'start';

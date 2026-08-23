@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
+import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { RENDER_ORDER } from './layers';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
@@ -708,53 +709,6 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     part(g, new THREE.BoxGeometry(0.02,0.45,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y, z+0.005], false);
   }
   
-  // 30 KINGICE — crown-shaped golden building with "King Ice" text
-  function buildCrown(cfg: BuildingDefinition): BuildingEntity {
-    const g = new THREE.Group();
-    // Stone base
-    part(g, new THREE.CylinderGeometry(1.8, 2.0, 0.3, 32), {color:P.BUILDING_BASE,roughness:0.8,tex:'stone',rx:1,ry:1}, [0,0.15,0]);
-    // Crown band — main cylinder body with golden "King Ice" texture
-    const bodyMat = stdMat({color:0xE8A838,roughness:0.25,metalness:0.35,tex:'kingice',rx:1,ry:1});
-    bodyMat.emissive = new THREE.Color(P.GOLD); bodyMat.emissiveIntensity = 0;
-    const body = mk(new THREE.CylinderGeometry(1.5, 1.6, 1.6, 32), bodyMat);
-    body.position.y = 0.3 + 0.8; body.castShadow = body.receiveShadow = true; g.add(body);
-    const top = 0.3 + 1.6;
-    // Gold rim at top of band
-    part(g, new THREE.CylinderGeometry(1.58, 1.58, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, top + 0.04, 0]);
-    // Gold rim at bottom of band
-    // Do not let the lower gold ring share the stone base's top face.
-    part(g, new THREE.CylinderGeometry(1.62, 1.62, 0.08, 32), {color:P.GOLD,roughness:0.2,metalness:0.5,tex:'metal',rx:1,ry:1}, [0, 0.355, 0]);
-    // 5 crown points (teeth) — evenly spaced around the top rim
-    const pointCount = 5;
-    const crownGemColors = [0x3B6FE0, 0xE85858, 0x5A8A3A, 0xA858E8, 0xE8A838];
-    for (let i = 0; i < pointCount; i++) {
-      const angle = (i / pointCount) * Math.PI * 2 - Math.PI / 2;
-      const px = Math.cos(angle) * 1.25;
-      const pz = Math.sin(angle) * 1.25;
-      // Tapered crown point — wider at base, narrow at tip
-      const pointH = 0.75 + (i % 2) * 0.15; // alternate heights for variety
-      part(g, new THREE.CylinderGeometry(0.06, 0.22, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
-      // Gem at each tip
-      part(g, new THREE.SphereGeometry(0.1, 12, 12), {color:crownGemColors[i],emissive:crownGemColors[i],emissiveIntensity:0.35,roughness:0.15,metalness:0.4}, [px, top + 0.08 + pointH + 0.1, pz], false);
-    }
-    // Short crown points between the tall ones (fill the gaps for full crown look)
-    for (let i = 0; i < pointCount; i++) {
-      const angle = ((i + 0.5) / pointCount) * Math.PI * 2 - Math.PI / 2;
-      const px = Math.cos(angle) * 1.35;
-      const pz = Math.sin(angle) * 1.35;
-      const pointH = 0.4;
-      part(g, new THREE.CylinderGeometry(0.04, 0.18, pointH, 6), {color:P.GOLD,roughness:0.2,metalness:0.45,tex:'metal',rx:1,ry:1}, [px, top + 0.08 + pointH / 2, pz]);
-      // Small gem at tip
-      part(g, new THREE.SphereGeometry(0.06, 8, 8), {color:0xFFF8E0,emissive:0xFFF8E0,emissiveIntensity:0.25,roughness:0.2,metalness:0.3}, [px, top + 0.08 + pointH + 0.06, pz], false);
-    }
-    // Blue entrance disc at base
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.3+0.05,0], false);
-    // Label Y for floating tag
-    const labelY = top + 0.08 + 0.85 + 0.5;
-    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
-    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY};
-  }
-  
   // 30 BANANA PALACE — 布拿拉宫
   function buildBanana(cfg: BuildingDefinition): BuildingEntity {
     const g = new THREE.Group();
@@ -921,7 +875,8 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     screen: buildScreen, shaft: buildShaft, altar: buildAltar, observatory: buildObservatory,
     pagoda: buildPagoda, market: buildMarket, greenhouse: buildGreenhouse,
     clocktower: buildClockTower, temple: buildTemple, factory: buildFactory,
-    mall: buildMall, school: buildSchool, academy: buildAcademy, crown: buildCrown,
+    mall: buildMall, school: buildSchool, academy: buildAcademy,
+    crown: (cfg: BuildingDefinition) => buildIceKingCrownBuilding(cfg, { stdMat, mk, part }),
     banana: buildBanana, qipai: buildQipai,
     television_tower: buildTelevisionTower, fried_chicken_shop: buildFriedChickenShop, tavern: buildTavern,
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),

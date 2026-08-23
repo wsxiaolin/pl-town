@@ -5,12 +5,21 @@ import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sce
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
 import { musterCGActive, startMusterCG, stopMusterCG } from './musterCg';
 import { isWeather, type Weather } from './weather';
+import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
 
 type NpcEntity = Npc;
 
 type NavigationApi = {
   buildRoadPath: (from: THREE.Vector3, to: THREE.Vector3) => THREE.Vector3[];
   nearestRoadCoord: (value: number) => number;
+};
+
+type IceSanctumController = {
+  enter: () => boolean;
+  hasEntered: () => boolean;
+  isActive: () => boolean;
+  interactNpc: () => boolean;
+  root: THREE.Object3D;
 };
 
 export type MiniCityDebugApi = ReturnType<typeof createMiniCityApi>;
@@ -70,6 +79,16 @@ function createMiniCityApi(options: DebugApiOptions) {
       startMuster: () => startMusterCG(),
       stopMuster: () => stopMusterCG(),
       musterActive: () => musterCGActive(),
+      playCatDeath: () => playCatDeathCG(),
+      stopCatDeath: () => stopCatDeathCG(),
+      isCatDeathActive: () => isCatDeathCGActive(),
+    },
+    iceSanctum: {
+      enter: () => options.getIceSanctum()?.enter(),
+      hasEntered: () => options.getIceSanctum()?.hasEntered() ?? false,
+      interactNpc: () => options.getIceSanctum()?.interactNpc() ?? false,
+      isActive: () => options.getIceSanctum()?.isActive() ?? false,
+      root: () => options.getIceSanctum()?.root ?? null,
     },
     invasionCG: () => options.playInvasionCG(),
     stopInvasionCG: () => options.stopInvasionCG(),
@@ -115,6 +134,7 @@ export type DebugApiOptions = {
   stopInvasionCG: () => void;
   getWeather: () => Weather;
   setWeather: (weather: Weather) => void;
+  getIceSanctum: () => IceSanctumController | null;
 };
 
 export function installDebugApi(options: DebugApiOptions) {

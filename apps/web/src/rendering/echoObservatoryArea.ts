@@ -60,15 +60,15 @@ function addBox(
 }
 
 function markInteriorObstacle(object: THREE.Object3D): void {
-  object.userData.echoInteriorObstacle = true;
+  object.userData.interiorObstacle = true;
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh) child.userData.echoInteriorObstacle = true;
+    if (child instanceof THREE.Mesh) child.userData.interiorObstacle = true;
   });
 }
 
 function markInteriorWalkable(object: THREE.Object3D): void {
-  object.userData.echoCabinWalkable = true;
-  object.traverse((child) => { child.userData.echoCabinWalkable = true; });
+  object.userData.interiorWalkableSurface = true;
+  object.traverse((child) => { child.userData.interiorWalkableSurface = true; });
 }
 
 function addCylinder(
@@ -223,7 +223,10 @@ function addGableRoof(
     pieces.push(addBox(parent, accentMaterial, [0.055, 0.04, roofDepth - 0.12], [-halfWidth + t * halfWidth, eaveY + t * ridgeRise + 0.14, 0], [0, 0, angle]));
     pieces.push(addBox(parent, accentMaterial, [0.055, 0.04, roofDepth - 0.12], [halfWidth - t * halfWidth, eaveY + t * ridgeRise + 0.14, 0], [0, 0, -angle]));
   }
-  if (markAsInteriorRoof) pieces.forEach((piece) => { piece.userData.echoInteriorRoof = true; });
+  if (markAsInteriorRoof) pieces.forEach((piece) => {
+    piece.userData.echoInteriorRoof = true;
+    piece.userData.interiorNavigationIgnore = true;
+  });
 }
 
 function addRug(parent: THREE.Object3D, edgeMaterial: THREE.Material, centerMaterial: THREE.Material, x: number, z: number, width: number, depth: number): void {
@@ -567,10 +570,10 @@ function createInteriorHome(materials: EchoMaterials): THREE.Group {
   const sideSegment = (width - doorWidth) / 2;
 
   const foundation = addBox(interior, timberDark, [width + 0.7, 0.25, depth + 0.7], [0, 0.12, 0], undefined, 'echo-interior-foundation');
-  foundation.userData.echoInteriorFloor = true;
+  foundation.userData.interiorFloor = true;
   const interiorFloor = addBox(interior, floor, [width, 0.18, depth], [0, 0.12, 0], undefined, 'echo-interior-floor');
-  interiorFloor.userData.echoInteriorFloor = true;
-  interiorFloor.userData.echoCabinWalkable = true;
+  interiorFloor.userData.interiorFloor = true;
+  interiorFloor.userData.interiorWalkableSurface = true;
   const walls = new THREE.Group();
   walls.name = 'echo-interior-walls';
   addBox(walls, wallLight, [width, wallHeight, thickness], [0, wallBottom + wallHeight / 2, backZ]);
@@ -598,6 +601,7 @@ function createInteriorHome(materials: EchoMaterials): THREE.Group {
   addGableRoof(interior, roof, roofAccent, width + 0.65, depth + 0.65, wallTop + 0.05, 2.35, true);
   const ceiling = addBox(interior, roofAccent, [width - 0.7, 0.12, depth - 0.7], [0, wallTop - 0.07, 0], undefined, 'echo-interior-ceiling');
   ceiling.userData.echoInteriorRoof = true;
+  ceiling.userData.interiorNavigationIgnore = true;
 
   // The playable face is the room-facing (+Z) side of the south door.
   const interiorDoor = new THREE.Group();
@@ -636,7 +640,7 @@ function createInteriorHome(materials: EchoMaterials): THREE.Group {
   interior.add(diningTable);
 
   interior.userData.echoInteriorBounds = { width, depth, wallHeight, door: { x: 0, z: frontZ - 0.55 } };
-  interior.userData.echoInteriorWalkable = {
+  interior.userData.interiorWalkableBounds = {
     minX: -width / 2 + 0.65,
     maxX: width / 2 - 0.65,
     minZ: frontZ + 0.65,

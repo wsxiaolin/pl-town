@@ -98,8 +98,14 @@
   color: #dfe7f4;
   min-height: 76px;
   margin-bottom: 16px;
-  animation: npcLineIn 0.4s ease;
   white-space: pre-line;
+}
+
+.npc-line-char {
+  display: inline-block;
+  white-space: pre;
+  opacity: 0;
+  animation: npcLineCharIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .npc-body {
@@ -314,15 +320,30 @@
   .echo-story-nav small { font-size: 9px; }
 }
 
-@keyframes npcLineIn {
-  from { opacity: 0; transform: translateY(8px); }
+@keyframes npcLineCharIn {
+  from { opacity: 0; transform: translateY(0.8em); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes npcOptionReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .npc-line-char { opacity: 1; animation: none; }
+  .npc-opt.npc-opt-revealing { opacity: 1; animation: none; }
 }
 
 .npc-options {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.npc-options-waiting { pointer-events: none; }
+.npc-opt.npc-opt-revealing {
+  opacity: 0;
+  animation: npcOptionReveal 0.55s ease forwards;
 }
 .npc-opt {
   text-align: left;

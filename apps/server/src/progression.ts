@@ -38,6 +38,7 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   night_owl: 25,
   unlock_3: 40,
   cat_cafe_note: 30,
+  cat_death_remembrance: 0,
   minicity_origin: 50,
   dragonwell_assimilation: 80,
   west_beach_encounter: 50,
@@ -70,6 +71,16 @@ export const DAILY_REWARDS = Object.freeze({
 export const ONE_TIME_REWARDS = Object.freeze({
   tirpitz_beach: { itemId: 'tirpitz_card', quantity: 1 },
 });
+
+export const REPEATABLE_REWARDS = Object.freeze({
+  ice_reject: { itemId: 'ice_wet_crown', quantity: 1 },
+  ice_accept: { itemId: 'ice_lemonade', quantity: 1 },
+});
+
+export const CONSUMABLE_ITEM_IDS: ReadonlySet<string> = new Set([
+  ...Object.values(SHOP_PRODUCTS).map((product) => product.itemId),
+  REPEATABLE_REWARDS.ice_accept.itemId,
+]);
 
 export type ProgressionCatalog = {
   initialCurrency: number;
