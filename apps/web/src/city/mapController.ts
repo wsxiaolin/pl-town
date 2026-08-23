@@ -318,6 +318,8 @@ export function createMapController(options: MapControllerOptions) {
   function closeSearchResults(): void {
     const input = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
     const results = options.document.getElementById('mapSearchResults');
+    searchResults = [];
+    results?.replaceChildren();
     if (results) results.hidden = true;
     input?.setAttribute('aria-expanded', 'false');
     input?.removeAttribute('aria-activedescendant');
@@ -366,6 +368,7 @@ export function createMapController(options: MapControllerOptions) {
     }, { signal });
     searchInput?.addEventListener('blur', closeSearchResults, { signal });
     searchInput?.addEventListener('keydown', (event) => {
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'ArrowDown' && searchResults.length > 0) {
         event.preventDefault();
         activeSearchIndex = (activeSearchIndex + 1) % searchResults.length;

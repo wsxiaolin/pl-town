@@ -384,10 +384,15 @@ test('map search fuzzily finds a building and keeps the existing teleport flow',
   await expect(searchResults.first()).toHaveClass(/is-active/);
   await search.press('Escape');
   await expect(page.locator('#mapSearchResults')).toBeHidden();
+  await expect(searchResults).toHaveCount(0);
   await expect(search).toHaveAttribute('aria-expanded', 'false');
+  await search.press('ArrowDown');
+  await expect(search).not.toHaveAttribute('aria-activedescendant', /.+/);
 
   await search.fill('图馆');
   await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+  await search.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
+  await expect(page.locator('#mapTip')).not.toHaveClass(/open/);
   await search.press('Enter');
   await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
   const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
@@ -410,6 +415,15 @@ test('map search fuzzily finds a building and keeps the existing teleport flow',
 test('short desktop map keeps available building icons visible', async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await seedCityStorage(page, 'short-desktop-map-tester');
+  await waitForCityBooted(page);
+
+  await page.locator('#mapToggle').click({ force: true });
+  await expect.poll(() => page.locator('.map-icon:visible').count()).toBeGreaterThan(0);
+});
+
+test('narrow landscape desktop map keeps available building icons visible', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 500 });
+  await seedCityStorage(page, 'narrow-desktop-map-tester');
   await waitForCityBooted(page);
 
   await page.locator('#mapToggle').click({ force: true });

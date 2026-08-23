@@ -205,7 +205,7 @@
   .map-search-input { height: 34px; font-size: 11px; }
   .map-search-result-meta { max-width: 110px; }
 }
-@media (max-width: 680px), (max-height: 540px) and (pointer: coarse) {
+@media (max-width: 680px) and (pointer: coarse), (max-height: 540px) and (pointer: coarse) {
   .map-icon:not(.is-confirmed),
   .map-house-tag { display: none; }
 }
