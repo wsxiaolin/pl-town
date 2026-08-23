@@ -15,6 +15,7 @@ interface SceneInterestPointOptionsInput {
   scene: THREE.Scene;
   makeMaterial: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
   makeMesh: (geometry: THREE.BufferGeometry, material: THREE.Material) => THREE.Mesh;
+  waterRendering: boolean;
 }
 
 interface SceneInterestPointOptions extends SceneInterestPointOptionsInput {
@@ -28,6 +29,7 @@ export interface SceneInterestPoints {
   update(elapsedSeconds: number): void;
   setWellPhase(phase: 'idle' | 'focus' | 'engulf' | 'recede'): void;
   setBeachEncounterPhase(phase: 'hidden' | 'revealed' | 'reward'): void;
+  setWaterDaylight(daylight: number, instant?: boolean): void;
   setActiveStoryPoints(ids: readonly SceneInterestPointId[]): void;
   dispose(): void;
 }
@@ -446,6 +448,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       wellStaticDirty = true;
     },
     setBeachEncounterPhase(phase) { westBeach.setPhase(phase); },
+    setWaterDaylight(daylight, instant) { westBeach.setDaylight(daylight, instant); },
     setActiveStoryPoints(ids) {
       const active = new Set(ids);
       activeInvestigationMarkers.length = 0;
@@ -469,6 +472,11 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       );
     },
     dispose() {
+      westBeach.entity.object.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.userData.dynamicMaterial instanceof THREE.Material) {
+          child.userData.dynamicMaterial.dispose();
+        }
+      });
       materialCache.forEach((material) => material.dispose());
       materialCache.clear();
     },

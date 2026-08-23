@@ -39,6 +39,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   const shadows = panel.querySelector<HTMLInputElement>('#renderShadows')!;
   const exposure = panel.querySelector<HTMLInputElement>('#renderExposure')!;
   const textureRendering = panel.querySelector<HTMLInputElement>('#renderTextureRendering')!;
+  const waterRendering = panel.querySelector<HTMLInputElement>('#renderWaterRendering')!;
   const exposureValue = panel.querySelector<HTMLOutputElement>('#renderExposureValue')!;
   const presetStatus = panel.querySelector<HTMLElement>('#renderPresetStatus')!;
   const presetButtons = [...panel.querySelectorAll<HTMLButtonElement>('[data-render-preset]')];
@@ -61,6 +62,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   shadows.checked = settings.shadows;
   exposure.value = String(settings.exposure);
   textureRendering.checked = settings.textureRendering;
+  waterRendering.checked = settings.waterRendering;
 
   for (const option of anisotropy.options) {
     option.disabled = Number(option.value) > normalizedMaxAnisotropy;
@@ -76,10 +78,10 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   );
 
   const presets: Record<RenderPresetName, Omit<RenderSettings, 'exposure'>> = {
-    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false, textureRendering: false },
-    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true },
-    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true },
-    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true },
+    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false, textureRendering: false, waterRendering: false },
+    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: false },
+    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: true },
+    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true, waterRendering: true },
   };
 
   const currentValues = (): Omit<RenderSettings, 'exposure'> => ({
@@ -88,6 +90,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
     anisotropy: Number(anisotropy.value),
     shadows: shadows.checked,
     textureRendering: textureRendering.checked,
+    waterRendering: waterRendering.checked,
   });
 
   const updateLabels = () => {
@@ -127,6 +130,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
       anisotropy.value = String(preset.anisotropy);
       shadows.checked = preset.shadows;
       textureRendering.checked = preset.textureRendering;
+      waterRendering.checked = preset.waterRendering;
       updateLabels();
     }, { signal });
   }
@@ -136,6 +140,7 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   anisotropy.addEventListener('change', updateLabels, { signal });
   shadows.addEventListener('change', updateLabels, { signal });
   textureRendering.addEventListener('change', updateLabels, { signal });
+  waterRendering.addEventListener('change', updateLabels, { signal });
   exposure.addEventListener('input', updateLabels, { signal });
   panel.querySelector('#renderSettingsApply')!.addEventListener('click', () => {
     localStorage.setItem(RENDER_SETTINGS_KEY, JSON.stringify({
