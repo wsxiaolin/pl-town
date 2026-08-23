@@ -87,6 +87,7 @@ function shorelineX(z: number): number {
 // any temporal locality — the waterline at the beach rises and falls.
 function surfaceHeight(elapsedSeconds: number, x: number, z: number): number {
   return (
+    0.25 +
     Math.sin(elapsedSeconds * 0.9 + z * 0.31 + x * 0.17) * 0.14 +
     Math.sin(elapsedSeconds * 0.43 + x * 0.23 - z * 0.12) * 0.1 +
     Math.sin(elapsedSeconds * 1.6 + z * 0.55) * 0.05
@@ -98,10 +99,47 @@ function animateWaterSurface(geometry: THREE.BufferGeometry, elapsedSeconds: num
   const array = position.array as Float32Array;
   for (let i = 0; i < array.length; i += 3) {
     const x = array[i] as number;
-    const z = array[i + 2] as number;
-    array[i + 1] = surfaceHeight(elapsedSeconds, x, z);
+    const z = array[i + 1] as number;
+    // Water rotates local XY onto world XZ, with local -Z becoming height.
+    array[i + 2] = -surfaceHeight(elapsedSeconds, x, z);
   }
   position.needsUpdate = true;
+}
+
+function createWaterRibbonGeometry(
+  innerX: (z: number) => number,
+  outerX: (z: number) => number,
+  minZ: number,
+  maxZ: number,
+  columns = 18,
+  rows = 72,
+): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const z = minZ + (maxZ - minZ) * row / rows;
+    for (let column = 0; column <= columns; column += 1) {
+      const t = column / columns;
+      positions.push(THREE.MathUtils.lerp(innerX(z), outerX(z), t), z, 0);
+      uvs.push(t, row / rows);
+    }
+  }
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const a = row * (columns + 1) + column;
+      const b = a + 1;
+      const c = a + columns + 1;
+      const d = c + 1;
+      indices.push(a, c, d, a, d, b);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function createShoreRibbonGeometry(
@@ -187,11 +225,14 @@ export function createWestBeach(options: BeachOptions): {
   // underneath it, and it spans past the ground edge so no land shows beyond.
   const waterMinZ = -112;
   const waterMaxZ = 112;
-  const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
+  const waterGeometry = options.waterRendering
+    ? createWaterRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, 64, 220)
+    : createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, 12, 96);
   const water = options.waterRendering
     ? createAnimatedWater(waterGeometry)
     : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
   water.position.set(0, 0.06, 0);
+  if (options.waterRendering) water.rotation.x = -Math.PI / 2;
   if (!options.waterRendering) {
     water.castShadow = false;
     water.renderOrder = 3;
@@ -256,7 +297,7 @@ export function createWestBeach(options: BeachOptions): {
         const index = foam.userData.foamIndex as number;
         const z = foam.userData.foamZ as number;
         const height = surfaceHeight(elapsedSeconds, foam.position.x, z);
-        foam.position.y = 0.1 + height * 0.55;
+        foam.position.y = 0.06 + height + 0.02;
         const foamMaterial = foam.material as THREE.MeshStandardMaterial;
         foamMaterial.opacity = 0.4 + Math.min(0.6, Math.max(0, height) * 0.5);
       }
