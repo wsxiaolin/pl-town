@@ -397,6 +397,15 @@ test('map search fuzzily finds a building and keeps the existing teleport flow',
   await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
   const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
   await expect(libraryIcon).toHaveClass(/is-selected/);
+  await expect(libraryIcon).toHaveClass(/is-confirmed/);
+  await expect(libraryIcon).toHaveAttribute('aria-pressed', 'true');
+  const highlightedIcon = await libraryIcon.evaluate((icon) => {
+    const style = getComputedStyle(icon);
+    return { background: style.backgroundColor, transform: style.transform, zIndex: style.zIndex };
+  });
+  expect(highlightedIcon.background).toBe('rgb(255, 216, 77)');
+  expect(highlightedIcon.transform).not.toBe('none');
+  expect(Number(highlightedIcon.zIndex)).toBeGreaterThan(2);
   await libraryIcon.evaluate((icon) => { (icon as HTMLButtonElement).hidden = true; });
   await expect(libraryIcon).toBeHidden();
   await libraryIcon.evaluate((icon) => { (icon as HTMLButtonElement).hidden = false; });
@@ -438,43 +447,39 @@ test.describe('mobile map', () => {
     isMobile: true,
   });
 
-  test('only shows the last confirmed building icon', async ({ page }) => {
+  test('shows scaled building icons and shrinks them with the rendered map', async ({ page }) => {
     await seedCityStorage(page, 'mobile-map-search-tester');
     await waitForCityBooted(page);
-
     await page.locator('#mapToggle').click({ force: true });
     const visibleIcons = page.locator('.map-icon:visible');
-    await expect(visibleIcons).toHaveCount(0);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
     await expect(page.locator('.map-house-tag:visible')).toHaveCount(0);
 
-    const search = page.locator('#mapSearchInput');
-    await search.fill('图馆');
-    await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
-    await expect(visibleIcons).toHaveCount(0);
-    await search.press('Enter');
+    const icon = visibleIcons.first();
+    const initial = await icon.boundingBox();
+    const initialMap = await page.locator('.map-image-wrap').boundingBox();
+    expect(initial).not.toBeNull();
+    expect(initialMap).not.toBeNull();
+    expect(initial!.width).toBeLessThan(24);
 
-    const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
-    await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
-    await expect(libraryIcon).toBeVisible();
-    await expect(libraryIcon).toHaveClass(/is-confirmed/);
-    await expect(visibleIcons).toHaveCount(1);
-
+    await icon.click();
+    await expect(icon).toHaveClass(/is-confirmed/);
+    await expect(icon).toHaveAttribute('aria-pressed', 'true');
+    const highlighted = await icon.boundingBox();
+    expect(highlighted).not.toBeNull();
+    expect(highlighted!.width).toBeGreaterThan(initial!.width * 1.5);
     await page.locator('#mapTipClose').click();
-    await search.fill('物实学院');
-    await expect(page.locator('.map-search-result').first()).toContainText('物实学院');
-    await expect(visibleIcons).toHaveCount(1);
-    await search.press('Enter');
+    await expect(icon).toHaveClass(/is-confirmed/);
 
-    const academyIcon = page.locator('.map-icon[data-building-id="academy"]');
-    await expect(academyIcon).toBeVisible();
-    await expect(academyIcon).toHaveClass(/is-confirmed/);
-    await expect(libraryIcon).not.toBeVisible();
-    await expect(visibleIcons).toHaveCount(1);
-
-    await page.locator('#mapClose').click();
-    await page.locator('#mapToggle').click({ force: true });
-    await expect(academyIcon).toBeVisible();
-    await expect(visibleIcons).toHaveCount(1);
+    // Model the visual viewport reduction caused by an on-screen keyboard.
+    await page.setViewportSize({ width: 844, height: 300 });
+    const compressed = await icon.boundingBox();
+    const compressedMap = await page.locator('.map-image-wrap').boundingBox();
+    expect(compressed).not.toBeNull();
+    expect(compressedMap).not.toBeNull();
+    expect(compressedMap!.width).toBeLessThan(initialMap!.width);
+    expect(compressed!.width).toBeLessThan(initial!.width);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
   });
 });
 

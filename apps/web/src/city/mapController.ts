@@ -150,8 +150,10 @@ export function createMapController(options: MapControllerOptions) {
     wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
       const building = buildingsById.get(icon.dataset.buildingId ?? '');
       const available = Boolean(building && !options.isStoryLocked(building));
+      const selected = available && building?.id === confirmedBuildingId;
       icon.hidden = !available;
-      icon.classList.toggle('is-confirmed', available && building?.id === confirmedBuildingId);
+      icon.classList.toggle('is-confirmed', selected);
+      icon.setAttribute('aria-pressed', String(selected));
     });
   }
 
@@ -183,6 +185,7 @@ export function createMapController(options: MapControllerOptions) {
       icon.className = 'map-icon';
       icon.dataset.buildingId = building.id;
       icon.title = building.label ?? building.id;
+      icon.setAttribute('aria-pressed', 'false');
       icon.innerHTML = building.icon ?? '';
       icon.style.left = `${((building.group.position.x - MAP_SHOT_CENTER_X + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;
       icon.style.top = `${((building.group.position.z - MAP_SHOT_CENTER_Z + MAP_SHOT_SPAN) / (2 * MAP_SHOT_SPAN)) * 100}%`;

@@ -139,13 +139,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  /* Stay proportional to the rendered map. When a mobile keyboard reduces
+     the visual viewport, map and markers shrink together instead of piling up. */
+  width: clamp(9px, 4.25cqi, 24px);
+  height: clamp(9px, 4.25cqi, 24px);
   border-radius: 50%;
   background: rgba(255,253,245,0.92);
   border: 1px solid rgba(107,82,48,0.45);
   box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-  padding: 3px;
+  padding: clamp(1px, 0.5cqi, 3px);
   box-sizing: border-box;
 }
 .map-icon[hidden] { display: none; }
@@ -160,11 +162,22 @@
   transform: translate(-50%, -50%) scale(1.18);
   box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
-.map-icon.is-selected {
-  background: #E8EEF9;
-  border-color: #3B6FE0;
-  box-shadow: 0 0 0 3px rgba(59,111,224,0.22), 0 2px 8px rgba(0,0,0,0.35);
-  transform: translate(-50%, -50%) scale(1.18);
+.map-icon.is-selected,
+.map-icon.is-confirmed {
+  z-index: 4;
+  color: #4A2300;
+  background: #FFD84D;
+  border: 2px solid #FF5A1F;
+  box-shadow:
+    0 0 0 clamp(2px, 0.75cqi, 5px) rgba(255,255,255,0.95),
+    0 0 0 clamp(4px, 1.3cqi, 9px) rgba(255,90,31,0.55),
+    0 4px 14px rgba(84,32,0,0.55);
+  transform: translate(-50%, -50%) scale(1.75);
+}
+.map-icon.is-selected svg,
+.map-icon.is-confirmed svg {
+  color: #4A2300;
+  filter: sepia(1) saturate(2.4) brightness(0.55);
 }
 .map-close {
   position: absolute;
@@ -185,6 +198,7 @@
 }
 .map-image-wrap {
   position: relative;
+  container-type: inline-size;
   width: 100%;
   aspect-ratio: 1 / 1;
   overflow: hidden;
@@ -206,7 +220,6 @@
   .map-search-result-meta { max-width: 110px; }
 }
 @media (max-width: 680px) and (pointer: coarse), (max-height: 540px) and (pointer: coarse) {
-  .map-icon:not(.is-confirmed),
   .map-house-tag { display: none; }
 }
 .map-image-wrap img {
