@@ -2,7 +2,7 @@ import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/teleme
 import { isWeather, type Weather } from '../city/weather';
 
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
-export type NetUser = { id: string; nickname: string; email: string | null; position: NetPosition };
+export type NetUser = { id: string; nickname: string; position: NetPosition };
 export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string }> };
 export type HousingRequest = {
   id: number;
@@ -71,8 +71,14 @@ const TOKEN_KEY = 'minicityServerToken';
 const serverUrl = (): string => {
   const configured = (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_SERVER_URL;
   if (configured) return configured;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:8787`;
+  // Fail closed: without an explicit VITE_SERVER_URL, plaintext ws:// is only
+  // ever used for loopback development origins. Nickname/password and the
+  // session token travel on this socket, so any other origin upgrades to
+  // wss:// instead of silently downgrading to an interceptable transport.
+  const hostname = window.location.hostname;
+  const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+  const protocol = window.location.protocol === 'https:' || !loopback ? 'wss:' : 'ws:';
+  return `${protocol}//${hostname}:8787`;
 };
 
 export class MultiplayerClient {

@@ -10,7 +10,7 @@ import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
-import type { ClientMessage, Position, ServerMessage, User, Weather } from './types.js';
+import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
@@ -50,6 +50,9 @@ let serverWeather: Weather = 'clear';
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
+// Residents' email addresses are PII and must never be broadcast to other
+// players: `hello`, the roster and `player.joined` reach every online client.
+const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position });
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
 const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
@@ -146,8 +149,8 @@ async function handle(client: Client, raw: string) {
     if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
-    send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
-    broadcast({ type: 'player.joined', player: client.user }, client.user.id); client.authInProgress = false; return;
+    send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
+    broadcast({ type: 'player.joined', player: publicUser(client.user) }, client.user.id); client.authInProgress = false; return;
   }
   requireReady(client, () => {
     const userId = client.user.id;

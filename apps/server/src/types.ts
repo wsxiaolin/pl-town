@@ -8,6 +8,13 @@ export type User = {
   position: Position;
 };
 
+/**
+ * Wire shape for residents broadcast over the WebSocket. Email is PII and is
+ * intentionally excluded: every online client receives `hello`, `player.joined`
+ * and the player roster, so the full `User` record must never leave the server.
+ */
+export type PublicUser = Omit<User, 'email'>;
+
 export type PlayerProgress = {
   currency: number;
   inventory: Record<string, number>;

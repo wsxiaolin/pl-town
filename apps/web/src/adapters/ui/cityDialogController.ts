@@ -125,6 +125,24 @@ function setIdentityField(document: Document, id: string, value: string | null |
   element.hidden = text.trim().length === 0;
 }
 
+// Story CG backgrounds are interpolated into a CSS url() custom property, so
+// the raw string must be validated before it reaches the style engine: quotes,
+// parentheses, backslashes or whitespace could break out of the url() token
+// and inject arbitrary CSS (CSS injection, CWE-79). Allowed shapes are https
+// URLs, same-origin relative/absolute paths (never protocol-relative
+// "//host/…") and base64 data: images; any other URL scheme is rejected and
+// everything else falls back to `none`.
+const storyCgImage = (image: string | undefined): string => {
+  const value = image?.trim() ?? '';
+  if (value.length === 0 || value.length > 8192) return 'none';
+  if (/[\s"'()\\]/.test(value)) return 'none';
+  if (value.startsWith('//')) return 'none';
+  if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);base64,[a-z0-9+/=]+$/i.test(value)) return `url("${value}")`;
+  if (/^https:\/\//i.test(value)) return `url("${value}")`;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return 'none';
+  return `url("${value}")`;
+};
+
 export function createCityDialogController(options: CityDialogControllerOptions): CityDialogController {
   const { document } = options;
   let npcOpen = false;
@@ -422,7 +440,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       overlay.classList.toggle('story-mode', story.variant === 'story' || story.variant === 'cg' || story.variant === 'blackout');
       overlay.classList.toggle('cg-mode', story.variant === 'cg');
       overlay.classList.toggle('blackout-mode', story.variant === 'blackout');
-      overlay.style.setProperty('--story-cg-image', story.image ? `url("${story.image}")` : 'none');
+      overlay.style.setProperty('--story-cg-image', storyCgImage(story.image));
       overlay.classList.add('open');
       const lineRevealMs = renderLine(story.text, story.tone, story.presentation?.typewriter);
       const storyLine = getElement<HTMLParagraphElement>(document, 'npcLine');
