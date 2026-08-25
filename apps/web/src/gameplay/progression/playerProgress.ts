@@ -1,8 +1,10 @@
 import type { QuestProgressView } from '../quests/types';
+import { ICE_KING_ITEMS } from '../content/stories/iceKing/iceKingContent';
 
 export type PlayerProgress = {
   currency: number;
   inventory: Record<string, number>;
+  repeatableRewardClaims: Record<string, number>;
   achievements: string[];
   unlockedBuildings: string[];
   visitedBuildings: string[];
@@ -27,12 +29,15 @@ export type ProgressionEvent = {
   quantity?: number;
   purchased?: boolean;
   claimed?: boolean;
+  accepted?: boolean;
+  claimSequence?: number;
   welcomeItemsGranted?: boolean;
 };
 
 export const EMPTY_PLAYER_PROGRESS: PlayerProgress = {
   currency: 0,
   inventory: {},
+  repeatableRewardClaims: {},
   achievements: [],
   unlockedBuildings: [],
   visitedBuildings: [],
@@ -54,6 +59,13 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   music_box: '音乐盒',
   mandarin: '沃柑',
   tirpitz_card: '皮尔皮茨号',
+  [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.name,
+  [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.name,
+});
+
+export const ITEM_DETAILS: Readonly<Record<string, string>> = Object.freeze({
+  [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.detail,
+  [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.detail,
 });
 
 const validStringArray = (value: unknown): string[] => Array.isArray(value)
@@ -61,17 +73,24 @@ const validStringArray = (value: unknown): string[] => Array.isArray(value)
   : [];
 
 export function normalizePlayerProgress(value: unknown): PlayerProgress {
-  if (!value || typeof value !== 'object') return { ...EMPTY_PLAYER_PROGRESS, inventory: {} };
+  if (!value || typeof value !== 'object') return { ...EMPTY_PLAYER_PROGRESS, inventory: {}, repeatableRewardClaims: {} };
   const input = value as Partial<PlayerProgress>;
   const inventory: Record<string, number> = {};
+  const repeatableRewardClaims: Record<string, number> = {};
   if (input.inventory && typeof input.inventory === 'object') {
     Object.entries(input.inventory).forEach(([itemId, quantity]) => {
       if (Number.isInteger(quantity) && Number(quantity) > 0) inventory[itemId] = Number(quantity);
     });
   }
+  if (input.repeatableRewardClaims && typeof input.repeatableRewardClaims === 'object') {
+    Object.entries(input.repeatableRewardClaims).forEach(([rewardId, count]) => {
+      if (Number.isSafeInteger(count) && Number(count) >= 0) repeatableRewardClaims[rewardId] = Number(count);
+    });
+  }
   return {
     currency: Number.isInteger(input.currency) && Number(input.currency) >= 0 ? Number(input.currency) : 0,
     inventory,
+    repeatableRewardClaims,
     achievements: validStringArray(input.achievements),
     unlockedBuildings: validStringArray(input.unlockedBuildings),
     visitedBuildings: validStringArray(input.visitedBuildings),

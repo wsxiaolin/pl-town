@@ -26,6 +26,12 @@ export type FrameLoopOptions = {
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getBeachEncounterActive?: () => boolean;
+  getSpecialInterior?: () => {
+    isActive: () => boolean;
+    npcWorldPosition: (target?: THREE.Vector3) => THREE.Vector3;
+    interactNpc: () => boolean;
+  } | null;
+  updateWeather?: (delta: number) => void;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
   npcYieldToPlayer: (npc: NpcEntity) => void;
@@ -52,6 +58,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
     options.setLastFrameTime(now);
     const playerController = options.getPlayerController();
     playerController?.updateMovement(delta);
+    options.updateWeather?.(delta);
     options.getMultiplayerHousing()?.updateRemotePlayers(delta);
     const cursorChar = options.getCursorChar();
     if (cursorChar?.visible) {
@@ -62,7 +69,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const sceneInterestPoints = options.getSceneInterestPoints();
     sceneInterestPoints?.update(now / 1000);
     options.getNavigationTargetMarker()?.update(delta);
-    const beach = cursorChar?.visible && !options.getCityDialogs()?.isOpen() && !options.getBeachEncounterActive?.()
+    const beach = !options.getSpecialInterior?.()?.isActive() && cursorChar?.visible && !options.getCityDialogs()?.isOpen() && !options.getBeachEncounterActive?.()
       ? sceneInterestPoints?.entities.get('west-beach')
       : null;
     if (beach && cursorChar) {

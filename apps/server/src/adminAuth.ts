@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   ADMIN_ACCOUNTS, ADMIN_ENABLED, ADMIN_SESSION_TTL_MINUTES, IS_PRODUCTION,
@@ -19,6 +19,19 @@ const digest = (value: string) => createHash('sha256').update(value).digest();
 const equal = (left: string, right: string) => {
   const a = digest(left); const b = digest(right);
   return timingSafeEqual(a, b);
+};
+
+// Administrator passwords are configured in plaintext via environment variables,
+// so the comparison itself must be a slow password KDF (CWE-916). A single fast
+// SHA-256 digest would let an online attacker test millions of guesses per
+// second if request throttling is ever bypassed. Each verification derives both
+// sides with scrypt under a fresh random salt, making every attempt cost the
+// full KDF work factor while keeping the comparison timing-safe.
+const SCRYPT_PARAMETERS = { N: 16_384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+const scryptDigest = (value: string, salt: Buffer) => scryptSync(value, salt, 32, SCRYPT_PARAMETERS);
+const passwordMatches = (candidate: string, stored: string): boolean => {
+  const salt = randomBytes(16);
+  return timingSafeEqual(scryptDigest(candidate, salt), scryptDigest(stored, salt));
 };
 
 const cookies = (request: IncomingMessage): Record<string, string> => Object.fromEntries(
@@ -45,8 +58,8 @@ export function adminLoginAllowed(request: IncomingMessage): boolean {
 
 export function createAdminSession(request: IncomingMessage, response: ServerResponse, username: string, password: string): { actor: string; csrf: string } | null {
   const account = ADMIN_ACCOUNTS.find((candidate) => equal(username, candidate.username));
-  const passwordMatches = equal(password, account?.password ?? 'invalid-administrator-password');
-  if (!ADMIN_ENABLED || !account || !passwordMatches) return null;
+  const validPassword = passwordMatches(password, account?.password ?? 'invalid-administrator-password');
+  if (!ADMIN_ENABLED || !account || !validPassword) return null;
   const token = randomBytes(32).toString('base64url');
   const session = { actor: account.username, csrf: randomBytes(24).toString('base64url'), expiresAt: Date.now() + SESSION_TTL_MS, ip: clientIp(request) };
   sessions.set(token, session);

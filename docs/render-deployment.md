@@ -28,6 +28,8 @@ AUTO_BACKUP_ENABLED=false
 
 Render 的负载均衡器终止 TLS 并将请求转发给服务；其官方安全说明建议应用从 `X-Forwarded-For` 读取真实客户端 IP。因此此单层测试拓扑设置 `TRUST_PROXY_HOPS=1`。[Render Web Services](https://render.com/docs/web-services) [Render DDoS guidance](https://render.com/articles/how-render-handles-ddos-attacks)
 
+注意：服务只信任 `TRUSTED_PROXIES`（默认 `127.0.0.1,::1`）转发的 `X-Forwarded-For`。Render 负载均衡器的来源地址不在回环段，因此默认配置下伪造的 `X-Forwarded-For` 会被忽略，所有请求会按负载均衡器 IP 聚合计入每 IP 限流——对测试部署而言这是更安全的取舍。若 Render 公布了固定的转发网段，可显式设置 `TRUSTED_PROXIES=<网段>` 恢复按真实 IP 限流。
+
 ## 前端测试站点
 
 ```text

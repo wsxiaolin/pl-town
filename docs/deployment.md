@@ -446,6 +446,7 @@ BACKUP_DIR=/var/backups/minicity
 
 ALLOWED_ORIGINS=https://city.example.com
 TRUST_PROXY_HOPS=1
+TRUSTED_PROXIES=127.0.0.1,::1
 ALLOW_ORIGINLESS_WEBSOCKET=false
 
 ADMIN_USERNAME=
@@ -471,6 +472,8 @@ openssl rand -base64 36
 ```
 
 不要把引号、尖括号或中文示例文字原样留在真实密码字段。生产模式缺少管理员账号、密码或 `ALLOWED_ORIGINS` 时会拒绝启动，这是预期的安全行为。
+
+`TRUST_PROXY_HOPS=1` 让服务读取 Nginx 转发的 `X-Forwarded-For` 作为客户端真实 IP（用于每 IP 限流和注册上限）。`TRUSTED_PROXIES` 限定只有列表内的 TCP 对端（IP 或 CIDR 段）转发的头才被信任；默认只信任本机回环地址，与本方案的 Nginx 同机部署一致。如果端口被绕过 Nginx 直接访问，伪造的 `X-Forwarded-For` 会被直接忽略。
 
 检查文件权限和关键配置，但不要把整份文件输出到终端截图：
 

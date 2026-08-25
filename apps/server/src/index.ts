@@ -10,9 +10,9 @@ import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
-import type { ClientMessage, Position, ServerMessage, User, Weather } from './types.js';
+import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
@@ -50,6 +50,9 @@ let serverWeather: Weather = 'clear';
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
+// Residents' email addresses are PII and must never be broadcast to other
+// players: `hello`, the roster and `player.joined` reach every online client.
+const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position });
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
 const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
@@ -146,8 +149,8 @@ async function handle(client: Client, raw: string) {
     if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
-    send(client.socket, { type: 'hello', token: result.token, user: client.user, players: [...clients.values()].map((item) => item.user), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
-    broadcast({ type: 'player.joined', player: client.user }, client.user.id); client.authInProgress = false; return;
+    send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
+    broadcast({ type: 'player.joined', player: publicUser(client.user) }, client.user.id); client.authInProgress = false; return;
   }
   requireReady(client, () => {
     const userId = client.user.id;
@@ -210,7 +213,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.item.consume') {
       const quantity = message.quantity ?? 1;
-      if (!Object.values(SHOP_PRODUCTS).some((product) => product.itemId === message.itemId) || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
+      if (!CONSUMABLE_ITEM_IDS.has(message.itemId) || !validQuantity(quantity)) return fail(client.socket, 'Item cannot be consumed');
       try {
         const progress = db.consumeItem(userId, message.itemId, quantity);
         send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'item.consumed', itemId: message.itemId, quantity } });
@@ -228,8 +231,20 @@ async function handle(client: Client, raw: string) {
       if (!validId(message.rewardId)) return fail(client.socket, 'Reward is not available');
       const dailyReward = DAILY_REWARDS[message.rewardId as keyof typeof DAILY_REWARDS];
       const oneTimeReward = ONE_TIME_REWARDS[message.rewardId as keyof typeof ONE_TIME_REWARDS];
-      const reward = dailyReward ?? oneTimeReward;
+      const repeatableReward = REPEATABLE_REWARDS[message.rewardId as keyof typeof REPEATABLE_REWARDS];
+      const reward = dailyReward ?? oneTimeReward ?? repeatableReward;
       if (!reward) return fail(client.socket, 'Reward is not available');
+      if (repeatableReward) {
+        if (!Number.isSafeInteger(message.claimSequence) || Number(message.claimSequence) < 1) return fail(client.socket, 'Invalid reward claim sequence');
+        const result = db.claimRepeatableReward(userId, message.rewardId, Number(message.claimSequence), reward.itemId, reward.quantity);
+        send(client.socket, {
+          type: 'progress.updated',
+          progress: result.progress,
+          catalog: getProgressionCatalog(),
+          event: { type: 'reward.claimed', rewardId: message.rewardId, claimSequence: message.claimSequence, claimed: result.claimed, accepted: result.accepted },
+        });
+        return;
+      }
       const result = db.claimReward(userId, message.rewardId, oneTimeReward ? 'once' : shanghaiDayKey(), reward.itemId, reward.quantity);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
       return;

@@ -1,10 +1,32 @@
 import type { IncomingMessage } from 'node:http';
-import { ALLOWED_ORIGINS, IS_PRODUCTION, TRUST_PROXY_HOPS } from './config.js';
+import { BlockList, isIP } from 'node:net';
+import { ALLOWED_ORIGINS, IS_PRODUCTION, TRUST_PROXY_HOPS, TRUSTED_PROXIES } from './config.js';
 
 const normalizeIp = (value: string): string => value.startsWith('::ffff:') ? value.slice(7) : value;
 
+// X-Forwarded-For is only honoured when the TCP peer itself matches a
+// configured trusted proxy (TRUSTED_PROXIES, loopback by default). Reading the
+// header on arbitrary connections would let any client that reaches the port
+// directly spoof its IP and defeat every per-IP rate limit, WebSocket cap and
+// registration quota (CWE-290), so untrusted peers fail closed to the socket
+// address.
+const trustedProxyRanges = new BlockList();
+for (const entry of TRUSTED_PROXIES) {
+  const separator = entry.lastIndexOf('/');
+  const address = separator === -1 ? entry : entry.slice(0, separator);
+  const family = isIP(address) === 6 ? ('ipv6' as const) : ('ipv4' as const);
+  if (separator === -1) trustedProxyRanges.addAddress(address, family);
+  else trustedProxyRanges.addSubnet(address, Number(entry.slice(separator + 1)), family);
+}
+const isFromTrustedProxy = (request: IncomingMessage): boolean => {
+  const peer = request.socket.remoteAddress;
+  if (peer === undefined) return false;
+  const normalized = normalizeIp(peer);
+  return trustedProxyRanges.check(normalized, isIP(normalized) === 6 ? 'ipv6' : 'ipv4');
+};
+
 export function clientIp(request: IncomingMessage): string {
-  if (TRUST_PROXY_HOPS > 0) {
+  if (TRUST_PROXY_HOPS > 0 && isFromTrustedProxy(request)) {
     const forwarded = request.headers['x-forwarded-for'];
     const addresses = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     const index = addresses.length - TRUST_PROXY_HOPS;

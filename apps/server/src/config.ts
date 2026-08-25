@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { join, resolve } from 'node:path';
 
 const integer = (name: string, fallback: number, minimum: number, maximum: number): number => {
@@ -17,6 +18,28 @@ const boolean = (name: string, fallback: boolean): boolean => {
   if (raw === '1' || raw.toLowerCase() === 'true') return true;
   if (raw === '0' || raw.toLowerCase() === 'false') return false;
   throw new Error(`${name} must be true, false, 1, or 0`);
+};
+
+// Reverse proxies whose X-Forwarded-For header may be trusted. Entries are
+// literal IP addresses or CIDR ranges (hostnames are rejected); IPv4-mapped
+// IPv6 forms are normalised to plain IPv4. The loopback default keeps the
+// bundled nginx deployment working while failing closed for every other peer.
+const proxyAddresses = (raw: string | undefined, fallback: string): ReadonlyArray<string> => {
+  const value = raw === undefined || raw.trim() === '' ? fallback : raw;
+  const entries = value.split(',').map((item) => item.trim()).filter(Boolean)
+    .map((item) => (item.toLowerCase().startsWith('::ffff:') ? item.slice(7) : item));
+  if (entries.length === 0) throw new Error('TRUSTED_PROXIES must list at least one IP address or CIDR range');
+  for (const entry of entries) {
+    const separator = entry.lastIndexOf('/');
+    const address = separator === -1 ? entry : entry.slice(0, separator);
+    if (!isIP(address)) throw new Error(`TRUSTED_PROXIES contains a non-IP entry: ${entry}`);
+    const prefix = separator === -1 ? undefined : entry.slice(separator + 1);
+    const maximum = isIP(address) === 6 ? 128 : 32;
+    if (prefix !== undefined && (!/^\d+$/.test(prefix) || Number(prefix) > maximum)) {
+      throw new Error(`TRUSTED_PROXIES contains an invalid CIDR prefix length: ${entry}`);
+    }
+  }
+  return entries;
 };
 
 const origins = (raw: string | undefined): ReadonlySet<string> => {
@@ -46,6 +69,9 @@ export const BACKUP_DIR = resolve(process.env.BACKUP_DIR ?? join(DATA_DIR, 'back
 export const DATABASE_PATH = resolve(DATA_DIR, 'minicity.sqlite');
 
 export const TRUST_PROXY_HOPS = integer('TRUST_PROXY_HOPS', 0, 0, 10);
+// X-Forwarded-For is only read when the TCP peer matches one of these
+// addresses/ranges; otherwise the header is ignored (see requestSecurity.ts).
+export const TRUSTED_PROXIES = proxyAddresses(process.env.TRUSTED_PROXIES, '127.0.0.1,::1');
 export const ALLOWED_ORIGINS = origins(process.env.ALLOWED_ORIGINS);
 export const ALLOW_ORIGINLESS_WEBSOCKET = boolean('ALLOW_ORIGINLESS_WEBSOCKET', !IS_PRODUCTION);
 export const MAX_CONNECTIONS = integer('MAX_CONNECTIONS', 500, 1, 10_000);

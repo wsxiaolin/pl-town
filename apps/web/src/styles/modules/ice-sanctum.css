@@ -1,0 +1,98 @@
+body.ice-sanctum-active .ui-header,
+body.ice-sanctum-active .welcome-block,
+body.ice-sanctum-active .you-block,
+body.ice-sanctum-active .phone-fab,
+body.ice-sanctum-active .phone,
+body.ice-sanctum-active #popFilter,
+body.ice-sanctum-active #statsPanel,
+body.ice-sanctum-active #renderSettings,
+body.ice-sanctum-active #labelsWrap,
+body.ice-sanctum-active .echo-story-nav,
+body.ice-sanctum-active .unlock-toast { display: none !important; }
+
+body.ice-sanctum-active .npc-panel { text-align: center; }
+body.ice-sanctum-active .npc-name,
+body.ice-sanctum-active .npc-role,
+body.ice-sanctum-active .npc-line,
+body.ice-sanctum-active .npc-opt { text-align: center; }
+body.ice-sanctum-active .npc-id { align-items: center; }
+body.ice-sanctum-active .npc-close { visibility: hidden; }
+body.ice-sanctum-active .npc-line-char { animation-duration: 0.975s; }
+body.ice-sanctum-active .npc-opt.npc-opt-selected {
+  color: #efffff;
+  background: rgba(113, 218, 235, 0.34);
+  border-color: #a8f3ff;
+  box-shadow: 0 0 14px rgba(126, 228, 242, 0.3), inset 0 0 12px rgba(213, 250, 255, 0.12);
+}
+body.ice-sanctum-active .npc-opt.npc-opt-selected::before { color: #d8fbff; }
+
+.ice-sanctum-cinematic {
+  position: fixed;
+  inset: 0;
+  z-index: 590;
+  overflow: hidden;
+  pointer-events: all;
+}
+
+.ice-sanctum-cinematic-mask {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: clamp(78px, 16vh, 168px);
+  background: #000;
+  will-change: transform;
+}
+
+.ice-sanctum-cinematic-mask-top { top: 0; }
+.ice-sanctum-cinematic-mask-bottom { bottom: 0; }
+
+body.ice-sanctum-active .npc-overlay.blackout-mode {
+  animation: ice-blackout-in 2s ease both;
+}
+
+@keyframes ice-blackout-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ice-sanctum-time-skip-fade {
+  position: fixed;
+  inset: 0;
+  z-index: 570;
+  pointer-events: all;
+  background: #000;
+  opacity: 1;
+  transition: opacity 2s ease;
+  will-change: opacity;
+}
+
+.ice-sanctum-time-skip-fade.is-fading { opacity: 0; }
+
+body.ice-sanctum-returning::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 580;
+  pointer-events: all;
+  background: #000;
+  animation: ice-room-cover 1.5s ease forwards;
+}
+
+body.ice-sanctum-return-revealing::before { animation: ice-room-reveal 1.5s ease forwards; }
+
+@keyframes ice-room-cover { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ice-room-reveal { from { opacity: 1; } to { opacity: 0; } }
+
+body[data-city-weather='rain']::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  background: rgba(73, 103, 116, .12);
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 680px) {
+  body.ice-sanctum-active .npc-panel { max-width: calc(100vw - 20px); }
+}

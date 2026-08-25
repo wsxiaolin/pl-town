@@ -3,6 +3,8 @@ import test from 'node:test';
 import type { StoryDialogModel } from '../../src/adapters/ui/cityDialogController';
 import { getNpcType } from '../../src/city/data/npcTypes';
 import { createSceneInterestPointController } from '../../src/city/sceneInterestPointController';
+import { createCatCafeIceWallInteraction } from '../../src/city/iceKing/catCafeIceWallInteraction';
+import { CAT_CAFE_ICE_WALL, ICE_KING_ITEMS } from '../../src/gameplay/content/stories/iceKing/iceKingContent';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { residenceStyleFor, residenceStyleSeedForLot } from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
@@ -98,6 +100,53 @@ test('cat cafe note deliberately opens with blank copy and awards discovery', as
   await controller.interact('cat-cafe-note');
   assert.equal(activeStory?.text, '');
   assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.catCafeNote.id]);
+});
+
+test('cat cafe ice wall awards remembrance only after Cat Death CG completes', async () => {
+  let activeStory: StoryDialogModel | undefined;
+  let hasLemonade = true;
+  let consumeSucceeds = true;
+  let finishReason: 'completed' | 'skipped' = 'completed';
+  let cgStarts = 0;
+  const consumed: string[] = [];
+  const awards: string[] = [];
+  const toasts: string[] = [];
+  const controller = createCatCafeIceWallInteraction({
+    dialogs: { openStory: (story) => { activeStory = story; } },
+    inventory: {
+      hasItem: (itemId) => hasLemonade && itemId === ICE_KING_ITEMS.lemonade.id,
+      consumeItem: async (itemId) => { consumed.push(itemId); return consumeSucceeds; },
+    },
+    awardAchievement: (achievementId) => { awards.push(achievementId); },
+    showToast: (message) => { toasts.push(message); },
+    startCatDeathCG: async () => { cgStarts += 1; return finishReason; },
+  });
+
+  await controller.interact('cat-cafe-ice-wall');
+  assert.equal(activeStory?.text, CAT_CAFE_ICE_WALL.copy);
+  assert.equal(activeStory?.options?.[0]?.text, '#放上冰镇柠檬水');
+  await activeStory?.options?.[0]?.onPick();
+  assert.deepEqual(consumed, [ICE_KING_ITEMS.lemonade.id]);
+  assert.equal(cgStarts, 1);
+  assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.catDeathRemembrance.id]);
+
+  finishReason = 'skipped';
+  await controller.interact('cat-cafe-ice-wall');
+  await activeStory?.options?.[0]?.onPick();
+  assert.equal(cgStarts, 2);
+  assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.catDeathRemembrance.id]);
+
+  consumeSucceeds = false;
+  await controller.interact('cat-cafe-ice-wall');
+  await activeStory?.options?.[0]?.onPick();
+  assert.equal(cgStarts, 2);
+  assert.match(toasts.at(-1) ?? '', /不在背包/);
+
+  hasLemonade = false;
+  await controller.interact('cat-cafe-ice-wall');
+  assert.equal(activeStory?.text, CAT_CAFE_ICE_WALL.copy);
+  assert.equal(activeStory?.role, null);
+  assert.deepEqual(activeStory?.options, []);
 });
 
 test('亦航 keeps the requested schedule, park spawn, and dialogue branches', () => {

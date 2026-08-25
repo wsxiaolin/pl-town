@@ -13,6 +13,7 @@ export interface LegacyDialogueOption {
 }
 
 export interface LegacyDialogueNode {
+  speaker?: string;
   text: string;
   options: readonly LegacyDialogueOption[];
 }
@@ -24,6 +25,7 @@ export interface NpcEntityLike {
     role?: string;
     head: number;
     body: number;
+    transitionDelayMs?: number;
     dialog: readonly LegacyDialogueNode[];
   };
   mesh: { rotation: { y: number }; position: { x: number; z: number } };
@@ -58,6 +60,11 @@ export interface StoryDialogModel {
   options?: readonly StoryDialogOption[];
   onAdvance?: () => void;
   onClose?: () => void;
+  presentation?: {
+    typewriter?: boolean;
+    optionStaggerMs?: number;
+    selectionDelayMs?: number;
+  };
 }
 
 export interface LyricsLineLike {
@@ -118,52 +125,116 @@ function setIdentityField(document: Document, id: string, value: string | null |
   element.hidden = text.trim().length === 0;
 }
 
+// Story CG backgrounds are interpolated into a CSS url() custom property, so
+// the raw string must be validated before it reaches the style engine: quotes,
+// parentheses, backslashes or whitespace could break out of the url() token
+// and inject arbitrary CSS (CSS injection, CWE-79). Allowed shapes are https
+// URLs, same-origin relative/absolute paths (never protocol-relative
+// "//host/…") and base64 data: images; any other URL scheme is rejected and
+// everything else falls back to `none`.
+const storyCgImage = (image: string | undefined): string => {
+  const value = image?.trim() ?? '';
+  if (value.length === 0 || value.length > 8192) return 'none';
+  if (/[\s"'()\\]/.test(value)) return 'none';
+  if (value.startsWith('//')) return 'none';
+  if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);base64,[a-z0-9+/=]+$/i.test(value)) return `url("${value}")`;
+  if (/^https:\/\//i.test(value)) return `url("${value}")`;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return 'none';
+  return `url("${value}")`;
+};
+
 export function createCityDialogController(options: CityDialogControllerOptions): CityDialogController {
   const { document } = options;
   let npcOpen = false;
   let activeNpc: NpcEntityLike | null = null;
   let activeStoryClose: (() => void) | undefined;
   let activeStoryAdvance: (() => void) | undefined;
+  let optionRevealTimer: number | undefined;
   const firstNode = (npc: NpcEntityLike): LegacyDialogueNode => npc.profile.dialog[0] ?? { text: '……', options: [] };
 
-  const renderOptions = (items: readonly { text: string; onPick: () => void }[]): void => {
+  const clearOptionRevealTimer = (): void => {
+    if (optionRevealTimer === undefined) return;
+    window.clearTimeout(optionRevealTimer);
+    optionRevealTimer = undefined;
+  };
+
+  const renderOptions = (
+    items: readonly { text: string; onPick: (button: HTMLButtonElement) => void }[],
+    revealAfterMs = 0,
+    staggerMs = 0,
+  ): void => {
     const wrapper = getElement<HTMLDivElement>(document, 'npcOptions');
+    clearOptionRevealTimer();
     wrapper.replaceChildren();
-    items.forEach((item) => {
+    if (revealAfterMs > 0 && items.length > 0) {
+      wrapper.classList.add('npc-options-waiting');
+      optionRevealTimer = window.setTimeout(() => {
+        optionRevealTimer = undefined;
+        renderOptions(items, 0, staggerMs);
+      }, revealAfterMs);
+      return;
+    }
+    wrapper.classList.remove('npc-options-waiting');
+    items.forEach((item, index) => {
       const button = document.createElement('button');
-      button.className = 'npc-opt';
+      button.className = staggerMs > 0 ? 'npc-opt npc-opt-revealing' : 'npc-opt';
       button.textContent = item.text;
-      button.addEventListener('click', item.onPick);
+      if (staggerMs > 0) button.style.animationDelay = `${index * staggerMs}ms`;
+      button.addEventListener('click', () => item.onPick(button));
       wrapper.appendChild(button);
     });
   };
 
-  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default'): void => {
+  const renderLine = (text: string, tone: StoryDialogModel['tone'] = 'default', typewriter = false): number => {
     const line = getElement<HTMLParagraphElement>(document, 'npcLine');
-    line.textContent = text;
     line.style.color = tone === 'green' ? '#3f8a4f' : '';
-    line.style.animation = 'none';
-    void line.offsetWidth;
-    line.style.animation = '';
+    if (!typewriter) {
+      line.textContent = text;
+      return 0;
+    }
+    const characters = Array.from(text);
+    const stepMs = Math.min(90, 3600 / Math.max(characters.length - 1, 1)) * 1.5;
+    line.replaceChildren(...characters.map((character, index) => {
+      if (character === '\n') return document.createElement('br');
+      const span = document.createElement('span');
+      span.className = 'npc-line-char';
+      span.textContent = character;
+      span.style.animationDelay = `${index * stepMs}ms`;
+      return span;
+    }));
+    if (characters.length === 0) return 0;
+    return (characters.length - 1) * stepMs + 975;
   };
 
   const renderNode = (node: LegacyDialogueNode): void => {
     if (!activeNpc) return;
+    setIdentityField(document, 'npcName', node.speaker ?? activeNpc.profile.name);
     renderLine(node.text);
     const visitor = options.document.defaultView?.localStorage.getItem('minicityUser') || '旅人';
     const dialogOptions = node.options.map((option) => ({
       text: option.text,
-      onPick: () => {
-        if (option.action) options.onDialogueAction?.(option.action, activeNpc?.profile.id ?? '');
-        option.onPick?.();
-        if (!activeNpc) return;
-        const visitorBranch = option.nextByVisitor;
-        const visitorMatches = visitorBranch
-          && visitorBranch.includes.some((name) => visitor.includes(name))
-          && (visitorBranch.maxLength === undefined || visitor.length <= visitorBranch.maxLength);
-        const next = visitorMatches ? visitorBranch.next : option.next;
-        if (next === null) controller.closeNpc();
-        else renderNode(activeNpc.profile.dialog[next] ?? firstNode(activeNpc));
+      onPick: (selectedButton: HTMLButtonElement) => {
+        const sourceNpc = activeNpc;
+        if (!sourceNpc) return;
+        const advance = () => {
+          if (activeNpc !== sourceNpc) return;
+          if (option.action) options.onDialogueAction?.(option.action, sourceNpc.profile.id);
+          option.onPick?.();
+          if (activeNpc !== sourceNpc) return;
+          const visitorBranch = option.nextByVisitor;
+          const visitorMatches = visitorBranch
+            && visitorBranch.includes.some((name) => visitor.includes(name))
+            && (visitorBranch.maxLength === undefined || visitor.length <= visitorBranch.maxLength);
+          const next = visitorMatches ? visitorBranch.next : option.next;
+          if (next === null) controller.closeNpc();
+          else renderNode(sourceNpc.profile.dialog[next] ?? firstNode(sourceNpc));
+        };
+        const transitionDelayMs = sourceNpc.profile.transitionDelayMs ?? 0;
+        if (transitionDelayMs > 0) {
+          selectedButton.classList.add('npc-opt-selected');
+          selectedButton.parentElement?.classList.add('npc-options-waiting');
+          window.setTimeout(advance, transitionDelayMs);
+        } else advance();
       },
     }));
     if (node === activeNpc.profile.dialog[0]) {
@@ -369,19 +440,26 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       overlay.classList.toggle('story-mode', story.variant === 'story' || story.variant === 'cg' || story.variant === 'blackout');
       overlay.classList.toggle('cg-mode', story.variant === 'cg');
       overlay.classList.toggle('blackout-mode', story.variant === 'blackout');
-      overlay.style.setProperty('--story-cg-image', story.image ? `url("${story.image}")` : 'none');
+      overlay.style.setProperty('--story-cg-image', storyCgImage(story.image));
       overlay.classList.add('open');
-      renderLine(story.text, story.tone);
+      const lineRevealMs = renderLine(story.text, story.tone, story.presentation?.typewriter);
       const storyLine = getElement<HTMLParagraphElement>(document, 'npcLine');
       storyLine.onclick = null;
       storyLine.style.cursor = story.onAdvance ? 'pointer' : '';
       renderOptions((story.options ?? []).map((item) => ({
         text: item.text,
-        onPick: () => { void item.onPick(); },
-      })));
+        onPick: (selectedButton: HTMLButtonElement) => {
+          const selectionDelayMs = story.presentation?.selectionDelayMs ?? 0;
+          if (selectionDelayMs <= 0) { void item.onPick(); return; }
+          selectedButton.classList.add('npc-opt-selected');
+          selectedButton.parentElement?.classList.add('npc-options-waiting');
+          window.setTimeout(() => { void item.onPick(); }, selectionDelayMs);
+        },
+      })), story.presentation?.typewriter ? lineRevealMs : 0, story.presentation?.optionStaggerMs ?? 0);
     },
     closeNpc() {
       if (!npcOpen) return;
+      clearOptionRevealTimer();
       npcOpen = false;
       activeNpc = null;
       activeStoryAdvance = undefined;
