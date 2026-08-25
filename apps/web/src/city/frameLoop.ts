@@ -4,6 +4,7 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
+import type { WorldDecorations } from '../rendering/worldDecorations';
 
 type NpcEntity = Npc;
 
@@ -20,6 +21,7 @@ export type FrameLoopOptions = {
   getMultiplayerHousing: () => { updateRemotePlayers: (delta: number) => void } | null;
   getSceneInterestPoints: () => SceneInterestPoints | null;
   getSceneInterestPointController: () => SceneInterestPointController | null;
+  getWorldDecorations?: () => WorldDecorations | null;
   getMapController: () => { isOpen: () => boolean; updateMarker: () => void } | null;
   getNavigationTargetMarker: () => { update: (delta: number) => void } | null;
   getBurnOverlay: () => { render: (renderer: THREE.WebGLRenderer) => void; isActive: () => boolean } | null;
@@ -68,6 +70,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
     options.getCameraPanController?.()?.update(delta);
     const sceneInterestPoints = options.getSceneInterestPoints();
     sceneInterestPoints?.update(now / 1000);
+    options.getWorldDecorations?.()?.update(now / 1000);
     options.getNavigationTargetMarker()?.update(delta);
     const beach = !options.getSpecialInterior?.()?.isActive() && cursorChar?.visible && !options.getCityDialogs()?.isOpen() && !options.getBeachEncounterActive?.()
       ? sceneInterestPoints?.entities.get('west-beach')

@@ -2,13 +2,7 @@ import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { WEST_BEACH } from '../city/data/cityConfig';
-import waterNormalsUrl from '../assets/textures/waternormals.jpg';
-
-const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
-const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
-const DAY_SUN_COLOR = new THREE.Color(0xbdd4e6);
-const NIGHT_SUN_COLOR = new THREE.Color(0x3a4a6a);
-const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
+import { createAnimatedWater, SEA_WATER_PALETTE, updateWaterDaylight } from './waterRendering';
 
 type BeachOptions = {
   scene: THREE.Scene;
@@ -118,33 +112,8 @@ function createShoreRibbonGeometry(
   return geometry;
 }
 
-function createAnimatedWater(geometry: THREE.BufferGeometry): Water {
-  const waterNormals = new THREE.TextureLoader().load(waterNormalsUrl);
-  waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
-  const water = new Water(geometry, {
-    waterNormals,
-    sunDirection: SUN_DIRECTION.clone(),
-    sunColor: DAY_SUN_COLOR.clone(),
-    waterColor: DAY_WATER_COLOR.clone(),
-    distortionScale: 3.7,
-    side: THREE.DoubleSide,
-    fog: false,
-  });
-  water.renderOrder = 3;
-  water.castShadow = false;
-  const material = water.material as THREE.ShaderMaterial;
-  // The stock Water shader reflects the sky almost entirely (rf0 = 0.3, 0.9
-  // reflection weight), which washes the sea white. Real water has a fresnel
-  // base near 0.02, so lower both to let the deep water color dominate.
-  material.fragmentShader = material.fragmentShader
-    .replace('float rf0 = 0.3;', 'float rf0 = 0.02;')
-    .replace(
-      'vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight',
-      'vec3( 0.08 ) + reflectionSample * 0.45 + reflectionSample * specularLight',
-    );
-  material.needsUpdate = true;
-  water.userData.dynamicMaterial = material;
-  return water;
+function createAnimatedWaterForBeach(geometry: THREE.BufferGeometry): Water {
+  return createAnimatedWater(geometry, { distortionScale: 3.7, palette: SEA_WATER_PALETTE });
 }
 
 export function createWestBeach(options: BeachOptions): {
@@ -167,7 +136,7 @@ export function createWestBeach(options: BeachOptions): {
   const waterMaxZ = 112;
   const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
   const water = options.waterRendering
-    ? createAnimatedWater(waterGeometry)
+    ? createAnimatedWaterForBeach(waterGeometry)
     : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
   water.position.set(0, 0.06, 0);
   if (!options.waterRendering) {
@@ -238,14 +207,7 @@ export function createWestBeach(options: BeachOptions): {
         daylight += (daylightTarget - daylight) * Math.min(1, dt * 2.5);
         const uniforms = waterMaterial.uniforms;
         if (uniforms.time) uniforms.time.value = elapsedSeconds;
-        if (uniforms.waterColor) {
-          const waterColor = uniforms.waterColor.value as THREE.Color;
-          waterColor.copy(DAY_WATER_COLOR).lerp(NIGHT_WATER_COLOR, 1 - daylight);
-        }
-        if (uniforms.sunColor) {
-          const sunColor = uniforms.sunColor.value as THREE.Color;
-          sunColor.copy(DAY_SUN_COLOR).lerp(NIGHT_SUN_COLOR, 1 - daylight);
-        }
+        updateWaterDaylight(water as Water, daylight);
       }
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {

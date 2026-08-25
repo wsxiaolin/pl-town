@@ -1,11 +1,13 @@
 // Procedural city decoration catalog and its instanced rendering resources.
 import * as THREE from 'three';
+import { Water } from 'three/examples/jsm/objects/Water.js';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
 import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
+import { createAnimatedWater, POND_WATER_PALETTE, updateWaterDaylight } from './waterRendering';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
 
@@ -23,6 +25,7 @@ export interface WorldDecorationsOptions {
   residences: ResidenceEntity[];
   pathMaterials: THREE.MeshStandardMaterial[];
   lampMaterials: THREE.MeshStandardMaterial[];
+  waterRendering: boolean;
   getIsNight: () => boolean;
   makeMaterial: MeshHelpers['stdMat'];
   makeMesh: MeshHelpers['mk'];
@@ -35,7 +38,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   const {
     scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
-    getIsNight, makeMaterial: stdMat, makeMesh: mk, addPart: part, addRaycastGroup,
+    waterRendering, getIsNight, makeMaterial: stdMat, makeMesh: mk, addPart: part, addRaycastGroup,
     addObstacleGroup,
   } = options;
   let treeTrunks: InstancedBatch | undefined, treeCrowns: InstancedBatch | undefined, lampPosts: InstancedBatch | undefined, lampLights: InstancedBatch | undefined;
@@ -43,6 +46,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   let residenceVisualBatch: RetainedStaticMeshBatch | null = null;
   const residenceRoots: RetainedStaticMeshRoot[] = [];
   const interactiveDecorationRoots = new Set<THREE.Object3D>();
+  const pondWaters: Water[] = [];
+  let pondWaterDaylight = 1;
+  let pondWaterDaylightTarget = 1;
+  let lastPondWaterElapsed = 0;
   const orangeGroveCenter={x:-15,z:-3};
   const roadWidth=(position: number)=>position===0?MAIN_ROAD_WIDTH:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
 
@@ -393,12 +400,26 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   }
   
   function addPond(cx: number, cz: number, r: number) {
-    const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
-    // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.04) so
-    // the surrounding ground never z-fights through the pond.
-    pond.renderOrder = RENDER_ORDER.water;
-    pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);
+    if (waterRendering) {
+      // Animated water matching the west beach sea, but calmer and lighter for
+      // a pond. Scaled UVs keep the ripple frequency fine at pond scale.
+      const geometry = new THREE.CircleGeometry(r, 32);
+      const uv = geometry.attributes.uv as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i += 1) {
+        uv.setXY(i, uv.getX(i) * 3, uv.getY(i) * 3);
+      }
+      const water = createAnimatedWater(geometry, { distortionScale: 1.2, palette: POND_WATER_PALETTE });
+      water.renderOrder = RENDER_ORDER.water;
+      water.rotation.x = -Math.PI/2; water.position.set(cx, 0.055, cz); scene.add(water);
+      pondWaters.push(water);
+    } else {
+      const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
+      const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
+      // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.04) so
+      // the surrounding ground never z-fights through the pond.
+      pond.renderOrder = RENDER_ORDER.water;
+      pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);
+    }
     // Stone border
     for (let i = 0; i < 12; i++) {
       const a = (i/12)*Math.PI*2;
@@ -475,5 +496,23 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   return {
     addDecorations, addTrees, addLamps, addArch, addBench,
     setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
+    update(elapsedSeconds: number) {
+      for (const water of pondWaters) {
+        const uniforms = (water.material as THREE.ShaderMaterial).uniforms;
+        if (uniforms.time) uniforms.time.value = elapsedSeconds;
+      }
+      if (pondWaters.length > 0) {
+        const dt = Math.min(Math.max(elapsedSeconds - lastPondWaterElapsed, 0), 0.1);
+        lastPondWaterElapsed = elapsedSeconds;
+        pondWaterDaylight += (pondWaterDaylightTarget - pondWaterDaylight) * Math.min(1, dt * 2.5);
+        for (const water of pondWaters) updateWaterDaylight(water, pondWaterDaylight);
+      }
+    },
+    setWaterDaylight(daylight: number, instant = false) {
+      pondWaterDaylightTarget = daylight;
+      if (instant) pondWaterDaylight = daylight;
+    },
   };
 }
+
+export type WorldDecorations = ReturnType<typeof createWorldDecorations>;
