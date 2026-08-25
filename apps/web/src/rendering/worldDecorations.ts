@@ -82,6 +82,8 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     // leading out from the inner road grid, with 2 small buildings beside the feature.
     // (Removes the 4 cardinal community-park patches — too symmetric and not city-like.)
     addEdgeGrassAndPond();
+    // ── 北边树林：城市北门外的小树林与通往林间的小路 ──
+    addNorthForest();
     // Inner-city greenery — boulevard trees and one city grass patch
     addInnerCityGreenery();
     // ── 外环装饰 ──
@@ -140,6 +142,46 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addSuburbHouse(-12, -32, -90);
   }
   
+  // ── North forest: a small grove beyond the north gate, inside the map bounds ─
+  function addNorthForest() {
+    // The grove sits in the ~10-unit band between the outer ring road
+    // (r≈38) and the north map edge (z=-48), with its clearing centred at
+    // (0, -44.5) so the whole copse stays visible on the fixed map.
+    // A small path runs north from the end of the main north road (z=-40)
+    // into the clearing.
+    const treePositions: Vec3[] = [
+      [1.5, 0, -40.9], [2.2, 0, -42.0], [3.7, 0, -42.6], [4.0, 0, -43.5],
+      [3.7, 0, -44.5], [2.2, 0, -45.0], [1.5, 0, -45.8], [2.4, 0, -46.3],
+      [-1.5, 0, -40.9], [-2.2, 0, -42.0], [-3.7, 0, -42.6], [-4.0, 0, -43.5],
+      [-3.7, 0, -44.5], [-2.2, 0, -45.0], [-1.5, 0, -45.8], [-2.4, 0, -46.3],
+      [1.4, 0, -46.5], [-1.4, 0, -46.5], [3.6, 0, -46.0], [-3.6, 0, -46.0],
+      [1.6, 0, -44.2], [-1.6, 0, -44.2], [2.3, 0, -43.5], [-2.3, 0, -43.5],
+    ];
+    addTrees(treePositions);
+
+    // Forest-floor clearing with a stone ring at the far end.
+    const clearingMat = stdMat({ color: 0xA8C888, roughness: 1, tex: 'grass', rx: 1.1, ry: 1.1 });
+    const clearing = new THREE.Mesh(new THREE.CircleGeometry(2.2, 32), clearingMat);
+    clearing.rotation.x = -Math.PI / 2;
+    clearing.position.set(0, 0.05, -44.5);
+    clearing.receiveShadow = true;
+    scene.add(clearing);
+    addStoneRing(0, 0, -44.5);
+
+    // Small path from the end of the north road into the grove.
+    const pathMat = stdMat({ color: 0xE8E7E4, roughness: 1, tex: 'pavement', rx: 1, ry: 1 });
+    pathMats.push(pathMat);
+    const path = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 2.3), pathMat);
+    path.position.set(0, SURFACE_Y.road, -41.15);
+    path.renderOrder = RENDER_ORDER.road;
+    path.receiveShadow = true;
+    scene.add(path);
+
+    // A couple of flowerbeds flanking the entrance.
+    addFlowerbed(1.3, 0, -41.0);
+    addFlowerbed(-1.3, 0, -41.0);
+  }
+
   // ── Inner-city greenery: boulevard trees + city grass + city pond ───────────
   function addInnerCityGreenery() {
     // Boulevard trees along main road (x=0 and z=0), on both sides — skip intersections
