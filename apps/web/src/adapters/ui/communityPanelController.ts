@@ -131,7 +131,12 @@ export function createCommunityPanelController(options: CommunityPanelController
     }
   }
   function handlePhysicsSessionExpired(){
-    if(!localStorage.getItem('plSession')) return;
+    const session=localStorage.getItem('plSession');
+    if(!session) return;
+    // Revoke the server-side proxy session before dropping the local copy so a
+    // stolen session ID cannot keep acting as this player until the 24h TTL
+    // expires (CWE-613). keepalive lets the request survive page unload.
+    void fetch('/town-api/pl/logout',{method:'POST',headers:{'x-town-pl-session':session},keepalive:true}).catch(()=>{});
     localStorage.removeItem('plSession');
     localStorage.removeItem('plUser');
     updatePhoneBindingState();
