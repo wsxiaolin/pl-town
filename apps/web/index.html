@@ -154,6 +154,22 @@
     <div class="map-paper">
       <button class="map-close" id="mapClose" type="button" aria-label="关闭地图">✕</button>
       <h2 class="map-title">物实小城 · 全景地图</h2>
+      <div class="map-search" id="mapSearch">
+        <label class="map-search-label" for="mapSearchInput">搜索建筑</label>
+        <input
+          class="map-search-input"
+          id="mapSearchInput"
+          type="search"
+          placeholder="搜索建筑名称、编号或 ID"
+          autocomplete="off"
+          spellcheck="false"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="mapSearchResults"
+          aria-expanded="false"
+        />
+        <div class="map-search-results" id="mapSearchResults" role="listbox" aria-label="建筑搜索结果" hidden></div>
+      </div>
       <div class="map-image-wrap" id="mapImageWrap">
         <img id="mapImage" alt="物实小城全景地图" />
         <div class="map-icons" id="mapIcons"></div>

@@ -340,6 +340,9 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
   await expect(page.locator('.map-icon[data-building-id="litreview"]')).toHaveCount(0);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.locator('.map-icon[data-building-id="echo-observatory"]')).toHaveCount(0);
+  await page.locator('#mapSearchInput').fill('文学审核部');
+  await expect(page.locator('.map-search-result')).toHaveCount(0);
+  await expect(page.locator('.map-search-empty')).toHaveText('没有找到建筑');
   expect(await page.evaluate(() => (window as any)._mini.interactBuilding('litreview'))).toBe(false);
 
   const lockedAudit = await page.evaluate(() => {
@@ -355,6 +358,190 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
     return { storyLocked, emissiveIntensity };
   });
   expect(lockedAudit).toEqual({ storyLocked: true, emissiveIntensity: 0 });
+});
+
+test('map search fuzzily finds a building and keeps the existing teleport flow', async ({ page }) => {
+  await seedCityStorage(page, 'map-search-tester');
+  await page.addInitScript(() => {
+    localStorage.setItem('minicityStats', JSON.stringify({ achievements: ['walker_100'] }));
+  });
+  await waitForCityBooted(page);
+  const before = await page.evaluate(() => {
+    const position = (window as any)._mini.player.position;
+    return { x: position.x, z: position.z };
+  });
+
+  await page.locator('#mapToggle').click({ force: true });
+  const search = page.locator('#mapSearchInput');
+  const searchResults = page.locator('.map-search-result');
+  await search.fill('mall');
+  await expect(searchResults.nth(1)).toBeVisible();
+  await expect(searchResults.first()).toHaveClass(/is-active/);
+  await search.press('ArrowDown');
+  await expect(searchResults.nth(1)).toHaveClass(/is-active/);
+  await expect(search).toHaveAttribute('aria-activedescendant', 'mapSearchResult-1');
+  await search.press('ArrowUp');
+  await expect(searchResults.first()).toHaveClass(/is-active/);
+  await search.press('Escape');
+  await expect(page.locator('#mapSearchResults')).toBeHidden();
+  await expect(searchResults).toHaveCount(0);
+  await expect(search).toHaveAttribute('aria-expanded', 'false');
+  await search.press('ArrowDown');
+  await expect(search).not.toHaveAttribute('aria-activedescendant', /.+/);
+
+  await search.fill('图馆');
+  await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+  await search.dispatchEvent('keydown', { key: 'Enter', isComposing: true });
+  await expect(page.locator('#mapTip')).not.toHaveClass(/open/);
+  await search.press('Enter');
+  await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
+  const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
+  await expect(libraryIcon).toHaveClass(/is-selected/);
+  await expect(libraryIcon).toHaveClass(/is-confirmed/);
+  await expect(libraryIcon).toHaveAttribute('aria-pressed', 'true');
+  const highlightedIcon = await libraryIcon.evaluate((icon) => {
+    const style = getComputedStyle(icon);
+    return { background: style.backgroundColor, transform: style.transform, zIndex: style.zIndex };
+  });
+  expect(highlightedIcon.background).toBe('rgb(255, 216, 77)');
+  expect(highlightedIcon.transform).not.toBe('none');
+  expect(Number(highlightedIcon.zIndex)).toBeGreaterThan(2);
+  await libraryIcon.evaluate((icon) => { (icon as HTMLButtonElement).hidden = true; });
+  await expect(libraryIcon).toBeHidden();
+  await libraryIcon.evaluate((icon) => { (icon as HTMLButtonElement).hidden = false; });
+  await expect(libraryIcon).toBeVisible();
+  await expect(page.locator('#mapTipTele')).toBeEnabled();
+  await page.locator('#mapTipTele').click();
+  await expect(page.locator('#mapOverlay')).not.toHaveClass(/show/);
+
+  const after = await page.evaluate(() => {
+    const position = (window as any)._mini.player.position;
+    return { x: position.x, z: position.z };
+  });
+  expect(after).not.toEqual(before);
+});
+
+test('short desktop map keeps available building icons visible', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await seedCityStorage(page, 'short-desktop-map-tester');
+  await waitForCityBooted(page);
+
+  await page.locator('#mapToggle').click({ force: true });
+  await expect.poll(() => page.locator('.map-icon:visible').count()).toBeGreaterThan(0);
+});
+
+test('narrow landscape desktop map keeps available building icons visible', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 500 });
+  await seedCityStorage(page, 'narrow-desktop-map-tester');
+  await waitForCityBooted(page);
+
+  await page.locator('#mapToggle').click({ force: true });
+  await expect.poll(() => page.locator('.map-icon:visible').count()).toBeGreaterThan(0);
+});
+
+test.describe('mobile map', () => {
+  test.use({
+    viewport: { width: 844, height: 390 },
+    screen: { width: 844, height: 390 },
+    hasTouch: true,
+    isMobile: true,
+  });
+
+  test('shows scaled building icons and shrinks them with the rendered map', async ({ page }) => {
+    await seedCityStorage(page, 'mobilemapscale');
+    await waitForCityBooted(page);
+    await expect.poll(() => page.evaluate(() => {
+      const overlay = document.getElementById('mapOverlay');
+      if (!overlay?.classList.contains('show')) document.getElementById('mapToggle')?.click();
+      return overlay?.classList.contains('show') ?? false;
+    }), { timeout: 10_000, intervals: [200, 300, 500] }).toBe(true);
+    const visibleIcons = page.locator('.map-icon:visible');
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+    await expect(page.locator('.map-house-tag:visible')).toHaveCount(0);
+
+    const icon = visibleIcons.first();
+    const initial = await icon.boundingBox();
+    const initialMap = await page.locator('.map-image-wrap').boundingBox();
+    expect(initial).not.toBeNull();
+    expect(initialMap).not.toBeNull();
+    expect(initial!.width).toBeLessThan(24);
+
+    await icon.click();
+    await expect(icon).toHaveClass(/is-confirmed/);
+    await expect(icon).toHaveAttribute('aria-pressed', 'true');
+    const highlighted = await icon.boundingBox();
+    expect(highlighted).not.toBeNull();
+    expect(highlighted!.width).toBeGreaterThan(initial!.width * 1.5);
+    await page.locator('#mapTipClose').click();
+    await expect(icon).toHaveClass(/is-confirmed/);
+
+    // Model the visual viewport reduction caused by an on-screen keyboard.
+    await page.setViewportSize({ width: 844, height: 300 });
+    const compressed = await icon.boundingBox();
+    const compressedMap = await page.locator('.map-image-wrap').boundingBox();
+    expect(compressed).not.toBeNull();
+    expect(compressedMap).not.toBeNull();
+    expect(compressedMap!.width).toBeLessThan(initialMap!.width);
+    expect(compressed!.width).toBeLessThan(highlighted!.width);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+  });
+
+  test('hides icons for mobile search and restores them when the keyboard closes', async ({ page }) => {
+    await seedCityStorage(page, 'mobilemapsearch');
+    await waitForCityBooted(page);
+    await expect.poll(() => page.evaluate(() => {
+      const overlay = document.getElementById('mapOverlay');
+      if (!overlay?.classList.contains('show')) document.getElementById('mapToggle')?.click();
+      return overlay?.classList.contains('show') ?? false;
+    }), { timeout: 10_000, intervals: [200, 300, 500] }).toBe(true);
+
+    const overlay = page.locator('#mapOverlay');
+    const visibleIcons = page.locator('.map-icon:visible');
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+    const search = page.locator('#mapSearchInput');
+    await search.focus();
+    await expect(overlay).toHaveClass(/is-mobile-search-active/);
+    await expect(visibleIcons).toHaveCount(0);
+    await search.fill('图馆');
+    await expect(page.locator('.map-search-result').first()).toContainText('图书馆');
+    await expect(visibleIcons).toHaveCount(0);
+
+    await search.press('Escape');
+    await expect(page.locator('#mapSearchResults')).toBeHidden();
+    await expect(overlay).toHaveClass(/show/);
+    await search.press('Escape');
+    await expect(overlay).not.toHaveClass(/show/);
+    await expect(search).not.toBeFocused();
+
+    await page.locator('#mapToggle').click({ force: true });
+    await search.focus();
+    await search.fill('图馆');
+    await search.press('Enter');
+
+    const libraryIcon = page.locator('.map-icon[data-building-id="library"]');
+    await expect(page.locator('#mapTipTitle')).toHaveText('图书馆');
+    await expect(libraryIcon).toBeVisible();
+    await expect(libraryIcon).toHaveClass(/is-confirmed/);
+    await expect(overlay).not.toHaveClass(/is-mobile-search-active/);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+
+    await page.locator('#mapTipClose').click({ force: true });
+    await search.focus();
+    await search.fill('物实学院');
+    await expect(page.locator('.map-search-result').first()).toContainText('物实学院');
+    await expect(visibleIcons).toHaveCount(0);
+    await page.setViewportSize({ width: 844, height: 220 });
+    await expect(overlay).toHaveClass(/is-mobile-search-active/);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(search).toBeFocused();
+    await expect(overlay).not.toHaveClass(/is-mobile-search-active/);
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+    await search.blur();
+
+    await page.locator('#mapClose').click({ force: true });
+    await page.locator('#mapToggle').click({ force: true });
+    await expect.poll(() => visibleIcons.count()).toBeGreaterThan(1);
+  });
 });
 
 test('renamed mall buildings surface their new store names', async ({ page }) => {
