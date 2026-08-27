@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
+import { createAnimatedWaterSurface, type AnimatedWaterSurface } from './animatedWater';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
 import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
@@ -12,6 +13,21 @@ import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
 type Palette = Record<string, number>;
 
 type Vec3 = readonly [number, number, number];
+
+// ── Pond water tuning (shares the sea's mirror-water shader) ──────────────────
+// Ponds should read calm, shallow and clear: ripples drift far slower than the
+// sea (which itself runs at 0.55), distortion is gentle, the color is a pale
+// lake blue, and the surface is translucent over a sandy bed.
+const POND_WATER_DAY = new THREE.Color(0x8fc7d8);
+const POND_WATER_NIGHT = new THREE.Color(0x2c4a5e);
+const POND_SUN_DAY = new THREE.Color(0xd8e9f2);
+const POND_SUN_NIGHT = new THREE.Color(0x33445c);
+const POND_SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
+const POND_TIME_SCALE = 0.16;
+const POND_DISTORTION_SCALE = 0.6;
+// Ponds are a few units across, so the normal tiles need a higher density
+// than the sea's default size=1 or the whole pond would sample one flat texel.
+const POND_RIPPLE_SIZE = 14;
 
 export interface WorldDecorationsOptions {
   scene: THREE.Scene;
@@ -29,6 +45,7 @@ export interface WorldDecorationsOptions {
   addPart: MeshHelpers['part'];
   addRaycastGroup: (group: THREE.Object3D) => void;
   addObstacleGroup?: (group: THREE.Object3D) => void;
+  waterRendering: boolean;
 }
 
 export function createWorldDecorations(options: WorldDecorationsOptions) {
@@ -36,8 +53,9 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
     getIsNight, makeMaterial: stdMat, makeMesh: mk, addPart: part, addRaycastGroup,
-    addObstacleGroup,
+    addObstacleGroup, waterRendering,
   } = options;
+  const pondSurfaces: AnimatedWaterSurface[] = [];
   let treeTrunks: InstancedBatch | undefined, treeCrowns: InstancedBatch | undefined, lampPosts: InstancedBatch | undefined, lampLights: InstancedBatch | undefined;
   let decorationObstacleBounds: THREE.Box3[] | null = null;
   let residenceVisualBatch: RetainedStaticMeshBatch | null = null;
@@ -393,12 +411,46 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   }
   
   function addPond(cx: number, cz: number, r: number) {
-    const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
-    // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.04) so
-    // the surrounding ground never z-fights through the pond.
-    pond.renderOrder = RENDER_ORDER.water;
-    pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);
+    if (waterRendering) {
+      // Sandy bed under a translucent surface — the water reads shallow and clear.
+      const bed = new THREE.Mesh(
+        new THREE.CircleGeometry(r, 24),
+        stdMat({ color: 0xD8CFA6, roughness: 0.95, tex: 'ground', rx: Math.max(1, r / 1.5), ry: Math.max(1, r / 1.5) }),
+      );
+      bed.rotation.x = -Math.PI/2; bed.position.set(cx, 0.042, cz); bed.receiveShadow = true;
+      scene.add(bed);
+      // Same mirror-water shader as the sea, tuned calm / pale / slow.
+      // The bed sits below the surface (no overlap with the lawn at 0.04) so the
+      // surrounding ground never z-fights through the pond.
+      const surface = createAnimatedWaterSurface(new THREE.CircleGeometry(r, 24), {
+        sunDirection: POND_SUN_DIRECTION,
+        waterColorDay: POND_WATER_DAY,
+        waterColorNight: POND_WATER_NIGHT,
+        sunColorDay: POND_SUN_DAY,
+        sunColorNight: POND_SUN_NIGHT,
+        distortionScale: POND_DISTORTION_SCALE,
+        timeScale: POND_TIME_SCALE,
+        size: POND_RIPPLE_SIZE,
+        alpha: 0.82,
+        reflectionBase: 0.05,
+        reflectionWeight: 0.25,
+        fresnelBase: 0.01,
+        textureWidth: 128,
+        textureHeight: 128,
+      });
+      const pond = surface.water;
+      pond.renderOrder = RENDER_ORDER.water;
+      pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.058, cz);
+      scene.add(pond);
+      pondSurfaces.push(surface);
+    } else {
+      const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
+      const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
+      // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.04) so
+      // the surrounding ground never z-fights through the pond.
+      pond.renderOrder = RENDER_ORDER.water;
+      pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);
+    }
     // Stone border
     for (let i = 0; i < 12; i++) {
       const a = (i/12)*Math.PI*2;
@@ -475,5 +527,13 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   return {
     addDecorations, addTrees, addLamps, addArch, addBench,
     setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
+    // Advances pond ripples (ponds drift slower than the sea) and the shared
+    // day/night water tint; called from the main frame loop.
+    update(elapsedSeconds: number) {
+      for (const surface of pondSurfaces) surface.update(elapsedSeconds);
+    },
+    setWaterDaylight(value: number, instant = false) {
+      for (const surface of pondSurfaces) surface.setDaylight(value, instant);
+    },
   };
 }
