@@ -21,6 +21,8 @@ export type AnimatedWaterConfig = {
   alpha?: number;
   /** Fresnel base reflectance — lower reads as clearer water. */
   fresnelBase?: number;
+  /** Scalar on the specular highlight strength — lower keeps small calm surfaces from blowing out white. */
+  specularScale?: number;
   /** Base brightness mixed in by the reflection term. */
   reflectionBase?: number;
   /** Weight of the mirrored reflection sample — lower reads as clearer water. */
@@ -80,7 +82,7 @@ export function createAnimatedWaterSurface(
     .replace('float rf0 = 0.3;', `float rf0 = ${glslFloat(config.fresnelBase ?? 0.02)};`)
     .replace(
       'vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight',
-      `vec3( ${glslFloat(config.reflectionBase ?? 0.08)} ) + reflectionSample * ${glslFloat(config.reflectionWeight ?? 0.45)} + reflectionSample * specularLight`,
+      `vec3( ${glslFloat(config.reflectionBase ?? 0.08)} ) + reflectionSample * ${glslFloat(config.reflectionWeight ?? 0.45)} + reflectionSample * specularLight * ${glslFloat(config.specularScale ?? 1)}`,
     );
   material.needsUpdate = true;
   // Keep the marker the scene-interest-points dispose pass looks for.

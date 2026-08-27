@@ -18,10 +18,10 @@ type Vec3 = readonly [number, number, number];
 // Ponds should read calm, shallow and clear: ripples drift far slower than the
 // sea (which itself runs at 0.55), distortion is gentle, the color is a pale
 // lake blue, and the surface is translucent over a sandy bed.
-const POND_WATER_DAY = new THREE.Color(0x8fc7d8);
-const POND_WATER_NIGHT = new THREE.Color(0x2c4a5e);
-const POND_SUN_DAY = new THREE.Color(0xd8e9f2);
-const POND_SUN_NIGHT = new THREE.Color(0x33445c);
+const POND_WATER_DAY = new THREE.Color(0x7db7cd);
+const POND_WATER_NIGHT = new THREE.Color(0x28445c);
+const POND_SUN_DAY = new THREE.Color(0xa6c4db);
+const POND_SUN_NIGHT = new THREE.Color(0x2c3f58);
 const POND_SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 const POND_TIME_SCALE = 0.16;
 const POND_DISTORTION_SCALE = 0.6;
@@ -431,9 +431,12 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         distortionScale: POND_DISTORTION_SCALE,
         timeScale: POND_TIME_SCALE,
         size: POND_RIPPLE_SIZE,
-        alpha: 0.82,
-        reflectionBase: 0.05,
-        reflectionWeight: 0.25,
+        // Keep the water fairly opaque so the pale sandy bed and bright sky
+        // reflection don't wash the pond out to white.
+        alpha: 0.92,
+        reflectionBase: 0.04,
+        reflectionWeight: 0.15,
+        specularScale: 0.4,
         fresnelBase: 0.01,
         textureWidth: 128,
         textureHeight: 128,
