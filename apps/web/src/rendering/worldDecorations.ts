@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { createAnimatedWaterSurface, type AnimatedWaterSurface } from './animatedWater';
+import { createPondWaterSurface, type AnimatedWaterSurface } from './animatedWater';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
 import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
@@ -14,17 +14,17 @@ type Palette = Record<string, number>;
 
 type Vec3 = readonly [number, number, number];
 
-// ── Pond water tuning (shares the sea's mirror-water shader) ──────────────────
+// ── Pond water tuning (lightweight animated shader, no mirror) ───────────────
 // Ponds should read calm, shallow and clear: ripples drift far slower than the
-// sea (which itself runs at 0.55), distortion is gentle, and the surface stays
-// deep enough that the bright sky reflection never washes it out to white.
+// sea (which itself runs at 0.55), and the tint stays deep enough to never wash
+// out to white. Ponds deliberately avoid the mirror Water shader so the sea is
+// the only mirror surface in the scene.
 const POND_WATER_DAY = new THREE.Color(0x3b7691);
 const POND_WATER_NIGHT = new THREE.Color(0x15283c);
 const POND_SUN_DAY = new THREE.Color(0x8fb0c8);
 const POND_SUN_NIGHT = new THREE.Color(0x263b50);
 const POND_SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 const POND_TIME_SCALE = 0.16;
-const POND_DISTORTION_SCALE = 0.6;
 // Ponds are a few units across, so the normal tiles need a higher density
 // than the sea's default size=1 or the whole pond would sample one flat texel.
 const POND_RIPPLE_SIZE = 14;
@@ -419,27 +419,19 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       );
       bed.rotation.x = -Math.PI/2; bed.position.set(cx, 0.042, cz); bed.receiveShadow = true;
       scene.add(bed);
-      // Same mirror-water shader as the sea, tuned calm / pale / slow.
-      // The bed sits below the surface (no overlap with the lawn at 0.04) so the
-      // surrounding ground never z-fights through the pond.
-      const surface = createAnimatedWaterSurface(new THREE.CircleGeometry(r, 24), {
+      // Lightweight animated water (no mirror render target): the sea is the
+      // only mirror Water object, so it never gets corrupted by nested mirror
+      // passes. The bed sits below the surface (no overlap with the lawn at
+      // 0.04) so the surrounding ground never z-fights through the pond.
+      const surface = createPondWaterSurface(new THREE.CircleGeometry(r, 24), {
         sunDirection: POND_SUN_DIRECTION,
         waterColorDay: POND_WATER_DAY,
         waterColorNight: POND_WATER_NIGHT,
         sunColorDay: POND_SUN_DAY,
         sunColorNight: POND_SUN_NIGHT,
-        distortionScale: POND_DISTORTION_SCALE,
         timeScale: POND_TIME_SCALE,
         size: POND_RIPPLE_SIZE,
-        // Nearly opaque: the pale sandy bed and bright sky reflection are what
-        // washed the pond white, so keep them barely visible.
         alpha: 0.98,
-        reflectionBase: 0.02,
-        reflectionWeight: 0.06,
-        specularScale: 0.2,
-        fresnelBase: 0.01,
-        textureWidth: 128,
-        textureHeight: 128,
       });
       const pond = surface.water;
       pond.renderOrder = RENDER_ORDER.water;
