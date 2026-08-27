@@ -78,3 +78,11 @@ Entries discovered by the Agent during task execution should follow this format:
 - Context: 用户要求在思考时统一以 "we need..." 开头
 - Instructions:
   - 所有内部思考（thinking）必须从 "we need..." 开始。
+
+[Project Knowledge Summary]
+- Date: 2026-08-27
+- Context: Discovered by Agent while debugging sea disappearing after ponds got mirror water shaders (PR #117)
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - three.js 场景中同时存在多个 `Water` mirror 对象时，各自的 `onBeforeRender` 会把整个场景重渲染到各自的镜像渲染目标，镜像互相嵌套破坏彼此，导致水面消失/错乱。全场景只保留一个 mirror `Water` 对象。
+  - 池塘等小水面用无镜像的轻量 ShaderMaterial 动画水面（`createPondWaterSurface`，位于 `apps/web/src/rendering/animatedWater.ts`），海面（westBeach）保持唯一 mirror `Water`。
