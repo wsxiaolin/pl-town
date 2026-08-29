@@ -252,6 +252,7 @@ const frameLoop = createFrameLoop({
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
   getSceneInterestPointController: () => sceneInterestPointController,
+  getWorldDecorations: () => worldDecorations,
   getMapController: () => mapController,
   getNavigationTargetMarker: () => navigationTargetMarker,
   getBurnOverlay: () => burnCityEffect,
@@ -397,6 +398,7 @@ function init() {
     getIsNight: () => isNight, makeMaterial: stdMat, makeMesh: mk, addPart: part,
     addRaycastGroup: (group) => raycastBuildingGroups.push(group),
     addObstacleGroup: (group) => roadNavigation.registerObstacleGroup(group),
+    waterRendering: readRenderSettings().waterRendering,
   });
   npcSystem = createNpcSystem({
     scene, profiles: NPC_PROFILES, npcList,
@@ -835,6 +837,7 @@ function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionP
 function applyTheme(night: boolean, instant?: boolean) {
   themeClock.applyTheme(night, instant);
   sceneInterestPoints?.setWaterDaylight(night ? 0 : 1, instant);
+  worldDecorations?.setWaterDaylight(night ? 0 : 1, instant);
 }
 function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); weatherEffect?.set(weather); }
 

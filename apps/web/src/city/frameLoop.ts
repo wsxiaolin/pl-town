@@ -26,6 +26,9 @@ export type FrameLoopOptions = {
   getCursorChar: () => THREE.Object3D | null;
   getCityDialogs: () => { isOpen: () => boolean } | null;
   getBeachEncounterActive?: () => boolean;
+  // World decorations carry the pond mirror-water surfaces that need a
+  // per-frame time update (like the sea) once water rendering is on.
+  getWorldDecorations?: () => { update: (elapsedSeconds: number) => void } | null;
   getSpecialInterior?: () => {
     isActive: () => boolean;
     npcWorldPosition: (target?: THREE.Vector3) => THREE.Vector3;
@@ -68,6 +71,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
     options.getCameraPanController?.()?.update(delta);
     const sceneInterestPoints = options.getSceneInterestPoints();
     sceneInterestPoints?.update(now / 1000);
+    options.getWorldDecorations?.()?.update(now / 1000);
     options.getNavigationTargetMarker()?.update(delta);
     const beach = !options.getSpecialInterior?.()?.isActive() && cursorChar?.visible && !options.getCityDialogs()?.isOpen() && !options.getBeachEncounterActive?.()
       ? sceneInterestPoints?.entities.get('west-beach')

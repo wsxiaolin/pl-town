@@ -1,14 +1,16 @@
 import * as THREE from 'three';
-import { Water } from 'three/examples/jsm/objects/Water.js';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
+import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH } from '../city/data/cityConfig';
-import waterNormalsUrl from '../assets/textures/waternormals.jpg';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
 const DAY_SUN_COLOR = new THREE.Color(0xbdd4e6);
 const NIGHT_SUN_COLOR = new THREE.Color(0x3a4a6a);
 const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
+// The sea used to drift at full shader speed, which read as choppy; scale the
+// time uniform down so the swell rolls visibly slower.
+const SEA_TIME_SCALE = 0.55;
 
 type BeachOptions = {
   scene: THREE.Scene;
@@ -118,35 +120,6 @@ function createShoreRibbonGeometry(
   return geometry;
 }
 
-function createAnimatedWater(geometry: THREE.BufferGeometry): Water {
-  const waterNormals = new THREE.TextureLoader().load(waterNormalsUrl);
-  waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
-  const water = new Water(geometry, {
-    waterNormals,
-    sunDirection: SUN_DIRECTION.clone(),
-    sunColor: DAY_SUN_COLOR.clone(),
-    waterColor: DAY_WATER_COLOR.clone(),
-    distortionScale: 3.7,
-    side: THREE.DoubleSide,
-    fog: false,
-  });
-  water.renderOrder = 3;
-  water.castShadow = false;
-  const material = water.material as THREE.ShaderMaterial;
-  // The stock Water shader reflects the sky almost entirely (rf0 = 0.3, 0.9
-  // reflection weight), which washes the sea white. Real water has a fresnel
-  // base near 0.02, so lower both to let the deep water color dominate.
-  material.fragmentShader = material.fragmentShader
-    .replace('float rf0 = 0.3;', 'float rf0 = 0.02;')
-    .replace(
-      'vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight',
-      'vec3( 0.08 ) + reflectionSample * 0.45 + reflectionSample * specularLight',
-    );
-  material.needsUpdate = true;
-  water.userData.dynamicMaterial = material;
-  return water;
-}
-
 export function createWestBeach(options: BeachOptions): {
   entity: SceneInterestPointEntity;
   update(elapsedSeconds: number): void;
@@ -166,8 +139,19 @@ export function createWestBeach(options: BeachOptions): {
   const waterMinZ = -112;
   const waterMaxZ = 112;
   const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
-  const water = options.waterRendering
-    ? createAnimatedWater(waterGeometry)
+  const waterSurface = options.waterRendering
+    ? createAnimatedWaterSurface(waterGeometry, {
+        sunDirection: SUN_DIRECTION,
+        waterColorDay: DAY_WATER_COLOR,
+        waterColorNight: NIGHT_WATER_COLOR,
+        sunColorDay: DAY_SUN_COLOR,
+        sunColorNight: NIGHT_SUN_COLOR,
+        distortionScale: 3.7,
+        timeScale: SEA_TIME_SCALE,
+      })
+    : null;
+  const water = waterSurface
+    ? waterSurface.water
     : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
   water.position.set(0, 0.06, 0);
   if (!options.waterRendering) {
@@ -175,7 +159,6 @@ export function createWestBeach(options: BeachOptions): {
     water.renderOrder = 3;
   }
   object.add(water);
-  const waterMaterial = options.waterRendering ? (water.material as THREE.ShaderMaterial) : null;
   const palms = [-1, 1].map((side) => {
     const palm = new THREE.Group();
     addMesh(palm, options, new THREE.CylinderGeometry(0.09, 0.14, 1.8, 9), { color: 0x765139, roughness: 0.9, tex: 'wood', rx: 1, ry: 2 }, [0, 0.9, 0]);
@@ -210,11 +193,6 @@ export function createWestBeach(options: BeachOptions): {
   const seaGod = createSeaGod(options);
   seaGod.position.set(-41.2, 0, 11.5);
   object.add(seaGod);
-  // Daylight eases toward the theme-clock target inside update(), so the
-  // unlit water shader follows the day/night transition smoothly.
-  let daylight = 1;
-  let daylightTarget = 1;
-  let lastElapsed = 0;
   const rewardCard = addMesh(object, options, new THREE.BoxGeometry(0.44, 0.58, 0.045), { color: 0x445466, roughness: 0.45, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [-40.65, 1.05, 11.5]);
   rewardCard.visible = false;
   const cardStripe = addMesh(object, options, new THREE.BoxGeometry(0.35, 0.07, 0.052), { color: 0xe0c06b, roughness: 0.48, metalness: 0.25 }, [-40.65, 1.18, 11.5]);
@@ -232,21 +210,7 @@ export function createWestBeach(options: BeachOptions): {
         bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       }
-      if (waterMaterial) {
-        const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
-        lastElapsed = elapsedSeconds;
-        daylight += (daylightTarget - daylight) * Math.min(1, dt * 2.5);
-        const uniforms = waterMaterial.uniforms;
-        if (uniforms.time) uniforms.time.value = elapsedSeconds;
-        if (uniforms.waterColor) {
-          const waterColor = uniforms.waterColor.value as THREE.Color;
-          waterColor.copy(DAY_WATER_COLOR).lerp(NIGHT_WATER_COLOR, 1 - daylight);
-        }
-        if (uniforms.sunColor) {
-          const sunColor = uniforms.sunColor.value as THREE.Color;
-          sunColor.copy(DAY_SUN_COLOR).lerp(NIGHT_SUN_COLOR, 1 - daylight);
-        }
-      }
+      if (waterSurface) waterSurface.update(elapsedSeconds);
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
         rewardCard.rotation.y = elapsedSeconds * 0.8;
@@ -259,8 +223,7 @@ export function createWestBeach(options: BeachOptions): {
       cardStripe.visible = phase === 'reward';
     },
     setDaylight(value, instant = false) {
-      daylightTarget = value;
-      if (instant) daylight = value;
+      waterSurface?.setDaylight(value, instant);
     },
   };
 }
