@@ -28,6 +28,7 @@ export function addCityLighting(scene: THREE.Scene, mobile: () => boolean, night
 export function addCityFountain(options: { scene: THREE.Scene; palette: Record<string, number>; part: (group: THREE.Group, geometry: THREE.BufferGeometry, material: MaterialParameters, position: [number, number, number], shadow?: boolean) => THREE.Mesh }): void {
   const { scene, palette, part } = options;
   const group = new THREE.Group();
+  group.name = 'city-fountain';
   part(group, new THREE.CylinderGeometry(1.8, 1.9, 0.36, 48), { color: palette.FOUNTAIN_RIM, roughness: 0.75, tex: 'stone', rx: 6, ry: 1 }, [0, 0.18, 0]);
   part(group, new THREE.CylinderGeometry(1.55, 1.55, 0.03, 48), { color: palette.FOUNTAIN_WATER, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.85 }, [0, 0.335, 0], false);
   part(group, new THREE.CylinderGeometry(0.85, 0.95, 0.18, 32), { color: palette.FOUNTAIN_RIM, roughness: 0.75, tex: 'stone', rx: 3, ry: 1 }, [0, 0.45, 0]);

@@ -665,6 +665,7 @@ export function addEchoObservatoryArea(options: EchoObservatoryAreaOptions): THR
   const home = createExteriorHome(materials);
   const interior = createInteriorHome(materials);
   const sign = createSign(materials);
+  sign.name = 'echo-observatory-sign';
   options.scene.add(observatory, home, interior, sign);
   // Only the two exterior structures participate in the town obstacle graph.
   // The interior is a narrative teleport room and exposes explicit bounds above.

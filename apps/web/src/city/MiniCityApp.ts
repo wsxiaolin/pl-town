@@ -13,6 +13,7 @@ import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
 import { NPC_PROFILES } from './data/npcs';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
+import { createCityZoneController } from './cityZoneController';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
 import { destroyMusterCG } from './musterCg';
@@ -132,6 +133,7 @@ let buildingLabelController: ReturnType<typeof createBuildingLabelController>;
 let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController, academyController: AcademyController;
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof createWorldDecorations>;
+let citySurfaces: ReturnType<typeof createCitySurfaces> | null = null; let cityZoneController: ReturnType<typeof createCityZoneController> | null = null;
 let npcSystem: ReturnType<typeof createNpcSystem>;
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
@@ -216,7 +218,7 @@ const interactionPointer = createInteractionPointer({
   clearNavigationTarget,
   navigateTo,
   interactWithSceneInterestPoint,
-  interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
+  interactWithInterestPointController: (id) => { if (cityZoneController && !cityZoneController.isInterestPointOpen(id)) return; sceneInterestPointController?.interact(id); },
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
 });
 
@@ -273,6 +275,7 @@ const roadNavigation = createRoadNavigationSystem({
   westBeach: WEST_BEACH,
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
+  zoneLevelAt: (x, z) => cityZoneController?.levelAt(x, z) ?? 4,
 });
 const FOUNTAIN_CLEAR = roadNavigation.fountainClear;
 const buildRoadPath = roadNavigation.buildRoadPath;
@@ -397,7 +400,7 @@ function init() {
     buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
     getIsNight: () => isNight, makeMaterial: stdMat, makeMesh: mk, addPart: part,
     addRaycastGroup: (group) => raycastBuildingGroups.push(group),
-    addObstacleGroup: (group) => roadNavigation.registerObstacleGroup(group),
+    addObstacleGroup: (group, minStage) => roadNavigation.registerObstacleGroup(group, minStage),
     waterRendering: readRenderSettings().waterRendering,
   });
   npcSystem = createNpcSystem({
@@ -422,8 +425,9 @@ function init() {
       set cameraZoom(value) { cameraZoom = value; },
     },
     updateCameraProjection, getActiveStoryActorIds: () => activeStoryActorIds,
+    getZoneLevelAt: (x, z) => cityZoneController?.levelAt(x, z) ?? 4,
   });
-  createCitySurfaces({
+  citySurfaces = createCitySurfaces({
     scene,
     isNight,
     roadCoords: ROAD_COORDS,
@@ -451,7 +455,7 @@ function init() {
   addEchoObservatoryArea({
     scene,
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => stdMat(parameters)),
-  }).forEach(group => roadNavigation.registerObstacleGroup(group));
+  }).forEach(group => roadNavigation.registerObstacleGroup(group, 3));
   cacheBuildingBoxes(); addDecorations(); addCharacters();
   sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk, waterRendering: readRenderSettings().waterRendering });
   sceneInterestPoints.obstacleRoots.forEach((root) => roadNavigation.registerObstacleGroup(root));
@@ -460,6 +464,8 @@ function init() {
     .catch(error => console.error('3D model loading failed', error));
   buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isBuildingUnavailable, interact: interactOrWalk });
   buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
+  cityZoneController = createCityZoneController({ scene, storage: window.localStorage, getBuildings: () => buildings, getResidences: () => residences, getCitySurfaces: () => citySurfaces, getWorldDecorations: () => worldDecorations, getSceneInterestPoints: () => sceneInterestPoints, invalidateRoadGraph: () => roadNavigation.invalidateRoadGraph(), invalidateMapShot: () => mapController?.invalidateShot(), refreshNpcs: () => npcSystem?.updateNpcSchedules() });
+  cityZoneController.applyAll();
   communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
   writerCatalogController = createWriterCatalogController({ document });
   newsstandController = createNewsstandController({ document, signal: eventController.signal });
@@ -703,6 +709,7 @@ function init() {
 
   loginController.checkLogin();
   setupMultiplayerUI();
+  cityZoneController?.applyAll();
 }
 
 function setupRenderer() {
@@ -752,6 +759,7 @@ function setupScene() {
     getWeather: () => weather,
     setWeather: (value) => updateWeatherState(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
+    getCityZoneController: () => cityZoneController,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -784,7 +792,7 @@ function npcForRaycast() { return npcSystem.npcForRaycast(); }
 function setupEvents() { eventBindings.setupEvents(); }
 function isStoryLockedBuilding(building: BuildingEntity) { return STORY_LOCKED_BUILDINGS.has(building.id); }
 function isBuildingUnavailable(building: BuildingEntity) {
-  return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
+  return isStoryLockedBuilding(building) || isBuildingDestroyed(building) || (cityZoneController?.isBuildingHiddenByZone(building) ?? false);
 }
 export function destroyBuilding(buildingId: string): boolean {
   return buildingDamageController?.destroyBuilding(buildingId) ?? false;
@@ -806,7 +814,7 @@ export function restoreAll(): number {
 }
 function isResidenceUnavailable(residenceId: string): boolean {
   const residence = residences.find((item) => item.id === residenceId);
-  return !residence || isBuildingDestroyed(residence);
+  return !residence || isBuildingDestroyed(residence) || (cityZoneController?.isResidenceHiddenByZone(residenceId) ?? false);
 }
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
 function onMouseMove(e: MouseEvent) { interactionPointer.onMouseMove(e); }

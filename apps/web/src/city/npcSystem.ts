@@ -73,6 +73,7 @@ type NpcSystemOptions = {
   view: View;
   updateCameraProjection: (zoom: number) => void;
   getActiveStoryActorIds: () => Set<string>;
+  getZoneLevelAt?: (x: number, z: number) => number;
 };
 
 export function hoursInRange(h: number, wh: number[] | null): boolean {
@@ -100,6 +101,9 @@ export function createNpcSystem(options: NpcSystemOptions) {
   const visibleNpcMeshes: THREE.Object3D[]=[];
   const npcById=new Map<string, Npc>();
   const shadowMaterial=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.11,depthWrite:false});
+  // 城市分区通行控制：未提供时视为全区开放（阶段 4）。
+  const zoneLevelAt=(x: number,z: number): number => options.getZoneLevelAt?.(x,z) ?? 4;
+  const zoneOpen=(x: number,z: number): boolean => zoneLevelAt(x,z) >= 1;
 
   function refreshNpcIndexes() {
     avoidanceNpcs.length=0;
@@ -228,7 +232,12 @@ export function createNpcSystem(options: NpcSystemOptions) {
   function pickPatrolSpot(npc: Npc, gameHour: number): THREE.Vector3 | null {
     const pool=npcIsWorking(npc,gameHour)?npc.workPatrol:npc.homePatrol;
     if(!pool.length) return null;
-    return pool[Math.floor(Math.random()*pool.length)] ?? null;
+    // 未解锁分区（阶段 < 1）不可到达，巡逻点跳过这些位置。
+    for(let attempt=0;attempt<pool.length;attempt++){
+      const spot=pool[Math.floor(Math.random()*pool.length)];
+      if(spot && zoneOpen(spot.x,spot.z)) return spot;
+    }
+    return null;
   }
   
   // NPCs step aside when the player walks into them instead of blocking the road.
@@ -323,6 +332,13 @@ export function createNpcSystem(options: NpcSystemOptions) {
         }
       } else {
         npc.mesh.visible=true;
+      }
+      // 站在未解锁分区里的非剧情 NPC 一并隐藏（剧情演员由 CG 控制，不干预）。
+      if (npc.mesh.visible && !activeStoryActorIds.has(npc.profile.id)
+          && zoneLevelAt(npc.mesh.position.x, npc.mesh.position.z) < 1) {
+        npc.mesh.visible=false;
+        if(npc.tween){ npc.tween.kill(); npc.tween=null; }
+        continue;
       }
       if (npc.walking===false) continue;
       if (!npc.mesh.visible) continue;

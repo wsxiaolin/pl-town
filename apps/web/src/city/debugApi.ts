@@ -1,6 +1,8 @@
 import type * as THREE from 'three';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
+import type { CityZoneController } from './cityZoneController';
+import type { ZoneId, ZoneStage } from './data/cityZones';
 import type { SceneInterestPoints, SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from './lanYuPreludeCG';
 import { musterCGActive, startMusterCG, stopMusterCG } from './musterCg';
@@ -100,6 +102,14 @@ function createMiniCityApi(options: DebugApiOptions) {
         return true;
       },
     },
+    zones: {
+      list: () => options.getCityZoneController()?.list() ?? [],
+      get: (zone: ZoneId) => options.getCityZoneController()?.getStages()[zone] ?? null,
+      set: (zone: ZoneId, stage: ZoneStage) => options.getCityZoneController()?.setStage(zone, stage) ?? false,
+      setAll: (stage: ZoneStage) => options.getCityZoneController()?.setAll(stage) ?? false,
+      reset: () => options.getCityZoneController()?.reset(),
+      levelAt: (x: number, z: number) => options.getCityZoneController()?.levelAt(x, z) ?? 4,
+    },
   };
 }
 
@@ -135,6 +145,7 @@ export type DebugApiOptions = {
   getWeather: () => Weather;
   setWeather: (weather: Weather) => void;
   getIceSanctum: () => IceSanctumController | null;
+  getCityZoneController: () => CityZoneController | null;
 };
 
 export function installDebugApi(options: DebugApiOptions) {

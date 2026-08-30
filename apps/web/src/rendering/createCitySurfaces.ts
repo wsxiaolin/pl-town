@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
-import { batchStaticMeshes } from './staticMeshBatcher';
+import { classifyZone, zoneBoundariesAlongAxis, type ZoneId } from '../city/data/cityZones';
+import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
 type MaterialOptions = MaterialParameters;
@@ -29,7 +30,11 @@ type CitySurfaceOptions = {
   addLamps: (positions: readonly (readonly [number, number, number])[]) => void;
 };
 
-export function createCitySurfaces(options: CitySurfaceOptions): void {
+export type CitySurfacesApi = {
+  setZoneRoadsVisible: (zone: ZoneId, visible: boolean) => void;
+};
+
+export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi {
   const {
     scene,
     isNight,
@@ -64,9 +69,29 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     pathMaterials.push(material);
   };
 
+  // ── 分区道路容器：每个分区一个 Group，配合 retained 批处理按区显隐 ──
+  const zoneRoadBuckets = new Map<ZoneId, THREE.Group>();
+  const zoneRoadHandles: Array<{ zone: ZoneId; key: string; root: THREE.Group; batch: RetainedStaticMeshBatch }> = [];
+  const zoneBucket = (zone: ZoneId): THREE.Group => {
+    let bucket = zoneRoadBuckets.get(zone);
+    if (!bucket) {
+      bucket = new THREE.Group();
+      bucket.name = `zone-roads:${zone}`;
+      zoneRoadBuckets.set(zone, bucket);
+      scene.add(bucket);
+    }
+    return bucket;
+  };
+
   addGround();
   addPaths();
-  batchStaticMeshes(scene, scene.children.filter((child) => !existingSceneChildren.has(child)));
+  const zoneRoadBucketSet = new Set<THREE.Object3D>(zoneRoadBuckets.values());
+  zoneRoadBuckets.forEach((root, zone) => {
+    const key = `zone-roads:${zone}`;
+    zoneRoadHandles.push({ zone, key, root, batch: batchRetainedStaticMeshes(scene, [{ key, root }]) });
+  });
+  // 两条黑色主干道（x=0 / z=0）及其标线永远可见，不进入分区容器。
+  batchStaticMeshes(scene, scene.children.filter((child) => !existingSceneChildren.has(child) && !zoneRoadBucketSet.has(child)));
 
   function addGround(): void {
     const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
@@ -124,7 +149,44 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
   function addPaths(): void {
     const pathColor = isNight ? colors.nightPath : colors.dayPath;
     const roadWidth = (position: number) => position === 0 ? MAIN_ROAD_WIDTH : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
-    const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road', district = '') => {
+
+    // 进入分区容器的路段：按 (x,z) 自动归类，或用 zoneOverride 显式指定。
+    const addZoneRoadSegment = (width: number, depth: number, x: number, z: number, texture = 'pavement', district = '', zoneOverride?: ZoneId) => {
+      const material = createLayerMaterial({
+        color: pathColor,
+        roughness: 1,
+        tex: texture,
+        rx: Math.max(1, width / 3),
+        ry: Math.max(1, depth / 3),
+      });
+      trackPathMaterial(material);
+      const road = createMesh(new THREE.BoxGeometry(width, 0.04, depth), material);
+      road.position.set(x, SURFACE_Y.road, z);
+      road.renderOrder = RENDER_ORDER.road;
+      road.receiveShadow = true;
+      if (district) road.userData.district = district;
+      zoneBucket(zoneOverride ?? classifyZone(x, z)).add(road);
+    };
+
+    // 把 [start,end] 沿可变轴按分类边界切开，保证每段只属于一个分区。
+    const emitZoneSplitRoads = (axis: 'x' | 'z', fixed: number, start: number, end: number, width: number, texture = 'pavement') => {
+      if (end <= start) return;
+      const cuts = zoneBoundariesAlongAxis(fixed)
+        .filter((cut) => cut > start && cut < end)
+        .sort((left, right) => left - right);
+      const stops = [start, ...cuts, end];
+      for (let index = 0; index < stops.length - 1; index += 1) {
+        const pieceStart = stops[index]!;
+        const pieceEnd = stops[index + 1]!;
+        if (pieceEnd - pieceStart < 0.05) continue;
+        const center = (pieceStart + pieceEnd) / 2;
+        if (axis === 'x') addZoneRoadSegment(pieceEnd - pieceStart, width, center, fixed, texture);
+        else addZoneRoadSegment(width, pieceEnd - pieceStart, fixed, center, texture);
+      }
+    };
+
+    // ── 两条黑色主干道（含划线、斑马线）永远可见 ──
+    const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road') => {
       const material = createLayerMaterial({
         color: main ? colors.asphalt : pathColor,
         roughness: 1,
@@ -137,7 +199,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       road.position.set(x, SURFACE_Y.road, z);
       road.renderOrder = RENDER_ORDER.road;
       road.receiveShadow = true;
-      if(district) road.userData.district = district;
       scene.add(road);
     };
 
@@ -145,47 +206,50 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, 21.1, true, 'asphalt');
     addRoadSegment(38.8, MAIN_ROAD_WIDTH, -23.6, 0, true, 'asphalt');
     addRoadSegment(38.8, MAIN_ROAD_WIDTH, 23.6, 0, true, 'asphalt');
-    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -39.0, false, 'pavement');
-    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, 39.0, false, 'pavement');
+    // 主干道与环路之间的两小段引道，归对应外区。
+    addZoneRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -39.0);
+    addZoneRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, 39.0);
 
+    // 观测台延伸道路整条归东延伸区。
     ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
       const dx = x2 - x1;
       const dz = z2 - z1;
       const length = Math.hypot(dx, dz);
-      const road = createMesh(new THREE.BoxGeometry(1.35, 0.04, length), createLayerMaterial({
+      const material = createLayerMaterial({
         color: pathColor,
         roughness: 1,
         tex: 'pavement',
         rx: 1,
         ry: Math.max(1, length / 3),
-      }));
+      });
+      const road = createMesh(new THREE.BoxGeometry(1.35, 0.04, length), material);
       road.position.set((x1 + x2) / 2, SURFACE_Y.road, (z1 + z2) / 2);
       road.rotation.y = -Math.atan2(dx, dz);
       road.renderOrder = RENDER_ORDER.road;
       road.receiveShadow = true;
       road.userData.district = 'echo-observatory-road';
-      scene.add(road);
+      zoneBucket('ext_east').add(road);
     });
     addLamps([[44, 0, -1.3], [52, 0, 1.3], [60, 0, -1.3], [66, 0, 1.3]]);
 
     const minorCoords = roadCoords.filter((position) => position !== 0);
     for (const position of minorCoords) {
       const width = roadWidth(position);
-      addRoadSegment(width, 32.8, position, -18.6, false, 'pavement');
-      addRoadSegment(width, 32.8, position, 18.6, false, 'pavement');
+      // 纵向道路：原本是 ±18.6 处两整段，现在按分区边界切开。
+      emitZoneSplitRoads('z', position, 2.2, 35, width);
+      emitZoneSplitRoads('z', position, -35, -2.2, width);
     }
 
     const boundaries = [-cityLimit, ...roadCoords, cityLimit];
     for (const z of minorCoords) {
       const width = roadWidth(z);
-      const texture = 'pavement';
       for (let index = 0; index < boundaries.length - 1; index++) {
         const left = boundaries[index]!;
         const right = boundaries[index + 1]!;
         const start = left + (roadCoords.includes(left) ? roadWidth(left) / 2 : 0);
         const end = right - (roadCoords.includes(right) ? roadWidth(right) / 2 : 0);
-        if (end > start) addRoadSegment(end - start, width, (start + end) / 2, z, false, texture);
+        if (end > start) emitZoneSplitRoads('x', z, start, end, width, 'pavement');
       }
     }
 
@@ -214,22 +278,36 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       addMarking(new THREE.BoxGeometry(MAIN_ROAD_WIDTH, 0.005, roadWidth(z)), material, 0, z);
     }
 
+    // ── 环状路：按象限拆成 4 段圆弧，归四个外区 ──
     const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });
     trackPathMaterial(ringMat);
-    addRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
-
     const ringLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     trackPathMaterial(ringLineMat);
-    addRing(37.96, 38.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking);
+    const ringArcs: Array<{ zone: ZoneId; thetaStart: number }> = [
+      { zone: 'outer_north', thetaStart: Math.PI / 4 },
+      { zone: 'outer_west', thetaStart: (Math.PI * 3) / 4 },
+      { zone: 'outer_south', thetaStart: (Math.PI * 5) / 4 },
+      { zone: 'outer_east', thetaStart: -Math.PI / 4 },
+    ];
+    for (const arc of ringArcs) {
+      addZoneRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road, arc.zone, arc.thetaStart);
+      addZoneRing(37.96, 38.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking, arc.zone, arc.thetaStart);
+    }
 
     for (let index = 0; index < 8; index++) {
       const angle = (index / 8) * Math.PI * 2 + Math.PI / 8;
       addLamps([[Math.cos(angle) * 38, 0, Math.sin(angle) * 38]]);
     }
 
+    // 中央喷泉周围的人行环道，归内区。
     const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);
-    addRing(2.25, 3, pedestrianMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
+    const pedestrianRing = new THREE.Mesh(new THREE.RingGeometry(2.25, 3, 48), pedestrianMat);
+    pedestrianRing.rotation.x = -Math.PI / 2;
+    pedestrianRing.position.y = SURFACE_Y.roadSurface;
+    pedestrianRing.renderOrder = RENDER_ORDER.road;
+    pedestrianRing.receiveShadow = true;
+    zoneBucket('inner').add(pedestrianRing);
   }
 
   function addMarking(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, z: number): void {
@@ -239,12 +317,22 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     scene.add(marking);
   }
 
-  function addRing(inner: number, outer: number, material: THREE.Material, y: number, renderOrder: number): void {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 96), material);
+  function addZoneRing(inner: number, outer: number, material: THREE.Material, y: number, renderOrder: number, zone: ZoneId, thetaStart: number): void {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 28, thetaStart, Math.PI / 2), material);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = y;
     ring.renderOrder = renderOrder;
     ring.receiveShadow = true;
-    scene.add(ring);
+    zoneBucket(zone).add(ring);
   }
+
+  return {
+    setZoneRoadsVisible: (zone: ZoneId, visible: boolean) => {
+      for (const handle of zoneRoadHandles) {
+        if (handle.zone !== zone) continue;
+        handle.batch.setVisible(handle.key, visible);
+        handle.root.visible = visible;
+      }
+    },
+  };
 }

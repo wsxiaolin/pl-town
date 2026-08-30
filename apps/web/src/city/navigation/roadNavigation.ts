@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { MAIN_ROAD_WIDTH } from '../data/cityConfig';
 
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
 type RoadNode = THREE.Vector3 & { i: number; adj: RoadNode[] };
 type BuildingBox = { minX: number; maxX: number; minZ: number; maxZ: number };
+type CollisionBox = BuildingBox & { queryStamp: number; cx: number; cz: number; minStage: number };
 type RoadGraph = { nodes: RoadNode[]; nodeIdx: Map<string, number>; routeCache: Map<string, RoadNode[] | null> };
-type CollisionBox = BuildingBox & { queryStamp: number };
 type ObstacleGroup = THREE.Object3D & {
   userData: THREE.Object3D['userData'] & { navigationFootprint?: { width: number; depth: number } };
 };
@@ -16,6 +17,7 @@ export interface RoadNavigationOptions {
   westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
+  zoneLevelAt?: (x: number, z: number) => number;
 }
 
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
@@ -33,7 +35,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   };
   const buildings = options.getBuildings();
   const buildingBoxes: CollisionBox[] = [];
-  const obstacleGroups: ObstacleGroup[] = [];
+  const obstacleGroups: { group: ObstacleGroup; minStage: number }[] = [];
   const obstacleGroupSet = new Set<THREE.Object3D>();
   const collisionRows = new Map<number, Map<number, CollisionBox[]>>();
   const collisionBounds = new THREE.Box3();
@@ -42,11 +44,29 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   let collisionQueryStamp = 0;
   let buildingBoxesInitialized = false;
 
-  function registerObstacleGroup(group: THREE.Object3D | null) {
+  // ── 城市分区通行控制 ──
+  // zoneLevelAt(x,z) 返回该点所在分区的建造阶段（0-4）；未提供时视为全区开放。
+  const zoneLevelAt = (x: number, z: number): number => options.zoneLevelAt?.(x, z) ?? 4;
+  const ARTERY_HALF = MAIN_ROAD_WIDTH / 2 + 0.06;
+  const ARTERY_EXTENT = CITY_LIMIT + MAIN_ROAD_WIDTH / 2 + 0.1;
+  // 两条黑色主干道（x=0 与 z=0）永远可见、可通行，即使其所在分区未解锁。
+  function onOpenArtery(x: number, z: number): boolean {
+    return (Math.abs(z) <= ARTERY_HALF && Math.abs(x) <= ARTERY_EXTENT)
+      || (Math.abs(x) <= ARTERY_HALF && Math.abs(z) <= ARTERY_EXTENT);
+  }
+  function zoneOpen(x: number, z: number, minLevel = 1): boolean {
+    return onOpenArtery(x, z) || zoneLevelAt(x, z) >= minLevel;
+  }
+  // 碰撞盒仅在对应分区达到其可见阶段后才实际参与碰撞（未解锁区域的建筑不挡路）。
+  function boxActive(box: CollisionBox): boolean {
+    return zoneLevelAt(box.cx, box.cz) >= box.minStage;
+  }
+
+  function registerObstacleGroup(group: THREE.Object3D | null, minStage = 2) {
     if (!group || obstacleGroupSet.has(group)) return;
     obstacleGroupSet.add(group);
-    obstacleGroups.push(group as ObstacleGroup);
-    if (buildingBoxesInitialized) addObstacleBounds(group as ObstacleGroup);
+    obstacleGroups.push({ group: group as ObstacleGroup, minStage });
+    if (buildingBoxesInitialized) addObstacleBounds(group as ObstacleGroup, minStage);
     roadGraph = null;
   }
 
@@ -70,9 +90,15 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     }
   }
 
-  function addBuildingBox(box: CollisionBox): void {
-    buildingBoxes.push(box);
-    indexBuildingBox(box);
+  function addBuildingBox(box: Omit<CollisionBox, 'cx' | 'cz' | 'minStage'>, minStage: number): void {
+    const full: CollisionBox = {
+      ...box,
+      cx: (box.minX + box.maxX) / 2,
+      cz: (box.minZ + box.maxZ) / 2,
+      minStage,
+    };
+    buildingBoxes.push(full);
+    indexBuildingBox(full);
   }
 
   function visitCollisionCandidates(minX: number,minZ: number,maxX: number,maxZ: number,visitor: (box: CollisionBox) => boolean): boolean {
@@ -89,6 +115,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
           // Large buildings can occupy multiple cells. A numeric stamp avoids
           // allocating a Set for every movement query.
           if(box.queryStamp===stamp) continue;
+          if(!boxActive(box)) continue;
           box.queryStamp=stamp;
           if(visitor(box)) return true;
         }
@@ -97,19 +124,19 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     return false;
   }
 
-  function addObjectBounds(group: THREE.Object3D): void {
+  function addObjectBounds(group: THREE.Object3D, minStage: number): void {
     collisionBounds.setFromObject(group);
     if(!Number.isFinite(collisionBounds.min.x)) return;
     addBuildingBox({
       minX:collisionBounds.min.x-PLAYER_CLEARANCE, maxX:collisionBounds.max.x+PLAYER_CLEARANCE,
       minZ:collisionBounds.min.z-PLAYER_CLEARANCE, maxZ:collisionBounds.max.z+PLAYER_CLEARANCE,
       queryStamp:0,
-    });
+    }, minStage);
   }
 
-  function addObstacleBounds(group: ObstacleGroup): void {
+  function addObstacleBounds(group: ObstacleGroup, minStage: number): void {
     const footprint=group.userData.navigationFootprint;
-    if(!footprint){ addObjectBounds(group); return; }
+    if(!footprint){ addObjectBounds(group, minStage); return; }
     group.getWorldPosition(collisionCenter);
     const quarterTurn=Math.abs(Math.sin(group.rotation.y))>0.5;
     const width=quarterTurn?footprint.depth:footprint.width;
@@ -120,7 +147,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       minZ:collisionCenter.z-depth/2-PLAYER_CLEARANCE,
       maxZ:collisionCenter.z+depth/2+PLAYER_CLEARANCE,
       queryStamp:0,
-    });
+    }, minStage);
   }
 
   function buildRoadPath(from: THREE.Vector3, rawTarget: THREE.Vector3): THREE.Vector3[] {
@@ -197,6 +224,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     coords.forEach((x:number)=>coords.forEach((z:number)=>addNode(x,z)));
     nodes.forEach((n,i)=>{ n.i=i; n.adj=[]; });
     const addEdge=(a: RoadNode,b: RoadNode)=>{
+      if(!zoneOpen(a.x,a.z)||!zoneOpen(b.x,b.z)||!zoneOpen((a.x+b.x)/2,(a.z+b.z)/2)) return;
       if(pathBlocked(a.x,a.z,b.x,b.z)) return;
       a.adj.push(b); b.adj.push(a);
     };
@@ -260,6 +288,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     if(x<WORLD_BOUNDS.minX||x>WORLD_BOUNDS.maxX||z<WORLD_BOUNDS.minZ||z>WORLD_BOUNDS.maxZ) return true;
     if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
     if(WEST_BEACH && x<WEST_BEACH.deepWaterX && z>=WEST_BEACH.minZ && z<=WEST_BEACH.maxZ) return true;
+    if(!zoneOpen(x,z)) return true;
     return pointInAnyBuilding(x,z);
   }
 
@@ -462,8 +491,8 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   function cacheBuildingBoxes() {
     buildingBoxes.length=0;
     collisionRows.clear();
-    buildings.forEach((building)=>addObjectBounds(building.group));
-    obstacleGroups.forEach(addObstacleBounds);
+    buildings.forEach((building)=>addObjectBounds(building.group, 3));
+    obstacleGroups.forEach(({group, minStage})=>addObstacleBounds(group, minStage));
     buildingBoxesInitialized=true;
   }
   
@@ -550,5 +579,6 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     resolveMovement,
     nearestRoadCoord,
     clamp,
+    invalidateRoadGraph: () => { roadGraph = null; },
   };
 }

@@ -6,7 +6,8 @@ import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createPondWaterSurface, type AnimatedWaterSurface } from './animatedWater';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
 import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
-import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
+import { classifyZone, type ZoneId } from '../city/data/cityZones';
+import { batchRetainedStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
 
@@ -44,7 +45,7 @@ export interface WorldDecorationsOptions {
   makeMesh: MeshHelpers['mk'];
   addPart: MeshHelpers['part'];
   addRaycastGroup: (group: THREE.Object3D) => void;
-  addObstacleGroup?: (group: THREE.Object3D) => void;
+  addObstacleGroup?: (group: THREE.Object3D, minStage?: number) => void;
   waterRendering: boolean;
 }
 
@@ -61,6 +62,22 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   let residenceVisualBatch: RetainedStaticMeshBatch | null = null;
   const residenceRoots: RetainedStaticMeshRoot[] = [];
   const interactiveDecorationRoots = new Set<THREE.Object3D>();
+  // ── 分区可见性状态：装饰/路灯/树/摊位/小径/民居 ──
+  const zoneDecorBuckets = new Map<ZoneId, THREE.Group>();
+  const zoneDecorHandles = new Map<ZoneId, { key: string; root: THREE.Group; batch: RetainedStaticMeshBatch }>();
+  const zoneStallGroups = new Map<ZoneId, THREE.Object3D[]>();
+  const zoneTreeIndices = new Map<ZoneId, number[]>();
+  const zoneLampIndices = new Map<ZoneId, number[]>();
+  const zonePathMeshes = new Map<ZoneId, THREE.Mesh[]>();
+  const residenceZoneOf = new Map<string, ZoneId>();
+  const residenceDamageVisible = new Map<string, boolean>();
+  const residenceZoneVisible = new Map<string, boolean>();
+  const residencePlots = new Map<string, THREE.Mesh>();
+  const pushZoneEntry = <T>(store: Map<ZoneId, T[]>, zone: ZoneId, entry: T): void => {
+    const list = store.get(zone) ?? [];
+    list.push(entry);
+    store.set(zone, list);
+  };
   const orangeGroveCenter={x:-15,z:-3};
   const roadWidth=(position: number)=>position===0?MAIN_ROAD_WIDTH:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
 
@@ -126,7 +143,25 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       addTrees([[v,0,-3],[v,0,3],[-3,0,v],[3,0,v]]);
     }
     const decorationRoots = scene.children.filter((child)=>!existingSceneChildren.has(child));
-    batchStaticMeshes(scene, decorationRoots, interactiveDecorationRoots);
+    // 非交互装饰按城市分区归组，再按分区做 retained 批处理，支持按分区整体显隐。
+    decorationRoots.forEach((root) => {
+      if (interactiveDecorationRoots.has(root)) return;
+      const zoneRoad = (root as THREE.Mesh).userData?.cityZoneRoad as ZoneId | undefined;
+      if (zoneRoad) { pushZoneEntry(zonePathMeshes, zoneRoad, root as THREE.Mesh); return; }
+      const zone = classifyZone(root.position.x, root.position.z);
+      let bucket = zoneDecorBuckets.get(zone);
+      if (!bucket) {
+        bucket = new THREE.Group();
+        bucket.name = `zone-decor:${zone}`;
+        zoneDecorBuckets.set(zone, bucket);
+        scene.add(bucket);
+      }
+      bucket.add(root);
+    });
+    zoneDecorBuckets.forEach((root, zone) => {
+      const key = `zone-decor:${zone}`;
+      zoneDecorHandles.set(zone, { key, root, batch: batchRetainedStaticMeshes(scene, [{ key, root }]) });
+    });
     residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots);
   }
   
@@ -148,12 +183,14 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     pathMats.push(pathMat);
     const path1 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 5.5), pathMat);
     path1.position.set(15, 0.04, 27.5); path1.receiveShadow = true; scene.add(path1);
+    path1.userData.cityZoneRoad = classifyZone(15, 27.5);
     // One small building beside the feature; the path itself stays open.
     addSuburbHouse(12, 32, 90);
   
     // Straight path from the ring road to the nearby suburb house.
     const path2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 5.5), pathMat);
     path2.position.set(-15, 0.04, -27.5); path2.receiveShadow = true; scene.add(path2);
+    path2.userData.cityZoneRoad = classifyZone(-15, -27.5);
     // One small building beside the feature; the path itself stays open.
     addSuburbHouse(-12, -32, -90);
   }
@@ -240,9 +277,12 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     const variationSeed = residenceStyleSeedForLot(x, z);
     const { group:g, body, styleId, styleName } = createResidenceModel({x,z,variationSeed,lotType:type,isNight:getIsNight(),part});
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
+    residenceZoneOf.set(residenceId, classifyZone(x,z));
+    residenceDamageVisible.set(residenceId, true);
+    residenceZoneVisible.set(residenceId, true);
     g.position.set(x,y,z); g.rotation.y=(variationSeed%4)*Math.PI/2;
     g.traverse((object: THREE.Object3D)=>{ if('isMesh' in object && object.isMesh) { object.userData.residenceId=residenceId; object.userData.residenceStyleId=styleId; } });
-    scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
+    scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g, 4);
     residenceRoots.push({key:residenceId,root:g});
     residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅 · ${styleName}`,group:g,body,labelEl:null,styleId});
     // ── 建筑下面的小地块贴图（成片共享纹理）──
@@ -254,6 +294,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     pmat.depthWrite = false;
     const plot = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), pmat);
     plot.userData.residenceId = residenceId;
+    residencePlots.set(residenceId, plot);
     const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
     plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
     plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot); interactiveDecorationRoots.add(plot); addRaycastGroup(plot);
@@ -271,8 +312,9 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     positions.forEach(([x,,z]) => {
       if(Math.hypot(x-orangeGroveCenter.x,z-orangeGroveCenter.z)<2.4)return;
       if(treeCenterIsOnRoad(x,z))return;
-      treeTrunks!.add(x,0.19,z);
+      const index=treeTrunks!.add(x,0.19,z);
       treeCrowns!.add(x,0.66,z);
+      if(index>=0) pushZoneEntry(zoneTreeIndices, classifyZone(x,z), index);
     });
   }
   function addLamps(positions: readonly Vec3[]) {
@@ -291,8 +333,9 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
         return x>=box.min.x-0.8&&x<=box.max.x+0.8&&z>=box.min.z-0.8&&z<=box.max.z+0.8;
       });
       if(blocked)return;
-      lampPosts!.add(x,0.575,z);
+      const index=lampPosts!.add(x,0.575,z);
       lampLights!.add(x,1.28,z);
+      if(index>=0) pushZoneEntry(zoneLampIndices, classifyZone(x,z), index);
     });
   }
   function addBench(x: number, y: number, z: number, rotY: number) {
@@ -514,14 +557,58 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       g.position.set(px, 0, pz);
       g.userData.collisionGroup='market-stall';
       scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
+      pushZoneEntry(zoneStallGroups, classifyZone(px, pz), g);
     }
   }
   
   // ── Characters ────────────────────────────────────────────────────────────────
 
+  // 民居可见性 = 未被摧毁 && 分区已解锁（两路标志位合并）
+  function applyResidenceVisibility(residenceId: string): void {
+    const visible = (residenceDamageVisible.get(residenceId) ?? true) && (residenceZoneVisible.get(residenceId) ?? true);
+    residenceVisualBatch?.setVisible(residenceId, visible);
+    const plot = residencePlots.get(residenceId);
+    if (plot) plot.visible = visible;
+  }
+
+  function setZoneDecorVisible(zone: ZoneId, visible: boolean): void {
+    const handle = zoneDecorHandles.get(zone);
+    if (handle) {
+      handle.batch.setVisible(handle.key, visible);
+      handle.root.visible = visible;
+    }
+    (zoneStallGroups.get(zone) ?? []).forEach((group) => { group.visible = visible; });
+    (zoneTreeIndices.get(zone) ?? []).forEach((index) => {
+      treeTrunks?.setIndexVisible(index, visible);
+      treeCrowns?.setIndexVisible(index, visible);
+    });
+    (zoneLampIndices.get(zone) ?? []).forEach((index) => {
+      lampPosts?.setIndexVisible(index, visible);
+      lampLights?.setIndexVisible(index, visible);
+    });
+  }
+
+  function setZoneResidencesVisible(zone: ZoneId, visible: boolean): void {
+    residenceZoneOf.forEach((residenceZone, residenceId) => {
+      if (residenceZone !== zone) return;
+      residenceZoneVisible.set(residenceId, visible);
+      applyResidenceVisibility(residenceId);
+    });
+  }
+
+  function setZonePathsVisible(zone: ZoneId, visible: boolean): void {
+    (zonePathMeshes.get(zone) ?? []).forEach((mesh) => { mesh.visible = visible; });
+  }
+
   return {
     addDecorations, addTrees, addLamps, addArch, addBench,
-    setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
+    setResidenceVisualVisible: (residenceId: string, visible: boolean) => {
+      residenceDamageVisible.set(residenceId, visible);
+      applyResidenceVisibility(residenceId);
+    },
+    setZoneDecorVisible,
+    setZoneResidencesVisible,
+    setZonePathsVisible,
     // Advances pond ripples (ponds drift slower than the sea) and the shared
     // day/night water tint; called from the main frame loop.
     update(elapsedSeconds: number) {
