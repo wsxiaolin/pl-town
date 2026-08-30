@@ -10,7 +10,10 @@ import {
 } from './data/cityZones';
 import type { SceneInterestPointId, SceneInterestPoints } from '../rendering/sceneInterestPoints';
 
-type ZoneSurfaceApi = { setZoneRoadsVisible: (zone: ZoneId, visible: boolean) => void };
+type ZoneSurfaceApi = {
+  setZoneRoadsVisible: (zone: ZoneId, visible: boolean) => void;
+  setZoneGroundVisible: (zone: ZoneId, visible: boolean) => void;
+};
 
 type ZoneDecorationsApi = {
   setZoneDecorVisible: (zone: ZoneId, visible: boolean) => void;
@@ -79,6 +82,7 @@ export function createCityZoneController(options: CityZoneControllerOptions) {
     for (const zone of CITY_ZONE_IDS) {
       const level = levelOf(zone);
       surfaces?.setZoneRoadsVisible(zone, level >= 1);
+      surfaces?.setZoneGroundVisible(zone, level >= 1);
       decorations?.setZonePathsVisible(zone, level >= 1);
       decorations?.setZoneDecorVisible(zone, level >= 2);
       // 非民居建筑：建造 3 阶段起显示（摧毁废墟由 damage 模块自行呈现）。

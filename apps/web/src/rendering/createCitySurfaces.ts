@@ -32,6 +32,7 @@ type CitySurfaceOptions = {
 
 export type CitySurfacesApi = {
   setZoneRoadsVisible: (zone: ZoneId, visible: boolean) => void;
+  setZoneGroundVisible: (zone: ZoneId, visible: boolean) => void;
 };
 
 export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi {
@@ -72,6 +73,8 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
   // ── 分区道路容器：每个分区一个 Group，配合 retained 批处理按区显隐 ──
   const zoneRoadBuckets = new Map<ZoneId, THREE.Group>();
   const zoneRoadHandles: Array<{ zone: ZoneId; key: string; root: THREE.Group; batch: RetainedStaticMeshBatch }> = [];
+  const zoneGroundBuckets = new Map<ZoneId, THREE.Group>();
+  const zoneGroundHandles: Array<{ zone: ZoneId; key: string; root: THREE.Group; batch: RetainedStaticMeshBatch }> = [];
   const zoneBucket = (zone: ZoneId): THREE.Group => {
     let bucket = zoneRoadBuckets.get(zone);
     if (!bucket) {
@@ -86,6 +89,10 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
   addGround();
   addPaths();
   const zoneRoadBucketSet = new Set<THREE.Object3D>(zoneRoadBuckets.values());
+  zoneGroundBuckets.forEach((root, zone) => {
+    const key = `zone-ground:${zone}`;
+    zoneGroundHandles.push({ zone, key, root, batch: batchRetainedStaticMeshes(scene, [{ key, root }]) });
+  });
   zoneRoadBuckets.forEach((root, zone) => {
     const key = `zone-roads:${zone}`;
     zoneRoadHandles.push({ zone, key, root, batch: batchRetainedStaticMeshes(scene, [{ key, root }]) });
@@ -94,7 +101,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
   batchStaticMeshes(scene, scene.children.filter((child) => !existingSceneChildren.has(child) && !zoneRoadBucketSet.has(child)));
 
   function addGround(): void {
-    const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
+    const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0 });
     const farGround = createMesh(new THREE.PlaneGeometry(220, 220), farMat);
     farGround.rotation.x = -Math.PI / 2;
     farGround.position.y = SURFACE_Y.base;
@@ -102,7 +109,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
     farGround.renderOrder = RENDER_ORDER.base;
     scene.add(farGround);
 
-    const districtMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 18, ry: 18 });
+    const districtMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1 });
     const district = createMesh(new THREE.PlaneGeometry(150, 150), districtMat);
     district.rotation.x = -Math.PI / 2;
     district.position.y = SURFACE_Y.district;
@@ -110,7 +117,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
     district.renderOrder = RENDER_ORDER.district;
     scene.add(district);
 
-    const plazaMat = createLayerMaterial({ color: isNight ? 0xb0afa8 : 0xe8e7e4, roughness: 0.9, tex: 'ground5', rx: 10, ry: 10 });
+    const plazaMat = createLayerMaterial({ color: isNight ? 0xb0afa8 : 0xe8e7e4, roughness: 0.9 });
     const plaza = createMesh(new THREE.PlaneGeometry(40, 40), plazaMat);
     plaza.rotation.x = -Math.PI / 2;
     plaza.position.y = SURFACE_Y.plaza;
@@ -118,7 +125,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
     plaza.renderOrder = RENDER_ORDER.plaza;
     scene.add(plaza);
 
-    const grassMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 12, ry: 12 });
+    const grassMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1 });
     const grassPositions: Array<[number, number]> = [[24, 24], [24, -24], [-24, 24], [-24, -24]];
     for (const [x, z] of grassPositions) {
       const grass = createMesh(new THREE.PlaneGeometry(24, 24), grassMat);
@@ -129,7 +136,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
       scene.add(grass);
     }
 
-    const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 8, ry: 6 });
+    const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1 });
     const echoGround = createMesh(new THREE.PlaneGeometry(ECHO_OBSERVATORY_AREA.width, ECHO_OBSERVATORY_AREA.depth), echoGroundMat);
     echoGround.rotation.x = -Math.PI / 2;
     echoGround.position.set(ECHO_OBSERVATORY_AREA.center[0], SURFACE_Y.district, ECHO_OBSERVATORY_AREA.center[1]);
@@ -144,6 +151,29 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
       { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
     );
+
+    // Use small classified tiles for the textured ground layer. The plain
+    // underlay remains visible in locked zones, while these tiles disappear.
+    const tileSize = 8;
+    const halfExtent = 112;
+    for (let x = -halfExtent; x < halfExtent; x += tileSize) {
+      for (let z = -halfExtent; z < halfExtent; z += tileSize) {
+        const zone = classifyZone(x + tileSize / 2, z + tileSize / 2);
+        let bucket = zoneGroundBuckets.get(zone);
+        if (!bucket) {
+          bucket = new THREE.Group();
+          bucket.name = `zone-ground:${zone}`;
+          zoneGroundBuckets.set(zone, bucket);
+          scene.add(bucket);
+        }
+        const tile = createMesh(new THREE.PlaneGeometry(tileSize, tileSize), createLayerMaterial({ color: 0xffffff, roughness: 1, tex: 'ground6', rx: 2, ry: 2 }));
+        tile.rotation.x = -Math.PI / 2;
+        tile.position.set(x + tileSize / 2, SURFACE_Y.base + 0.002, z + tileSize / 2);
+        tile.receiveShadow = true;
+        tile.renderOrder = RENDER_ORDER.base + 1;
+        bucket.add(tile);
+      }
+    }
   }
 
   function addPaths(): void {
@@ -329,6 +359,13 @@ export function createCitySurfaces(options: CitySurfaceOptions): CitySurfacesApi
   return {
     setZoneRoadsVisible: (zone: ZoneId, visible: boolean) => {
       for (const handle of zoneRoadHandles) {
+        if (handle.zone !== zone) continue;
+        handle.batch.setVisible(handle.key, visible);
+        handle.root.visible = visible;
+      }
+    },
+    setZoneGroundVisible: (zone: ZoneId, visible: boolean) => {
+      for (const handle of zoneGroundHandles) {
         if (handle.zone !== zone) continue;
         handle.batch.setVisible(handle.key, visible);
         handle.root.visible = visible;

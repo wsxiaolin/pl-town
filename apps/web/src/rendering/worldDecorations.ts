@@ -73,6 +73,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   const residenceDamageVisible = new Map<string, boolean>();
   const residenceZoneVisible = new Map<string, boolean>();
   const residencePlots = new Map<string, THREE.Mesh>();
+  const residenceGroups = new Map<string, THREE.Object3D>();
   const pushZoneEntry = <T>(store: Map<ZoneId, T[]>, zone: ZoneId, entry: T): void => {
     const list = store.get(zone) ?? [];
     list.push(entry);
@@ -280,6 +281,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     residenceZoneOf.set(residenceId, classifyZone(x,z));
     residenceDamageVisible.set(residenceId, true);
     residenceZoneVisible.set(residenceId, true);
+    residenceGroups.set(residenceId, g);
     g.position.set(x,y,z); g.rotation.y=(variationSeed%4)*Math.PI/2;
     g.traverse((object: THREE.Object3D)=>{ if('isMesh' in object && object.isMesh) { object.userData.residenceId=residenceId; object.userData.residenceStyleId=styleId; } });
     scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g, 4);
@@ -566,6 +568,8 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   // 民居可见性 = 未被摧毁 && 分区已解锁（两路标志位合并）
   function applyResidenceVisibility(residenceId: string): void {
     const visible = (residenceDamageVisible.get(residenceId) ?? true) && (residenceZoneVisible.get(residenceId) ?? true);
+    const group = residenceGroups.get(residenceId);
+    if (group) group.visible = visible;
     residenceVisualBatch?.setVisible(residenceId, visible);
     const plot = residencePlots.get(residenceId);
     if (plot) plot.visible = visible;
