@@ -98,7 +98,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   }, { signal: options.signal });
 
   zone?.addEventListener('pointerdown', (event) => {
-    if (event.pointerType === 'mouse' || pointerId !== null) return;
+    if (event.button !== 0 || pointerId !== null) return;
     event.preventDefault();
     event.stopPropagation();
     pointerId = event.pointerId;

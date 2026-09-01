@@ -294,6 +294,28 @@ test.describe('touch-capable tablet', () => {
     await expect(base).toHaveCSS('opacity', '0');
   });
 
+  test('mouse press on the wheel capture area reveals the joystick like a touch', async ({ page }) => {
+    await enterCity(page);
+    const control = page.locator('#movementControl');
+    const base = page.locator('#movementControlBase');
+    await expect(control).toBeVisible();
+    await expect(base).toHaveCSS('opacity', '0');
+    const bounds = await control.boundingBox();
+    expect(bounds).not.toBeNull();
+    const start = { x: bounds!.x + 86, y: bounds!.y + 110 };
+    const before = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await expect(base).toHaveCSS('opacity', '1');
+    await page.mouse.move(start.x + 52, start.y, { steps: 2 });
+    await expect.poll(async () => {
+      const after = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
+      return Math.hypot(after[0] - before[0], after[2] - before[2]);
+    }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.1);
+    await page.mouse.up();
+    await expect(base).toHaveCSS('opacity', '0');
+  });
+
   test('long touch drags the camera without starting a walking route', async ({ page }) => {
     await enterCity(page);
     const start = await page.evaluate(() => {
