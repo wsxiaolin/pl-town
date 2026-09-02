@@ -49,6 +49,9 @@ test('desktop keyboard moves the player while the touch wheel stays hidden', asy
   }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.1);
   await page.keyboard.up('KeyW');
   await expect(page.locator('#movementControl')).toBeHidden();
+  await page.mouse.click(80, 700);
+  await expect(page.locator('#movementControl')).toBeHidden();
+  await expect(page.locator('#movementControlBase')).toHaveCSS('opacity', '0');
 });
 
 test('canvas click keeps automatic movement and produces a collision-safe route', async ({ page }) => {
@@ -269,7 +272,7 @@ test('repeated clicks keep an active automatic route', async ({ page }) => {
 test.describe('touch-capable tablet', () => {
   test.use({ hasTouch: true, viewport: { width: 1024, height: 768 } });
 
-  test('wheel capture area is available but its graphics wait for interaction', async ({ page }) => {
+  test('wheel capture area is available but its graphics wait for a touch drag', async ({ page }) => {
     await enterCity(page);
     const control = page.locator('#movementControl');
     const base = page.locator('#movementControlBase');
@@ -281,8 +284,9 @@ test.describe('touch-capable tablet', () => {
   const before = await page.evaluate(() => (window as any)._mini.player.position.clone().toArray());
     const client = await page.context().newCDPSession(page);
     await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }] });
-    await expect(base).toHaveCSS('opacity', '1');
+    await expect(base).toHaveCSS('opacity', '0');
     await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x + 52, y: start.y, id: 1, radiusX: 2, radiusY: 2 }] });
+    await expect(base).toHaveCSS('opacity', '1');
     // Under software-GL / parallel load the frame loop advances slower, so a
     // fixed 350ms wait under-shoots the 0.3 threshold. Poll for the player to
     // actually travel past it instead of asserting on a single snapshot.
@@ -292,6 +296,22 @@ test.describe('touch-capable tablet', () => {
     }, { timeout: 5_000, intervals: [100, 200, 300] }).toBeGreaterThan(0.3);
     await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await expect(base).toHaveCSS('opacity', '0');
+  });
+
+  test('a tap on the left keeps the wheel hidden', async ({ page }) => {
+    await enterCity(page);
+    const control = page.locator('#movementControl');
+    const base = page.locator('#movementControlBase');
+    await expect(control).toBeVisible();
+    const bounds = await control.boundingBox();
+    expect(bounds).not.toBeNull();
+    const start = { x: bounds!.x + 86, y: bounds!.y + 110 };
+    const client = await page.context().newCDPSession(page);
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }] });
+    await expect(base).toHaveCSS('opacity', '0');
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(base).toHaveCSS('opacity', '0');
+    await expect(control).not.toHaveClass(/active/);
   });
 
   test('long touch drags the camera without starting a walking route', async ({ page }) => {
