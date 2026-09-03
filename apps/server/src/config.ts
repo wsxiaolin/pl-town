@@ -145,8 +145,7 @@ if (new Set(ADMIN_ACCOUNTS.map((account) => account.username)).size !== ADMIN_AC
 }
 if (IS_PRODUCTION && !ADMIN_ENABLED) throw new Error('Production requires at least one administrator account');
 if (IS_PRODUCTION && ALLOWED_ORIGINS.size === 0) throw new Error('Production requires at least one ALLOWED_ORIGINS entry');
-if (IS_PRODUCTION && !BIGMODEL_API_KEY) throw new Error('Production requires BIGMODEL_API_KEY for chat moderation');
-if (IS_PRODUCTION && new URL(BIGMODEL_MODERATION_URL).protocol !== 'https:') throw new Error('Production requires an HTTPS BIGMODEL_MODERATION_URL');
+if (IS_PRODUCTION && BIGMODEL_API_KEY && new URL(BIGMODEL_MODERATION_URL).protocol !== 'https:') throw new Error('Production requires an HTTPS BIGMODEL_MODERATION_URL');
 if (OSS_ENABLED && !OFFSITE_BACKUP_ENABLED) throw new Error('OSS_ENABLED requires OSS_BUCKET, OSS_ACCESS_KEY_ID, and OSS_ACCESS_KEY_SECRET');
 if (OSS_ENABLED && OSS_REGION === '' && OSS_ENDPOINT === '') throw new Error('OSS_ENABLED requires OSS_REGION or OSS_ENDPOINT');
 if (OSS_ENABLED && OSS_PREFIX.startsWith('/')) throw new Error('OSS_PREFIX must not start with a slash');
