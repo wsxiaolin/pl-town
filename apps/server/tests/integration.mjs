@@ -27,6 +27,29 @@ const multiAdminConfigCheck = spawnSync(process.execPath, ['--input-type=module'
 if (multiAdminConfigCheck.status !== 0 || !multiAdminConfigCheck.stdout.includes('true:2')) {
   throw new Error(`Production configuration must support JSON-only administrator accounts:\n${multiAdminConfigCheck.stderr}`);
 }
+const noModerationKeyConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js').then((config) => console.log(`${config.IS_PRODUCTION}`))"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', BIGMODEL_API_KEY: '',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (noModerationKeyConfigCheck.status !== 0) {
+  throw new Error(`Production configuration must load without BIGMODEL_API_KEY (chat moderation is optional):\n${noModerationKeyConfigCheck.stderr}`);
+}
+const insecureModerationUrlConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', BIGMODEL_API_KEY: 'integration-api-key',
+    BIGMODEL_MODERATION_URL: 'http://127.0.0.1:8792/moderations',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (insecureModerationUrlConfigCheck.status === 0 || !`${insecureModerationUrlConfigCheck.stdout}${insecureModerationUrlConfigCheck.stderr}`.includes('HTTPS BIGMODEL_MODERATION_URL')) {
+  throw new Error('Production configuration must reject a non-HTTPS BIGMODEL_MODERATION_URL when moderation is configured');
+}
 const ossIncompleteConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
   cwd: new URL('..', import.meta.url),
   env: {
