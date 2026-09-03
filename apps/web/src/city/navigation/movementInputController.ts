@@ -8,6 +8,7 @@ export type MovementInputControllerOptions = {
 };
 
 const JOYSTICK_RADIUS = 42;
+const DRAG_REVEAL_DISTANCE = 12;
 
 export function screenVectorToWorld(
   screenX: number,
@@ -44,12 +45,24 @@ export function createMovementInputController(options: MovementInputControllerOp
   let pointerId: number | null = null;
   let centerX = 0;
   let centerY = 0;
+  let startX = 0;
+  let startY = 0;
+  let pending = false;
   let active = false;
   let locked = false;
 
   const touchCapable = options.window.navigator.maxTouchPoints > 0
     || options.window.matchMedia('(any-pointer: coarse)').matches;
   options.document.body.classList.toggle('touch-movement-enabled', touchCapable);
+
+  const isTouchPointer = (event: PointerEvent) => event.pointerType === 'touch' || event.pointerType === 'pen';
+
+  const zoneContains = (clientX: number, clientY: number) => {
+    if (!zone) return false;
+    const bounds = zone.getBoundingClientRect();
+    return clientX >= bounds.left && clientX <= bounds.right
+      && clientY >= bounds.top && clientY <= bounds.bottom;
+  };
 
   const beginManualMovement = () => {
     if (active) return;
@@ -71,11 +84,25 @@ export function createMovementInputController(options: MovementInputControllerOp
 
   const finishPointer = () => {
     pointerId = null;
+    pending = false;
     joystick.x = 0;
     joystick.z = 0;
     stick?.style.removeProperty('transform');
     zone?.classList.remove('active');
     active = keys.size > 0;
+  };
+
+  const revealJoystick = (clientX: number, clientY: number) => {
+    pending = false;
+    if (!zone) return;
+    const bounds = zone.getBoundingClientRect();
+    centerX = startX;
+    centerY = startY;
+    base?.style.setProperty('left', `${centerX - bounds.left}px`);
+    base?.style.setProperty('top', `${centerY - bounds.top}px`);
+    zone.classList.add('active');
+    beginManualMovement();
+    updateStick(clientX, clientY);
   };
 
   options.window.addEventListener('keydown', (event) => {
@@ -97,31 +124,34 @@ export function createMovementInputController(options: MovementInputControllerOp
     finishPointer();
   }, { signal: options.signal });
 
-  zone?.addEventListener('pointerdown', (event) => {
-    if (event.pointerType === 'mouse' || pointerId !== null) return;
-    event.preventDefault();
-    event.stopPropagation();
+  options.window.addEventListener('pointerdown', (event) => {
+    if (!isTouchPointer(event) || pointerId !== null || locked) return;
+    if (!zoneContains(event.clientX, event.clientY)) return;
     pointerId = event.pointerId;
-    const target = event.currentTarget as HTMLElement;
-    target.setPointerCapture(event.pointerId);
-    const bounds = target.getBoundingClientRect();
-    centerX = event.clientX;
-    centerY = event.clientY;
-    base?.style.setProperty('left', `${centerX - bounds.left}px`);
-    base?.style.setProperty('top', `${centerY - bounds.top}px`);
-    target.classList.add('active');
-    beginManualMovement();
-    updateStick(event.clientX, event.clientY);
+    startX = event.clientX;
+    startY = event.clientY;
+    pending = true;
   }, { signal: options.signal });
 
-  zone?.addEventListener('pointermove', (event) => {
+  options.window.addEventListener('pointermove', (event) => {
     if (event.pointerId !== pointerId) return;
+    if (pending) {
+      if (options.document.body.classList.contains('camera-pan-active')) {
+        pointerId = null;
+        pending = false;
+        return;
+      }
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) < DRAG_REVEAL_DISTANCE) return;
+      event.preventDefault();
+      revealJoystick(event.clientX, event.clientY);
+      return;
+    }
     event.preventDefault();
     updateStick(event.clientX, event.clientY);
-  }, { signal: options.signal });
+  }, { passive: false, signal: options.signal });
 
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
-    zone?.addEventListener(type, (event) => {
+  for (const type of ['pointerup', 'pointercancel'] as const) {
+    options.window.addEventListener(type, (event) => {
       if (event.pointerId === pointerId) finishPointer();
     }, { signal: options.signal });
   }
