@@ -20,9 +20,14 @@ HOST=0.0.0.0
 ADMIN_USERNAME=<测试管理员>
 ADMIN_PASSWORD=<至少 16 字符的随机测试密码>
 ALLOWED_ORIGINS=https://<测试前端域名>
+BIGMODEL_API_KEY=<测试用智谱 API Key>
 TRUST_PROXY_HOPS=1
 AUTO_BACKUP_ENABLED=false
 ```
+
+`NODE_ENV=production` 时服务启动前会强制校验：`BIGMODEL_API_KEY` 必填（聊天内容安全审核用）、`ALLOWED_ORIGINS` 至少一项、`ADMIN_PASSWORD` 至少 16 字符，任一缺失服务直接拒绝启动。Render 会自动注入 `PORT` 环境变量，服务按其监听，无需手动设置。需要多个测试管理员时，可另设 `ADMIN_ACCOUNTS_JSON='{"operator2":"至少 16 字符的密码"}'`。
+
+生产模式下 `ALLOW_ORIGINLESS_WEBSOCKET` 默认关闭，浏览器直连 `wss://<后端域名>` 会携带前端 Origin，只要该 Origin 在 `ALLOWED_ORIGINS` 中即可正常建立 WebSocket。
 
 不要设置 `DATA_DIR` 到所谓长期路径，也不要把 Render 上生成的居民、住房或剧情数据视为可保留数据。Render 默认文件系统是临时的，重启或重新部署可能清空 SQLite。测试账号和密码不得与生产复用。
 
