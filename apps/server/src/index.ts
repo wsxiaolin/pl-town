@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
-import { authenticate, RegistrationLimitError, tokenHash } from './auth.js';
+import { authenticate, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import { ChatModerationService } from './chatModerationService.js';
@@ -54,7 +54,7 @@ const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readySt
 // players: `hello`, the roster and `player.joined` reach every online client.
 const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position });
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
-const fail = (socket: WebSocket, message: string) => send(socket, { type: 'error', message });
+const fail = (socket: WebSocket, message: string, code?: string) => send(socket, { type: 'error', message, ...(code ? { code } : {}) });
 const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
 chatModeration.start();
 let housingBroadcastTimer: NodeJS.Timeout | undefined;
@@ -126,7 +126,8 @@ async function handle(client: Client, raw: string) {
     if (client.ready || client.authInProgress) { fail(client.socket, 'Already authenticating'); return; }
     if ((message.token !== undefined && typeof message.token !== 'string')
       || (message.nickname !== undefined && typeof message.nickname !== 'string')
-      || (message.password !== undefined && typeof message.password !== 'string')) return fail(client.socket, 'Invalid authentication message');
+      || (message.password !== undefined && typeof message.password !== 'string')
+      || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string'))) return fail(client.socket, 'Invalid authentication message');
     client.authInProgress = true;
     const address = client.ip;
     const attempt = authAttempts.get(address) ?? { count: 0, startedAt: now };
@@ -136,11 +137,28 @@ async function handle(client: Client, raw: string) {
     let result: Awaited<ReturnType<typeof authenticate>>;
     try {
       const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
-      result = await authenticate({ token: message.token, nickname: message.nickname, password: message.password, ip: address, registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP } });
+      result = await authenticate({
+        token: message.token, nickname: message.nickname, password: message.password, ip: address,
+        registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP },
+        pl: message.pl,
+        // Physics Lab ownership verification relays a credential check to the
+        // upstream account API; it shares the Physics Lab login budget so
+        // would-be relays cannot use residents as a guessing proxy.
+        plVerifyGuard: () => {
+          const physicsAttempt = physicsLoginAttempts.get(address) ?? { count: 0, startedAt: Date.now() };
+          if (Date.now() - physicsAttempt.startedAt >= 60_000) { physicsAttempt.startedAt = Date.now(); physicsAttempt.count = 0; }
+          if (++physicsAttempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE || !globalPhysicsLoginRate.consume('global').allowed) {
+            logger.warn('Physics Lab verification rate limit exceeded', { ip: address });
+            throw new Error('物实验证尝试过于频繁，请稍后再试');
+          }
+          physicsLoginAttempts.set(address, physicsAttempt);
+        },
+      });
     } catch (error) {
       const reason = error instanceof Error ? error.message : '登录失败';
+      const code = error instanceof PhysicsLabVerificationRequiredError ? error.code : undefined;
       logger.warn('Login failed', { ip: address, reason });
-      fail(client.socket, reason);
+      fail(client.socket, reason, code);
       client.authInProgress = false;
       return;
     }
@@ -396,8 +414,9 @@ const http = createServer(async (request, response) => {
       if (respondHttpBodyError(response, error)) return;
       const message = error instanceof Error ? error.message : '登录失败';
       const status = error instanceof RegistrationLimitError ? 429 : 401;
+      const code = error instanceof PhysicsLabVerificationRequiredError ? error.code : undefined;
       response.writeHead(status, { ...headers, 'cache-control': 'no-store' });
-      response.end(JSON.stringify({ error: message }));
+      response.end(JSON.stringify(code ? { error: message, code } : { error: message }));
     }
     return;
   }

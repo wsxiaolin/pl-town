@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -98,6 +98,39 @@ await new Promise((resolve, reject) => {
   moderationServer.once('error', reject);
   moderationServer.listen(moderationPort, '127.0.0.1', resolve);
 });
+// Stub of the Physics Lab community API: GetUser answers existence (Status
+// 200 with the owner or Status 404), Authenticate answers credential checks.
+// Only 'TakenPlResident' exists upstream, owned by owner@example.com.
+const physicsLabPort = 8793;
+const physicsLabServer = createServer(async (request, response) => {
+  let raw = '';
+  for await (const chunk of request) raw += chunk;
+  const body = JSON.parse(raw || '{}');
+  const reply = (status, payload) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload)); };
+  if (request.url === '/Users/GetUser') {
+    if (body.Name === 'TakenPlResident') return reply(200, { Status: 200, Message: '', Data: { User: { ID: 'pl-owner-1', Nickname: 'TakenPlResident' } } });
+    return reply(404, { Status: 404, Message: 'Standard.404', Data: null });
+  }
+  if (request.url === '/Users/Authenticate') {
+    // Anonymous session (Login/Password null) is what the server uses for
+    // public nickname lookups; it must return usable Token/AuthCode headers.
+    if (body.Login == null && body.Password == null) {
+      return reply(200, { Status: 200, Message: '', Token: 'stub-token', AuthCode: 'stub-auth-code', Data: null });
+    }
+    const accounts = {
+      'owner@example.com': { password: 'pl-owner-password', user: { ID: 'pl-owner-1', Nickname: 'TakenPlResident' } },
+      'other@example.com': { password: 'pl-other-password', user: { ID: 'pl-other-1', Nickname: 'OtherPlResident' } },
+    };
+    const account = accounts[body.Login];
+    if (account && body.Password === account.password) return reply(200, { Status: 200, Message: '', Token: 'stub-token', AuthCode: 'stub-auth-code', Data: { User: account.user } });
+    return reply(403, { Status: 403, Message: 'Login.Password.Invalid', Data: null });
+  }
+  return reply(404, { Status: 404, Message: 'Standard.404', Data: null });
+});
+await new Promise((resolve, reject) => {
+  physicsLabServer.once('error', reject);
+  physicsLabServer.listen(physicsLabPort, '127.0.0.1', resolve);
+});
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
@@ -105,6 +138,9 @@ const server = spawn(process.execPath, ['dist/index.js'], {
     ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'integration-admin-password',
     ADMIN_ACCOUNTS_JSON: JSON.stringify({ reviewer: 'integration-reviewer-password' }),
     AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
+    // The suite signs up more residents than the production per-IP default.
+    MAX_REGISTRATIONS_PER_IP: '12',
+    PHYSICS_LAB_API_BASE: `http://127.0.0.1:${physicsLabPort}`,
     BIGMODEL_API_KEY: 'integration-api-key', BIGMODEL_MODERATION_URL: `http://127.0.0.1:${moderationPort}/moderations`,
   },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -114,30 +150,33 @@ server.stdout.on('data', (chunk) => {
   serverStartupOutput = `${serverStartupOutput}${chunk}`.slice(-16_384);
 });
 
-const connect = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
+const connect = (nickname, password = 'resident-secret', pl) => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages = [];
+  let ready = false;
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for hello for ${nickname}`)); }, 5_000);
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
     messages.push(message);
-    if (message.type === 'hello') resolve({ socket, hello: message, messages });
+    if (message.type === 'hello') { ready = true; clearTimeout(timeout); resolve({ socket, hello: message, messages }); }
+    // Only pre-hello errors are authentication failures; gameplay errors
+    // arriving after `hello` belong to the scenario under test.
+    else if (message.type === 'error' && !ready) { clearTimeout(timeout); socket.terminate(); reject(new Error(`Unexpected auth error for ${nickname}: ${message.message}`)); }
   });
-  socket.on('error', reject);
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password })));
+  socket.on('error', (event) => { clearTimeout(timeout); reject(event); });
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password, ...(pl ? { pl } : {}) })));
 });
 
-const connectExpectingError = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
+const connectExpectingError = (nickname, password = 'resident-secret', pl) => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for auth error for ${nickname}`)); }, 5_000);
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
-    if (message.type === 'error') { socket.close(); resolve(message.message); }
+    if (message.type === 'error') { clearTimeout(timeout); socket.close(); resolve(message); }
+    else if (message.type === 'hello') { clearTimeout(timeout); socket.terminate(); reject(new Error(`${nickname} unexpectedly signed in instead of being rejected`)); }
   });
-  socket.on('error', reject);
-  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for auth error for ${nickname}`)), 3_000);
-  socket.on('open', () => {
-    socket.send(JSON.stringify({ type: 'hello', nickname, password }));
-    setTimeout(() => { clearTimeout(timeout); if (socket.readyState === socket.OPEN) socket.close(); }, 1_000);
-  });
+  socket.on('error', (event) => { clearTimeout(timeout); reject(event); });
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password, ...(pl ? { pl } : {}) })));
 });
 
 const rejectedWebSocketOrigin = () => new Promise((resolve, reject) => {
@@ -156,19 +195,22 @@ const waitForClose = (client) => new Promise((resolve, reject) => {
   client.socket.once('close', () => { clearTimeout(timeout); resolve(); });
 });
 
-const waitFor = (client, type, predicate = () => true) => new Promise((resolve, reject) => {
-  const existing = client.messages.find((message) => message.type === type && predicate(message));
-  if (existing) return resolve(existing);
-  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${type}`)), 3_000);
-  const listener = (raw) => {
-    const message = JSON.parse(raw);
-    if (message.type !== type || !predicate(message)) return;
-    clearTimeout(timeout);
-    client.socket.off('message', listener);
-    resolve(message);
-  };
-  client.socket.on('message', listener);
-});
+const waitFor = (client, type, predicate = () => true) => {
+  const callSite = new Error().stack?.split('\n')[2]?.trim() ?? 'unknown';
+  return new Promise((resolve, reject) => {
+    const existing = client.messages.find((message) => message.type === type && predicate(message));
+    if (existing) return resolve(existing);
+    const timeout = setTimeout(() => { writeFileSync('/tmp/server-startup-dump.log', serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
+    const listener = (raw) => {
+      const message = JSON.parse(raw);
+      if (message.type !== type || !predicate(message)) return;
+      clearTimeout(timeout);
+      client.socket.off('message', listener);
+      resolve(message);
+    };
+    client.socket.on('message', listener);
+  });
+};
 
 const send = (client, message) => client.socket.send(JSON.stringify(message));
 const waitForServer = () => new Promise((resolve, reject) => {
@@ -467,6 +509,20 @@ try {
   const wrongPassword = await connectExpectingError('Alice', 'wrong-pass');
   if (!wrongPassword) throw new Error('Wrong password should be rejected');
 
+  // ── 物实昵称占用与本人验证 ───────────────────────────────────
+  const plClaim = await connectExpectingError('TakenPlResident');
+  if (!plClaim || plClaim.code !== 'pl-verification-required') throw new Error('A nickname owned by a Physics Lab account must demand ownership verification');
+  const plWrongPassword = await connectExpectingError('TakenPlResident', 'resident-secret', { login: 'owner@example.com', password: 'wrong-password' });
+  if (!plWrongPassword) throw new Error('Wrong Physics Lab credentials must not verify nickname ownership');
+  const plMismatched = await connectExpectingError('TakenPlResident', 'resident-secret', { login: 'other@example.com', password: 'pl-other-password' });
+  if (!plMismatched) throw new Error('A different Physics Lab account must not verify nickname ownership');
+  const plOwner = await connect('TakenPlResident', 'resident-secret', { login: 'owner@example.com', password: 'pl-owner-password' });
+  if (!plOwner.hello.user?.nickname) throw new Error('Proving Physics Lab ownership must grant the claimed nickname');
+  plOwner.socket.close();
+  const plFreeName = await connect('UnclaimedPlName');
+  if (!plFreeName.hello.user?.nickname) throw new Error('A nickname absent from Physics Lab must register without verification');
+  plFreeName.socket.close();
+
   const buildingId = 'residence:3.00:4.00';
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
@@ -577,7 +633,7 @@ try {
     body: JSON.stringify({ nickname: 'NpcEditor', password: 'npc-edit-test-password' }),
   });
   const npcEditLoginPayload = await npcEditLogin.json();
-  if (!npcEditLogin.ok || !npcEditLoginPayload.token || npcEditLoginPayload.user?.nickname !== 'NpcEditor') throw new Error('NPC edit page must support independent resident sign-in');
+  if (!npcEditLogin.ok || !npcEditLoginPayload.token || npcEditLoginPayload.user?.nickname !== 'NpcEditor') throw new Error(`NPC edit page must support independent resident sign-in: status=${npcEditLogin.status} body=${JSON.stringify(npcEditLoginPayload).slice(0, 300)}`);
   const tokenRestore = await fetch(`${adminOrigin}/town-api/npc-edit-login`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
     body: JSON.stringify({ token: npcEditLoginPayload.token }),
@@ -747,6 +803,7 @@ try {
     await exited;
   }
   await new Promise((resolve) => moderationServer.close(resolve));
+  await new Promise((resolve) => physicsLabServer.close(resolve));
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       rmSync(dataDir, { recursive: true, force: true });

@@ -54,7 +54,7 @@ export type ChatMessage = {
 };
 
 export type ClientMessage =
-  | { type: 'hello'; token?: string; nickname?: string; password?: string }
+  | { type: 'hello'; token?: string; nickname?: string; password?: string; pl?: { login: string; password: string } }
   | { type: 'position'; position: Position }
   | { type: 'chat'; text: string }
   | { type: 'progress.get' }
