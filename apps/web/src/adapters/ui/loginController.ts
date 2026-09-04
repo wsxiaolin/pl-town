@@ -7,7 +7,7 @@ export type LoginControllerOptions = {
   checkAchievements: () => void;
   shouldShowIntro: () => boolean;
   startIntro: () => void;
-  proceed: (nickname?: string, password?: string) => void;
+  proceed: (nickname?: string, password?: string, pl?: { login: string; password: string }) => void;
 };
 
 export function createLoginController(options: LoginControllerOptions) {
@@ -57,6 +57,25 @@ export function createLoginController(options: LoginControllerOptions) {
     else showLogin();
   }
 
+  /** Read the Physics Lab ownership-verification fields when they are shown. */
+  function collectPlCredentials(): { login: string; password: string } | undefined | null {
+    const section = document.getElementById('plVerifySection');
+    if (!section || section.hidden) return undefined;
+    const login = (document.getElementById('plLoginInput') as HTMLInputElement | null)?.value.trim() ?? '';
+    const password = (document.getElementById('plPasswordInput') as HTMLInputElement | null)?.value ?? '';
+    if (!login || !password) return null;
+    return { login, password };
+  }
+
+  function hidePlVerification(): void {
+    const section = document.getElementById('plVerifySection');
+    if (section) section.hidden = true;
+    const login = document.getElementById('plLoginInput') as HTMLInputElement | null;
+    const password = document.getElementById('plPasswordInput') as HTMLInputElement | null;
+    if (login) login.value = '';
+    if (password) password.value = '';
+  }
+
   function login(): void {
     const input = document.getElementById('loginInput') as HTMLInputElement | null;
     const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
@@ -65,6 +84,8 @@ export function createLoginController(options: LoginControllerOptions) {
     if (name.length < 2) return setError('Nickname must contain at least two characters.');
     if (!/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
     if (!password) return setError('Enter a password.');
+    const pl = collectPlCredentials();
+    if (pl === null) return setError('请填写物实账号和密码完成身份验证，或换一个昵称。');
     localStorage.setItem('minicityUser', name);
     const stats = options.getStats();
     if (!stats.joinDate) {
@@ -78,7 +99,7 @@ export function createLoginController(options: LoginControllerOptions) {
     overlay?.classList.add('hidden');
     window.setTimeout(() => {
       if (overlay) overlay.style.display = 'none';
-      options.proceed(name, password);
+      options.proceed(name, password, pl);
     }, 550);
   }
 
@@ -87,6 +108,9 @@ export function createLoginController(options: LoginControllerOptions) {
     if (!input) return;
     const name = input.value.trim();
     window.clearTimeout(nicknameFeedbackTimer);
+    // The verification request is nickname-specific: editing the nickname
+    // invalidates it, so put the form back into its plain state.
+    hidePlVerification();
     if (name && !/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
     if (name.length === 1) {
       nicknameFeedbackTimer = window.setTimeout(() => {
@@ -98,5 +122,5 @@ export function createLoginController(options: LoginControllerOptions) {
     setError('');
   }
 
-  return { checkLogin, showLogin, showLoginEntry, login, validateInput };
+  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification };
 }

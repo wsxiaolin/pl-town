@@ -811,7 +811,7 @@ function isResidenceUnavailable(residenceId: string): boolean {
 function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
 function onMouseMove(e: MouseEvent) { interactionPointer.onMouseMove(e); }
 function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
-function setupMultiplayer(nickname: string, password?: string) { multiplayerHousing.connect(nickname, password); }
+function setupMultiplayer(nickname: string, password?: string, pl?: { login: string; password: string }) { multiplayerHousing.connect(nickname, password, pl); }
 function showLoginEntry() { loginController?.showLoginEntry(); }
 function showLoginOverlay() { loginController?.showLogin(); }
 function updateRemotePlayers(delta: number) { multiplayerHousing.updateRemotePlayers(delta); }
@@ -874,12 +874,12 @@ function flushDistance(amount: number) { interactionTracker.flushDistance(amount
 function trackInteraction(buildingId: string) { interactionTracker.trackInteraction(buildingId); }
 function updateWelcome() { /* Cloud progression owns the unique-building threshold and inventory entry. */ }
 
-function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string) {
+function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
   entranceAnimation();
   if(cursorChar){ cursorChar.visible=true; }
   trackingInterval=startTimeTracking();
   localStorage.removeItem('minicityPassword');
-  setupMultiplayer(nickname, password);
+  setupMultiplayer(nickname, password, pl);
   checkAchievements();
 }
 
