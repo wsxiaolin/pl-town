@@ -89,7 +89,7 @@ export async function findPhysicsLabUser(name: string): Promise<PhysicsLabUserLo
     body: JSON.stringify({ Name: name }), signal: AbortSignal.timeout(15_000),
   });
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (data.Status === 404) return { exists: false, userId: null };
+  if (response.status === 404 && data.Status === 404) return { exists: false, userId: null };
   const user = (data.Data as { User?: { ID?: unknown } } | undefined)?.User;
   if (!response.ok || data.Status !== 200 || !user || typeof user.ID !== 'string' || !user.ID) {
     throw new Error(typeof data.Message === 'string' && data.Message ? data.Message : 'Physics Lab user lookup failed');

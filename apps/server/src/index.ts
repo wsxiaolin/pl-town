@@ -127,7 +127,7 @@ async function handle(client: Client, raw: string) {
     if ((message.token !== undefined && typeof message.token !== 'string')
       || (message.nickname !== undefined && typeof message.nickname !== 'string')
       || (message.password !== undefined && typeof message.password !== 'string')
-      || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string'))) return fail(client.socket, 'Invalid authentication message');
+      || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string' || message.pl.login.length > 160 || message.pl.password.length > 256))) return fail(client.socket, 'Invalid authentication message');
     client.authInProgress = true;
     const address = client.ip;
     const attempt = authAttempts.get(address) ?? { count: 0, startedAt: now };
@@ -400,6 +400,10 @@ const http = createServer(async (request, response) => {
         response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
         return;
       }
+      const plBody = typeof body.pl === 'object' && body.pl !== null ? body.pl as { login?: unknown; password?: unknown } : null;
+      if (plBody && (typeof plBody.login !== 'string' || typeof plBody.password !== 'string' || plBody.login.length > 160 || plBody.password.length > 256)) {
+        throw new HttpBodyError('物实账号信息格式不正确', 400);
+      }
       const result = isRestore
         ? await authenticate({ token: body.token as string })
         : await authenticate({
@@ -407,6 +411,15 @@ const http = createServer(async (request, response) => {
             password: typeof body.password === 'string' ? body.password : '',
             ip: requestIp,
             registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
+            pl: typeof plBody?.login === 'string' && typeof plBody.password === 'string'
+              ? { login: plBody.login, password: plBody.password }
+              : undefined,
+            plVerifyGuard: () => {
+              const attempt = physicsLoginAttempts.get(requestIp) ?? { count: 0, startedAt: Date.now() };
+              if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
+              if (++attempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE || !globalPhysicsLoginRate.consume('global').allowed) throw new Error('物实验证尝试过于频繁，请稍后再试');
+              physicsLoginAttempts.set(requestIp, attempt);
+            },
           });
       response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
       response.end(JSON.stringify({ token: result.token, user: result.user }));
