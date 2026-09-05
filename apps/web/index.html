@@ -389,6 +389,27 @@
     </div>
   </div>
 
+  <!-- New-resident onboarding tutorial -->
+  <div class="tutorial-overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle" hidden>
+    <article class="tutorial-card">
+      <header class="tutorial-head">
+        <span class="tutorial-kicker" id="tutorialKicker"></span>
+        <span class="tutorial-count" id="tutorialCount"></span>
+      </header>
+      <h2 class="tutorial-title" id="tutorialTitle"></h2>
+      <p class="tutorial-lead" id="tutorialLead"></p>
+      <ul class="tutorial-hints" id="tutorialHints"></ul>
+      <footer class="tutorial-foot">
+        <div class="tutorial-dots" id="tutorialDots" aria-hidden="true"></div>
+        <div class="tutorial-actions">
+          <button class="tutorial-ghost" id="tutorialSkip" type="button">跳过引导</button>
+          <button class="tutorial-ghost" id="tutorialPrev" type="button">上一步</button>
+          <button class="tutorial-primary" id="tutorialNext" type="button">下一步</button>
+        </div>
+      </footer>
+    </article>
+  </div>
+
   <!-- CG Animation overlay -->
   <div class="cg-overlay" id="cgOverlay" style="display:none">
     <div class="cg-scene-wrap" id="cgSceneWrap"></div>

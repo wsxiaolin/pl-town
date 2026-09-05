@@ -54,6 +54,7 @@ import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPrese
 import { isBuildingDestroyed } from './buildingDamage';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
+import { createOnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
@@ -120,7 +121,7 @@ let yesterdaySongController: ReturnType<typeof createYesterdaySongController>;
 let magiStoryController: ReturnType<typeof createMagiStoryController>;
 let overcoatStoryController: ReturnType<typeof createOvercoatStoryController>;
 let mapController: ReturnType<typeof createMapController>;
-let loginController: ReturnType<typeof createLoginController>;
+let loginController: ReturnType<typeof createLoginController>, onboardingTutorial: ReturnType<typeof createOnboardingTutorialController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
@@ -602,6 +603,9 @@ function init() {
     startIntro: startCG,
     proceed: proceedToCity,
   });
+  onboardingTutorial = createOnboardingTutorialController({ document, signal: eventController.signal });
+  // Only brand-new residents get the guided tour; replay via window._mini.tutorial.start().
+  if (!onboardingTutorial.isCompleted() && !localStorage.getItem('minicityUser')) onboardingTutorial.start();
   statsPanelController = createStatsPanelController({
     getStats,
     getUserId,
@@ -752,6 +756,7 @@ function setupScene() {
     getWeather: () => weather,
     setWeather: (value) => updateWeatherState(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
+    getTutorial: () => onboardingTutorial,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }

@@ -25,6 +25,7 @@ its existing responsibilities are migrated incrementally.
 - `city/progression/`: legacy `minicityStats` compatibility and time-tracking boundary.
 - `rendering/buildingMeshFactory.ts`: building shape catalog; `proceduralTextureLibrary.ts`: canvas textures; `worldDecorations.ts`: trees, lamps, houses, ponds, and street props.
 - `adapters/ui/cityDialogController.ts`: building/NPC dialog DOM; `communityPanelController.ts`: Physics Lab panels; `multiplayerHousingController.ts`: WebSocket presence and housing UI.
+- `adapters/ui/onboardingTutorialController.ts`: new-resident onboarding card shown once per fresh visitor; copy stays in sync with `docs/new-user-guide.md` and is replayable via `window._mini.tutorial`.
 
 ## Ice King feature split
 
