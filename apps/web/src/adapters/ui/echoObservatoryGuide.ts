@@ -4,6 +4,8 @@ export function createEchoObservatoryGuide(document: Document, goToObservatory: 
   const nav = document.createElement('button');
   nav.className = 'echo-story-nav';
   nav.type = 'button';
+  // 引导标记只在玩家进入剧情并首次触发后（story.guide.updated）才显示。
+  nav.hidden = true;
   nav.innerHTML = '<span class="echo-guide-mark" aria-hidden="true"></span><span><strong>回声 · 相遇</strong><small>前往气象观测站寻找林澈</small></span>';
   nav.addEventListener('click', goToObservatory);
   document.body.appendChild(nav);

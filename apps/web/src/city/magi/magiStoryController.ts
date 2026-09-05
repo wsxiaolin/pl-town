@@ -75,6 +75,7 @@ export function createMagiStoryController(options: {
     announceGuide,
     syncActiveActors,
     state,
+    phase: () => flow.phase(),
     dispose,
   };
 }
