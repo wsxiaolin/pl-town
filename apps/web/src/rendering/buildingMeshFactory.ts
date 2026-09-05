@@ -212,8 +212,9 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     part(g, new THREE.BoxGeometry(0.6,0.4,0.6), {color:P.RUIN_GREY,roughness:0.85,tex:'ruin',rx:1,ry:1}, [-0.6,top+0.2,0]);
     part(g, new THREE.BoxGeometry(0.4,0.25,0.4), {color:0xA5A29A,roughness:0.85,tex:'ruin',rx:1,ry:1}, [0.1,top+0.12,0.3]);
     part(g, new THREE.BoxGeometry(0.35,0.15,0.35), {color:0x9A988E,roughness:0.85,tex:'ruin',rx:1,ry:1}, [0.7,top+0.07,-0.2]);
-    // Faded sign (desaturated board)
-    part(g, new THREE.BoxGeometry(0.8,0.4,0.04), {color:0xC8C2B0,roughness:0.9,tex:'wood',rx:1,ry:1}, [0,0.22+bh*0.6,bw/2+0.03]);
+    // Faded sign (desaturated board). Keep it fully in front of the generated
+    // facade plane (bw/2+0.024) so the sign never gets sliced by it.
+    part(g, new THREE.BoxGeometry(0.8,0.4,0.04), {color:0xC8C2B0,roughness:0.9,tex:'wood',rx:1,ry:1}, [0,0.22+bh*0.6,bw/2+0.056]);
     // Overgrown vine
     part(g, new THREE.SphereGeometry(0.18,8,8), {color:0x8A8870,roughness:0.95}, [-0.8,0.22+0.3,0.8]);
     part(g, new THREE.SphereGeometry(0.15,8,8), {color:0x7A7860,roughness:0.95}, [0.9,0.22+0.2,-0.6]);
@@ -265,9 +266,11 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const mainTop = 0.25+mh;
     part(g, new THREE.BoxGeometry(mw+0.18,0.1,md+0.18), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:3,ry:3}, [0,mainTop+0.05,0]);
     const aw=1.05, ah=1.5, ad=1.85;
-    const aX = -(mw/2-aw/2), aZ = md/2+ad/2;
+    // Keep the annex and its roof slab fully beyond the generated facade
+    // plane (md/2+0.024) so neither gets sliced by it and flickers.
+    const aX = -(mw/2-aw/2), aZ = md/2+0.036+ad/2;
     part(g, new THREE.BoxGeometry(aw,ah,ad), {color:0xFDFCFA,roughness:0.1,tex:'wall',rx:1,ry:1}, [aX,0.25+ah/2,aZ]);
-    part(g, new THREE.BoxGeometry(aw+0.14,0.08,ad+0.14), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:2,ry:2}, [aX,0.25+ah+0.04,aZ]);
+    part(g, new THREE.BoxGeometry(aw+0.14,0.08,1.92), {color:P.ROOF_RIM,roughness:0.5,tex:'rooftile',rx:2,ry:2}, [aX,0.25+ah+0.04,md/2+0.036+0.96]);
     ([[-0.7,0.22],[0,0.18],[0.75,0.26]] as const).forEach(([rx,rh]) => {
       part(g, new THREE.BoxGeometry(0.32,rh,0.32), {color:0xF0EFEC,roughness:0.3,tex:'stone',rx:1,ry:1}, [rx,mainTop+0.1+rh/2,-0.5]);
     });
@@ -601,21 +604,22 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     part(g, new THREE.BoxGeometry(2.4,0.55,0.12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.22,roughness:0.3,tex:'fabric',rx:2,ry:1}, [0,signY,bd/2-0.3]);
     part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-1.0,signY,bd/2-0.3]);
     part(g, new THREE.BoxGeometry(0.1,0.55,0.1), {color:0x6A6A6E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [1.0,signY,bd/2-0.3]);
-    // Entrance awning (curved feel via thin slab)
-    part(g, new THREE.BoxGeometry(2.0,0.08,0.9), {color:P.MALL_SIGN,roughness:0.5,tex:'fabric',rx:3,ry:1}, [0,0.25+1.0,bd/2+0.45]);
-    part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-0.9,0.25+0.55,bd/2+0.45], false).rotation.x = Math.PI/2;
-    part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [0.9,0.25+0.55,bd/2+0.45], false).rotation.x = Math.PI/2;
+    // Entrance awning (curved feel via thin slab). Park its back edge past the
+    // generated facade plane (bd/2+0.024) so the slab is never sliced by it.
+    part(g, new THREE.BoxGeometry(2.0,0.08,0.9), {color:P.MALL_SIGN,roughness:0.5,tex:'fabric',rx:3,ry:1}, [0,0.25+1.0,bd/2+0.49]);
+    part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [-0.9,0.25+0.55,bd/2+0.49], false).rotation.x = Math.PI/2;
+    part(g, new THREE.CylinderGeometry(0.05,0.05,0.9,8), {color:0x9A9A9E,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:1}, [0.9,0.25+0.55,bd/2+0.49], false).rotation.x = Math.PI/2;
     // Glass entrance doors
-    part(g, new THREE.BoxGeometry(1.2,1.0,0.04), {color:0xA8C8F8,roughness:0.05,metalness:0.4,transparent:true,opacity:0.85,tex:'glass',rx:1,ry:1}, [0,0.25+0.5,bd/2+0.02], false);
+    part(g, new THREE.BoxGeometry(1.2,1.0,0.04), {color:0xA8C8F8,roughness:0.05,metalness:0.4,transparent:true,opacity:0.85,tex:'glass',rx:1,ry:1}, [0,0.25+0.5,bd/2+0.056], false);
     // Side accent windows (lower band)
     for (let i = 0; i < 4; i++) {
-      part(g, new THREE.BoxGeometry(0.5,0.4,0.02), {color:0xB8D4F0,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [-1.35+i*0.9, 0.25+bh*0.55, bd/2+0.02], false);
+      part(g, new THREE.BoxGeometry(0.5,0.4,0.02), {color:0xB8D4F0,roughness:0.1,metalness:0.3,tex:'glass',rx:1,ry:1}, [-1.35+i*0.9, 0.25+bh*0.55, bd/2+0.056], false);
     }
-    // Accent corner pylon
-    // Offset both exterior faces from the glass walls to prevent z-fighting.
-    const pylonOffset = 0.025;
-    const pylonX = bw/2-0.15+pylonOffset;
-    const pylonZ = -bd/2+0.15-pylonOffset;
+    // Accent corner pylon. Park it fully outside both facade planes
+    // (bw/2+0.024 on the right, -bd/2-0.024 at the back) so it can never
+    // intersect them and flicker in far views.
+    const pylonX = bw/2+0.20;
+    const pylonZ = -bd/2+0.15;
     part(g, new THREE.BoxGeometry(0.3,2.8,0.3), {color:P.MALL_FRAME,roughness:0.4,metalness:0.5,tex:'metal',rx:1,ry:2}, [pylonX,0.25+1.4,pylonZ]);
     part(g, new THREE.SphereGeometry(0.12,12,12), {color:P.MALL_SIGN,emissive:P.MALL_SIGN,emissiveIntensity:0.35}, [pylonX,0.25+2.8+0.12,pylonZ], false);
     // Blue entrance disc
@@ -640,14 +644,16 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     part(g, new THREE.CylinderGeometry(0.05,0.05,bw+0.2,8), {color:0x4A3A2A,roughness:0.5,tex:'wood',rx:2,ry:1}, [0,top+0.1+0.025,0]).rotation.z = Math.PI/2;
     // Front gable
     part(g, new THREE.ConeGeometry(bw/2+0.1,0.6,4), {color:P.SCHOOL_ROOF,roughness:0.5,tex:'rooftile',rx:2,ry:1}, [0,top+0.1+0.3,bw/2-0.05]).rotation.y = Math.PI/4;
-    // Entrance door
-    part(g, new THREE.BoxGeometry(0.5,0.85,0.04), {color:0x6A4A3A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.425,bw/2+0.02], false);
-    part(g, new THREE.BoxGeometry(0.6,0.1,0.1), {color:0x4A3A2A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.85+0.05,bw/2+0.04], false);
+    // Entrance door. Keep all facade details fully in front of the generated
+    // facade plane (bw/2+0.024); overlapping it made the school flicker.
+    const facadeGap = 0.056;
+    part(g, new THREE.BoxGeometry(0.5,0.85,0.04), {color:0x6A4A3A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.425,bw/2+facadeGap], false);
+    part(g, new THREE.BoxGeometry(0.6,0.1,0.1), {color:0x4A3A2A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.85+0.05,bw/2+0.086], false);
     // Front windows (rows)
     for (let i = 0; i < 4; i++) {
       const x = -1.05 + i*0.7;
-      part(g, new THREE.BoxGeometry(0.42,0.42,0.02), {color:0xA8C8E0,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [x, 0.22+bh*0.55, bw/2+0.02], false);
-      ctx2d_windows(g, x, 0.22+bh*0.55, bw/2+0.02);
+      part(g, new THREE.BoxGeometry(0.42,0.42,0.02), {color:0xA8C8E0,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [x, 0.22+bh*0.55, bw/2+facadeGap], false);
+      ctx2d_windows(g, x, 0.22+bh*0.55, bw/2+facadeGap);
     }
     // Flagpole in front
     part(g, new THREE.CylinderGeometry(0.03,0.03,2.4,8), {color:0xD0CFCC,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:2}, [0,0.22+1.2,bw/2+1.0], false);
@@ -775,10 +781,11 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     queenG.position.set(bw/2+0.8, 0, bd/2+0.3);
     queenG.traverse((c: THREE.Object3D) => { if ('isMesh' in c && c.isMesh) c.castShadow = true; });
     g.add(queenG);
-    // Grand entrance
-    part(g, new THREE.BoxGeometry(1.8, 0.1, 0.1), {color:P.ROOF_RIM, roughness:0.4, tex:'stone', rx:1, ry:1}, [0, PLH+1.8, bd/2+0.02], false);
-    part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [-0.9, PLH+0.9, bd/2+0.02], false);
-    part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [0.9, PLH+0.9, bd/2+0.02], false);
+    // Grand entrance. Keep the frame fully in front of the generated facade
+    // plane (bd/2+0.024); the 0.1-deep members otherwise get sliced by it.
+    part(g, new THREE.BoxGeometry(1.8, 0.1, 0.1), {color:P.ROOF_RIM, roughness:0.4, tex:'stone', rx:1, ry:1}, [0, PLH+1.8, bd/2+0.086], false);
+    part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [-0.9, PLH+0.9, bd/2+0.086], false);
+    part(g, new THREE.BoxGeometry(0.3, 1.8, 0.1), {color:0x2A2A2E, roughness:0.3, tex:'stone', rx:1, ry:1}, [0.9, PLH+0.9, bd/2+0.086], false);
     // Checker floor
     for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
       const cw = 0.4, cx = -1.5 + c*cw + cw/2, cz = bd/2 + 0.3 + r*cw + cw/2;
