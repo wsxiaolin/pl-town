@@ -36,14 +36,15 @@ function showRequestPage(): void {
   if (session) $('signedInAs').textContent = `已登录：${session.user.nickname}`;
 }
 
-async function requestSession(body: { token: string } | { nickname: string; password: string }): Promise<Session> {
+async function requestSession(body: { token: string } | { nickname: string; password: string; pl?: { login: string; password: string } }): Promise<Session> {
   let response: Response;
   try {
     response = await fetch('/town-api/npc-edit-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch {
     throw Object.assign(new Error('无法连接服务器，请稍后重试'), { status: 0 });
   }
-  const payload = await response.json().catch(() => ({})) as { error?: string; token?: string; user?: { nickname: string } };
+  const payload = await response.json().catch(() => ({})) as { error?: string; code?: string; token?: string; user?: { nickname: string } };
+  if (payload.code === 'pl-verification-required') $('plVerification').hidden = false;
   if (!response.ok || !payload.token || !payload.user) throw Object.assign(new Error(payload.error || '登录失败'), { status: response.status });
   return { token: payload.token, user: payload.user };
 }
@@ -69,7 +70,10 @@ async function login(event: SubmitEvent): Promise<void> {
   if (button.disabled) return;
   button.disabled = true;
   try {
-    session = await requestSession({ nickname: ($('loginNickname') as HTMLInputElement).value.trim(), password: ($('loginPassword') as HTMLInputElement).value });
+    const plLogin = ($('plLogin') as HTMLInputElement).value.trim();
+    const plPassword = ($('plPassword') as HTMLInputElement).value;
+    if (!$('plVerification').hidden && (!plLogin || !plPassword)) throw new Error('请填写物实账号和密码完成验证');
+    session = await requestSession({ nickname: ($('loginNickname') as HTMLInputElement).value.trim(), password: ($('loginPassword') as HTMLInputElement).value, ...(plLogin && plPassword ? { pl: { login: plLogin, password: plPassword } } : {}) });
     localStorage.setItem(SESSION_KEY, session.token);
     showRequestPage();
   } catch (error) { setStatus(loginStatus, error instanceof Error ? error.message : '登录失败'); return; }

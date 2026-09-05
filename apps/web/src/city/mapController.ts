@@ -459,8 +459,9 @@ export function createMapController(options: MapControllerOptions) {
       }
     }, { signal });
     const view = getWindow();
-    view?.visualViewport?.addEventListener('resize', syncMobileKeyboardState, { signal });
-    view?.addEventListener('resize', syncMobileKeyboardState, { signal });
+    const scheduleMobileKeyboardSync = () => requestAnimationFrame(syncMobileKeyboardState);
+    view?.visualViewport?.addEventListener('resize', scheduleMobileKeyboardSync, { signal });
+    view?.addEventListener('resize', scheduleMobileKeyboardSync, { signal });
     options.document.getElementById('mapTipTele')?.addEventListener('click', () => {
       if (!tipBuilding || !canTeleport()) return;
       const building = tipBuilding;
