@@ -162,6 +162,8 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 根脚本 `npm run check:source-size` 扫描前后端源码：普通逻辑文件上限为 1,000 行，迁移期的 `MiniCityApp.ts` 上限为 2,000 行；`data/` 和 `content/` 配置目录豁免。该检查已接入根级 `npm run typecheck` 和 `npm run build`。超过限制时，应按职责拆分模块，而不是把逻辑伪装成配置。
 
+根脚本 `npm run check:asset-size` 扫描 `apps/web/src/assets`：单文件上限 1 MiB，资产树总量上限 48 MiB，已接入根级 `npm run typecheck` 和 `npm run build`。新增纹理需先经 `pngquant --quality=70-95 --force --skip-if-larger --ext .png` 压缩再提交，完整策略见 `docs/repo-size-reduction.md`。
+
 ## 前端迁移验证
 
 涉及领域规则或模块边界时，至少运行 `npm run check:source-size`、`npm run typecheck`、`npm run test:domain` 和 `npm run build`。只有修改浏览器交互、布局、WebGL 或端到端流程时才运行 `npm run test:web`；如果环境无法启动 Chromium，应在交付说明中明确记录。
