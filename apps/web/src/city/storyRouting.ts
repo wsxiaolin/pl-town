@@ -10,8 +10,8 @@ type StoryRouteController = {
 export type StoryRouteEntry = readonly [string, StoryRouteController];
 
 export type StoryRouter = {
-  routeNpc: (actorId: string, dialogs: CityDialogController) => boolean;
-  routeBuilding: (buildingId: string, dialogs: CityDialogController) => boolean;
+  routeNpc: (actorId: string, dialogs: CityDialogController) => 'handled' | 'blocked' | 'unhandled';
+  routeBuilding: (buildingId: string, dialogs: CityDialogController) => 'handled' | 'blocked' | 'unhandled';
 };
 
 /**
@@ -23,7 +23,7 @@ export function createStoryRouter(options: {
   gate: StoryEntryGate;
   showToast?: (message: string) => void;
 }): StoryRouter {
-  const route = (kind: 'actor' | 'building', targetId: string, dialogs: CityDialogController): boolean => {
+  const route = (kind: 'actor' | 'building', targetId: string, dialogs: CityDialogController): 'handled' | 'blocked' | 'unhandled' => {
     const entries = options.listControllers();
     let blockedByGate = false;
     for (const [id, controller] of entries) {
@@ -33,13 +33,13 @@ export function createStoryRouter(options: {
         continue;
       }
       const handled = kind === 'actor' ? controller.interactNpc(targetId, dialogs) : controller.interactBuilding(targetId, dialogs);
-      if (handled) return true;
+      if (handled) return 'handled';
     }
     if (blockedByGate) {
       options.showToast?.('当前有剧情正在进行中，先完成它吧');
-      return true;
+      return 'blocked';
     }
-    return false;
+    return 'unhandled';
   };
 
   return {

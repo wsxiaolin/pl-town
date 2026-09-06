@@ -60,7 +60,9 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     const dialogs = options.getCityDialogs();
     const storyRouter = options.getStoryRouter?.();
-    if (dialogs && storyRouter?.routeBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
+    const storyResult = dialogs ? storyRouter?.routeBuilding(b.id, dialogs) : 'unhandled';
+    if (storyResult === 'handled') { options.trackInteraction(b.id); return; }
+    if (storyResult === 'blocked') return;
     if (b.isStats) { options.getStatsPanelController()?.open(); options.trackInteraction('stats'); return; }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();

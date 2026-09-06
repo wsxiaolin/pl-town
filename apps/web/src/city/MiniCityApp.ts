@@ -924,10 +924,12 @@ function getQuestProgressView() {
 function recordNpcInteraction(npcId: string) { interactionTracker.recordNpcInteraction(npcId); }
 
 function openNpcDialog(npc: Npc) {
-  if (cityDialogs && storyRouter.routeNpc(npc.profile.id, cityDialogs)) {
+  const storyResult = cityDialogs ? storyRouter.routeNpc(npc.profile.id, cityDialogs) : 'unhandled';
+  if (storyResult === 'handled') {
     recordNpcInteraction(npc.profile.id);
     return;
   }
+  if (storyResult === 'blocked') return;
   cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
 }
 function closeNpcDialog() { cityDialogs?.closeNpc(); }

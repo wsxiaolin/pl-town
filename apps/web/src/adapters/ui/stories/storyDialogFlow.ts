@@ -127,8 +127,8 @@ export function createStoryDialogFlow(
 
   const ownsEntry = (kind: 'actor' | 'building', targetId: string): boolean =>
     kind === 'actor'
-      ? definition.entryActorId === targetId || (definition.interactions ?? []).some((item) => item.actorId === targetId)
-      : (definition.buildingInteractions ?? []).some((item) => item.buildingId === targetId);
+      ? definition.entryActorId === targetId || (definition.interactions ?? []).some((item) => item.actorId === targetId && item.nodeId === runtime.state().nodeId)
+      : (definition.buildingInteractions ?? []).some((item) => item.buildingId === targetId && item.nodeId === runtime.state().nodeId);
 
   return { open, choose, interact, interactBuilding, interactInterestPoint, state: () => runtime.state(), phase: () => getStoryPhase(definition, runtime.state()), ownsEntry, announceGuide, syncWorldInteractions, syncActiveActors };
 }

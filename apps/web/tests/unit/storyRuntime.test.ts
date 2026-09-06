@@ -354,7 +354,7 @@ const router = createStoryRouter({
   gate: createStoryEntryGate(() => [['echo', phaseStub('active')], ['yesterday', phaseStub('untouched')]]),
   showToast: (msg) => toastMessages.push(msg),
 });
-assert(router.routeNpc(actorLincheId, routerDialogs) === true, 'the router delegates to the story that owns the entry');
+assert(router.routeNpc(actorLincheId, routerDialogs) === 'handled', 'the router delegates to the story that owns the entry');
 assert(handledByStory === actorLincheId, 'the owning story receives the interaction');
 
 const blockedRouter = createStoryRouter({
@@ -362,5 +362,5 @@ const blockedRouter = createStoryRouter({
   gate: createStoryEntryGate(() => [['echo', phaseStub('active')], ['yesterday', phaseStub('untouched')]]),
   showToast: (msg) => toastMessages.push(msg),
 });
-assert(blockedRouter.routeNpc(actorLincheId, routerDialogs) === true, 'a gated entry consumes the interaction after showing feedback');
+assert(blockedRouter.routeNpc(actorLincheId, routerDialogs) === 'blocked', 'a gated entry reports a blocked interaction after showing feedback');
 assert(toastMessages.length === 1, 'the player gets feedback when the gate blocks a story entry');
