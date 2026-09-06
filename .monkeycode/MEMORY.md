@@ -86,3 +86,10 @@ Entries discovered by the Agent during task execution should follow this format:
 - Instructions:
   - three.js 场景中同时存在多个 `Water` mirror 对象时，各自的 `onBeforeRender` 会把整个场景重渲染到各自的镜像渲染目标，镜像互相嵌套破坏彼此，导致水面消失/错乱。全场景只保留一个 mirror `Water` 对象。
   - 池塘等小水面用无镜像的轻量 ShaderMaterial 动画水面（`createPondWaterSurface`，位于 `apps/web/src/rendering/animatedWater.ts`），海面（westBeach）保持唯一 mirror `Water`。
+
+[User Instruction Summary]
+- Date: 2026-09-06
+- Context: 修复 PR 后验证 CI
+- Instructions:
+  - CI 验证以远端 GitHub Actions 结果为准，不再主动运行本地 CI 测试。
+  - 等待远端 CI 时使用前台 `sleep` 轮询状态。

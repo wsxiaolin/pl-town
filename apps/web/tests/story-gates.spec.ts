@@ -1,14 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { RENDER_SETTINGS } from './helpers';
-
-async function waitForStoryGateCityBooted(page: import('@playwright/test').Page): Promise<void> {
-  // Telemetry waits on the optional local API server. The gate tests only need
-  // the client city, so continue once its document and debug API are ready.
-  await page.goto('/', { waitUntil: 'commit', timeout: 5_000 }).catch(() => undefined);
-  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 30_000 });
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
-  await page.waitForTimeout(1_000);
-}
+import { RENDER_SETTINGS, waitForCityBooted } from './helpers';
 
 test('echo story entry stays suspended and the guide header stays hidden', async ({ page }) => {
   await page.addInitScript(({ settings }) => {
@@ -16,7 +7,7 @@ test('echo story entry stays suspended and the guide header stays hidden', async
     localStorage.setItem('minicityUser', 'echo-gate-tester');
     localStorage.setItem('minicityRenderSettings', settings);
   }, { settings: RENDER_SETTINGS });
-  await waitForStoryGateCityBooted(page);
+  await waitForCityBooted(page);
 
   // A fresh save never entered the echo story, so the suspended-story guide
   // header must stay hidden instead of floating over the city.
@@ -43,7 +34,7 @@ test('an in-progress story locks other story entries with a toast', async ({ pag
       updatedAt: 1,
     }));
   }, { settings: RENDER_SETTINGS });
-  await waitForStoryGateCityBooted(page);
+  await waitForCityBooted(page);
 
   // With 昨日之歌 active, clicking 林澈 (owned by the suspended echo story)
   // must be blocked by the mutual-exclusion gate and surface a toast.

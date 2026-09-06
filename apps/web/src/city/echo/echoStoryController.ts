@@ -180,7 +180,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   function interactNpc(actorId: string, dialogs: CityDialogController): boolean {
     if (ECHO_STORY_SUSPENDED && getStoryPhase(ECHO_STORY, story.state()) === 'untouched') {
       options.showToast?.('「回声」正在调整中，暂时无法触发');
-      return false;
+      return true;
     }
     const cursor = options.getCursor();
     if (actorId === 'linche' && isCabinNode() && cursor) {
