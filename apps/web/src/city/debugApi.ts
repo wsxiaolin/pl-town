@@ -6,6 +6,7 @@ import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from '
 import { musterCGActive, startMusterCG, stopMusterCG } from './musterCg';
 import { isWeather, type Weather } from './weather';
 import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
+import type { OnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 
 type NpcEntity = Npc;
 
@@ -100,6 +101,7 @@ function createMiniCityApi(options: DebugApiOptions) {
         return true;
       },
     },
+    get tutorial() { return options.getTutorial(); },
   };
 }
 
@@ -135,6 +137,7 @@ export type DebugApiOptions = {
   getWeather: () => Weather;
   setWeather: (weather: Weather) => void;
   getIceSanctum: () => IceSanctumController | null;
+  getTutorial: () => OnboardingTutorialController;
 };
 
 export function installDebugApi(options: DebugApiOptions) {
