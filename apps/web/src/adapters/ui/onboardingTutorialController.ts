@@ -340,12 +340,8 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
     previewTimer = window.setTimeout(() => {
       previewTimer = 0;
       if (!active) return;
-      if (step().target !== '#onlinePanelToggle') dismissTourPanels();
+      dismissTourPanels();
       advance();
-      previewTimer = window.setTimeout(() => {
-        previewTimer = 0;
-        if (active) dismissTourPanels();
-      }, OVERLAY_PREVIEW_MS);
     }, OVERLAY_PREVIEW_MS);
   }
 
@@ -396,7 +392,11 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
 
   skipButton?.addEventListener('click', finish, listenerOptions);
   prevButton?.addEventListener('click', prev, listenerOptions);
-  nextButton?.addEventListener('click', next, listenerOptions);
+  nextButton?.addEventListener('click', (event) => {
+    // The forwarded target click owns panel behavior; keep this click local.
+    event.stopPropagation();
+    next();
+  }, listenerOptions);
   doc.defaultView?.addEventListener('resize', layout, listenerOptions);
   doc.addEventListener('click', onTargetClick, { capture: true, ...listenerOptions });
   doc.addEventListener('keydown', onKeydown, listenerOptions);
