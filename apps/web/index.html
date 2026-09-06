@@ -20,13 +20,27 @@
   </div>
 
   <div class="tutorial-overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle" hidden>
-    <div class="tutorial-orbit" aria-hidden="true"></div>
-    <article class="tutorial-card">
-      <header class="tutorial-head"><span class="tutorial-kicker" id="tutorialKicker"></span><span class="tutorial-count" id="tutorialCount"></span></header>
-      <div class="tutorial-icon" aria-hidden="true">✦</div>
-      <h2 class="tutorial-title" id="tutorialTitle"></h2><p class="tutorial-lead" id="tutorialLead"></p>
-      <ul class="tutorial-hints" id="tutorialHints"></ul>
-      <footer class="tutorial-foot"><div class="tutorial-dots" id="tutorialDots" aria-hidden="true"></div><div class="tutorial-actions"><button class="tutorial-ghost" id="tutorialSkip" type="button">稍后探索</button><button class="tutorial-ghost" id="tutorialPrev" type="button">返回</button><button class="tutorial-primary" id="tutorialNext" type="button">继续探索</button></div></footer>
+    <div class="tutorial-mask" id="tutorialMaskTop" aria-hidden="true"></div>
+    <div class="tutorial-mask" id="tutorialMaskRight" aria-hidden="true"></div>
+    <div class="tutorial-mask" id="tutorialMaskBottom" aria-hidden="true"></div>
+    <div class="tutorial-mask" id="tutorialMaskLeft" aria-hidden="true"></div>
+    <div class="tutorial-hole" id="tutorialHole" aria-hidden="true"></div>
+    <article class="tutorial-card" id="tutorialCard">
+      <header class="tutorial-head">
+        <span class="tutorial-kicker" id="tutorialKicker"></span>
+        <span class="tutorial-count" id="tutorialCount"></span>
+      </header>
+      <h2 class="tutorial-title" id="tutorialTitle"></h2>
+      <p class="tutorial-lead" id="tutorialLead"></p>
+      <p class="tutorial-hint" id="tutorialHint"></p>
+      <footer class="tutorial-foot">
+        <div class="tutorial-dots" id="tutorialDots" aria-hidden="true"></div>
+        <div class="tutorial-actions">
+          <button class="tutorial-ghost" id="tutorialSkip" type="button">跳过</button>
+          <button class="tutorial-ghost" id="tutorialPrev" type="button">上一步</button>
+          <button class="tutorial-primary" id="tutorialNext" type="button">继续</button>
+        </div>
+      </footer>
     </article>
   </div>
 

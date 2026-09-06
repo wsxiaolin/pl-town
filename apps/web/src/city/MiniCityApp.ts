@@ -605,7 +605,6 @@ function init() {
     proceed: proceedToCity,
   });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: eventController.signal });
-  if (!onboardingTutorial.isCompleted() && !localStorage.getItem('minicityUser')) onboardingTutorial.start();
   statsPanelController = createStatsPanelController({
     getStats,
     getUserId,
@@ -756,6 +755,7 @@ function setupScene() {
     getWeather: () => weather,
     setWeather: (value) => updateWeatherState(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
+    getTutorial: () => onboardingTutorial,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -943,10 +943,12 @@ export function startMiniCity() {
     if (!started) return;
     try { init(); } catch (error) { console.error('City initialization failed', error); }
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+    onboardingTutorial?.start();
   }).catch(() => {
     if (!started) return;
     try { init(); } catch (error) { console.error('City initialization failed', error); }
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+    onboardingTutorial?.start();
   });
   initCG({
     onFinish: () => {
