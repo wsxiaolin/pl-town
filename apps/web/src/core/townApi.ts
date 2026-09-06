@@ -1,25 +1,16 @@
 // The frontend ships as a static site while the backend usually lives on a
-// separate origin (Render). HTTP calls therefore resolve against a build-time
-// API base: VITE_API_BASE wins when set, otherwise VITE_SERVER_URL (the
-// WebSocket endpoint) converts from ws(s):// to http(s)://, and when neither
-// is configured requests stay same-origin (local dev proxy and single-domain
-// self-hosted deployments). Cross-origin responses rely on the server's
-// origin allowlist (CORS) mirroring the WebSocket origin check.
+// separate origin (Render). HTTP calls resolve against a build-time API base
+// injected by vite.config.ts: VITE_API_BASE wins when set, otherwise it is
+// derived from VITE_SERVER_URL (wss -> https), and when neither is configured
+// requests stay same-origin (local dev proxy and single-domain self-hosted
+// deployments). Cross-origin responses rely on the server's origin allowlist
+// (CORS) mirroring the WebSocket origin check.
 
-const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
+declare const __TOWN_API_BASE__: string;
 
 const apiBase = (): string => {
-  const explicit = env.VITE_API_BASE?.trim();
-  if (explicit) return explicit.replace(/\/+$/, '');
-  const server = env.VITE_SERVER_URL?.trim();
-  if (server) {
-    try {
-      const url = new URL(server);
-      const protocol = url.protocol === 'wss:' ? 'https:' : url.protocol === 'ws:' ? 'http:' : url.protocol;
-      return `${protocol}//${url.host}`.replace(/\/+$/, '');
-    } catch { return ''; }
-  }
-  return '';
+  const base = typeof __TOWN_API_BASE__ === 'string' ? __TOWN_API_BASE__ : '';
+  return base.replace(/\/+$/, '');
 };
 
 export const townApiUrl = (path: string): string => `${apiBase()}${path}`;
