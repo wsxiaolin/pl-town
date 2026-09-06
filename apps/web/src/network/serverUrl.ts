@@ -1,7 +1,9 @@
 type ServerEnv = { VITE_SERVER_URL?: string; VITE_API_BASE_URL?: string };
 type ServerLocation = Pick<Location, 'hostname' | 'protocol'>;
 
-const environment = (): ServerEnv => (import.meta as ImportMeta & { env?: ServerEnv }).env ?? {};
+declare const __TOWN_SERVER_ENV__: ServerEnv;
+
+const environment = (): ServerEnv => typeof __TOWN_SERVER_ENV__ === 'undefined' ? {} : __TOWN_SERVER_ENV__;
 
 // Product deployment: production and single-label Cloudflare Pages previews.
 const isProductHost = (hostname: string): boolean => /^(?:[a-z0-9-]+\.)?pl-town\.pages\.dev$/i.test(hostname);

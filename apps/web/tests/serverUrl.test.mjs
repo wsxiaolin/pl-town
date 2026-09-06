@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import ts from 'typescript';
 
-// In-memory ESM transpilation keeps import.meta and avoids a production build.
+// In-memory ESM transpilation avoids a production build.
 const moduleUrl = async (path, imports = {}) => {
   let source = await readFile(new URL(path, import.meta.url), 'utf8');
   for (const [specifier, url] of Object.entries(imports)) source = source.replace(`'${specifier}'`, JSON.stringify(url));
@@ -14,6 +14,11 @@ const serverModule = await moduleUrl('../src/network/serverUrl.ts');
 const { getServerUrl, getApiUrl, apiFetch } = await import(serverModule);
 const location = (hostname, protocol = 'https:') => ({ hostname, protocol });
 const path = '/town-api/works?scope=all';
+
+test('missing build-time environment uses defaults in Node', () => {
+  assert.equal(getServerUrl(undefined, location('localhost', 'http:')), 'ws://localhost:8787');
+  assert.equal(getApiUrl(path, undefined, location('localhost', 'http:')), path);
+});
 
 test('explicit URLs win and HTTP uses only the configured origin', () => {
   const host = location('pl-town.pages.dev');

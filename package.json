@@ -12,7 +12,7 @@
     "check:source-size": "node apps/web/check-source-size.mjs",
     "check:asset-size": "node apps/web/check-asset-size.mjs",
     "test": "npm run test:domain && playwright test --config apps/web/playwright.config.ts && npm run test:integration -w @minicity/server",
-    "test:domain": "npm run test:unit -w @minicity/web",
+    "test:domain": "npm run test:unit -w @minicity/web && node --test apps/web/tests/serverUrl.test.mjs",
     "test:web": "playwright test --config apps/web/playwright.config.ts",
     "test:server": "npm run test:integration -w @minicity/server"
   },
