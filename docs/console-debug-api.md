@@ -79,7 +79,7 @@ window._mini.tutorial.close()
 window._mini.tutorial.isCompleted()
 ```
 
-`start(true)` 会强制重看引导。新居民在登录与开场 CG 结束后自动出现一次。
+`start(true)` 会强制重看引导。新居民在登录与开场 CG 结束后自动出现一次，依次点亮走路、地图、手机和登录入口。
 
 ## 调试约定
 

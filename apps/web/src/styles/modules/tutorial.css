@@ -91,8 +91,9 @@
 .tutorial-foot {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 14px;
+  flex-wrap: nowrap;
 }
-.tutorial-dots { display: flex; gap: 5px; }
+.tutorial-dots { display: flex; gap: 5px; flex-shrink: 0; }
 .tutorial-dot {
   width: 6px;
   height: 6px;
@@ -104,7 +105,7 @@
   width: 18px;
   background: #8ec2ff;
 }
-.tutorial-actions { display: flex; gap: 8px; }
+.tutorial-actions { display: flex; flex-wrap: nowrap; gap: 8px; flex-shrink: 0; }
 .tutorial-ghost,
 .tutorial-primary {
   appearance: none;
@@ -114,6 +115,8 @@
   border-radius: 999px;
   padding: 8px 14px;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .tutorial-ghost {
   color: #c2cde0;
@@ -142,7 +145,8 @@
 @media (max-width: 720px) {
   .tutorial-card { width: min(100% - 24px, 380px); padding: 18px 16px 14px; }
   .tutorial-title { font-size: 19px; }
-  .tutorial-foot { flex-wrap: wrap; }
+  .tutorial-foot { gap: 10px; }
+  .tutorial-ghost, .tutorial-primary { padding: 8px 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

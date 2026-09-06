@@ -21,20 +21,13 @@ export type OnboardingTutorialControllerOptions = {
 
 const STEPS: TutorialStep[] = [
   {
-    kicker: 'WELCOME · 新居民报到',
-    title: '欢迎来到物实小城',
-    lead: '这是一座会呼吸的小城。日光、夜色和天气都在慢慢流转，故事藏在街道与建筑里。',
-    hint: '接下来会依次点亮你真正会用到的入口。',
-    placement: 'center',
-  },
-  {
     kicker: 'MOVE · 出发',
     title: '先学会走路',
     lead: '点击道路，角色会沿着路网走过去；键盘也能直接移动。',
     hint: '触屏按住拖动，可唤出方向盘。',
     target: '.you-block',
     placement: 'right',
-    action: '试着点一下道路',
+    action: '点击道路',
   },
   {
     kicker: 'MAP · 全景地图',
@@ -61,13 +54,6 @@ const STEPS: TutorialStep[] = [
     hint: '之后也能从这里重新登录。',
     target: '#logoUser',
     placement: 'bottom',
-  },
-  {
-    kicker: 'READY · 上路吧',
-    title: '故事由你继续',
-    lead: '去遇见街道、建筑和还在等你的人。',
-    hint: '控制台输入 window._mini.tutorial.start() 可重看引导。',
-    placement: 'center',
   },
 ];
 
@@ -103,6 +89,7 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   let calmTimer = 0;
   let layoutTimer = 0;
   let highlighted: Element | null = null;
+  let skipTargetAdvance = false;
 
   function isCompleted(): boolean {
     return storage?.getItem(STORAGE_KEY) === 'done';
@@ -226,7 +213,7 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
       dots.innerHTML = STEPS.map((_, i) => `<i class="tutorial-dot${i === index ? ' is-active' : ''}"></i>`).join('');
     }
     if (prevButton) prevButton.disabled = index === 0;
-    if (nextButton) nextButton.textContent = last ? '进入小城' : (current.action ?? '继续');
+    if (nextButton) nextButton.textContent = last ? '完成' : (current.action ?? '继续');
     overlay?.classList.toggle('is-finale', last);
     layout();
   }
@@ -270,13 +257,32 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
     }, CALM_CHECK_MS);
   }
 
-  function next(): void {
+  function advance(): void {
     if (index >= STEPS.length - 1) {
       close();
       return;
     }
     index += 1;
     render();
+  }
+
+  function clickTarget(): void {
+    const current = step();
+    if (!current.target) return;
+    const target = doc.querySelector(current.target);
+    if (!(target instanceof HTMLElement)) return;
+    skipTargetAdvance = true;
+    target.click();
+    skipTargetAdvance = false;
+  }
+
+  function next(): void {
+    if (index >= STEPS.length - 1) {
+      close();
+      return;
+    }
+    clickTarget();
+    advance();
   }
 
   function prev(): void {
@@ -286,11 +292,11 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   }
 
   function onTargetClick(event: Event): void {
-    if (!active) return;
+    if (!active || skipTargetAdvance) return;
     const current = step();
     if (!current.target) return;
     const target = doc.querySelector(current.target);
-    if (target && (event.target instanceof Node) && target.contains(event.target)) next();
+    if (target && (event.target instanceof Node) && target.contains(event.target)) advance();
   }
 
   skipButton?.addEventListener('click', close);
