@@ -178,7 +178,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   }
 
   function interactNpc(actorId: string, dialogs: CityDialogController): boolean | 'blocked' {
-    if (ECHO_STORY_SUSPENDED && getStoryPhase(ECHO_STORY, story.state()) === 'untouched') {
+    if (actorId === 'linche' && ECHO_STORY_SUSPENDED && getStoryPhase(ECHO_STORY, story.state()) === 'untouched') {
       options.showToast?.('「回声」正在调整中，暂时无法触发');
       return 'blocked';
     }
