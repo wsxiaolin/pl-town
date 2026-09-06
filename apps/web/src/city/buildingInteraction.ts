@@ -11,7 +11,7 @@ export type BuildingInteractionOptions = {
   getCityDialogs: () => CityDialogController | null;
   getEchoStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
   /** 剧情入口统一路由（含互斥判定与被拦提示）。 */
-  getStoryRouter?: () => { routeBuilding: (buildingId: string, dialogs: CityDialogController) => boolean } | null;
+  getStoryRouter?: () => { routeBuilding: (buildingId: string, dialogs: CityDialogController) => 'handled' | 'blocked' | 'unhandled' } | null;
   getStatsPanelController: () => { open: () => void } | null;
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
