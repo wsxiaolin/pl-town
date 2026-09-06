@@ -19,6 +19,17 @@
     <a class="landscape-fullscreen" id="landscapeFullscreen" href="#">全屏访问效果更加（点击）</a>
   </div>
 
+  <div class="tutorial-overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle" hidden>
+    <div class="tutorial-orbit" aria-hidden="true"></div>
+    <article class="tutorial-card">
+      <header class="tutorial-head"><span class="tutorial-kicker" id="tutorialKicker"></span><span class="tutorial-count" id="tutorialCount"></span></header>
+      <div class="tutorial-icon" aria-hidden="true">✦</div>
+      <h2 class="tutorial-title" id="tutorialTitle"></h2><p class="tutorial-lead" id="tutorialLead"></p>
+      <ul class="tutorial-hints" id="tutorialHints"></ul>
+      <footer class="tutorial-foot"><div class="tutorial-dots" id="tutorialDots" aria-hidden="true"></div><div class="tutorial-actions"><button class="tutorial-ghost" id="tutorialSkip" type="button">稍后探索</button><button class="tutorial-ghost" id="tutorialPrev" type="button">返回</button><button class="tutorial-primary" id="tutorialNext" type="button">继续探索</button></div></footer>
+    </article>
+  </div>
+
   <!-- First-paint shell shown while the WebGL city is being prepared. -->
   <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
     <div class="boot-grid" aria-hidden="true"></div>
