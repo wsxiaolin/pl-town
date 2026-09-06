@@ -45,6 +45,6 @@ VITE_SERVER_URL=wss://<后端域名>
 BASE_PATH=/
 ```
 
-在 Static Site 中把 `/town-api/*` Rewrite 到后端同路径。`ALLOWED_ORIGINS` 支持逗号分隔的多个来源；Cloudflare Pages 分支预览可使用 `https://*.pl-town.pages.dev`，它匹配一层子域，例如 `https://abc.pl-town.pages.dev`。配置值只写 Origin，不包含路径。
+`VITE_SERVER_URL` 同时驱动两条链路：WebSocket 直连该地址，HTTP `/town-api/*` 请求也会转换成 `https://<后端域名>` 直连（后端按 `ALLOWED_ORIGINS` 白名单返回 CORS 头），静态托管方无需再做任何代理配置——Cloudflare Pages 的 `_redirects` 本身无法代理外部域名，Render Static Site 的 `/town-api/*` Rewrite 规则也可以省略。后端 `ALLOWED_ORIGINS` 支持逗号分隔的多个来源；Cloudflare Pages 分支预览可使用 `https://*.pl-town.pages.dev`，它匹配一层子域，例如 `https://abc.pl-town.pages.dev`。配置值只写 Origin，不包含路径。
 
 测试结束后删除服务或测试数据。生产上线只使用 `docs/deployment.md` 的独立 Linux 云服务器方案。

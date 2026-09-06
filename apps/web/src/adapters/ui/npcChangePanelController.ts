@@ -3,6 +3,8 @@
 // admins in the NPC management console for approval. Submitting does NOT
 // mutate game runtime or override the catalog — it only opens a ticket.
 
+import { townApiFetch } from '../../core/townApi';
+
 const TOKEN_KEY = 'minicityServerToken';
 const FORM_ID = 'npcChangeForm';
 const STATUS_ID = 'npcChangeStatus';
@@ -39,7 +41,7 @@ async function submitChangeRequest(event: Event): Promise<void> {
 
   if (submit) submit.disabled = true;
   try {
-    const response = await fetch('/town-api/npc-change-requests', {
+    const response = await townApiFetch('/town-api/npc-change-requests', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token, npcId, kind, title, summary, change: {} }),

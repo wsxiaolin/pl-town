@@ -718,6 +718,27 @@ try {
     });
     forwardedResponse.resume();
     if (forwardedResponse.statusCode !== 200) throw new Error(`Same-origin via X-Forwarded-Host must be allowed behind a trusted proxy, got ${forwardedResponse.statusCode}`);
+    // CORS: static-site browsers (Cloudflare Pages previews) fetch town-api
+    // cross-origin, so preflights and real responses must carry allow-origin
+    // for allowlisted origins only.
+    const preflight = (origin) => fetch(`${originBase}/town-api/telemetry/event`, {
+      method: 'OPTIONS',
+      headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-town-pl-session' },
+    });
+    const allowedPreflight = await preflight('https://city.example.com');
+    if (allowedPreflight.status !== 204 || allowedPreflight.headers.get('access-control-allow-origin') !== 'https://city.example.com') throw new Error(`CORS preflight must return 204 with allow-origin for allowlisted origins, got ${allowedPreflight.status}`);
+    if (allowedPreflight.headers.get('access-control-allow-headers') !== 'content-type,x-town-pl-session') throw new Error('CORS preflight must echo the requested headers so custom town-api headers work cross-origin');
+    const wildcardPreflight = await preflight('https://abc.pl-town.pages.dev');
+    if (wildcardPreflight.status !== 204 || wildcardPreflight.headers.get('access-control-allow-origin') !== 'https://abc.pl-town.pages.dev') throw new Error('CORS preflight must accept wildcard single-level preview subdomains');
+    if ((await preflight('https://evil.example')).status !== 403) throw new Error('CORS preflight must reject untrusted origins');
+    const corsPost = await fetch(`${originBase}/town-api/telemetry/event`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://city.example.com' }, body: JSON.stringify({ event: 'origin-matrix', properties: {}, sessionId: 'origin-matrix' }),
+    });
+    if (!corsPost.ok || corsPost.headers.get('access-control-allow-origin') !== 'https://city.example.com') throw new Error(`Cross-origin town-api POST must succeed and carry allow-origin, got ${corsPost.status}`);
+    const evilPost = await fetch(`${originBase}/town-api/telemetry/event`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: JSON.stringify({ event: 'origin-matrix', properties: {}, sessionId: 'origin-matrix' }),
+    });
+    if (evilPost.status !== 403 || evilPost.headers.get('access-control-allow-origin')) throw new Error('Cross-origin town-api POST from untrusted origins must fail without a CORS grant');
   } finally {
     if (originServer.exitCode === null && originServer.signalCode === null) {
       const exited = new Promise((resolve) => originServer.once('exit', resolve));
