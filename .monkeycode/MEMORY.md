@@ -31,6 +31,13 @@ Entries discovered by the Agent during task execution should follow this format:
 
 ## Entries
 
+[User Instruction Summary]
+- Date: 2026-09-06
+- Context: 首次发起新手引导 PR 后，用户要求后续都先等 CI
+- Instructions:
+  - 首次发起 PR 后，前台长时间等待到该 PR 的 CI 跑完，再查看审查意见和 CI 结果。
+  - 不要在 CI / 自动审查结束前声称 PR 已处理完毕。
+
 [Project Knowledge Summary]
 - Date: 2026-08-16
 - Context: Discovered by Agent while converting lab_outer into a memorial monument, then debugging why the app would not boot (`Cannot access 'clamp' before initialization`)

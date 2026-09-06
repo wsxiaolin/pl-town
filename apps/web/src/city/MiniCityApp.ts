@@ -54,6 +54,7 @@ import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPrese
 import { isBuildingDestroyed } from './buildingDamage';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
+import { createOnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
@@ -123,6 +124,7 @@ let magiStoryController: ReturnType<typeof createMagiStoryController>;
 let overcoatStoryController: ReturnType<typeof createOvercoatStoryController>;
 let mapController: ReturnType<typeof createMapController>;
 let loginController: ReturnType<typeof createLoginController>;
+let onboardingTutorial: ReturnType<typeof createOnboardingTutorialController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
@@ -611,6 +613,7 @@ function init() {
     startIntro: startCG,
     proceed: proceedToCity,
   });
+  onboardingTutorial = createOnboardingTutorialController({ document, signal: eventController.signal });
   statsPanelController = createStatsPanelController({
     getStats,
     getUserId,
@@ -761,6 +764,7 @@ function setupScene() {
     getWeather: () => weather,
     setWeather: (value) => updateWeatherState(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
+    getTutorial: () => onboardingTutorial,
   });
 }
 function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
@@ -936,10 +940,12 @@ export function startMiniCity() {
     if (!started) return;
     try { init(); } catch (error) { console.error('City initialization failed', error); }
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+    onboardingTutorial?.start();
   }).catch(() => {
     if (!started) return;
     try { init(); } catch (error) { console.error('City initialization failed', error); }
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+    onboardingTutorial?.start();
   });
   initCG({
     onFinish: () => {

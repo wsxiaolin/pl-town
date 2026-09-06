@@ -71,6 +71,16 @@ window._mini.weather.set('snow-deep')
 天气由服务端管理员接口手动下发。离线运行时客户端保持 `clear`，服务端重启后也从 `clear` 开始；管理员可通过服务端接口重新设置天气。
 本次产品行为保留了服务端手动下发模型，客户端移除了按游戏天自动轮换天气的逻辑。已连接客户端调用 `window._mini.weather.set(...)` 后，最多持续到下一次服务端天气同步。
 
+## 新居民引导
+
+```js
+window._mini.tutorial.start(true)
+window._mini.tutorial.close()
+window._mini.tutorial.isCompleted()
+```
+
+`start(true)` 会强制重看引导。新居民在登录与开场 CG 结束后自动出现一次，依次点亮走路、地图、手机和登录入口。
+
 ## 调试约定
 
 - `window._mini.*` 是唯一控制台调用格式。
