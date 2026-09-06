@@ -424,7 +424,7 @@ export function createMapController(options: MapControllerOptions) {
     searchInput?.addEventListener('focus', () => {
       if (isMobileMapViewport()) {
         mobileViewportBaseline = Math.max(mobileViewportBaseline, getViewportHeight());
-        mobileKeyboardWasOpen = false;
+        mobileKeyboardWasOpen = true;
         // Hide immediately while the software keyboard animates in. A later
         // visualViewport resize restores the icons if the keyboard is closed
         // without blurring the input.

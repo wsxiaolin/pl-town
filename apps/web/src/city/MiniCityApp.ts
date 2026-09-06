@@ -69,6 +69,8 @@ import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
+import { createStoryEntryGate } from './storyEntryGate';
+import { createStoryRouter } from './storyRouting';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { isWeather, type Weather } from './weather';
@@ -155,6 +157,15 @@ function mergeActiveStoryActorIds() {
   activeStoryActorIds = new Set([...echoActiveActors, ...yesterdayActiveActors, ...magiActiveActors, ...overcoatActiveActors]);
   npcSystem?.updateNpcSchedules();
 }
+
+const storyEntryGate = createStoryEntryGate(() => [
+  ['echo', echoStoryController], ['yesterday', yesterdaySongController], ['magi', magiStoryController], ['overcoat', overcoatStoryController]]);
+const storyRouter = createStoryRouter({
+  listControllers: () => [
+    ['echo', echoStoryController], ['yesterday', yesterdaySongController], ['magi', magiStoryController], ['overcoat', overcoatStoryController]],
+  gate: storyEntryGate,
+  showToast: showUnlockToast,
+});
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const residences: ResidenceEntity[] = [];
@@ -321,10 +332,7 @@ const buildingInteraction = createBuildingInteraction({
   isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
-  getEchoStoryController: () => echoStoryController,
-  getYesterdayStoryController: () => yesterdaySongController,
-  getMagiStoryController: () => magiStoryController,
-  getOvercoatStoryController: () => overcoatStoryController,
+  getStoryRouter: () => storyRouter,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
@@ -499,6 +507,7 @@ function init() {
     setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
     awardAchievement: (id, name) => progressionController?.awardDirectAchievement(id, name),
+    showToast: showUnlockToast,
     getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
     clearPlayerPath: () => { playerPath = []; },
     setCameraTarget: (x, z, instant) => cameraController?.setTarget(x, z, instant),
@@ -915,22 +924,12 @@ function getQuestProgressView() {
 function recordNpcInteraction(npcId: string) { interactionTracker.recordNpcInteraction(npcId); }
 
 function openNpcDialog(npc: Npc) {
-  if (cityDialogs && echoStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+  const storyResult = cityDialogs ? storyRouter.routeNpc(npc.profile.id, cityDialogs) : 'unhandled';
+  if (storyResult === 'handled') {
     recordNpcInteraction(npc.profile.id);
     return;
   }
-  if (cityDialogs && yesterdaySongController?.interactNpc(npc.profile.id, cityDialogs)) {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
-  if (cityDialogs && magiStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
-  if (cityDialogs && overcoatStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
+  if (storyResult === 'blocked') return;
   cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
 }
 function closeNpcDialog() { cityDialogs?.closeNpc(); }

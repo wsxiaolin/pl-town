@@ -9,10 +9,9 @@ export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
   getCityDialogs: () => CityDialogController | null;
-  getEchoStoryController: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  getYesterdayStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  getMagiStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  getOvercoatStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
+  getEchoStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
+  /** 剧情入口统一路由（含互斥判定与被拦提示）。 */
+  getStoryRouter?: () => { routeBuilding: (buildingId: string, dialogs: CityDialogController) => 'handled' | 'blocked' | 'unhandled' } | null;
   getStatsPanelController: () => { open: () => void } | null;
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
@@ -60,14 +59,10 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       return;
     }
     const dialogs = options.getCityDialogs();
-    const echo = options.getEchoStoryController();
-    if (dialogs && echo?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
-    const yesterday = options.getYesterdayStoryController?.();
-    if (dialogs && yesterday?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
-    const magi = options.getMagiStoryController?.();
-    if (dialogs && magi?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
-    const overcoat = options.getOvercoatStoryController?.();
-    if (dialogs && overcoat?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
+    const storyRouter = options.getStoryRouter?.();
+    const storyResult = dialogs ? storyRouter?.routeBuilding(b.id, dialogs) : 'unhandled';
+    if (storyResult === 'handled') { options.trackInteraction(b.id); return; }
+    if (storyResult === 'blocked') return;
     if (b.isStats) { options.getStatsPanelController()?.open(); options.trackInteraction('stats'); return; }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();

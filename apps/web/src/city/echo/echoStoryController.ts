@@ -6,6 +6,7 @@ import type { StoryConditionContext, StoryEffect, StoryEvent } from '../../gamep
 import { LocalStorageStoryRepository } from '../../adapters/storage/stories/LocalStorageStoryRepository';
 import { createStoryDialogFlow } from '../../adapters/ui/stories/storyDialogFlow';
 import { createEchoObservatoryGuide } from '../../adapters/ui/echoObservatoryGuide';
+import { getStoryPhase } from '../../gameplay/stories/StoryRuntime';
 import type { CityDialogController } from '../../adapters/ui/cityDialogController';
 
 const ECHO_CABIN_NODES = new Set([
@@ -27,6 +28,10 @@ const ECHO_STORY_ACHIEVEMENTS: Readonly<Record<string, { id: string; name: strin
   'echo.achievement.true-dawn': { id: 'echo_true_dawn', name: '真正的黎明' },
 };
 
+// 「回声」临时下线：尚未触发的玩家无法开启剧情；已在剧情中的玩家可继续。
+// 恢复上线时改回 false 即可。
+const ECHO_STORY_SUSPENDED = true;
+
 type Cursor = {
   position: THREE.Vector3;
   rotation: { y: number };
@@ -41,6 +46,7 @@ export type EchoStoryControllerOptions = {
   setActiveActors: (ids: readonly string[]) => void;
   updateNpcSchedules: () => void;
   awardAchievement: (id: string, name: string) => void;
+  showToast?: (message: string) => void;
   getCursor: () => Cursor | null;
   clearPlayerPath: () => void;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
@@ -171,7 +177,11 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     if (nodeId === 'epilogue-complete') options.awardAchievement('echo_true_dawn', '真正的黎明');
   }
 
-  function interactNpc(actorId: string, dialogs: CityDialogController): boolean {
+  function interactNpc(actorId: string, dialogs: CityDialogController): boolean | 'blocked' {
+    if (actorId === 'linche' && ECHO_STORY_SUSPENDED && getStoryPhase(ECHO_STORY, story.state()) === 'untouched') {
+      options.showToast?.('「回声」正在调整中，暂时无法触发');
+      return 'blocked';
+    }
     const cursor = options.getCursor();
     if (actorId === 'linche' && isCabinNode() && cursor) {
       const distance = Math.hypot(
@@ -212,6 +222,8 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     setupGuide,
     restoreAchievements,
     isCabinNode,
+    phase: () => getStoryPhase(ECHO_STORY, story.state()),
+    ownsEntry: story.ownsEntry,
     isInteriorView: () => echoInteriorView,
     setInteriorView,
     teleportToCabin,

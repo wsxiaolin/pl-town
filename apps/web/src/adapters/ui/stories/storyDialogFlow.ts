@@ -1,4 +1,4 @@
-import { StoryRuntime } from '../../../gameplay/stories/StoryRuntime';
+import { StoryRuntime, getStoryPhase } from '../../../gameplay/stories/StoryRuntime';
 import type { StoryConditionContext, StoryDefinition, StoryEffect, StoryEvent, StoryRepository } from '../../../gameplay/stories/types';
 import type { CityDialogController } from '../cityDialogController';
 
@@ -125,5 +125,10 @@ export function createStoryDialogFlow(
     return choose(dialogs, interaction.choiceId);
   };
 
-  return { open, choose, interact, interactBuilding, interactInterestPoint, state: () => runtime.state(), announceGuide, syncWorldInteractions, syncActiveActors };
+  const ownsEntry = (kind: 'actor' | 'building', targetId: string): boolean =>
+    kind === 'actor'
+      ? definition.entryActorId === targetId || (definition.interactions ?? []).some((item) => item.actorId === targetId && item.nodeId === runtime.state().nodeId)
+      : (definition.buildingInteractions ?? []).some((item) => item.buildingId === targetId && item.nodeId === runtime.state().nodeId);
+
+  return { open, choose, interact, interactBuilding, interactInterestPoint, state: () => runtime.state(), phase: () => getStoryPhase(definition, runtime.state()), ownsEntry, announceGuide, syncWorldInteractions, syncActiveActors };
 }

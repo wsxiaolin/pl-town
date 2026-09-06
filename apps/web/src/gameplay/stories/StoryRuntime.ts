@@ -45,6 +45,26 @@ export function storyConditionMatches(
   }
 }
 
+/**
+ * Lifecycle phase of a story, derived from persisted/live state.
+ * - `untouched`: the player never interacted with the story's entry points.
+ * - `active`: the story was entered and has not reached a final node yet.
+ * - `concluded`: the live node is terminal with no remaining choices.
+ *
+ * Guide bookkeeping events (`story.guide.*`) are published even for players
+ * who never touched the story, so they are ignored when detecting entry.
+ */
+export type StoryPhase = 'untouched' | 'active' | 'concluded';
+
+export function getStoryPhase(definition: StoryDefinition, state: StoryState): StoryPhase {
+  const node = definition.nodes[state.nodeId] ?? definition.nodes[definition.startNode];
+  if (node?.terminal && (node.choices?.length ?? 0) === 0) return 'concluded';
+  const advanced = state.nodeId !== definition.startNode;
+  const interacted = Object.keys(state.flags).some((flagId) =>
+    flagId.startsWith(EVENT_FLAG_PREFIX) && !flagId.startsWith(`${EVENT_FLAG_PREFIX}story.guide.`));
+  return advanced || interacted || state.visitCount > 0 ? 'active' : 'untouched';
+}
+
 function conditionsMatch(conditions: readonly StoryCondition[] | undefined, state: StoryState, context: StoryConditionContext): boolean {
   return (conditions ?? []).every((condition) => storyConditionMatches(condition, state, context));
 }

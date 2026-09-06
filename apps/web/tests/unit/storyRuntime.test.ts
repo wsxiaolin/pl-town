@@ -1,5 +1,7 @@
-import { StoryRuntime, createInitialStoryState, getStoryBuildingState, getStoryEventCount } from '../../src/gameplay/stories/StoryRuntime';
+import { StoryRuntime, createInitialStoryState, getStoryBuildingState, getStoryEventCount, getStoryPhase } from '../../src/gameplay/stories/StoryRuntime';
 import { createCloudStoryController } from '../../src/adapters/ui/cloudStoryController';
+import { createStoryEntryGate } from '../../src/city/storyEntryGate';
+import { createStoryRouter } from '../../src/city/storyRouting';
 import type { StoryDialogModel } from '../../src/adapters/ui/cityDialogController';
 import type { StoryDefinition, StoryState } from '../../src/gameplay/stories/types';
 
@@ -277,3 +279,88 @@ chooseCloudOption(0);
 chooseCloudOption(0);
 chooseCloudOption(0);
 assert(sentNodeIds.join(',') === 'anchor,anchor,final', 'cloud persistence must keep transient chains pinned to the savepoint');
+
+// Story phase detection drives the trigger gates: untouched stories can be
+// started, active stories block every other story's entry points, and stories
+// parked on a terminal node without choices count as concluded.
+const phaseDefinition: StoryDefinition = {
+  schemaVersion: 1,
+  definitionVersion: 1,
+  id: 'main.phase',
+  title: 'Phase',
+  startNode: 'meeting',
+  nodes: {
+    meeting: { id: 'meeting', text: 'Meet.', choices: [{ id: 'go', label: 'Go', next: 'hub' }] },
+    hub: { id: 'hub', text: 'Hub.', choices: [{ id: 'finish', label: 'Finish', next: 'final-act' }] },
+    // terminal with remaining choices must stay "active" (postgame continuation)
+    'final-act': { id: 'final-act', terminal: true, text: 'Final act.', choices: [{ id: 'replay', label: 'Replay', next: 'epilogue' }] },
+    epilogue: { id: 'epilogue', terminal: true, text: 'The end.' },
+  },
+};
+const phaseOf = (nodeId: string, flags: StoryState['flags'] = {}): ReturnType<typeof getStoryPhase> =>
+  getStoryPhase(phaseDefinition, { ...createInitialStoryState(phaseDefinition, 1), nodeId, flags });
+
+assert(phaseOf('meeting') === 'untouched', 'a story nobody interacted with stays untouched');
+assert(
+  phaseOf('meeting', { '$event:story.guide.cleared': 1, '$event:story.guide.updated': 2 }) === 'untouched',
+  'guide bookkeeping events must not count as story entry',
+);
+assert(
+  phaseOf('meeting', { '$event:story.actor.interacted.linche': 1 }) === 'active',
+  'the first entry interaction marks the story active even on the start node',
+);
+assert(phaseOf('hub') === 'active', 'advancing past the start node marks the story active');
+assert(phaseOf('final-act') === 'active', 'a terminal node with remaining choices keeps the story active');
+assert(phaseOf('epilogue') === 'concluded', 'a terminal node without choices concludes the story');
+
+// The entry gate must collect every active story before deciding: legacy saves
+// may hold two parallel active stories, and both must keep their own entries
+// open while untouched stories stay locked.
+const phaseStub = (phase: 'untouched' | 'active' | 'concluded') => ({ phase: () => phase });
+const entryGate = createStoryEntryGate(() => [
+  ['echo', phaseStub('active')],
+  ['yesterday', phaseStub('active')],
+  ['magi', phaseStub('untouched')],
+]);
+assert(
+  entryGate('echo') && entryGate('yesterday'),
+  'parallel active stories in a legacy save keep their own entries open',
+);
+assert(entryGate('magi') === false, 'an untouched story stays locked while another story is active');
+
+// The router delegates to the owning story and reports when the gate blocks an
+// entry the player actually interacted with, instead of failing silently.
+const toastMessages: string[] = [];
+const routerDialogs = {} as never;
+let handledByStory = '';
+const actorLincheId = 'linche';
+const owningController = {
+  interactNpc: (actorId: string) => { handledByStory = actorId; return true; },
+  interactBuilding: () => false,
+  ownsEntry: (kind: 'actor' | 'building', targetId: string) => kind === 'actor' && targetId === actorLincheId,
+};
+const gatedController = {
+  interactNpc: () => false,
+  interactBuilding: () => false,
+  ownsEntry: (kind: 'actor' | 'building', targetId: string) => kind === 'actor' && targetId === actorLincheId,
+};
+const unrelatedController = {
+  interactNpc: () => false,
+  interactBuilding: () => false,
+  ownsEntry: () => false,
+};
+const router = createStoryRouter({
+  listControllers: () => [['echo', owningController], ['yesterday', gatedController]],
+  gate: createStoryEntryGate(() => [['echo', phaseStub('active')], ['yesterday', phaseStub('untouched')]]),
+  showToast: (msg) => toastMessages.push(msg),
+});
+assert(router.routeNpc(actorLincheId, routerDialogs) === 'handled', 'the router delegates to the story that owns the entry');
+assert(handledByStory === actorLincheId, 'the owning story receives the interaction');
+
+const blockedRouter = createStoryRouter({
+  listControllers: () => [['echo', unrelatedController], ['yesterday', gatedController]],
+  gate: createStoryEntryGate(() => [['echo', phaseStub('active')], ['yesterday', phaseStub('untouched')]]),
+  showToast: (msg) => toastMessages.push(msg),
+});
+assert(blockedRouter.routeNpc(actorLincheId, routerDialogs) === 'blocked', 'a gated entry reports a blocked interaction after showing feedback');
+assert(toastMessages.length === 1, 'the player gets feedback when the gate blocks a story entry');

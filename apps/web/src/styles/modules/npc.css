@@ -289,6 +289,9 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* display:flex overrides the hidden attribute's UA style, so re-hide explicitly */
+.echo-story-nav[hidden] { display: none; }
+
 .echo-story-nav {
   position: fixed;
   z-index: 80;
