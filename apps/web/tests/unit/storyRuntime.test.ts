@@ -362,5 +362,5 @@ const blockedRouter = createStoryRouter({
   gate: createStoryEntryGate(() => [['echo', phaseStub('active')], ['yesterday', phaseStub('untouched')]]),
   showToast: (msg) => toastMessages.push(msg),
 });
-assert(blockedRouter.routeNpc(actorLincheId, routerDialogs) === false, 'a gated entry falls back to the default interaction');
+assert(blockedRouter.routeNpc(actorLincheId, routerDialogs) === true, 'a gated entry consumes the interaction after showing feedback');
 assert(toastMessages.length === 1, 'the player gets feedback when the gate blocks a story entry');
