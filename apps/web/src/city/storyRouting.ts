@@ -2,8 +2,8 @@ import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { StoryEntryGate } from './storyEntryGate';
 
 type StoryRouteController = {
-  interactNpc: (actorId: string, dialogs: CityDialogController) => boolean;
-  interactBuilding: (buildingId: string, dialogs: CityDialogController) => boolean;
+  interactNpc: (actorId: string, dialogs: CityDialogController) => boolean | 'blocked';
+  interactBuilding: (buildingId: string, dialogs: CityDialogController) => boolean | 'blocked';
   ownsEntry: (kind: 'actor' | 'building', targetId: string) => boolean;
 };
 
@@ -33,6 +33,7 @@ export function createStoryRouter(options: {
         continue;
       }
       const handled = kind === 'actor' ? controller.interactNpc(targetId, dialogs) : controller.interactBuilding(targetId, dialogs);
+      if (handled === 'blocked') return 'blocked';
       if (handled) return 'handled';
     }
     if (blockedByGate) {
