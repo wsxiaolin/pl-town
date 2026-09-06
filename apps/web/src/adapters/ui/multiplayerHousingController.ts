@@ -325,9 +325,6 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     const mine = multiplayer?.user?.id;
     renderHousingRequests(list, mine);
     if (selectedResidenceId && houses.some((house) => house.buildingId === selectedResidenceId)) list.appendChild(buildHouseFocus(houses));
-    if (!houses.length) {
-      const empty = document.createElement('p'); empty.className = 'house-empty'; empty.textContent = '还没有被认领的住宅。'; list.appendChild(empty);
-    }
     houses.forEach((house) => list.appendChild(buildHouseCard(house, houses, mine)));
     if (!selectedResidenceId) {
       const hint = document.createElement('p'); hint.className = 'house-select-hint'; hint.textContent = '点击地图中的小型居民楼，可查看或认领该住宅。'; list.appendChild(hint);
