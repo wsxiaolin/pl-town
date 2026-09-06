@@ -17,6 +17,7 @@ const formatDuration = (seconds) => {
   const days = Math.floor(seconds / 86400); const hours = Math.floor(seconds % 86400 / 3600); const minutes = Math.floor(seconds % 3600 / 60);
   return days ? `${days} 天 ${hours} 小时` : hours ? `${hours} 小时 ${minutes} 分` : `${minutes} 分钟`;
 };
+const truncate = (value, limit = 32) => { const text = String(value); return text.length > limit ? `${text.slice(0, limit)}…` : text; };
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = String(text);
@@ -45,7 +46,7 @@ function showLogin() {
 }
 function showApp(session) {
   state.csrf = session.csrf || ''; state.actor = session.actor || '管理员';
-  $('#actorName').textContent = state.actor; $('#loginView').hidden = true; $('#appView').hidden = false;
+  $('#actorName').textContent = truncate(state.actor, 48); $('#loginView').hidden = true; $('#appView').hidden = false;
   void switchView(state.view);
 }
 
@@ -237,9 +238,11 @@ async function loadOffsiteBackups() {
     const statusCell = node('td'); const badge = node('span', status, `status nowrap${backup.orphan || !backup.inSync ? ' bad' : ''}`); statusCell.append(badge);
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const link = node('a', '下载', 'download'); link.href = `/admin/api/offsite/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
+    const restore = node('button', '恢复'); restore.type = 'button';
+    restore.addEventListener('click', () => confirmAction('恢复异地备份', `将从阿里云 OSS 下载 ${backup.name} 并覆盖当前数据库，所有在线居民会被强制下线并需重新登录。确定继续？`, () => restoreOffsiteBackup(backup.name)));
     const del = node('button', '删除', 'warning'); del.type = 'button';
     del.addEventListener('click', () => confirmAction('删除异地备份', `将从阿里云 OSS 删除 ${backup.name}，本机备份不受影响。确定继续？`, () => deleteOffsite(backup.name)));
-    group.append(link, del); actions.append(group);
+    group.append(restore, link, del); actions.append(group);
     row.append(node('td', backup.name), node('td', formatDate(backup.uploadedAt)), node('td', backup.sha256 ? '已校验' : '—', 'nowrap'), node('td', formatBytes(backup.bytes)), statusCell, actions); return row;
   });
   $('#offsiteRows').replaceChildren(...(rows.length ? rows : [emptyRow(6, '尚无异地备份，请在上方备份列表点击“上传异地”')]));
@@ -251,6 +254,10 @@ async function deleteOffsite(name) {
 }
 async function restoreBackup(name) {
   try { await api(`/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('备份已恢复，所有居民会话已撤销', true); await Promise.all([loadBackups(), loadOverview()]); }
+  catch (error) { showNotice(error.message); }
+}
+async function restoreOffsiteBackup(name) {
+  try { await api(`/offsite/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('异地备份已恢复，所有居民会话已撤销', true); await Promise.all([loadBackups(), loadOverview()]); }
   catch (error) { showNotice(error.message); }
 }
 async function createBackup() {

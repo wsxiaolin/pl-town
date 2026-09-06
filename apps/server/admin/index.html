@@ -103,11 +103,11 @@
       </section>
 
       <section class="view" data-page="backups" hidden>
-        <div class="toolbar"><p>SQLite 在线一致性备份，可直接下载到异地存储，或从控制台恢复。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
+        <div class="toolbar"><p>SQLite 在线一致性备份，可直接下载到异地存储，或从控制台恢复（含异地备份直接恢复）。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
         <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>创建时间</th><th>校验</th><th>大小</th><th class="align-right">操作</th></tr></thead><tbody id="backupRows"></tbody></table></div>
         <section class="panel panel--offsite" id="offsitePanel" hidden>
           <header><div><p class="eyebrow">OFFSITE OSS</p><h2>异地备份（阿里云 OSS）</h2></div></header>
-          <p class="hint">保存于阿里云OSS，从异地下载不会在本地产生新的备份</p>
+          <p class="hint">保存于阿里云OSS，可从异地直接恢复，无需本地原件</p>
           <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>上传时间</th><th>校验</th><th>大小</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="offsiteRows"></tbody></table></div>
         </section>
       </section>

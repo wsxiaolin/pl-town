@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import {
 } from './adminAuth.js';
 import { createBackup, listBackups, streamBackup, verifyStoredBackup } from './backup.js';
 import { verifyBackup } from './backupVerification.js';
-import { deleteOffsiteBackup, listOffsiteBackups, offsiteBackupEnabled, streamOffsiteBackup, uploadOffsiteBackup } from './offsiteBackup.js';
+import { deleteOffsiteBackup, downloadOffsiteBackup, listOffsiteBackups, offsiteBackupEnabled, streamOffsiteBackup, uploadOffsiteBackup } from './offsiteBackup.js';
 import { ADMIN_ENABLED, AUTO_BACKUP_ENABLED, BACKUP_DIR, BACKUP_INTERVAL_MINUTES, BACKUP_RETENTION_DAYS, DATABASE_PATH, IS_PRODUCTION } from './config.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
@@ -284,12 +284,50 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       error(response, 502, 'OFFSITE_DELETE_FAILED', 'Deleting the backup from the object store failed'); return true;
     }
   }
+  const offsiteRestore = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)\/restore$/);
+  if (request.method === 'POST' && offsiteRestore) {
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    const body = await readJson(request, 1_024).catch(() => ({} as Record<string, unknown>));
+    if (body.confirm !== true) { error(response, 400, 'CONFIRM_REQUIRED', '恢复备份需要二次确认'); return true; }
+    const name = offsiteRestore[1]!;
+    const stagedPath = join(DATA_DIR, `.minicity-offsite-restore-${randomUUID()}.sqlite`);
+    let staged: { bytes: number; sha256?: string } | undefined;
+    try {
+      staged = await downloadOffsiteBackup(name, stagedPath);
+      const verification = await verifyBackup(stagedPath;
+      if (verification.integrity !== 'ok' || verification.foreignKeyErrors) { error(response, 422, 'BACKUP_UNVERIFIED', '备份完整性校验未通过'); return true; }
+      if (staged.sha256 && staged.sha256.toLowerCase() !== verification.sha256.toLowerCase()) { error(response, 422, 'BACKUP_CHECKSUM_MISMATCH', '异地备份校验和不匹配'); return true; }
+      context.disconnectAll();
+      try {
+        const result = db.restoreFromBackupFile(stagedPath;
+        db.recordAdminAudit(principal.actor, 'database.backup.offsite.restore', name, { rowsCopied: result.rowsCopied });
+        logger.info('Database restored from off-site backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
+        respond(response, 200, { ok: true, integrity: db.verifyDatabase(), rowsCopied: result.rowsCopied });
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : String(caught;
+        logger.error('Database restore from off-site backup failed', { name, error: message });
+        error(response, 500, 'RESTORE_FAILED', message);
+      }
+    } catch (caught) {
+      if (!staged) {
+        const message = caught instanceof Error ? caught.message : String(caught;
+        if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', '异地备份不存在'); return true; }
+        logger.error('Off-site backup download failed', { name, error: message });
+        error(response, 502, 'OFFSITE_DOWNLOAD_FAILED', '下载异地备份失败'); return true;
+      }
+      logger.error('Off-site backup restore failed', { name, error: caught instanceof Error ? caught.message : String(caught) });
+      error(response, 500, 'RESTORE_FAILED', '恢复异地备份失败');
+    } finally {
+      if (existsSync(stagedPath)) rmSync(stagedPath, { force: true });
+    }
+    return true;
+  }
   if (request.method === 'POST' && path === '/admin/api/database/checkpoint') {
     db.checkpointDatabase();
     db.recordAdminAudit(principal.actor, 'database.checkpoint');
     respond(response, 200, { ok: true, integrity: db.verifyDatabase() }); return true;
   }
-
+  
   // Chat moderation: list recent messages, group by author, hide/flag.
   if (request.method === 'GET' && path === '/admin/api/chat') {
     const url = new URL(request.url ?? path, 'http://localhost');

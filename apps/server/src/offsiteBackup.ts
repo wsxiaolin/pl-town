@@ -1,3 +1,4 @@
+import { createWriteStream, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import OSS from 'ali-oss';
@@ -117,8 +118,35 @@ export async function uploadOffsiteBackup(name: string): Promise<OffsiteBackupIn
   return { name, bytes: localBackup.bytes, uploadedAt: new Date().toISOString(), sha256: localBackup.sha256, local: true, inSync: true, orphan: false };
 }
 
-// Proxy a remote backup straight from OSS to the caller without staging it on
-// disk, so a remote download never introduces a backup that is not local.
+// Stage a remote backup from OSS into a caller-provided temporary path for an
+// in-process restore, so a remote download never introduces a backup that is not
+// local. Returns the object's checksum when OSS carries one so the caller can
+// cross-check the staged file before restoring it.
+export async function downloadOffsiteBackup(name: string, destination: string): Promise<{ bytes: number; sha256?: string }> {
+  if (!validName(name)) throw new Error('Backup was not found');
+  const store = oss();
+  const key = keyFor(name);
+  try { await store.head(key); } catch { throw new Error('Backup was not found'); }
+  const sha256 = (await checksumFromMeta(store, key)) ?? (await checksumFromSidecar(store, sidecarKeyFor(name)));
+  const partial = `${destination}.partial`;
+  rmSync(partial, { force: true });
+  try {
+    const result = await store.getStream(key);
+    await new Promise<void>((resolve, reject)) => {
+      const file = createWriteStream(partial, { mode: 0o600, flag: 'wx' });
+      result.stream.pipe(file);
+      result.stream.once('error', (error) => { file.destroy(error); });
+      file.once('error', reject);
+      file.once('finish', resolve);
+    });
+    renameSync(partial, destination);
+  } catch (error) {
+    rmSync(partial, { force: true });
+    throw error;
+  }
+  return { bytes: statSync(destination).size, sha256 };
+}
+
 export async function streamOffsiteBackup(name: string, response: ServerResponse): Promise<boolean> {
   if (!validName(name)) return false;
   const store = oss();

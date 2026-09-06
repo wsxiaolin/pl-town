@@ -35,7 +35,8 @@ nav { display: grid; gap: 3px; margin-top: 18px; }
 .nav-item { min-height: 40px; padding: 0 13px; text-align: left; color: #526159; background: transparent; border: 0; border-radius: 5px; font-size: 13px; }
 .nav-item:hover { color: #1f4936; background: #f1f6f3; }
 .nav-item.active { color: #115c3d; background: #e7f3ed; font-weight: 700; }
-.sidebar-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 15px 8px 0; border-top: 1px solid #e4e9e6; font-size: 12px; }
+.sidebar-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 8px 0; border-top: 1px solid #e4e9e6; font-size: 12px; }
+.sidebar-foot span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quiet { padding: 6px; color: #5f6e66; background: none; border: 0; }
 .workspace { min-width: 0; padding: 0 32px 40px; }
 .topbar { min-height: 92px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #dfe5e2; }
