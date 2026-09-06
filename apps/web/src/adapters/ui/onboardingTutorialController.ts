@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'minicity.tutorial.v1';
 const CALM_CHECK_MS = 280;
+const OVERLAY_PREVIEW_MS = 700;
 
 type TutorialPlacement = 'center' | 'bottom' | 'top' | 'left' | 'right';
 
@@ -11,6 +12,7 @@ type TutorialStep = {
   target?: string;
   placement: TutorialPlacement;
   action?: string;
+  opensOverlay?: boolean;
 };
 
 export type OnboardingTutorialControllerOptions = {
@@ -37,6 +39,7 @@ const STEPS: TutorialStep[] = [
     target: '#mapToggle',
     placement: 'bottom',
     action: '打开地图',
+    opensOverlay: true,
   },
   {
     kicker: 'PHONE · 居民手机',
@@ -46,6 +49,7 @@ const STEPS: TutorialStep[] = [
     target: '#onlinePanelToggle',
     placement: 'left',
     action: '打开手机',
+    opensOverlay: true,
   },
   {
     kicker: 'IDENTITY · 居民身份',
@@ -61,7 +65,8 @@ function isOverlayBlocking(element: Element | null): boolean {
   if (!element) return false;
   const style = element.ownerDocument.defaultView?.getComputedStyle(element);
   if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
-  return !element.classList.contains('hidden') && !element.classList.contains('is-ready');
+  if (element.classList.contains('hidden') || element.classList.contains('is-ready')) return false;
+  return true;
 }
 
 export function createOnboardingTutorialController(options: OnboardingTutorialControllerOptions) {
@@ -83,16 +88,19 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   const skipButton = doc.getElementById('tutorialSkip') as HTMLButtonElement | null;
   const prevButton = doc.getElementById('tutorialPrev') as HTMLButtonElement | null;
   const nextButton = doc.getElementById('tutorialNext') as HTMLButtonElement | null;
+  const listenerOptions = { signal: options.signal };
 
   let index = 0;
   let active = false;
+  let previewing = false;
   let calmTimer = 0;
   let layoutTimer = 0;
+  let previewTimer = 0;
   let highlighted: Element | null = null;
   let skipTargetAdvance = false;
 
   function isCompleted(): boolean {
-    return storage?.getItem(STORAGE_KEY) === 'done';
+    try { return storage?.getItem(STORAGE_KEY) === 'done'; } catch { return false; }
   }
 
   function markCompleted(): void {
@@ -112,6 +120,27 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   function clearHighlight(): void {
     highlighted?.classList.remove('tutorial-target');
     highlighted = null;
+  }
+
+  function stopPolling(): void {
+    if (calmTimer) window.clearInterval(calmTimer);
+    calmTimer = 0;
+    if (layoutTimer) window.clearInterval(layoutTimer);
+    layoutTimer = 0;
+    if (previewTimer) window.clearTimeout(previewTimer);
+    previewTimer = 0;
+  }
+
+  function dismissTourPanels(): void {
+    const mapToggle = doc.getElementById('mapToggle');
+    const phoneToggle = doc.getElementById('onlinePanelToggle');
+    const login = doc.getElementById('loginOverlay');
+    if (doc.getElementById('mapOverlay')?.classList.contains('show')) mapToggle?.click();
+    if (doc.getElementById('onlinePanel')?.classList.contains('open')) phoneToggle?.click();
+    if (login && login.style.display !== 'none') {
+      login.classList.add('hidden');
+      login.style.display = 'none';
+    }
   }
 
   function placeCard(targetBox: DOMRect | null, placement: TutorialPlacement): void {
@@ -187,7 +216,7 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   }
 
   function layout(): void {
-    if (!active) return;
+    if (!active || previewing) return;
     const current = step();
     clearHighlight();
     const target = current.target ? doc.querySelector(current.target) : null;
@@ -212,58 +241,22 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
     if (dots) {
       dots.innerHTML = STEPS.map((_, i) => `<i class="tutorial-dot${i === index ? ' is-active' : ''}"></i>`).join('');
     }
-    if (prevButton) prevButton.disabled = index === 0;
+    if (prevButton) prevButton.disabled = index === 0 || previewing;
     if (nextButton) nextButton.textContent = last ? '完成' : (current.action ?? '继续');
     overlay?.classList.toggle('is-finale', last);
     layout();
+    nextButton?.focus();
   }
 
-  function stopPolling(): void {
-    if (calmTimer) window.clearInterval(calmTimer);
-    calmTimer = 0;
-  }
-
-  function close(): void {
-    if (!active && overlay?.hidden) return;
-    active = false;
-    stopPolling();
-    clearHighlight();
-    overlay?.classList.remove('open', 'is-focused', 'is-finale');
+  function hideTutorialShell(): void {
+    overlay?.classList.remove('open');
     overlay?.setAttribute('hidden', '');
-    markCompleted();
   }
 
-  function reveal(): void {
+  function showTutorialShell(): void {
     if (!overlay) return;
-    active = true;
     overlay.removeAttribute('hidden');
-    render();
     requestAnimationFrame(() => overlay.classList.add('open'));
-  }
-
-  function start(force = false): void {
-    if (!overlay) return;
-    if (!force && (isCompleted() || Boolean(storage?.getItem('minicityUser')))) return;
-    index = 0;
-    stopPolling();
-    if (isCalm()) {
-      reveal();
-      return;
-    }
-    calmTimer = window.setInterval(() => {
-      if (!isCalm()) return;
-      stopPolling();
-      reveal();
-    }, CALM_CHECK_MS);
-  }
-
-  function advance(): void {
-    if (index >= STEPS.length - 1) {
-      close();
-      return;
-    }
-    index += 1;
-    render();
   }
 
   function clickTarget(): void {
@@ -276,9 +269,90 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
     skipTargetAdvance = false;
   }
 
-  function next(): void {
+  function finish(): void {
+    previewing = false;
+    active = false;
+    stopPolling();
+    dismissTourPanels();
+    clearHighlight();
+    overlay?.classList.remove('open', 'is-focused', 'is-finale');
+    overlay?.setAttribute('hidden', '');
+    markCompleted();
+  }
+
+  function abort(): void {
+    previewing = false;
+    active = false;
+    stopPolling();
+    dismissTourPanels();
+    clearHighlight();
+    overlay?.classList.remove('open', 'is-focused', 'is-finale');
+    overlay?.setAttribute('hidden', '');
+  }
+
+  function reveal(): void {
+    if (!overlay) return;
+    active = true;
+    overlay.removeAttribute('hidden');
+    render();
+    requestAnimationFrame(() => overlay.classList.add('open'));
+    if (!layoutTimer) layoutTimer = window.setInterval(() => { if (active) layout(); }, 400);
+  }
+
+  function start(force = false): void {
+    if (!overlay) return;
+    let hasUser = false;
+    try { hasUser = Boolean(storage?.getItem('minicityUser')); } catch {}
+    if (!force && (isCompleted() || hasUser)) return;
+    index = 0;
+    previewing = false;
+    stopPolling();
+    if (isCalm()) {
+      reveal();
+      return;
+    }
+    calmTimer = window.setInterval(() => {
+      if (!isCalm()) return;
+      stopPolling();
+      reveal();
+    }, CALM_CHECK_MS);
+  }
+
+  function goTo(nextIndex: number): void {
+    previewing = false;
+    dismissTourPanels();
+    index = nextIndex;
+    showTutorialShell();
+    render();
+  }
+
+  function advance(): void {
     if (index >= STEPS.length - 1) {
-      close();
+      finish();
+      return;
+    }
+    goTo(index + 1);
+  }
+
+  function previewOverlayThenAdvance(): void {
+    previewing = true;
+    hideTutorialShell();
+    clickTarget();
+    previewTimer = window.setTimeout(() => {
+      previewTimer = 0;
+      if (!active) return;
+      advance();
+    }, OVERLAY_PREVIEW_MS);
+  }
+
+  function next(): void {
+    if (!active || previewing) return;
+    if (index >= STEPS.length - 1) {
+      finish();
+      return;
+    }
+    if (step().opensOverlay) {
+      previewOverlayThenAdvance();
       return;
     }
     clickTarget();
@@ -286,33 +360,47 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   }
 
   function prev(): void {
-    if (index === 0) return;
-    index -= 1;
-    render();
+    if (!active || previewing || index === 0) return;
+    goTo(index - 1);
   }
 
   function onTargetClick(event: Event): void {
-    if (!active || skipTargetAdvance) return;
+    if (!active || previewing || skipTargetAdvance) return;
     const current = step();
     if (!current.target) return;
     const target = doc.querySelector(current.target);
-    if (target && (event.target instanceof Node) && target.contains(event.target)) advance();
+    if (!(target && event.target instanceof Node && target.contains(event.target))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    next();
   }
 
-  skipButton?.addEventListener('click', close);
-  prevButton?.addEventListener('click', prev);
-  nextButton?.addEventListener('click', next);
-  doc.defaultView?.addEventListener('resize', layout);
-  doc.addEventListener('click', onTargetClick, true);
-  layoutTimer = window.setInterval(() => { if (active) layout(); }, 400);
-  options.signal.addEventListener('abort', () => {
-    window.clearInterval(layoutTimer);
-    close();
-  }, { once: true });
+  function onKeydown(event: KeyboardEvent): void {
+    if (!active || previewing || event.key !== 'Tab' || !card) return;
+    const focusable = [skipButton, prevButton, nextButton].filter((button): button is HTMLButtonElement => button !== null && !button.disabled);
+    if (!focusable.length) return;
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (event.shiftKey && doc.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && doc.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  skipButton?.addEventListener('click', finish, listenerOptions);
+  prevButton?.addEventListener('click', prev, listenerOptions);
+  nextButton?.addEventListener('click', next, listenerOptions);
+  doc.defaultView?.addEventListener('resize', layout, listenerOptions);
+  doc.addEventListener('click', onTargetClick, { capture: true, ...listenerOptions });
+  doc.addEventListener('keydown', onKeydown, listenerOptions);
+  options.signal.addEventListener('abort', abort, { once: true });
 
   return {
     start,
-    close,
+    close: finish,
     next,
     prev,
     isCompleted,

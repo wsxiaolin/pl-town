@@ -31,6 +31,13 @@ Entries discovered by the Agent during task execution should follow this format:
 
 ## Entries
 
+[User Instruction Summary]
+- Date: 2026-09-06
+- Context: 首次发起新手引导 PR 后，用户要求后续都先等 CI
+- Instructions:
+  - 首次发起 PR 后，前台长时间等待到该 PR 的 CI 跑完，再查看审查意见和 CI 结果。
+  - 不要在 CI / 自动审查结束前声称 PR 已处理完毕。
+
 [Project Knowledge Summary]
 - Date: 2026-08-16
 - Context: Discovered by Agent while converting lab_outer into a memorial monument, then debugging why the app would not boot (`Cannot access 'clamp' before initialization`)
@@ -86,3 +93,12 @@ Entries discovered by the Agent during task execution should follow this format:
 - Instructions:
   - three.js 场景中同时存在多个 `Water` mirror 对象时，各自的 `onBeforeRender` 会把整个场景重渲染到各自的镜像渲染目标，镜像互相嵌套破坏彼此，导致水面消失/错乱。全场景只保留一个 mirror `Water` 对象。
   - 池塘等小水面用无镜像的轻量 ShaderMaterial 动画水面（`createPondWaterSurface`，位于 `apps/web/src/rendering/animatedWater.ts`），海面（westBeach）保持唯一 mirror `Water`。
+
+[Project Knowledge Summary]
+- Date: 2026-09-04
+- Context: Discovered by Agent while doing automated headless WebGL z-fighting verification for the building facade flicker fix (PR #124)
+- Category: Testing Methods
+- Instructions:
+  - SwiftShader（`chromium.launch({executablePath:'/root/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome', args:['--enable-unsafe-swiftshader']})`）下页面加载到 city-ready 需 3-5 分钟，`page.screenshot` 需显式 `timeout: 180000` 且视口 ≤960×600；脚本收尾必须 `process.exit(0)` 并跳过 `browser.close()`（会挂死）。
+  - 开场 CG（5 幕 GSAP 时间线）在 SwiftShader 下永远走不完：帧间隔数秒时 GSAP lagSmoothing 每帧只推进 33ms 时间线。Playwright `reducedMotion:'reduce'` 无效，因为 `MiniCityApp.ts:87` 硬编码 `REDUCED=false`。唯一可靠跳过：`page.addInitScript` 预置 `localStorage.minicityCGSeenV3='true'`（cg.ts shouldShowCG）与 `minicityUser`（loginController.checkLogin 直接 proceed）。注意 `multiplayerHousingController` 会 `removeItem('minicityUser')` 再次弹出登录，全自动进城仍未打通；对场景图测量类验证无影响（不依赖可见画面）。
+  - z-fighting 排查可直接做场景图 AABB 扫描而非截图：垂直立面平面（facade，polyOffset 材质）与细节盒的穿越即闪烁类；y@0.0000 地面接触为良性（底面被背面剔除）。建筑入场动画把 group 停在 y=-3，测量前需强制置 0；立面网格晚于 tagMeshes 添加，归属需沿父组后代 userData.buildingId 推断。脚本存于 /tmp/opencode/flicker/（detect.cjs、shot.cjs）。
