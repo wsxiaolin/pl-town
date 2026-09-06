@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { BlockList, isIP } from 'node:net';
-import { ALLOWED_ORIGINS, IS_PRODUCTION, TRUST_PROXY_HOPS, TRUSTED_PROXIES } from './config.js';
+import { ALLOWED_ORIGIN_WILDCARDS, ALLOWED_ORIGINS, IS_PRODUCTION, TRUST_PROXY_HOPS, TRUSTED_PROXIES } from './config.js';
 
 const normalizeIp = (value: string): string => value.startsWith('::ffff:') ? value.slice(7) : value;
 
@@ -35,17 +35,53 @@ export function clientIp(request: IncomingMessage): string {
   return normalizeIp(request.socket.remoteAddress ?? 'unknown');
 }
 
+// Requests whose Origin matches the server's own host are same-origin by
+// definition: the admin panel is served from the backend domain itself, so
+// its fetches and WebSocket connections must be accepted even when that
+// domain is absent from ALLOWED_ORIGINS. Browsers always derive the Host
+// header from the URL they are talking to, so a cross-site page cannot make
+// a victim's browser send a matching pair; the header pair can only be
+// forged by a direct client that gains nothing extra because session auth,
+// CSRF tokens and rate limits still apply. Behind a TLS-terminating proxy
+// the original host is read from X-Forwarded-Host, honoured only from
+// trusted proxy peers (same rules as clientIp).
+const sameOriginWithHost = (request: IncomingMessage, origin: URL): boolean => {
+  const candidates = new Set<string>();
+  const collect = (value: string | string[] | undefined) => {
+    const hosts = (Array.isArray(value) ? value.join(',') : value)?.split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean) ?? [];
+    for (const host of hosts) {
+      candidates.add(host);
+      try { candidates.add(new URL(`http://${host}`).host); } catch { /* ignore malformed header values */ }
+    }
+  };
+  collect(request.headers.host);
+  if (TRUST_PROXY_HOPS > 0 && isFromTrustedProxy(request)) collect(request.headers['x-forwarded-host']);
+  return candidates.has(origin.host.toLowerCase()) || candidates.has(origin.hostname.toLowerCase());
+};
+
 export function originAllowed(origin: string | undefined, allowMissing = false): boolean {
   if (!origin) return allowMissing;
   try {
     const url = new URL(origin);
     if (ALLOWED_ORIGINS.has(url.origin)) return true;
+    for (const allowed of ALLOWED_ORIGIN_WILDCARDS) {
+      const allowedUrl = new URL(allowed);
+      const hostname = url.hostname.toLowerCase();
+      const allowedHostname = allowedUrl.hostname.toLowerCase();
+      const prefix = hostname.endsWith(`.${allowedHostname}`) ? hostname.slice(0, -(allowedHostname.length + 1)) : '';
+      if (url.protocol === allowedUrl.protocol && url.port === allowedUrl.port && prefix && !prefix.includes('.')) return true;
+    }
     return !IS_PRODUCTION && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   } catch { return false; }
 }
 
 export function requestOriginAllowed(request: IncomingMessage, allowMissing = false): boolean {
-  return originAllowed(typeof request.headers.origin === 'string' ? request.headers.origin : undefined, allowMissing);
+  const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+  if (!origin) return allowMissing;
+  try {
+    if (sameOriginWithHost(request, new URL(origin))) return true;
+  } catch { return false; }
+  return originAllowed(origin, allowMissing);
 }
 
 export const jsonSecurityHeaders = {
