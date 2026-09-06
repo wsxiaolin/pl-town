@@ -320,7 +320,6 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
 
   function goTo(nextIndex: number): void {
     previewing = false;
-    dismissTourPanels();
     index = nextIndex;
     showTutorialShell();
     render();
@@ -341,6 +340,7 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
     previewTimer = window.setTimeout(() => {
       previewTimer = 0;
       if (!active) return;
+      dismissTourPanels();
       advance();
     }, OVERLAY_PREVIEW_MS);
   }
