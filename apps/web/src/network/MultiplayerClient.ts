@@ -1,5 +1,6 @@
 import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
 import { isWeather, type Weather } from '../city/weather';
+import { getServerUrl } from './serverUrl';
 
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
 export type NetUser = { id: string; nickname: string; position: NetPosition };
@@ -68,18 +69,6 @@ type Callbacks = {
 };
 
 const TOKEN_KEY = 'minicityServerToken';
-const serverUrl = (): string => {
-  const configured = (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_SERVER_URL;
-  if (configured) return configured;
-  // Fail closed: without an explicit VITE_SERVER_URL, plaintext ws:// is only
-  // ever used for loopback development origins. Nickname/password and the
-  // session token travel on this socket, so any other origin upgrades to
-  // wss:// instead of silently downgrading to an interceptable transport.
-  const hostname = window.location.hostname;
-  const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
-  const protocol = window.location.protocol === 'https:' || !loopback ? 'wss:' : 'ws:';
-  return `${protocol}//${hostname}:8787`;
-};
 
 export class MultiplayerClient {
   private socket: WebSocket | null = null;
@@ -96,7 +85,7 @@ export class MultiplayerClient {
     this.closed = false; this.authorized = false; this.callbacks.connection?.('connecting');
     this.restoringIdentity = Boolean(localStorage.getItem(TOKEN_KEY));
     this.credentials = { nickname, password };
-    try { this.socket = new WebSocket(serverUrl()); } catch { this.scheduleReconnect(); return; }
+    try { this.socket = new WebSocket(getServerUrl()); } catch { this.scheduleReconnect(); return; }
     this.socket.addEventListener('open', () => {
       const token = localStorage.getItem(TOKEN_KEY) ?? undefined;
       this.send({ type: 'hello', token, nickname, password: token ? undefined : password });

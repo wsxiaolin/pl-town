@@ -1,3 +1,5 @@
+import { apiFetch as fetch } from './network/serverUrl';
+
 type Npc = { id: string; name: string; role: string; npcType: string };
 type Session = { token: string; user: { nickname: string } };
 

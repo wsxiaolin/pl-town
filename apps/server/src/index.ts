@@ -351,6 +351,20 @@ const http = createServer(async (request, response) => {
     response.writeHead(database.ready ? 200 : 503, headers); response.end(JSON.stringify({ ok: database.ready, database, online: clients.size })); return;
   }
   if (request.url?.startsWith('/town-api/')) {
+    const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+    const corsHeaders = origin && requestOriginAllowed(request) ? {
+      'access-control-allow-origin': origin,
+      'access-control-allow-credentials': 'true',
+      vary: 'Origin',
+    } : {};
+    for (const [name, value] of Object.entries(corsHeaders)) response.setHeader(name, value);
+    if (request.method === 'OPTIONS') {
+      if (!requestOriginAllowed(request)) {
+        response.writeHead(403, headers); response.end(JSON.stringify({ error: 'Request origin is not allowed' })); return;
+      }
+      response.writeHead(204, { ...corsHeaders, 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type, x-town-pl-session, x-town-work-category', 'access-control-max-age': '600' });
+      response.end(); return;
+    }
     const limiter = ['GET', 'HEAD'].includes(request.method ?? '') ? publicApiRate : publicMutationRate;
     const globalLimiter = ['GET', 'HEAD'].includes(request.method ?? '') ? globalPublicApiRate : globalPublicMutationRate;
     const result = limiter.consume(requestIp);

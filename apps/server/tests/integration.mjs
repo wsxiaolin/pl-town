@@ -537,6 +537,11 @@ try {
     method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
     body: JSON.stringify({ event: 'integration.test', sessionId: 'sess-1', properties: { ok: true } }),
   });
+  if (eventPost.headers.get('access-control-allow-origin') !== adminOrigin || eventPost.headers.get('access-control-allow-credentials') !== 'true') throw new Error('Town telemetry responses must include precise credentialed CORS headers');
+  const telemetryPreflight = await fetch(`${adminOrigin}/town-api/telemetry/event`, {
+    method: 'OPTIONS', headers: { origin: adminOrigin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-town-pl-session,x-town-work-category' },
+  });
+  if (telemetryPreflight.status !== 204 || telemetryPreflight.headers.get('access-control-allow-origin') !== adminOrigin || telemetryPreflight.headers.get('access-control-allow-methods') !== 'GET, POST' || telemetryPreflight.headers.get('access-control-allow-headers') !== 'content-type, x-town-pl-session, x-town-work-category') throw new Error('Town API CORS preflight must allow the documented methods and headers');
   if (eventPost.status !== 202) throw new Error('Telemetry event collection must accept valid payloads');
   const badEvent = await fetch(`${adminOrigin}/town-api/telemetry/event`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },

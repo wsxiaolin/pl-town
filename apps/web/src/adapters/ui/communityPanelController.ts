@@ -1,4 +1,6 @@
 // Physics Lab community API and panel state.
+import { apiFetch as fetch } from '../../network/serverUrl';
+
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 
 export type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'volunteers';

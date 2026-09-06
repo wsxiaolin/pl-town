@@ -3,6 +3,8 @@
 // admins in the NPC management console for approval. Submitting does NOT
 // mutate game runtime or override the catalog — it only opens a ticket.
 
+import { apiFetch as fetch } from '../../network/serverUrl';
+
 const TOKEN_KEY = 'minicityServerToken';
 const FORM_ID = 'npcChangeForm';
 const STATUS_ID = 'npcChangeStatus';

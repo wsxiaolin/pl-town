@@ -2,6 +2,8 @@
 // errors to the server's /town-api/telemetry endpoints. Failures are silent
 // so analytics never breaks the game.
 
+import { getApiUrl } from '../network/serverUrl';
+
 const SESSION_KEY = 'minicity.sessionId';
 let sessionId = '';
 let userId: string | null = null;
@@ -29,11 +31,12 @@ const loadSessionId = (): string => {
 const send = (path: string, payload: Record<string, unknown>): void => {
   try {
     const body = JSON.stringify(payload);
+    const url = getApiUrl(path);
     if (navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
-      if (navigator.sendBeacon(path, blob)) return;
+      if (navigator.sendBeacon(url, blob)) return;
     }
-    void fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => { /* ignore */ });
+    void fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
 };
 
