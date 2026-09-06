@@ -125,5 +125,10 @@ export function createStoryDialogFlow(
     return choose(dialogs, interaction.choiceId);
   };
 
-  return { open, choose, interact, interactBuilding, interactInterestPoint, state: () => runtime.state(), phase: () => getStoryPhase(definition, runtime.state()), announceGuide, syncWorldInteractions, syncActiveActors };
+  const ownsEntry = (kind: 'actor' | 'building', targetId: string): boolean =>
+    kind === 'actor'
+      ? definition.entryActorId === targetId || (definition.interactions ?? []).some((item) => item.actorId === targetId)
+      : (definition.buildingInteractions ?? []).some((item) => item.buildingId === targetId);
+
+  return { open, choose, interact, interactBuilding, interactInterestPoint, state: () => runtime.state(), phase: () => getStoryPhase(definition, runtime.state()), ownsEntry, announceGuide, syncWorldInteractions, syncActiveActors };
 }

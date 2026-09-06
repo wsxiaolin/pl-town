@@ -9,12 +9,9 @@ export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
   getCityDialogs: () => CityDialogController | null;
-  getEchoStoryController: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  getYesterdayStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  getMagiStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  getOvercoatStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
-  /** 剧情互斥：某剧情进行中时，仅放行该剧情的入口（storyId 为控制器标识）。 */
-  storyGate?: (storyId: string) => boolean;
+  getEchoStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
+  /** 剧情入口统一路由（含互斥判定与被拦提示）。 */
+  getStoryRouter?: () => { routeBuilding: (buildingId: string, dialogs: CityDialogController) => boolean } | null;
   getStatsPanelController: () => { open: () => void } | null;
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
@@ -62,15 +59,8 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       return;
     }
     const dialogs = options.getCityDialogs();
-    const gate = options.storyGate;
-    const echo = options.getEchoStoryController();
-    if (dialogs && (!gate || gate('echo')) && echo?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
-    const yesterday = options.getYesterdayStoryController?.();
-    if (dialogs && (!gate || gate('yesterday')) && yesterday?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
-    const magi = options.getMagiStoryController?.();
-    if (dialogs && (!gate || gate('magi')) && magi?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
-    const overcoat = options.getOvercoatStoryController?.();
-    if (dialogs && (!gate || gate('overcoat')) && overcoat?.interactBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
+    const storyRouter = options.getStoryRouter?.();
+    if (dialogs && storyRouter?.routeBuilding(b.id, dialogs)) { options.trackInteraction(b.id); return; }
     if (b.isStats) { options.getStatsPanelController()?.open(); options.trackInteraction('stats'); return; }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();

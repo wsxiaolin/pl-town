@@ -12,9 +12,14 @@ export function createStoryEntryGate(
   listControllers: () => readonly (readonly [string, PhaseReporter | null | undefined])[],
 ): StoryEntryGate {
   return (storyId: string): boolean => {
+    let anyActive = false;
+    let selfActive = false;
     for (const [id, controller] of listControllers()) {
-      if (id !== storyId && controller?.phase() === 'active') return false;
+      if (controller?.phase() !== 'active') continue;
+      anyActive = true;
+      if (id === storyId) selfActive = true;
     }
-    return true;
+    // 收集全部 active 后再判定：已进入的剧情自身入口始终放行（存量并行存档的逃生通道）。
+    return !anyActive || selfActive;
   };
 }

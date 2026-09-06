@@ -84,6 +84,7 @@ export function createOvercoatStoryController(options: {
     syncActiveActors,
     state,
     phase: () => flow.phase(),
+    ownsEntry: flow.ownsEntry,
     dispose,
   };
 }

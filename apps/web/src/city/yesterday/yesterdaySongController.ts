@@ -86,6 +86,7 @@ export function createYesterdaySongController(options: {
     syncActiveActors,
     state,
     phase: () => flow.phase(),
+    ownsEntry: flow.ownsEntry,
     dispose,
   };
 }

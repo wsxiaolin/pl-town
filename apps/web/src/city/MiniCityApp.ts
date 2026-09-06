@@ -69,6 +69,7 @@ import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createStoryEntryGate } from './storyEntryGate';
+import { createStoryRouter } from './storyRouting';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { isWeather, type Weather } from './weather';
@@ -157,6 +158,12 @@ function mergeActiveStoryActorIds() {
 
 const storyEntryGate = createStoryEntryGate(() => [
   ['echo', echoStoryController], ['yesterday', yesterdaySongController], ['magi', magiStoryController], ['overcoat', overcoatStoryController]]);
+const storyRouter = createStoryRouter({
+  listControllers: () => [
+    ['echo', echoStoryController], ['yesterday', yesterdaySongController], ['magi', magiStoryController], ['overcoat', overcoatStoryController]],
+  gate: storyEntryGate,
+  showToast: showUnlockToast,
+});
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const residences: ResidenceEntity[] = [];
@@ -323,11 +330,7 @@ const buildingInteraction = createBuildingInteraction({
   isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
-  getEchoStoryController: () => echoStoryController,
-  getYesterdayStoryController: () => yesterdaySongController,
-  getMagiStoryController: () => magiStoryController,
-  getOvercoatStoryController: () => overcoatStoryController,
-  storyGate: storyEntryGate,
+  getStoryRouter: () => storyRouter,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
@@ -917,19 +920,7 @@ function getQuestProgressView() {
 function recordNpcInteraction(npcId: string) { interactionTracker.recordNpcInteraction(npcId); }
 
 function openNpcDialog(npc: Npc) {
-  if (cityDialogs && storyEntryGate('echo') && echoStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
-  if (cityDialogs && storyEntryGate('yesterday') && yesterdaySongController?.interactNpc(npc.profile.id, cityDialogs)) {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
-  if (cityDialogs && storyEntryGate('magi') && magiStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
-  if (cityDialogs && storyEntryGate('overcoat') && overcoatStoryController?.interactNpc(npc.profile.id, cityDialogs)) {
+  if (cityDialogs && storyRouter.routeNpc(npc.profile.id, cityDialogs)) {
     recordNpcInteraction(npc.profile.id);
     return;
   }

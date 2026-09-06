@@ -223,6 +223,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
     restoreAchievements,
     isCabinNode,
     phase: () => getStoryPhase(ECHO_STORY, story.state()),
+    ownsEntry: story.ownsEntry,
     isInteriorView: () => echoInteriorView,
     setInteriorView,
     teleportToCabin,
