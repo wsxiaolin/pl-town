@@ -42,14 +42,20 @@ const proxyAddresses = (raw: string | undefined, fallback: string): ReadonlyArra
   return entries;
 };
 
-const origins = (raw: string | undefined): ReadonlySet<string> => {
+const origins = (raw: string | undefined): { exact: ReadonlySet<string>; wildcardHosts: ReadonlySet<string> } => {
   const values = (raw ?? '').split(',').map((value) => value.trim()).filter(Boolean);
-  return new Set(values.map((value) => {
+  const exact = new Set<string>();
+  const wildcardHosts = new Set<string>();
+  for (const value of values) {
     const url = new URL(value);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('ALLOWED_ORIGINS only accepts HTTP(S) origins');
     if (url.pathname !== '/' || url.search || url.hash || url.username || url.password) throw new Error('ALLOWED_ORIGINS entries must be origins without paths');
-    return url.origin;
-  }));
+    if (url.hostname.startsWith('*.')) {
+      if (url.hostname.length <= 2 || url.hostname.slice(2).includes('*')) throw new Error('ALLOWED_ORIGINS wildcard must use a single leading *');
+      wildcardHosts.add(`${url.protocol}//${url.hostname.slice(2)}${url.port ? `:${url.port}` : ''}`.toLowerCase());
+    } else exact.add(url.origin);
+  }
+  return { exact, wildcardHosts };
 };
 
 const httpUrl = (name: string, raw: string): string => {
@@ -72,7 +78,9 @@ export const TRUST_PROXY_HOPS = integer('TRUST_PROXY_HOPS', 0, 0, 10);
 // X-Forwarded-For is only read when the TCP peer matches one of these
 // addresses/ranges; otherwise the header is ignored (see requestSecurity.ts).
 export const TRUSTED_PROXIES = proxyAddresses(process.env.TRUSTED_PROXIES, '127.0.0.1,::1');
-export const ALLOWED_ORIGINS = origins(process.env.ALLOWED_ORIGINS);
+const allowedOrigins = origins(process.env.ALLOWED_ORIGINS);
+export const ALLOWED_ORIGINS = allowedOrigins.exact;
+export const ALLOWED_ORIGIN_WILDCARDS = allowedOrigins.wildcardHosts;
 export const ALLOW_ORIGINLESS_WEBSOCKET = boolean('ALLOW_ORIGINLESS_WEBSOCKET', !IS_PRODUCTION);
 export const MAX_CONNECTIONS = integer('MAX_CONNECTIONS', 500, 1, 10_000);
 export const MAX_CONNECTIONS_PER_IP = integer('MAX_CONNECTIONS_PER_IP', 20, 1, 1_000);
@@ -144,7 +152,7 @@ if (new Set(ADMIN_ACCOUNTS.map((account) => account.username)).size !== ADMIN_AC
   throw new Error('Administrator usernames must be unique');
 }
 if (IS_PRODUCTION && !ADMIN_ENABLED) throw new Error('Production requires at least one administrator account');
-if (IS_PRODUCTION && ALLOWED_ORIGINS.size === 0) throw new Error('Production requires at least one ALLOWED_ORIGINS entry');
+if (IS_PRODUCTION && ALLOWED_ORIGINS.size + ALLOWED_ORIGIN_WILDCARDS.size === 0) throw new Error('Production requires at least one ALLOWED_ORIGINS entry');
 if (IS_PRODUCTION && BIGMODEL_API_KEY && new URL(BIGMODEL_MODERATION_URL).protocol !== 'https:') throw new Error('Production requires an HTTPS BIGMODEL_MODERATION_URL');
 if (OSS_ENABLED && !OFFSITE_BACKUP_ENABLED) throw new Error('OSS_ENABLED requires OSS_BUCKET, OSS_ACCESS_KEY_ID, and OSS_ACCESS_KEY_SECRET');
 if (OSS_ENABLED && OSS_REGION === '' && OSS_ENDPOINT === '') throw new Error('OSS_ENABLED requires OSS_REGION or OSS_ENDPOINT');

@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
@@ -668,6 +668,72 @@ try {
   if (!storyCatalog.ok || !storyCatalogPayload.items?.some((story) => story.id === 'main.echo.act-one' && story.nodes.length > 0)) throw new Error('Admin story catalog must expose node details even when no resident progress matches');
   const topologyHtml = await fetch(`${adminOrigin}/admin/story-topology`);
   if (!topologyHtml.ok || topologyHtml.headers.get('cache-control') !== 'no-store') throw new Error('Story topology HTML shell must be served without caching');
+
+  // Production origin matrix: the admin panel is served from the backend
+  // itself, so same-origin requests must pass even when ALLOWED_ORIGINS only
+  // lists frontend origins; wildcard entries must match exactly one subdomain
+  // level with matching protocol, and unrelated origins stay rejected.
+  const originPort = 8793;
+  const originDataDir = mkdtempSync(join(tmpdir(), 'minicity-origin-'));
+  const originServer = spawn(process.execPath, ['dist/index.js'], {
+    cwd: new URL('..', import.meta.url),
+    env: {
+      ...process.env, NODE_ENV: 'production', PORT: String(originPort), DATA_DIR: originDataDir, HOST: '127.0.0.1',
+      ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678', ADMIN_ACCOUNTS_JSON: '',
+      ALLOWED_ORIGINS: 'https://city.example.com,https://*.pl-town.pages.dev', TRUST_PROXY_HOPS: '1',
+      AUTO_BACKUP_ENABLED: 'false',
+    },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  try {
+    const originBase = `http://127.0.0.1:${originPort}`;
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timed out waiting for the production origin server')), 10_000);
+      const poll = async () => {
+        try {
+          const response = await fetch(`${originBase}/readyz`);
+          if (response.ok) { clearTimeout(timeout); resolve(); return; }
+        } catch { /* server not listening yet */ }
+        setTimeout(poll, 100);
+      };
+      poll();
+    });
+    const loginWithOrigin = (origin) => fetch(`${originBase}/admin/api/login`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify({ username: 'admin', password: 'admin-password-12345678' }),
+    });
+    if ((await loginWithOrigin(originBase)).status !== 200) throw new Error('Same-origin admin sign-in must be allowed in production even when the backend origin is absent from ALLOWED_ORIGINS');
+    if ((await loginWithOrigin('https://evil.example')).status !== 403) throw new Error('Admin sign-in must still reject unrelated origins');
+    if ((await loginWithOrigin('https://abc.pl-town.pages.dev')).status !== 200) throw new Error('Wildcard ALLOWED_ORIGINS must accept single-level preview subdomains');
+    if ((await loginWithOrigin('https://a.b.pl-town.pages.dev')).status !== 403) throw new Error('Wildcard ALLOWED_ORIGINS must reject multi-level subdomains');
+    if ((await loginWithOrigin('https://pl-town.pages.dev')).status !== 403) throw new Error('Wildcard ALLOWED_ORIGINS must reject the bare root domain');
+    if ((await loginWithOrigin('http://abc.pl-town.pages.dev')).status !== 403) throw new Error('Wildcard ALLOWED_ORIGINS must reject protocol mismatches');
+    // Behind a trusted single-hop proxy the client-facing host arrives via
+    // X-Forwarded-Host; a request carrying that origin is the panel talking
+    // to its own deployment (the Render topology).
+    const forwardedResponse = await new Promise((resolve, reject) => {
+      const request = httpRequest({ host: '127.0.0.1', port: originPort, path: '/admin/api/login', method: 'POST', headers: { 'content-type': 'application/json', host: '127.0.0.1', origin: 'https://render-backend.example', 'x-forwarded-host': 'render-backend.example' } }, resolve);
+      request.once('error', reject);
+      request.end(JSON.stringify({ username: 'admin', password: 'admin-password-12345678' }));
+    });
+    forwardedResponse.resume();
+    if (forwardedResponse.statusCode !== 200) throw new Error(`Same-origin via X-Forwarded-Host must be allowed behind a trusted proxy, got ${forwardedResponse.statusCode}`);
+  } finally {
+    if (originServer.exitCode === null && originServer.signalCode === null) {
+      const exited = new Promise((resolve) => originServer.once('exit', resolve));
+      originServer.kill();
+      await exited;
+    }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        rmSync(originDataDir, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if (attempt === 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
 
   console.log('Integration passed: production fail-closed, origin/CSRF, identity, chat moderation, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, and story topology');
 } finally {
