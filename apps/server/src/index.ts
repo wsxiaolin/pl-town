@@ -14,7 +14,7 @@ import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather 
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
-import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
+import { clientIp, jsonSecurityHeaders, originAllowed, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
@@ -351,6 +351,23 @@ const http = createServer(async (request, response) => {
     response.writeHead(database.ready ? 200 : 503, headers); response.end(JSON.stringify({ ok: database.ready, database, online: clients.size })); return;
   }
   if (request.url?.startsWith('/town-api/')) {
+    // Cross-origin browser clients (static hosts like Cloudflare Pages) call
+    // these endpoints directly, so both preflights and real responses need
+    // CORS; the allowlist mirrors the WebSocket handshake. setHeader merges
+    // with every later writeHead, so error paths stay readable too.
+    const requestOrigin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+    if (requestOrigin && originAllowed(requestOrigin, process.env.NODE_ENV !== 'production')) {
+      response.setHeader('access-control-allow-origin', requestOrigin);
+      response.setHeader('vary', 'Origin');
+      if (request.method === 'OPTIONS') {
+        response.writeHead(204, {
+          'access-control-allow-methods': 'GET, HEAD, POST, PATCH, DELETE',
+          'access-control-allow-headers': typeof request.headers['access-control-request-headers'] === 'string' ? request.headers['access-control-request-headers'] : 'content-type',
+          'access-control-max-age': '600',
+        });
+        response.end(); return;
+      }
+    }
     const limiter = ['GET', 'HEAD'].includes(request.method ?? '') ? publicApiRate : publicMutationRate;
     const globalLimiter = ['GET', 'HEAD'].includes(request.method ?? '') ? globalPublicApiRate : globalPublicMutationRate;
     const result = limiter.consume(requestIp);

@@ -1,6 +1,7 @@
 // Lightweight analytics + error capture. Reports user events and uncaught
 // errors to the server's /town-api/telemetry endpoints. Failures are silent
 // so analytics never breaks the game.
+import { townApiUrl } from './townApi';
 
 const SESSION_KEY = 'minicity.sessionId';
 let sessionId = '';
@@ -28,12 +29,13 @@ const loadSessionId = (): string => {
 
 const send = (path: string, payload: Record<string, unknown>): void => {
   try {
+    const url = townApiUrl(path);
     const body = JSON.stringify(payload);
     if (navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
-      if (navigator.sendBeacon(path, blob)) return;
+      if (navigator.sendBeacon(url, blob)) return;
     }
-    void fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => { /* ignore */ });
+    void fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
 };
 
