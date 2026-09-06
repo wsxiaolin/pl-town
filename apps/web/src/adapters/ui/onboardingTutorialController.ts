@@ -340,8 +340,12 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
     previewTimer = window.setTimeout(() => {
       previewTimer = 0;
       if (!active) return;
-      dismissTourPanels();
+      if (step().target !== '#onlinePanelToggle') dismissTourPanels();
       advance();
+      previewTimer = window.setTimeout(() => {
+        previewTimer = 0;
+        if (active) dismissTourPanels();
+      }, OVERLAY_PREVIEW_MS);
     }, OVERLAY_PREVIEW_MS);
   }
 
