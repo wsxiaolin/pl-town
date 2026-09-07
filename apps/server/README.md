@@ -50,7 +50,7 @@ npm run start -w @minicity/server
 
 备份通过 SQLite Online Backup API 生成 `.partial`，在 worker 中执行完整性检查、外键检查和流式 SHA-256，通过后原子重命名并写入 `manifest.json`。默认每天备份，保留 30 天且最多 30 个文件。
 
-配置 `OSS_ENABLED=true` 及 OSS 凭据后，后台可手动把某个本地备份上传到阿里云 OSS，也可以从 OSS 下载或删除异地备份。异地备份始终是本地的子集：上传只接受本地已校验备份，OSS 上不存在的备份不会出现在本地。上传时会把备份的 SHA-256 记录为 OSS 对象元数据，并附带上传不可变 sidecar（`*.sqlite.manifest.json`），便于事后交叉校验。
+配置 `OSS_ENABLED=true` 及 OSS 凭据后，后台可手动把某个本地备份上传到阿里云 OSS，也可以从 OSS 下载、删除，或直接恢复。恢复会把对象临时拉到本地校验后再覆盖当前数据库，本机没有这份备份时也可以操作，临时文件不会进入本地备份列表。上传只接受本地已校验备份。上传时会把备份的 SHA-256 记录为 OSS 对象元数据，并附带上传不可变 sidecar（`*.sqlite.manifest.json`），便于事后交叉校验。
 
 恢复必须先停服：
 

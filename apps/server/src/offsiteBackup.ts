@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import OSS from 'ali-oss';
@@ -9,8 +11,9 @@ import {
 import { logger } from './logger.js';
 
 // Off-site backups are a secondary copy of verified local backups. Uploads only
-// ever originate from a local verified backup, which guarantees the "remote is
-// a subset of local" invariant the feature is built around.
+// ever originate from a local verified backup. Console restore may pull an OSS
+// object that is no longer present locally (for example after retention prune)
+// into a temporary file, verify it, then discard the staging copy.
 const BACKUP_NAME = /^minicity-(\d{8}T\d{6}\.\d{3}Z)-([a-f0-9]{8})\.sqlite$/;
 const SHA256 = /^[a-f0-9]{64}$/i;
 const KEY_PREFIX = OSS_PREFIX.endsWith('/') ? OSS_PREFIX : `${OSS_PREFIX}/`;
@@ -135,6 +138,32 @@ export async function streamOffsiteBackup(name: string, response: ServerResponse
   result.stream.once('error', () => { response.destroy(); });
   response.once('close', () => { if (!response.writableFinished) result.stream.destroy(); });
   return true;
+}
+
+// Download an OSS backup to a unique staging file under BACKUP_DIR. The file
+// name does not match the local backup pattern, so it never appears in the
+// local backup list. Callers must discard it after restore or on failure.
+export async function stageOffsiteBackup(name: string): Promise<{ path: string; expectedSha256?: string }> {
+  if (!validName(name)) throw new Error('Backup was not found');
+  const store = oss();
+  const key = keyFor(name);
+  const expectedSha256 = (await checksumFromMeta(store, key)) ?? (await checksumFromSidecar(store, sidecarKeyFor(name)));
+  const destination = join(BACKUP_DIR, `.offsite-restore-${randomUUID()}.sqlite`);
+  try {
+    await store.get(key, destination);
+  } catch (caught) {
+    discardStagedBackup(destination);
+    const message = caught instanceof Error ? caught.message : String(caught);
+    if (/status:\s*404\b/i.test(message) || /NoSuchKey/i.test(message) || /not found/i.test(message)) {
+      throw new Error('Backup was not found');
+    }
+    throw caught;
+  }
+  return { path: destination, expectedSha256 };
+}
+
+export function discardStagedBackup(path: string): void {
+  try { rmSync(path, { force: true }); } catch { /* staging file may already be gone */ }
 }
 
 export async function deleteOffsiteBackup(name: string): Promise<void> {
