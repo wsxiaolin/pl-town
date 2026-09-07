@@ -101,7 +101,7 @@ await new Promise((resolve, reject) => {
 // Stub of the Physics Lab community API: GetUser answers existence (Status
 // 200 with the owner or Status 404), Authenticate answers credential checks.
 // Only 'TakenPlResident' exists upstream, owned by owner@example.com.
-const physicsLabPort = 8793;
+const physicsLabPort = 8794;
 const physicsLabServer = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
