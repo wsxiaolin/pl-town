@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate, RegistrationLimitError, tokenHash } from './auth.js';
 import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
+import { discardStaleStagedBackups } from './offsiteBackup.js';
 import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import { ChatModerationService } from './chatModerationService.js';
 import * as db from './db.js';
@@ -601,6 +602,7 @@ http.headersTimeout = 20_000;
 http.keepAliveTimeout = 5_000;
 http.maxHeadersCount = 100;
 http.listen(PORT, HOST, () => {
+  discardStaleStagedBackups();
   startAutomaticBackups();
   logger.info(`MiniCity server listening on http://${HOST}:${PORT}`);
 });

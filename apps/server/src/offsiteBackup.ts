@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import OSS from 'ali-oss';
@@ -164,6 +164,15 @@ export async function stageOffsiteBackup(name: string): Promise<{ path: string; 
 
 export function discardStagedBackup(path: string): void {
   try { rmSync(path, { force: true }); } catch { /* staging file may already be gone */ }
+}
+
+export function discardStaleStagedBackups(): void {
+  let names: string[] = [];
+  try { names = readdirSync(BACKUP_DIR); } catch { return; }
+  for (const name of names) {
+    if (!name.startsWith('.offsite-restore-') || !name.endsWith('.sqlite')) continue;
+    discardStagedBackup(join(BACKUP_DIR, name));
+  }
 }
 
 export async function deleteOffsiteBackup(name: string): Promise<void> {

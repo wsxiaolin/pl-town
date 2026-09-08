@@ -55,7 +55,9 @@ declare module 'ali-oss' {
   export default class OSS {
     constructor(options: OSSOptions);
     put(name: string, file: string | Buffer | import('node:stream').Readable, options?: PutOptions): Promise<{ name: string; res: Record<string, unknown> }>;
-    get(name: string, file?: string | Record<string, unknown>, options?: Record<string, unknown>): Promise<GetResult>;
+    get(name: string): Promise<GetResult>;
+    get(name: string, file: string, options?: Record<string, unknown>): Promise<GetResult>;
+    get(name: string, options: Record<string, unknown>): Promise<GetResult>;
     getStream(name: string, options?: Record<string, unknown>): Promise<GetStreamResult>;
     head(name: string, options?: Record<string, unknown>): Promise<HeadResult>;
     delete(name: string, options?: Record<string, unknown>): Promise<{ res: Record<string, unknown> }>;

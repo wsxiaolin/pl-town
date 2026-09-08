@@ -94,7 +94,7 @@ th, td { padding: 13px 15px; text-align: left; border-bottom: 1px solid #e8ecea;
 th { color: #68736d; background: #f9faf9; font-size: 11px; font-weight: 700; }
 tr:last-child td { border-bottom: 0; }
 td strong, td small { display: block; }
-td strong { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#userRows td strong, #chatRows td strong, #chatAuthorRows td strong, #houseRows td:nth-child(2) { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td small { margin-top: 3px; color: #89928e; overflow-wrap: anywhere; }
 .align-right { text-align: right; }
 .row-actions { display: flex; justify-content: flex-end; gap: 6px; white-space: nowrap; }
