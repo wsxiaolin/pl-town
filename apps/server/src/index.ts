@@ -45,6 +45,16 @@ const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // budget used by WebSocket `hello` logins. Password sign-ins still use the
 // global limiter to stay consistent with the game login path.
 const npcEditTokenRestoreRate = new FixedWindowRateLimiter(20, 60_000);
+// Shared per-IP + global budget for every Physics Lab credential path
+// (ownership verification during sign-in and direct credential relays) so the
+// call sites cannot drift apart.
+function consumePhysicsLoginAttempt(ip: string): boolean {
+  const attempt = physicsLoginAttempts.get(ip) ?? { count: 0, startedAt: Date.now() };
+  if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
+  const allowed = ++attempt.count <= MAX_PHYSICS_LOGINS_PER_MINUTE && globalPhysicsLoginRate.consume('global').allowed;
+  physicsLoginAttempts.set(ip, attempt);
+  return allowed;
+}
 let serverWeather: Weather = 'clear';
 // The edit page only needs the identity fields for its dropdown; the full
 // catalog carries hundreds of KB of dialog text that the page never shows.
@@ -145,13 +155,10 @@ async function handle(client: Client, raw: string) {
         // upstream account API; it shares the Physics Lab login budget so
         // would-be relays cannot use residents as a guessing proxy.
         plVerifyGuard: () => {
-          const physicsAttempt = physicsLoginAttempts.get(address) ?? { count: 0, startedAt: Date.now() };
-          if (Date.now() - physicsAttempt.startedAt >= 60_000) { physicsAttempt.startedAt = Date.now(); physicsAttempt.count = 0; }
-          if (++physicsAttempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE || !globalPhysicsLoginRate.consume('global').allowed) {
+          if (!consumePhysicsLoginAttempt(address)) {
             logger.warn('Physics Lab verification rate limit exceeded', { ip: address });
             throw new Error('物实验证尝试过于频繁，请稍后再试');
           }
-          physicsLoginAttempts.set(address, physicsAttempt);
         },
       });
     } catch (error) {
@@ -415,10 +422,10 @@ const http = createServer(async (request, response) => {
               ? { login: plBody.login, password: plBody.password }
               : undefined,
             plVerifyGuard: () => {
-              const attempt = physicsLoginAttempts.get(requestIp) ?? { count: 0, startedAt: Date.now() };
-              if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
-              if (++attempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE || !globalPhysicsLoginRate.consume('global').allowed) throw new Error('物实验证尝试过于频繁，请稍后再试');
-              physicsLoginAttempts.set(requestIp, attempt);
+              if (!consumePhysicsLoginAttempt(requestIp)) {
+                logger.warn('Physics Lab verification rate limit exceeded', { ip: requestIp });
+                throw new Error('物实验证尝试过于频繁，请稍后再试');
+              }
             },
           });
       response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
@@ -493,15 +500,12 @@ const http = createServer(async (request, response) => {
   }
   if (request.method === 'POST' && request.url === '/town-api/pl/login') {
     try {
-      const attempt = physicsLoginAttempts.get(requestIp) ?? { count: 0, startedAt: Date.now() };
-      if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
-      if (++attempt.count > MAX_PHYSICS_LOGINS_PER_MINUTE || !globalPhysicsLoginRate.consume('global').allowed) {
+      if (!consumePhysicsLoginAttempt(requestIp)) {
         logger.warn('Physics Lab login rate limit exceeded', { ip: requestIp });
         response.writeHead(429, { ...headers, 'cache-control': 'no-store', 'retry-after': '60' });
         response.end(JSON.stringify({ error: 'Too many login attempts' }));
         return;
       }
-      physicsLoginAttempts.set(requestIp, attempt);
       const body = await readJson(request); const login = typeof body.login === 'string' ? body.login.trim() : ''; const password = typeof body.password === 'string' ? body.password : '';
       if (!login || !password || login.length > 160 || password.length > 256) throw new Error('Login details are invalid');
       const result = await authenticateAccount(login, password); const id = randomUUID();

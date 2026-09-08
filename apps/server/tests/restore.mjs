@@ -28,6 +28,10 @@ const physicsLabServer = createServer(async (request, response) => {
     return;
   }
   if (request.url === '/Users/GetUser') {
+    // Deliberately reports every nickname as unknown: the restore flow
+    // authenticates with a stored token, which skips Physics Lab ownership
+    // verification entirely. The existing-user path is covered in
+    // integration.mjs, which stubs both known and unknown names.
     response.end(JSON.stringify({ Status: 404, Message: 'Standard.404', Data: null }));
     return;
   }
