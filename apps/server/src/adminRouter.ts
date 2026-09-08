@@ -7,9 +7,9 @@ import {
   adminLoginAllowed, authenticateAdmin, authorizeAdminMutation,
   createAdminSession, destroyAdminSession,
 } from './adminAuth.js';
-import { createBackup, listBackups, streamBackup, verifyStoredBackup } from './backup.js';
+import { createBackup, endRestoreExclusive, listBackups, RESTORE_IN_PROGRESS, streamBackup, tryBeginRestore, verifyStoredBackup, waitForBackup } from './backup.js';
 import { verifyBackup } from './backupVerification.js';
-import { deleteOffsiteBackup, listOffsiteBackups, offsiteBackupEnabled, streamOffsiteBackup, uploadOffsiteBackup } from './offsiteBackup.js';
+import { deleteOffsiteBackup, discardStagedBackup, listOffsiteBackups, offsiteBackupEnabled, stageOffsiteBackup, streamOffsiteBackup, uploadOffsiteBackup } from './offsiteBackup.js';
 import { ADMIN_ENABLED, AUTO_BACKUP_ENABLED, BACKUP_DIR, BACKUP_INTERVAL_MINUTES, BACKUP_RETENTION_DAYS, DATABASE_PATH, IS_PRODUCTION } from './config.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
@@ -70,6 +70,10 @@ const error = (response: ServerResponse, status: number, code: string, message: 
 const integer = (value: string | null, fallback: number, minimum: number, maximum: number) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) ? Math.max(minimum, Math.min(maximum, parsed)) : fallback;
+};
+const beginRestore = (response: ServerResponse): boolean => {
+  if (!tryBeginRestore()) { error(response, 409, 'RESTORE_IN_PROGRESS', '已有恢复正在进行'); return false; }
+  return true;
 };
 
 async function login(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -224,9 +228,15 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   }
   if (request.method === 'GET' && path === '/admin/api/backups') { respond(response, 200, { items: listBackups() }); return true; }
   if (request.method === 'POST' && path === '/admin/api/backups') {
-    const backup = await createBackup('manual');
-    db.recordAdminAudit(principal.actor, 'database.backup.create', backup.name, { bytes: backup.bytes });
-    respond(response, 201, { backup }); return true;
+    try {
+      const backup = await createBackup('manual');
+      db.recordAdminAudit(principal.actor, 'database.backup.create', backup.name, { bytes: backup.bytes });
+      respond(response, 201, { backup }); return true;
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      if (message === RESTORE_IN_PROGRESS) { error(response, 409, 'RESTORE_IN_PROGRESS', '已有恢复正在进行'); return true; }
+      throw caught;
+    }
   }
   const download = path.match(/^\/admin\/api\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)$/);
   if (request.method === 'GET' && download) {
@@ -241,9 +251,9 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     respond(response, 200, { backup }); return true;
   }
 
-  // Off-site (Alibaba Cloud OSS) backups: manual upload/download/delete from the
-  // admin console. Uploads only accept local verified backups, keeping the
-  // "every remote backup has a local original" invariant.
+  // Off-site (Alibaba Cloud OSS) backups: upload/download/delete/restore from
+  // the admin console. Uploads only accept local verified backups. Restore may
+  // pull an OSS object that is no longer local, stage it, verify, then discard.
   if (request.method === 'GET' && path === '/admin/api/offsite/backups') {
     if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
     const items = await listOffsiteBackups();
@@ -263,6 +273,44 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       logger.error('Off-site backup upload failed', { name: offsiteUpload[1], error: message });
       error(response, 502, 'OFFSITE_UPLOAD_FAILED', 'Uploading the backup to the object store failed'); return true;
     }
+  }
+  const offsiteRestore = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)\/restore$/);
+  if (request.method === 'POST' && offsiteRestore) {
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    const name = offsiteRestore[1]!;
+    const body = await readJson(request, 1_024).catch(() => ({} as Record<string, unknown>));
+    if (body.confirm !== true) { error(response, 400, 'CONFIRM_REQUIRED', '恢复备份需要二次确认'); return true; }
+    await waitForBackup();
+    if (!beginRestore(response)) return true;
+    let staged: { path: string; expectedSha256?: string } | undefined;
+    try {
+      await waitForBackup();
+      staged = await stageOffsiteBackup(name);
+      const verification = await verifyBackup(staged.path);
+      if (verification.integrity !== 'ok' || verification.foreignKeyErrors) { error(response, 422, 'BACKUP_UNVERIFIED', '备份完整性校验未通过'); return true; }
+      if (staged.expectedSha256 && staged.expectedSha256 !== verification.sha256) { error(response, 422, 'BACKUP_CHECKSUM_MISMATCH', '异地备份校验和与对象元数据不一致'); return true; }
+      if (!staged.expectedSha256) logger.warn('Off-site backup has no remote checksum; restoring after integrity check only', { name });
+      context.disconnectAll();
+      try {
+        const result = db.restoreFromBackupFile(staged.path);
+        db.recordAdminAudit(principal.actor, 'database.backup.offsite.restore', name, { rowsCopied: result.rowsCopied });
+        logger.info('Database restored from off-site backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
+        respond(response, 200, { ok: true, integrity: db.verifyDatabase(), rowsCopied: result.rowsCopied });
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : String(caught);
+        logger.error('Database restore from off-site backup failed', { name, error: message });
+        error(response, 500, 'RESTORE_FAILED', message);
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', 'Off-site backup was not found'); return true; }
+      logger.error('Off-site backup restore failed', { name, error: message });
+      error(response, 502, 'OFFSITE_RESTORE_FAILED', 'Downloading or verifying the off-site backup failed');
+    } finally {
+      if (staged) discardStagedBackup(staged.path);
+      endRestoreExclusive();
+    }
+    return true;
   }
   const offsiteDownload = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)$/);
   if (request.method === 'GET' && offsiteDownload) {
@@ -399,13 +447,16 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const name = restore[1]!;
     const body = await readJson(request, 1_024).catch(() => ({} as Record<string, unknown>));
     if (body.confirm !== true) { error(response, 400, 'CONFIRM_REQUIRED', '恢复备份需要二次确认'); return true; }
+    await waitForBackup();
+    if (!beginRestore(response)) return true;
     const candidatePath = join(BACKUP_DIR, name);
-    let verification;
-    try { verification = await verifyBackup(candidatePath); }
-    catch { error(response, 404, 'BACKUP_NOT_FOUND', '备份不存在或无法校验'); return true; }
-    if (verification.integrity !== 'ok' || verification.foreignKeyErrors) { error(response, 422, 'BACKUP_UNVERIFIED', '备份完整性校验未通过'); return true; }
-    context.disconnectAll();
     try {
+      await waitForBackup();
+      let verification;
+      try { verification = await verifyBackup(candidatePath); }
+      catch { error(response, 404, 'BACKUP_NOT_FOUND', '备份不存在或无法校验'); return true; }
+      if (verification.integrity !== 'ok' || verification.foreignKeyErrors) { error(response, 422, 'BACKUP_UNVERIFIED', '备份完整性校验未通过'); return true; }
+      context.disconnectAll();
       const result = db.restoreFromBackupFile(candidatePath);
       db.recordAdminAudit(principal.actor, 'database.backup.restore', name, { rowsCopied: result.rowsCopied });
       logger.info('Database restored from backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
@@ -414,7 +465,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       const message = caught instanceof Error ? caught.message : String(caught);
       logger.error('Database restore failed', { name, error: message });
       error(response, 500, 'RESTORE_FAILED', message);
-    }
+    } finally { endRestoreExclusive(); }
     return true;
   }
 

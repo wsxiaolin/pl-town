@@ -17,6 +17,18 @@ type ManifestRecord = { bytes: number; createdAt: string; sha256: string; userVe
 type Manifest = { version: 1; backups: Record<string, ManifestRecord> };
 let timer: NodeJS.Timeout | undefined;
 let running: Promise<BackupInfo> | null = null;
+let restoreClaimed = false;
+export const RESTORE_IN_PROGRESS = 'Restore is in progress';
+
+export function tryBeginRestore(): boolean {
+  if (restoreClaimed) return false;
+  restoreClaimed = true;
+  return true;
+}
+
+export function endRestoreExclusive(): void {
+  restoreClaimed = false;
+}
 
 const readManifest = (): Manifest => {
   try {
@@ -85,8 +97,10 @@ function pruneBackups(): void {
 }
 
 export async function createBackup(reason: 'automatic' | 'startup' | 'manual'): Promise<BackupInfo> {
+  if (restoreClaimed) throw new Error(RESTORE_IN_PROGRESS);
   if (running) return running;
   running = (async () => {
+    if (restoreClaimed) throw new Error(RESTORE_IN_PROGRESS);
     const timestamp = new Date().toISOString().replace(/[-:]/g, '');
     const suffix = randomUUID().replaceAll('-', '').slice(0, 8);
     const name = `minicity-${timestamp}-${suffix}.sqlite`;
@@ -164,7 +178,12 @@ export function stopAutomaticBackups(): void {
 }
 
 export async function waitForBackup(): Promise<void> {
-  if (running) await running;
+  if (!running) return;
+  try { await running; }
+  catch (error) {
+    if (error instanceof Error && error.message === RESTORE_IN_PROGRESS) return;
+    throw error;
+  }
 }
 
 export function streamBackup(name: string, response: ServerResponse): boolean {

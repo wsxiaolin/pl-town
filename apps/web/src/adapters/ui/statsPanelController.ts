@@ -40,7 +40,10 @@ export function createStatsPanelController(options: StatsPanelControllerOptions)
     const body = document.getElementById('spBody');
     if (!body) return;
     body.innerHTML = `<div class="sp-user-row"><div class="sp-username"></div><div class="sp-level">LVL ${options.calcLevel(interactions)}</div></div><div class="sp-since">citizen since ${stats.joinDate ? options.formatDate(stats.joinDate) : 'today'}</div><div class="sp-cards"><div class="sp-card"><div class="sc-val">${options.formatTime(Number(localStorage.getItem('minicityTime') ?? 0))}</div><div class="sc-lbl">TIME IN CITY</div></div><div class="sp-card"><div class="sc-val">${interactions}</div><div class="sc-lbl">INTERACTIONS</div></div><div class="sp-card"><div class="sc-val">${visited}/${options.getBuildingCount()}</div><div class="sc-lbl">BUILDINGS VISITED</div></div><div class="sp-card"><div class="sc-val">${Math.round(stats.distance ?? 0)}</div><div class="sc-lbl">DISTANCE WALKED</div></div></div><div class="sp-prog-section"><div class="sp-prog-label">${next ? `NEXT UNLOCK ${interactions}/${target}` : 'ALL UNLOCKS EARNED'}</div><div class="sp-prog-track"><div class="sp-prog-fill" style="width:${progress}%"></div></div></div><div class="sp-unlocks"><div class="sp-ul-title">UNLOCK HISTORY</div>${unlockRows}</div><div class="sp-unlocks"><div class="sp-ul-title">ACHIEVEMENTS ${achievementIds.length}/${options.achievements.length}</div>${achievementRows}</div>`;
-    body.querySelector('.sp-username')?.replaceChildren(document.createTextNode(localStorage.getItem('minicityUser') ?? 'visitor'));
+    const username = localStorage.getItem('minicityUser') ?? 'visitor';
+    const usernameEl = body.querySelector('.sp-username');
+    usernameEl?.replaceChildren(document.createTextNode(username));
+    if (usernameEl instanceof HTMLElement) usernameEl.title = username;
   }
 
   function renderRaw(): void {

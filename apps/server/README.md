@@ -1,6 +1,6 @@
 # MiniCity Server
 
-Node.js + TypeScript 单实例 HTTP/WebSocket 服务，使用 SQLite 持久化居民身份、位置、云进度、剧情和住房。服务同时提供 `/town-api` Physics Lab 代理、`/admin/` 管理后台、自动在线备份和停服恢复命令。
+Node.js + TypeScript 单实例 HTTP/WebSocket 服务，使用 SQLite 持久化居民身份、位置、云进度、剧情和住房。服务同时提供 `/town-api` Physics Lab 代理、`/admin/` 管理后台、自动在线备份、控制台在线恢复，以及停服 CLI 恢复命令。
 
 ## 本地运行
 
@@ -29,7 +29,7 @@ npm run test:integration -w @minicity/server
 npm run start -w @minicity/server
 ```
 
-集成测试覆盖认证、Origin/CSRF、恶意 WebSocket 消息、云进度、住房、管理员操作、在线备份与重新校验、活动服务恢复拒绝、停服恢复和会话撤销。
+集成测试覆盖认证、Origin/CSRF、恶意 WebSocket 消息、云进度、住房、管理员操作、在线备份与重新校验、控制台恢复确认、活动服务 CLI 恢复拒绝、停服 CLI 恢复和会话撤销。
 
 ## 配置
 
@@ -40,19 +40,19 @@ npm run start -w @minicity/server
 - 管理员：`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_ACCOUNTS_JSON`（用户名到密码的 JSON 对象）、`ADMIN_SESSION_TTL_MINUTES`。
 - 会话/连接：`SESSION_TTL_DAYS`、`MAX_CONNECTIONS`、`MAX_CONNECTIONS_PER_IP`。
 - 备份：`AUTO_BACKUP_ENABLED`、`BACKUP_ON_START`、`BACKUP_INTERVAL_MINUTES`、`BACKUP_RETENTION_DAYS`、`BACKUP_MAX_FILES`。
-- 异地备份（可选，阿里云 OSS）：`OSS_ENABLED`、`OSS_REGION`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`（可选，内网 endpoint）、`OSS_PREFIX`（默认 `minicity/backups/`）、`OSS_SECURE`（默认 true）。开启时后台「备份」页会出现异地备份面板，可手动把本地已校验备份上传到 OSS，或从 OSS 重新下载/删除。
+- 异地备份（可选，阿里云 OSS）：`OSS_ENABLED`、`OSS_REGION`、`OSS_BUCKET`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`（可选，内网 endpoint）、`OSS_PREFIX`（默认 `minicity/backups/`）、`OSS_SECURE`（默认 true）。开启时后台「备份」页会出现异地备份面板，可手动把本地已校验备份上传到 OSS，从 OSS 下载/删除，或直接在线恢复（本机缺失时会临时拉取）。
 
 `NODE_ENV=production` 时缺少管理员凭据或 `ALLOWED_ORIGINS` 会直接拒绝启动。生产部署只应监听反向代理可达的回环地址。
 
 ## 管理与备份
 
-后台提供：运行/数据库概览、居民搜索与封禁、住房名称和成员管理、住房删除、剧情节点查看、聊天审核、审计日志、WAL 检查点、创建/下载/重新验证备份。所有写操作要求管理员 Cookie、精确 Origin 和 CSRF Token；没有任意 SQL 接口。
+后台提供：运行/数据库概览、居民搜索与封禁、住房名称和成员管理、住房删除、剧情节点查看、聊天审核、审计日志、WAL 检查点、创建/下载/重新验证备份，以及经二次确认的在线恢复（本地或异地 OSS）。所有写操作要求管理员 Cookie、精确 Origin 和 CSRF Token；没有任意 SQL 接口。
 
 备份通过 SQLite Online Backup API 生成 `.partial`，在 worker 中执行完整性检查、外键检查和流式 SHA-256，通过后原子重命名并写入 `manifest.json`。默认每天备份，保留 30 天且最多 30 个文件。
 
-配置 `OSS_ENABLED=true` 及 OSS 凭据后，后台可手动把某个本地备份上传到阿里云 OSS，也可以从 OSS 下载或删除异地备份。异地备份始终是本地的子集：上传只接受本地已校验备份，OSS 上不存在的备份不会出现在本地。上传时会把备份的 SHA-256 记录为 OSS 对象元数据，并附带上传不可变 sidecar（`*.sqlite.manifest.json`），便于事后交叉校验。
+配置 `OSS_ENABLED=true` 及 OSS 凭据后，后台可手动把某个本地备份上传到阿里云 OSS，也可以从 OSS 下载、删除，或直接恢复。在线恢复会把对象临时拉到本地校验后再覆盖当前数据库，本机没有这份备份时也可以操作，临时文件不会进入本地备份列表；服务保持运行，会强制下线所有居民。上传只接受本地已校验备份。上传时会把备份的 SHA-256 记录为 OSS 对象元数据，并附带上传不可变 sidecar（`*.sqlite.manifest.json`），便于事后交叉校验。
 
-恢复必须先停服：
+灾难恢复或需要整库文件替换时，应先停服再跑 CLI：
 
 ```bash
 npm run db:restore -w @minicity/server -- <backup-file> <expected-sha256> --confirm

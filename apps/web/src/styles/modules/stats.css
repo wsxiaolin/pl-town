@@ -280,15 +280,22 @@ body.night .render-reset { border-color: rgba(255,255,255,0.14); }
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 4px;
 }
 .sp-username {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 20px;
   font-weight: 300;
   color: var(--text-dark);
   letter-spacing: -0.01em;
 }
 .sp-level {
+  flex: 0 0 auto;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.16em;
