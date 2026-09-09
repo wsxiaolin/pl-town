@@ -5,9 +5,24 @@ test('new resident tour highlights controls once and stays dismissed', async ({ 
   test.setTimeout(180_000);
   await page.addInitScript(({ settings }) => {
     const NativeWebSocket = window.WebSocket;
+    // The tutorial opens once the signing overlay closes, which since the
+    // verification gate happens on the `hello` success reply — so this stub
+    // must confirm the resident instead of staying silent.
     class OfflineGameWebSocket extends EventTarget {
       readyState = NativeWebSocket.CONNECTING;
-      send() {}
+      send(raw: string) {
+        const request = JSON.parse(raw) as { type: string; nickname?: string };
+        if (request.type !== 'hello') return;
+        queueMicrotask(() => {
+          this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+            type: 'hello', token: 'tour-token',
+            user: { id: 'tour-user', nickname: request.nickname, email: null, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [],
+            progress: { currency: 0, inventory: {}, achievements: [], unlockedBuildings: [], visitedBuildings: [] },
+            catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
+          }) }));
+        });
+      }
       close() { this.readyState = NativeWebSocket.CLOSED; }
     }
     Object.defineProperty(window, 'WebSocket', {

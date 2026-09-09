@@ -256,14 +256,17 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
         const error = document.getElementById('loginError');
         if (input) input.value = previousNickname;
-        if (passwordInput) passwordInput.value = '';
         if (error) { error.textContent = message; error.hidden = false; }
         // Nickname belongs to a Physics Lab account: reveal the ownership
         // verification fields so the claimant can prove they are the owner.
+        // The town password is kept so the retry only needs the Physics Lab
+        // credentials; other failures clear it as before.
         const verifySection = document.getElementById('plVerifySection');
         if (code === 'pl-verification-required' && verifySection) {
           verifySection.hidden = false;
           (document.getElementById('plLoginInput') as HTMLInputElement | null)?.focus();
+        } else if (passwordInput) {
+          passwordInput.value = '';
         }
         showLoginEntry();
         showLoginOverlay();
