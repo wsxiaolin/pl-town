@@ -56,26 +56,37 @@ stateDiagram-v2
 
 ### `apps/web/src/adapters/ui/loginController.ts`
 
-- 新增内部状态 `verifying: boolean` 与按钮等待态管理：
-  - `beginVerifying()`: 记录 `#loginBtn` 原文案、置为「正在核实身份…」并 `disabled`。
-  - `endVerifying()`: 恢复按钮文案与可用状态。
-- `login()` 改造：校验通过后调用 `beginVerifying()` 并立即 `options.proceed(name, password, pl)`；移除「隐藏浮层 + 550ms 延迟」逻辑。`applyUsername` 等现有副作用保持提交时发生（失败路径已有 `showLoginEntry()` 重置）。
-- 新增导出 `closeAfterAuth()`: 以现有动画（`.hidden` class + 550ms 后 `display:none`）关闭浮层，仅在 `hello` 成功回调中调用。
+状态机与门禁的唯一属主：
+
+- 新增内部状态：`verifying`（按钮等待态）、`pendingCityEntrance`（被扣住的入城副作用）。
+- `beginVerifying()`: 记录 `#loginBtn` 原文案、置为「正在核实身份…」并禁用；`verifying` 期间重复提交直接忽略。
+- `endVerifying()`: 恢复按钮文案与可用状态。
+- `closeAfterAuth()`: 仅在 `hello` 成功回调中调用——结束等待态、隐藏物实登录区、以现有动画关闭浮层。
+- `holdCityEntrance(entrance)`: 由 `proceedToCity` 在 Fresh sign-in 分支调用，扣住入城副作用。
+- `asLoginGate()`: 返回 `LoginGate`（`isWaiting` / `onAuthorized` / `onAuthFailed` / `onConnectionLost`），`onAuthorized` 先执行被扣住的入城副作用再 `closeAfterAuth()`；`onConnectionLost` 恢复按钮并显示「暂时无法连接小城服务器，请稍后重试」。
+- `login()` 改造：校验通过后 `beginVerifying()` 并立即 `options.proceed(name, password, pl)`；移除「隐藏浮层 + 550ms 延迟」逻辑。`applyUsername` 等现有副作用保持提交时发生（失败路径已有 `showLoginEntry()` 重置）。
 - 现有 `collectPlCredentials`、`hidePlVerification`、`validateInput`（修改昵称即重置物实登录区）保持不变。
 
 ### `apps/web/src/adapters/ui/multiplayerHousingController.ts`（回调接线）
 
-- `authenticationFailed`: 现有逻辑（恢复昵称、显示错误、按 `code === 'pl-verification-required'` 展开 `#plVerifySection` 并聚焦、重新打开浮层）保持，追加调用 `loginController.endVerifying()`（经 options 注入）。
-- `connection` 回调：当状态为 `disconnected` 且登录浮层处于等待态（`verifying === true` 且未授权）时，调用 `multiplayer.close()` 终止自动重连，显示「暂时无法连接小城服务器，请稍后重试」，调用 `endVerifying()`。令牌恢复路径（浮层隐藏、非等待态）保持现有自动重连行为。
+- 选项新增 `getLoginGate?: () => LoginGate | null`（延迟解析，规避控制器创建顺序）。
+- `connection`: 状态为 `disconnected` 且 `gate.isWaiting()` 时，调用 `multiplayer.close()` 终止自动重连并触发 `gate.onConnectionLost()`。令牌恢复路径（非等待态）保持现有自动重连行为。
+- `connected`: 先调用 `gate.onAuthorized()`（触发被扣住的入城与浮层关闭），再执行原有的手机 UI / 房屋列表等逻辑。
+- `authenticationFailed`: 先调用 `gate.onAuthFailed()`（恢复按钮），再执行现有逻辑（恢复昵称、显示错误、按 `code === 'pl-verification-required'` 展开物实登录区并聚焦、重新打开浮层）。
 
 ### `apps/web/src/city/MiniCityApp.ts`
 
-- `connected` 回调（`hello` 成功）：追加调用 `closeAfterAuth()` 关闭浮层，其余入城逻辑（players、houses、progress 等）不变。
-- `proceedToCity` 与 `checkLogin`（令牌恢复路径）签名与行为不变。
+- `proceedToCity` 拆分入城副作用：令牌恢复（无凭据参数）立即执行入城；Fresh sign-in（携带 password/pl）改为 `loginController.holdCityEntrance(entrance)`，由门禁在服务器确认后执行。
+- `createMultiplayerHousingController` 选项追加 `getLoginGate: () => loginController?.asLoginGate() ?? null` 一行。
+- 其余（`checkLogin`、CG 完成回调、令牌恢复路径）不变。
 
 ### `apps/web/src/network/MultiplayerClient.ts`
 
 - 保持不变：`connected` / `authenticationFailed` / `connection` 回调已具备驱动状态机所需的全部信息；`credentials.pl` 在 `hello` 成功后清空（PR #140 已实现）。
+
+### `apps/web/tests/pl-verify-gate.spec.ts`
+
+- e2e 覆盖四个分支：要求验证（展开物实登录区、按钮恢复、浮层保持）、验证后入城（浮层关闭、logo 更新）、免验证直登、连接失败（错误提示 + 按钮恢复 + 浮层保持）。WebSocket 以构造器级 stub 模拟，脚本化响应由 `window.__gateStage` 控制。
 
 ## Data Models
 
