@@ -10,6 +10,7 @@ test('new resident tour highlights controls once and stays dismissed', async ({ 
     // must confirm the resident instead of staying silent.
     class OfflineGameWebSocket extends EventTarget {
       readyState = NativeWebSocket.CONNECTING;
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
         const request = JSON.parse(raw) as { type: string; nickname?: string };
         if (request.type !== 'hello') return;
