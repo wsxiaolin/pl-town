@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 
 const port = 8792;
+const physicsLabPort = 8794;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-restore-'));
 const serverDir = new URL('..', import.meta.url);
 const origin = `http://127.0.0.1:${port}`;
@@ -13,7 +15,33 @@ const environment = {
   ...process.env, PORT: String(port), DATA_DIR: dataDir,
   ADMIN_USERNAME: 'operator', ADMIN_PASSWORD: 'restore-admin-password',
   AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: origin,
+  PHYSICS_LAB_API_BASE: `http://127.0.0.1:${physicsLabPort}`,
 };
+
+const physicsLabServer = createServer(async (request, response) => {
+  let raw = '';
+  for await (const chunk of request) raw += chunk;
+  const body = JSON.parse(raw || '{}');
+  response.writeHead(200, { 'content-type': 'application/json' });
+  if (request.url === '/Users/Authenticate') {
+    response.end(JSON.stringify({ Status: 200, AuthCode: 'restore-auth-code', Token: 'restore-token' }));
+    return;
+  }
+  if (request.url === '/Users/GetUser') {
+    // Deliberately reports every nickname as unknown: the restore flow
+    // authenticates with a stored token, which skips Physics Lab ownership
+    // verification entirely. The existing-user path is covered in
+    // integration.mjs, which stubs both known and unknown names.
+    response.end(JSON.stringify({ Status: 404, Message: 'Standard.404', Data: null }));
+    return;
+  }
+  response.end(JSON.stringify({ Status: 404, Message: `Unexpected request: ${body}` }));
+});
+
+const startPhysicsLabStub = () => new Promise((resolve, reject) => {
+  physicsLabServer.once('error', reject);
+  physicsLabServer.listen(physicsLabPort, '127.0.0.1', resolve);
+});
 
 const startServer = () => {
   const processHandle = spawn(process.execPath, ['dist/index.js'], {
@@ -39,11 +67,21 @@ const stopServer = async (processHandle) => {
 
 const connect = () => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
-  socket.once('error', reject);
+  const timeout = setTimeout(() => {
+    socket.terminate();
+    reject(new Error('Restore test WebSocket connection timed out'));
+  }, 5_000);
+  socket.once('error', (error) => {
+    clearTimeout(timeout);
+    reject(error);
+  });
   socket.once('open', () => socket.send(JSON.stringify({ type: 'hello', nickname: 'RestoreAlice', password: 'resident-secret' })));
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
-    if (message.type === 'hello') resolve({ socket, hello: message });
+    if (message.type === 'hello') {
+      clearTimeout(timeout);
+      resolve({ socket, hello: message });
+    }
   });
 });
 
@@ -61,6 +99,7 @@ const adminSession = async () => {
 let running;
 let resident;
 try {
+  await startPhysicsLabStub();
   running = startServer();
   await running.ready;
   resident = await connect();
@@ -108,5 +147,6 @@ try {
 } finally {
   resident?.socket.close();
   if (running) await stopServer(running.processHandle);
+  physicsLabServer.close();
   rmSync(dataDir, { recursive: true, force: true });
 }

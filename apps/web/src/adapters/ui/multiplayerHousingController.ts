@@ -182,7 +182,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     updatePhoneBadge();
   }
   
-  function setupMultiplayer(nickname: string, password?: string) {
+  function setupMultiplayer(nickname: string, password?: string, pl?: { login: string; password: string }) {
     if (multiplayer) return;
     multiplayer = new MultiplayerClient({
       connection: (state) => {
@@ -233,7 +233,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       weather: setWeather,
-      authenticationFailed: (message) => {
+      authenticationFailed: (message, code) => {
         const previousNickname = localStorage.getItem('minicityUser') || nickname;
         localStorage.removeItem('minicityUser');
         multiplayer?.close();
@@ -244,6 +244,13 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (input) input.value = previousNickname;
         if (passwordInput) passwordInput.value = '';
         if (error) { error.textContent = message; error.hidden = false; }
+        // Nickname belongs to a Physics Lab account: reveal the ownership
+        // verification fields so the claimant can prove they are the owner.
+        const verifySection = document.getElementById('plVerifySection');
+        if (code === 'pl-verification-required' && verifySection) {
+          verifySection.hidden = false;
+          (document.getElementById('plLoginInput') as HTMLInputElement | null)?.focus();
+        }
         showLoginEntry();
         showLoginOverlay();
         showUnlockToast(message);
@@ -255,7 +262,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         showUnlockToast(message);
       },
     });
-    multiplayer.connect(nickname, password);
+    multiplayer.connect(nickname, password, pl);
   }
   
   function updateOnlineCount(count: number) {

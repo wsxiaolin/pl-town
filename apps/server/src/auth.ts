@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'no
 import { AsyncGate } from './asyncGate.js';
 import { SESSION_TTL_DAYS } from './config.js';
 import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
+import { authenticateAccount, findPhysicsLabUser } from './physicsLab.js';
 import type { User } from './types.js';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -33,6 +34,22 @@ export class RegistrationLimitError extends Error {
   }
 }
 
+/**
+ * Thrown when a newly signed nickname already belongs to a Physics Lab
+ * community account and no proof of ownership was provided. Clients answer
+ * this by collecting the claimant's Physics Lab credentials and retrying the
+ * sign-in with `pl` credentials attached.
+ */
+export class PhysicsLabVerificationRequiredError extends Error {
+  readonly code = 'pl-verification-required';
+  constructor() {
+    super('这个昵称已属于物实社区，请用对应的物实账号验证身份后再签下，或者换一个昵称');
+    this.name = 'PhysicsLabVerificationRequiredError';
+  }
+}
+
+export type PhysicsLabCredentials = { login: string; password: string };
+
 export const NICKNAME_PATTERN = /^[\p{L}\p{N}]{2,40}$/u;
 export function validateNickname(nickname: string): string | null {
   if (!nickname || nickname.length < 2) return '昵称至少需要两个字符';
@@ -40,7 +57,7 @@ export function validateNickname(nickname: string): string | null {
   return null;
 }
 
-export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number } }): Promise<{ user: User; token: string; registered: boolean }> {
+export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number }; pl?: PhysicsLabCredentials; plVerifyGuard?: () => void }): Promise<{ user: User; token: string; registered: boolean }> {
   if (input.token) {
     if (input.token.length > 128) throw new Error('会话无效');
     const user = getUserByToken(hash(input.token));
@@ -66,6 +83,30 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   }
   if (password.length < 10) throw new Error('新密码至少需要 10 个字符');
 
+  // Nickname ownership: a name that already belongs to a Physics Lab account
+  // can only be signed by that account's owner. Fail closed on lookup errors.
+  let plUserId: string | null = null;
+  const plLookup = await findPhysicsLabUser(nickname).catch(() => {
+    throw new Error('暂时无法确认昵称在物实社区的状态，请稍后再试');
+  });
+  if (plLookup.exists) {
+    const pl = input.pl?.login && input.pl?.password ? input.pl : undefined;
+    if (!pl) throw new PhysicsLabVerificationRequiredError();
+    input.plVerifyGuard?.();
+    const plSession = await authenticateAccount(pl.login, pl.password).catch(() => {
+      throw new Error('物实账号验证失败：账号或密码不正确');
+    });
+    const plNickname = String(plSession.user?.Nickname ?? '').trim();
+    const plId = String(plSession.user?.ID ?? '').trim();
+    if (!plNickname || plNickname.toLowerCase() !== nickname.toLowerCase()) {
+      throw new Error('物实账号验证失败：登录的物实账号与该昵称不一致');
+    }
+    if (plLookup.userId && plId && plLookup.userId !== plId) {
+      throw new Error('物实账号验证失败：请使用持有这个昵称的物实账号');
+    }
+    plUserId = plId || plLookup.userId;
+  }
+
   const newToken = randomBytes(32).toString('base64url');
   const tokenHash = hash(newToken);
   const passwordHash = await hashPassword(password);
@@ -73,10 +114,10 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   const userId = randomUUID();
   if (input.ip && input.registrationLimit) {
     const { sinceIso, max } = input.registrationLimit;
-    const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max);
+    const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max, plUserId);
     if (!result.allowed) throw new RegistrationLimitError();
   } else {
-    createUser(userId, tokenHash, nickname, passwordHash, expiresAt);
+    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
   }
   return { user: getUserByToken(tokenHash)!, token: newToken, registered: true };
 }
