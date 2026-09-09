@@ -364,6 +364,16 @@ try {
     method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
   });
   if (offsiteUploadDisabled.status !== 503) throw new Error('Off-site backup upload must return 503 when OSS is not configured');
+  const offsiteRestoreDisabled = await fetch(`${adminBase}/offsite/backups/${backupPayload.backup.name}/restore`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ confirm: true }),
+  });
+  if (offsiteRestoreDisabled.status !== 503) throw new Error('Off-site backup restore must return 503 when OSS is not configured');
+  const localRestoreUnconfirmed = await fetch(`${adminBase}/backups/${backupPayload.backup.name}/restore`, {
+    method: 'POST', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({}),
+  });
+  if (localRestoreUnconfirmed.status !== 400) throw new Error('Backup restore must require a confirmation payload');
   const overviewWithOffsite = await fetch(`${adminBase}/overview`, { headers: { cookie } });
   const overviewWithOffsitePayload = await overviewWithOffsite.json();
   if (!overviewWithOffsite.ok || overviewWithOffsitePayload.offsite?.enabled !== false) throw new Error('Admin overview must report off-site backups as disabled when OSS is not configured');

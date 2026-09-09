@@ -77,6 +77,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border-radius: 999px;
   background: rgba(0,0,0,0.05);
   color: var(--text-dark);

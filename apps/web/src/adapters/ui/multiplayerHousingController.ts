@@ -306,7 +306,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
     row.dataset.messageId = String(messageId);
-    const author = document.createElement('b'); author.textContent = nickname;
+    const author = document.createElement('b'); author.textContent = nickname; author.title = nickname;
     const body = document.createElement('span'); body.textContent = text;
     row.append(author, body); log.appendChild(row);
     while (log.children.length > 80) log.firstElementChild?.remove();
@@ -464,6 +464,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       const chip = document.createElement('span');
       chip.className = `hc-chip${member.userId === house.ownerId ? ' owner' : ''}${member.userId === mine ? ' me' : ''}`;
       chip.textContent = member.userId === house.ownerId ? `${member.nickname} · 房主` : member.nickname;
+      chip.title = chip.textContent;
       members.appendChild(chip);
     });
     card.append(head, bar, members);

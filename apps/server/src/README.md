@@ -8,6 +8,7 @@
 - `types.ts`: messages and shared server-side data contracts.
 - `adminAuth.ts` / `adminRouter.ts`: cookie/CSRF administration boundary and routes.
 - `backup.ts` / `backupVerifier.ts`: online backups, manifest, retention, and worker verification.
+- `offsiteBackup.ts`: Alibaba Cloud OSS upload/download/delete and console restore from a remote object.
 - `restoreBackup.ts` / `runtimeLock.ts`: offline restore and exclusive data-directory ownership.
 - `requestSecurity.ts` / `httpBody.ts` / `rateLimit.ts`: transport security helpers.
 
