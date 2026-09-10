@@ -27,7 +27,7 @@ const authAttempts = new Map<string, { count: number; startedAt: number }>();
 const physicsLoginAttempts = new Map<string, { count: number; startedAt: number }>();
 const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
 const chatWindows = new Map<string, { startedAt: number; count: number }>();
-const physicsSessions = new Map<string, { token: string; authCode: string; user: User; expiresAt: number }>();
+const physicsSessions = new Map<string, { token: string; authCode: string; user: Omit<User, 'plUserId'>; expiresAt: number }>();
 const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGES_PER_SECOND = 60;
 const MAX_CHAT_MESSAGES_PER_TEN_SECONDS = 5;
@@ -61,9 +61,9 @@ let serverWeather: Weather = 'clear';
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
-// Residents' email addresses are PII and must never be broadcast to other
-// players: `hello`, the roster and `player.joined` reach every online client.
-const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position });
+// Residents' email addresses and upstream IDs must never be broadcast to other
+// players: only the derived verification flag is public.
+const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position, verified: user.plUserId !== null });
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string, code?: string) => send(socket, { type: 'error', message, ...(code ? { code } : {}) });
 const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));

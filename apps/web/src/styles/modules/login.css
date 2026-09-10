@@ -24,6 +24,38 @@
   outline: 2px solid var(--blue);
   outline-offset: 4px;
 }
+.verified-name {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  gap: 4px;
+}
+.verified-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.verified-name-suffix { flex: 0 0 auto; }
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #2f8f63;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 1px;
+  flex: 0 0 auto;
+  font-style: normal;
+}
+.verified-badge::before { content: '✓'; }
+.phone-owner.verified-name { justify-content: center; }
 
 /* ===== LOGIN OVERLAY ===== */
 .login-overlay {
@@ -122,6 +154,17 @@
   line-height: 1.6;
   color: var(--text-light);
 }
+.pl-verify-back {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #3b69ac;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 8px 0;
+}
+.pl-verify-back:hover { text-decoration: underline; }
 
 /* Standing risk note: residents sign in with nickname + password only, and
    the password cannot be recovered once forgotten. */
@@ -148,4 +191,3 @@
 }
 .login-btn:hover { opacity: 0.85; transform: translateY(-1px); }
 .login-btn:active { transform: none; }
-

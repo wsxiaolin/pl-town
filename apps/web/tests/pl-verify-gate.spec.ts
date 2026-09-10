@@ -11,7 +11,7 @@ import { RENDER_SETTINGS } from './helpers';
  * pattern as stubNewsstandWebSocket); the scripted response depends on
  * `window.__gateStage`, which each test sets before submitting.
  */
-type GateStage = 'verify' | 'ok';
+type GateStage = 'verify' | 'ok' | 'ok-verified';
 
 function stubGateWebSocket(page: Page): void {
   void page.addInitScript(() => {
@@ -30,8 +30,8 @@ function stubGateWebSocket(page: Page): void {
             this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'error', message: '这个昵称已属于物实社区，请验证所属权', code: 'pl-verification-required' }) }));
             return;
           }
-          if (stage === 'ok') {
-            this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'hello', token: 'gate-token', user: { id: 'gate-user', nickname: request.nickname, email: null, position: { x: 0, y: 0, z: -6 } }, players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog }) }));
+          if (stage === 'ok' || stage === 'ok-verified') {
+            this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'hello', token: 'gate-token', user: { id: 'gate-user', nickname: request.nickname, verified: stage === 'ok-verified', position: { x: 0, y: 0, z: -6 } }, players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog }) }));
           }
         });
       }
@@ -88,13 +88,22 @@ test.describe('Physics Lab verification gate', () => {
     await expect(page.locator('#loginError')).toContainText('物实');
     const button = page.locator('#loginBtn');
     await expect(button).toBeEnabled();
+    await expect(button).toHaveText('确认物实身份');
     await expect(page.locator('#loginOverlay')).toBeVisible();
     await expect(page.locator('#loginInput')).toHaveValue('故事里的人');
+    await expect(page.locator('#loginInput')).toBeHidden();
+    await expect(page.locator('#loginPassword')).toBeHidden();
+    await expect(page.locator('.login-warning')).toBeHidden();
 
-    // Editing the nickname invalidates the verification request.
-    await page.locator('#loginInput').fill('另一个名字');
+    await page.locator('#plLoginInput').fill('story@example.com');
+    await page.locator('#plPasswordInput').fill('pl-secret');
+    await page.locator('#plVerifyBack').click();
     await expect(verifySection).toBeHidden();
-    await page.locator('#loginInput').fill('故事里的人');
+    await expect(page.locator('#loginInput')).toBeVisible();
+    await expect(page.locator('#loginPassword')).toBeVisible();
+    await expect(page.locator('#plLoginInput')).toHaveValue('');
+    await expect(page.locator('#plPasswordInput')).toHaveValue('');
+    await expect(button).toHaveText('签下名字，进入小城');
   });
 
   test('enters the city only after the verification succeeds', async ({ page }) => {
@@ -108,13 +117,15 @@ test.describe('Physics Lab verification gate', () => {
     await page.locator('#loginBtn').click();
     await expect(page.locator('#plVerifySection')).toBeVisible();
 
-    await page.evaluate(() => { (window as unknown as { __gateStage?: GateStage }).__gateStage = 'ok'; });
+    await page.evaluate(() => { (window as unknown as { __gateStage?: GateStage }).__gateStage = 'ok-verified'; });
     await page.locator('#plLoginInput').fill('story@example.com');
     await page.locator('#plPasswordInput').fill('pl-secret');
     await page.locator('#loginBtn').click();
 
     await expect(page.locator('#loginOverlay')).toBeHidden({ timeout: 15_000 });
     await expect(page.locator('#logoUser')).toContainText('故事里的人');
+    await expect(page.locator('#logoUser .verified-badge')).toHaveAttribute('title', '已认证');
+    await expect(page.locator('#phoneOwner .verified-badge')).toHaveAttribute('title', '已认证');
   });
 
   test('signs straight in when no verification is required', async ({ page }) => {
@@ -129,6 +140,7 @@ test.describe('Physics Lab verification gate', () => {
 
     await expect(page.locator('#loginOverlay')).toBeHidden({ timeout: 15_000 });
     await expect(page.locator('#logoUser')).toContainText('自由居民');
+    await expect(page.locator('#logoUser .verified-badge')).toHaveCount(0);
   });
 
   test('connection failure keeps the visitor on the signing overlay', async ({ page }) => {

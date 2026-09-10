@@ -1,4 +1,5 @@
 import type { LegacyStats } from '../../city/progression/legacyStats';
+import { renderVerifiedName } from './verifiedBadge';
 
 /**
  * Bridges the WebSocket auth lifecycle into the login-overlay state machine:
@@ -7,8 +8,9 @@ import type { LegacyStats } from '../../city/progression/legacyStats';
  */
 export interface LoginGate {
   isWaiting: () => boolean;
-  onAuthorized: () => void;
+  onAuthorized: (verified?: boolean) => void;
   onAuthFailed: () => void;
+  onVerificationRequired: () => void;
   onConnectionLost: () => void;
 }
 
@@ -25,7 +27,7 @@ export type LoginControllerOptions = {
 export function createLoginController(options: LoginControllerOptions) {
   let nicknameFeedbackTimer = 0;
   let verifying = false;
-  let loginButtonLabel = '';
+  let verifyStep = false;
   let pendingCityEntrance: (() => void) | null = null;
 
   function setError(message: string): void {
@@ -41,7 +43,6 @@ export function createLoginController(options: LoginControllerOptions) {
     if (verifying) return;
     verifying = true;
     if (button) {
-      loginButtonLabel = button.textContent ?? '';
       button.textContent = '正在核实身份…';
       button.disabled = true;
     }
@@ -51,7 +52,7 @@ export function createLoginController(options: LoginControllerOptions) {
     const button = document.getElementById('loginBtn') as HTMLButtonElement | null;
     verifying = false;
     if (button) {
-      if (loginButtonLabel) button.textContent = loginButtonLabel;
+      button.textContent = verifyStep ? '确认物实身份' : '签下名字，进入小城';
       button.disabled = false;
     }
   }
@@ -75,21 +76,24 @@ export function createLoginController(options: LoginControllerOptions) {
   function asLoginGate(): LoginGate {
     return {
       isWaiting: () => verifying,
-      onAuthorized: () => {
+      onAuthorized: (verified) => {
         const entrance = pendingCityEntrance;
         pendingCityEntrance = null;
         if (entrance) entrance();
+        const name = localStorage.getItem('minicityUser');
+        if (name) applyUsername(name, Boolean(verified));
         closeAfterAuth();
       },
       onAuthFailed: () => endVerifying(),
+      onVerificationRequired: () => { endVerifying(); showPlVerification(); },
       onConnectionLost: () => { endVerifying(); setError('暂时无法连接小城服务器，请稍后重试'); },
     };
   }
 
-  function applyUsername(name: string): void {
+  function applyUsername(name: string, verified = false): void {
     const element = document.getElementById('logoUser');
     if (!element) return;
-    element.textContent = `- ${name}`;
+    renderVerifiedName(element, name, verified, { prefix: '- ' });
     element.classList.remove('login-required');
     element.setAttribute('aria-label', `${name}, logged in`);
     element.setAttribute('tabindex', '-1');
@@ -99,6 +103,7 @@ export function createLoginController(options: LoginControllerOptions) {
     const element = document.getElementById('logoUser');
     if (!element) return;
     element.textContent = 'Login';
+    element.classList.remove('verified-name');
     element.classList.add('login-required');
     element.setAttribute('aria-label', 'Login');
     element.removeAttribute('tabindex');
@@ -133,13 +138,33 @@ export function createLoginController(options: LoginControllerOptions) {
     return { login, password };
   }
 
-  function hidePlVerification(): void {
+  function showPlVerification(): void {
+    verifyStep = true;
+    document.querySelectorAll<HTMLElement>('.login-credential').forEach((element) => { element.hidden = true; });
+    const section = document.getElementById('plVerifySection');
+    if (section) section.hidden = false;
+    const button = document.getElementById('loginBtn');
+    if (button && !verifying) button.textContent = '确认物实身份';
+    (document.getElementById('plLoginInput') as HTMLInputElement | null)?.focus();
+  }
+
+  function hidePlVerification(focusNickname = false): void {
+    verifyStep = false;
     const section = document.getElementById('plVerifySection');
     if (section) section.hidden = true;
+    document.querySelectorAll<HTMLElement>('.login-credential').forEach((element) => { element.hidden = false; });
     const login = document.getElementById('plLoginInput') as HTMLInputElement | null;
     const password = document.getElementById('plPasswordInput') as HTMLInputElement | null;
     if (login) login.value = '';
     if (password) password.value = '';
+    const button = document.getElementById('loginBtn');
+    if (button && !verifying) button.textContent = '签下名字，进入小城';
+    if (focusNickname) (document.getElementById('loginInput') as HTMLInputElement | null)?.focus();
+  }
+
+  function resetVerification(): void {
+    hidePlVerification(true);
+    setError('');
   }
 
   function login(): void {
@@ -189,5 +214,5 @@ export function createLoginController(options: LoginControllerOptions) {
     setError('');
   }
 
-  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification, setError, endVerifying, holdCityEntrance, asLoginGate };
+  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification, resetVerification, setError, endVerifying, holdCityEntrance, asLoginGate };
 }

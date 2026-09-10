@@ -5,6 +5,7 @@ import { createCloudProgressionController } from './cloudProgressionController';
 import { createCommunityPanelController, type SocialKind } from './communityPanelController';
 import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
+import { renderVerifiedName } from './verifiedBadge';
 
 interface RemotePlayer {
   mesh: THREE.Group;
@@ -58,6 +59,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
   } = communityPanels;
   let multiplayer: MultiplayerClient | null = null;
   const remotePlayers = new Map<string, RemotePlayer>();
+  const verifiedIds = new Set<string>();
   let lastNetworkPosition = 0;
   let onlinePlayers: NetUser[] = [];
   let currentHouses: House[] = [];
@@ -202,15 +204,19 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         // back and hand control back to the signing overlay instead.
         const gate = getLoginGate();
         if (state === 'disconnected' && gate?.isWaiting()) {
-          multiplayer?.close();
+          const failedClient = multiplayer;
+          multiplayer = null;
+          failedClient?.close();
           gate.onConnectionLost();
         }
       },
       connected: (user, players, houses) => {
-        getLoginGate()?.onAuthorized();
+        verifiedIds.clear();
+        [user, ...players].forEach((player) => { if (player.verified) verifiedIds.add(player.id); });
+        getLoginGate()?.onAuthorized(user.verified);
         onlinePlayers = players.filter((player) => player.id !== user.id);
         const owner = document.getElementById('phoneOwner');
-        if (owner) owner.textContent = `${user.nickname} 的手机`;
+        if (owner) renderVerifiedName(owner, user.nickname, Boolean(user.verified), { suffix: ' 的手机' });
         const cursor = getCursorChar();
         if (cursor) {
           const unsafe = Math.hypot(user.position.x, user.position.z) < FOUNTAIN_CLEAR || pointInAnyBuilding(user.position.x, user.position.z);
@@ -226,13 +232,13 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         renderHouseList(houses);
         updateOnlineCount(players.length);
       },
-      playerJoined: (player) => { onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
+      playerJoined: (player) => { if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id); onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
       playerMoved: (id, position) => {
         const remote = remotePlayers.get(id);
         if (remote) { remote.target.set(position.x, position.y, position.z); remote.rotation = position.rotation ?? remote.rotation; }
       },
-      playerLeft: (id) => { onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
-      chat: (message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id),
+      playerLeft: (id) => { verifiedIds.delete(id); onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
+      chat: (message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id, verifiedIds.has(message.userId)),
       chatRemoved: (message) => removeChat(message.messageId),
       houses: renderHouseList,
       requests: (requests) => {
@@ -247,7 +253,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       },
       weather: setWeather,
       authenticationFailed: (message, code) => {
-        getLoginGate()?.onAuthFailed();
+        const gate = getLoginGate();
+        gate?.onAuthFailed();
         const previousNickname = localStorage.getItem('minicityUser') || nickname;
         localStorage.removeItem('minicityUser');
         multiplayer?.close();
@@ -263,9 +270,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         // credentials; other failures clear it as before.
         const verifySection = document.getElementById('plVerifySection');
         if (code === 'pl-verification-required' && verifySection) {
-          verifySection.hidden = false;
-          (document.getElementById('plLoginInput') as HTMLInputElement | null)?.focus();
-        } else if (passwordInput) {
+          gate?.onVerificationRequired();
+        } else if (passwordInput && verifySection?.hidden !== false) {
           passwordInput.value = '';
         }
         showLoginEntry();
@@ -318,12 +324,12 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     }
   }
   
-  function appendChat(messageId: number, nickname: string, text: string, own: boolean) {
+  function appendChat(messageId: number, nickname: string, text: string, own: boolean, verified: boolean) {
     const log = document.getElementById('chatLog');
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
     row.dataset.messageId = String(messageId);
-    const author = document.createElement('b'); author.textContent = nickname; author.title = nickname;
+    const author = document.createElement('b'); renderVerifiedName(author, nickname, verified); author.title = nickname;
     const body = document.createElement('span'); body.textContent = text;
     row.append(author, body); log.appendChild(row);
     while (log.children.length > 80) log.firstElementChild?.remove();
@@ -480,8 +486,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     house.members.forEach((member) => {
       const chip = document.createElement('span');
       chip.className = `hc-chip${member.userId === house.ownerId ? ' owner' : ''}${member.userId === mine ? ' me' : ''}`;
-      chip.textContent = member.userId === house.ownerId ? `${member.nickname} · 房主` : member.nickname;
-      chip.title = chip.textContent;
+      renderVerifiedName(chip, member.nickname, Boolean(member.verified), { suffix: member.userId === house.ownerId ? ' · 房主' : '' });
+      chip.title = member.nickname;
       members.appendChild(chip);
     });
     card.append(head, bar, members);
@@ -543,7 +549,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       }
       candidates.forEach((player) => {
         const row = document.createElement('div'); row.className = 'hc-person';
-        const name = document.createElement('span'); name.className = 'hc-person-name'; name.textContent = player.nickname;
+        const name = document.createElement('span'); name.className = 'hc-person-name'; renderVerifiedName(name, player.nickname, Boolean(player.verified));
         const pendingInvite = currentHousingRequests.some((request) => request.kind === 'invite' && request.buildingId === house.buildingId && request.requesterId === mine && request.targetId === player.id);
         const inviteAction = houseActionButton(pendingInvite ? '已邀请' : '邀请', false, () => {
           if (pendingInvite) return;
@@ -565,7 +571,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       }
       others.forEach((member) => {
         const row = document.createElement('div'); row.className = 'hc-person';
-        const name = document.createElement('span'); name.className = 'hc-person-name'; name.textContent = member.nickname;
+        const name = document.createElement('span'); name.className = 'hc-person-name'; renderVerifiedName(name, member.nickname, Boolean(member.verified));
         row.append(name,
           houseActionButton('转让', false, () => {
             housePanelState = { houseId: null, mode: null };

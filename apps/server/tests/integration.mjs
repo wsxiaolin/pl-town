@@ -528,9 +528,11 @@ try {
   if (!plMismatched) throw new Error('A different Physics Lab account must not verify nickname ownership');
   const plOwner = await connect('TakenPlResident', 'resident-secret', { login: 'owner@example.com', password: 'pl-owner-password' });
   if (!plOwner.hello.user?.nickname) throw new Error('Proving Physics Lab ownership must grant the claimed nickname');
+  if (plOwner.hello.user.verified !== true) throw new Error('A Physics Lab verified resident must be marked verified');
   plOwner.socket.close();
   const plFreeName = await connect('UnclaimedPlName');
   if (!plFreeName.hello.user?.nickname) throw new Error('A nickname absent from Physics Lab must register without verification');
+  if (plFreeName.hello.user.verified !== false) throw new Error('An unverified resident must not be marked verified');
   plFreeName.socket.close();
 
   const buildingId = 'residence:3.00:4.00';
