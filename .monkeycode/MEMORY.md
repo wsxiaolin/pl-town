@@ -100,3 +100,36 @@ Entries discovered by the Agent during task execution should follow this format:
 - Instructions:
   - CI 验证以远端 GitHub Actions 结果为准，不再主动运行本地 CI 测试。
   - 等待远端 CI 时使用前台 `sleep` 轮询状态。
+
+[User Instruction Summary]
+- Date: 2026-09-07
+- Context: 处理 PR #129 的 stack 冲突并新建 PR #140
+- Instructions:
+  - 只能创建/维护 PR，禁止代替用户执行 merge。
+  - PR 创建后要等 CI 和 AI review 完成；确认无 Blocker、状态 MERGEABLE 后再交给用户合并。
+
+[Project Knowledge Summary]
+- Date: 2026-09-07
+- Context: Discovered by Agent while diagnosing PR #129 stuck UNKNOWN/blocked because stack base #127 conflicted with main
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - 堆叠 PR 的 base 分支与 main 冲突时，下游 PR 会长时间 UNKNOWN/无法合并；应将下游分支 rebase 到最新 main 后新开直连 main 的 PR。
+  - integration.mjs 中 Physics Lab stub 使用独立端口；不要复用 8793（origin server 也用该端口），当前用 8794。
+
+[Project Knowledge Summary]
+- Date: 2026-09-08
+- Context: Discovered by Agent while pushing commits to PR #140 branch on 09-07 and 09-08, both times `pull_request synchronize` produced no workflow runs
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - 本仓库 push 到已开 PR 的分支后，`pull_request synchronize` 事件偶发不触发（连续两天复现），表现为 `gh run list` 无新运行。
+  - Tests 工作流有 `workflow_dispatch`，可用 `gh workflow run test.yml --ref <branch>` 手动触发，但手动触发的运行不会出现在 `gh pr checks` 里，需用 `gh run view <id>` 单独确认结果。
+  - AI PR Reviewer 只监听 `pull_request: [opened, synchronize]` 且无 `workflow_dispatch`，事件被吞时无法补触发；审查基于旧提交时需向用户说明增量改动范围。
+  - 前端生产/预览构建通过 `deploy-frontend.yml` 注入 `VITE_SERVER_URL: wss://pl-town.onrender.com`，即 PR 预览站也连 Render 生产后端；后端新功能在 PR 合并前无法在预览站验证。
+
+[Project Knowledge Summary]
+- Date: 2026-09-09
+- Context: Discovered by Agent while fixing recurring shard-3 failure of PR #142 (onboarding-tutorial.spec)
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - 自写 WebSocket stub 必须在 constructor 里 queueMicrotask 触发 open 事件（参照 tests/helpers.ts:69），否则 MultiplayerClient 停在 CONNECTING、hello 永不发送；gate 流程下表现为登录按钮卡「正在核实身份…」且手机面板显示「连接中」。
+  - 排障路径：CI 失败先下载 `test-results-shard-N` artifact 看 error-context.md 页面快照，再对比 stub 与 helpers 差异；本地 Xvfb 复现受限（无 GPU 下 page.goto 60s 超时），以 CI 快照为准。

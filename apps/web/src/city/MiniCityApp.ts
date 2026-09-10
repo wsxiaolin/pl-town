@@ -482,6 +482,7 @@ function init() {
     isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
     setWeather: (value) => updateWeatherState(value),
+    getLoginGate: () => loginController?.asLoginGate() ?? null,
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -888,10 +889,9 @@ function trackInteraction(buildingId: string) { interactionTracker.trackInteract
 function updateWelcome() { /* Cloud progression owns the unique-building threshold and inventory entry. */ }
 
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
-  entranceAnimation();
-  if(cursorChar){ cursorChar.visible=true; }
-  trackingInterval=startTimeTracking();
-  localStorage.removeItem('minicityPassword');
+  const entrance = () => { entranceAnimation(); if(cursorChar){ cursorChar.visible=true; } trackingInterval=startTimeTracking(); localStorage.removeItem('minicityPassword'); };
+  // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
+  if (password === undefined && pl === undefined) entrance(); else loginController?.holdCityEntrance(entrance);
   setupMultiplayer(nickname, password, pl);
   checkAchievements();
 }

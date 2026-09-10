@@ -1,5 +1,17 @@
 import type { LegacyStats } from '../../city/progression/legacyStats';
 
+/**
+ * Bridges the WebSocket auth lifecycle into the login-overlay state machine:
+ * the city entrance is held back and the button stays busy until the server
+ * confirms the resident, and every failure branch hands control back.
+ */
+export interface LoginGate {
+  isWaiting: () => boolean;
+  onAuthorized: () => void;
+  onAuthFailed: () => void;
+  onConnectionLost: () => void;
+}
+
 export type LoginControllerOptions = {
   getStats: () => LegacyStats;
   saveStats: (stats: LegacyStats) => void;
@@ -12,12 +24,66 @@ export type LoginControllerOptions = {
 
 export function createLoginController(options: LoginControllerOptions) {
   let nicknameFeedbackTimer = 0;
+  let verifying = false;
+  let loginButtonLabel = '';
+  let pendingCityEntrance: (() => void) | null = null;
 
   function setError(message: string): void {
     const error = document.getElementById('loginError');
     if (!error) return;
     error.textContent = message;
     error.hidden = !message;
+  }
+
+  /** Hold the overlay with a busy button while the server verifies identity. */
+  function beginVerifying(): void {
+    const button = document.getElementById('loginBtn') as HTMLButtonElement | null;
+    if (verifying) return;
+    verifying = true;
+    if (button) {
+      loginButtonLabel = button.textContent ?? '';
+      button.textContent = '正在核实身份…';
+      button.disabled = true;
+    }
+  }
+
+  function endVerifying(): void {
+    const button = document.getElementById('loginBtn') as HTMLButtonElement | null;
+    verifying = false;
+    if (button) {
+      if (loginButtonLabel) button.textContent = loginButtonLabel;
+      button.disabled = false;
+    }
+  }
+
+  /** Close the overlay only after the server has confirmed the resident. */
+  function closeAfterAuth(): void {
+    const overlay = document.getElementById('loginOverlay');
+    endVerifying();
+    hidePlVerification();
+    overlay?.classList.add('hidden');
+    window.setTimeout(() => {
+      if (overlay) overlay.style.display = 'none';
+    }, 550);
+  }
+
+  /** Called by proceedToCity for fresh sign-ins: run the entrance on success. */
+  function holdCityEntrance(entrance: () => void): void {
+    pendingCityEntrance = entrance;
+  }
+
+  function asLoginGate(): LoginGate {
+    return {
+      isWaiting: () => verifying,
+      onAuthorized: () => {
+        const entrance = pendingCityEntrance;
+        pendingCityEntrance = null;
+        if (entrance) entrance();
+        closeAfterAuth();
+      },
+      onAuthFailed: () => endVerifying(),
+      onConnectionLost: () => { endVerifying(); setError('暂时无法连接小城服务器，请稍后重试'); },
+    };
   }
 
   function applyUsername(name: string): void {
@@ -77,6 +143,7 @@ export function createLoginController(options: LoginControllerOptions) {
   }
 
   function login(): void {
+    if (verifying) return;
     const input = document.getElementById('loginInput') as HTMLInputElement | null;
     const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
     const name = input?.value.trim() ?? '';
@@ -95,12 +162,12 @@ export function createLoginController(options: LoginControllerOptions) {
     options.ensureUserId();
     applyUsername(name);
     options.checkAchievements();
-    const overlay = document.getElementById('loginOverlay');
-    overlay?.classList.add('hidden');
-    window.setTimeout(() => {
-      if (overlay) overlay.style.display = 'none';
-      options.proceed(name, password, pl);
-    }, 550);
+    // Keep the overlay up and hold the button in a waiting state until the
+    // server confirms the resident; the city opens on the `hello` success
+    // callback (closeAfterAuth), so verification always completes first.
+    beginVerifying();
+    setError('');
+    options.proceed(name, password, pl);
   }
 
   function validateInput(): void {
@@ -122,5 +189,5 @@ export function createLoginController(options: LoginControllerOptions) {
     setError('');
   }
 
-  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification };
+  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification, setError, endVerifying, holdCityEntrance, asLoginGate };
 }

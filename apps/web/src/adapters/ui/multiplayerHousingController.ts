@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { MultiplayerClient, type House, type HousingRequest, type NetPlayerProgress, type NetProgressionCatalog, type NetUser, type NetWeather } from '../../network/MultiplayerClient';
 import { createCloudProgressionController } from './cloudProgressionController';
 import { createCommunityPanelController, type SocialKind } from './communityPanelController';
+import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
 
 interface RemotePlayer {
@@ -17,6 +18,7 @@ interface HousePanelState {
   mode: string | null;
 }
 
+/** Bridges the WebSocket auth lifecycle into the login-overlay state machine. */
 export interface MultiplayerHousingOptions {
   scene: THREE.Scene;
   signal: AbortSignal;
@@ -37,6 +39,7 @@ export interface MultiplayerHousingOptions {
   getLegacyAchievements?: () => string[];
   isResidenceUnavailable?: (residenceId: string) => boolean;
   setWeather?: (weather: NetWeather) => void;
+  getLoginGate?: () => LoginGate | null;
 }
 
 export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
@@ -47,6 +50,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     getLegacyAchievements = () => [],
     isResidenceUnavailable = () => false,
     setWeather = () => {},
+    getLoginGate = () => null,
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -193,8 +197,17 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         dot?.classList.toggle('connected', state === 'connected');
         fab?.classList.toggle('connected', state === 'connected');
         if (state !== 'connected' && count) count.textContent = state === 'connecting' ? '连接中' : '离线';
+        // While the resident is still signing in, a dropped socket means the
+        // server never confirmed the identity: stop retrying behind the user's
+        // back and hand control back to the signing overlay instead.
+        const gate = getLoginGate();
+        if (state === 'disconnected' && gate?.isWaiting()) {
+          multiplayer?.close();
+          gate.onConnectionLost();
+        }
       },
       connected: (user, players, houses) => {
+        getLoginGate()?.onAuthorized();
         onlinePlayers = players.filter((player) => player.id !== user.id);
         const owner = document.getElementById('phoneOwner');
         if (owner) owner.textContent = `${user.nickname} 的手机`;
@@ -234,6 +247,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       },
       weather: setWeather,
       authenticationFailed: (message, code) => {
+        getLoginGate()?.onAuthFailed();
         const previousNickname = localStorage.getItem('minicityUser') || nickname;
         localStorage.removeItem('minicityUser');
         multiplayer?.close();
@@ -242,14 +256,17 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
         const error = document.getElementById('loginError');
         if (input) input.value = previousNickname;
-        if (passwordInput) passwordInput.value = '';
         if (error) { error.textContent = message; error.hidden = false; }
         // Nickname belongs to a Physics Lab account: reveal the ownership
         // verification fields so the claimant can prove they are the owner.
+        // The town password is kept so the retry only needs the Physics Lab
+        // credentials; other failures clear it as before.
         const verifySection = document.getElementById('plVerifySection');
         if (code === 'pl-verification-required' && verifySection) {
           verifySection.hidden = false;
           (document.getElementById('plLoginInput') as HTMLInputElement | null)?.focus();
+        } else if (passwordInput) {
+          passwordInput.value = '';
         }
         showLoginEntry();
         showLoginOverlay();
