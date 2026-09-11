@@ -6,6 +6,7 @@ export type UserRow = {
   id: string;
   nickname: string;
   email: string | null;
+  pl_user_id: string | null;
   password_hash: string | null;
   position_x: number;
   position_y: number;

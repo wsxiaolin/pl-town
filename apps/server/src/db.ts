@@ -244,7 +244,7 @@ db.exec('COMMIT');
 
 const now = () => new Date().toISOString();
 
-const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
+const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, plUserId: row.pl_user_id, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
 export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string, plUserId: string | null = null): User {
   const timestamp = now();

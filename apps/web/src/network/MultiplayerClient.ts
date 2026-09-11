@@ -2,8 +2,8 @@ import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/teleme
 import { isWeather, type Weather } from '../city/weather';
 
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
-export type NetUser = { id: string; nickname: string; position: NetPosition };
-export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string }> };
+export type NetUser = { id: string; nickname: string; position: NetPosition; verified?: boolean };
+export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string; verified?: boolean }> };
 export type HousingRequest = {
   id: number;
   buildingId: string;
