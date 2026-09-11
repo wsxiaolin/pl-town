@@ -84,6 +84,7 @@
       <button class="logo-user login-required" id="logoUser" type="button" aria-label="登录">登录</button>
     </div>
     <nav class="ui-nav">
+       <button class="map-toggle activity-panel-toggle" id="activityPanelToggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="activityPanelOverlay">活动</button>
        <button class="map-toggle fs-toggle" id="fsToggle" type="button">全屏</button>
        <button class="map-toggle" id="mapToggle" type="button">地图</button>
        <button class="settings-toggle" id="renderSettingsToggle" type="button" aria-label="画面设置" aria-expanded="false">
@@ -480,6 +481,36 @@
         <p class="npc-line" id="npcLine"></p>
       </div>
       <div class="npc-options" id="npcOptions"></div>
+    </div>
+  </div>
+
+  <!-- Activity panel (top-right entry; static catalog with per-activity background) -->
+  <div class="activity-panel-overlay" id="activityPanelOverlay" role="dialog" aria-modal="true" aria-label="活动">
+    <div class="activity-panel-shell">
+      <header class="activity-panel-topbar">
+        <div class="activity-panel-brand">
+          <span class="activity-panel-mark" aria-hidden="true"></span>
+          <div>
+            <span class="activity-panel-brand-kicker">ACTIVITY LOG</span>
+            <h2>活动机记</h2>
+          </div>
+        </div>
+        <button class="activity-panel-close" id="activityPanelClose" type="button" aria-label="关闭活动">✕</button>
+      </header>
+      <div class="activity-panel-body">
+        <nav class="activity-panel-list" id="activityPanelList" aria-label="活动列表"></nav>
+        <section class="activity-panel-hero" aria-live="polite">
+          <div class="activity-panel-hero-bg" id="activityPanelHeroBg" aria-hidden="true"></div>
+          <div class="activity-panel-hero-scrim" aria-hidden="true"></div>
+          <div class="activity-panel-hero-copy">
+            <span class="activity-panel-badge" id="activityPanelBadge" hidden></span>
+            <span class="activity-panel-kicker" id="activityPanelKicker"></span>
+            <h3 class="activity-panel-title" id="activityPanelTitle"></h3>
+            <p class="activity-panel-subtitle" id="activityPanelSubtitle"></p>
+            <p class="activity-panel-description" id="activityPanelDescription"></p>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 
