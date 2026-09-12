@@ -166,7 +166,7 @@ function createLongjingWell(options: SceneInterestPointOptions): SceneInterestPo
     leaf.rotation.y = -angle;
     leaf.userData.wellVine = true;
   }
-  object.position.set(14.6, 0, -16.6);
+  object.position.set(8.6, 0, -23.5);
   tag(object, 'longjing-well');
   options.scene.add(object);
   return { id: 'longjing-well', object, interactionPosition: object.position.clone().add(new THREE.Vector3(2.1, 0, 1.6)) };
