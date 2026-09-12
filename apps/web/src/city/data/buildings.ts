@@ -606,7 +606,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
   knowledgebaseE: {
     title: "实验知识库",
     Category: "Experiment",
-    Languages: [],
+    Languages: ["Chinese"],
     ExcludeLanguages: null,
     Tags: ["知识库"],
     ExcludeTags: null,
@@ -625,7 +625,7 @@ export const BUILDING_API_QUERIES = Object.freeze({
   knowledgebaseD: {
     title: "黑洞知识库",
     Category: "Discussion",
-    Languages: [],
+    Languages: ["Chinese"],
     ExcludeLanguages: null,
     Tags: ["知识库"],
     ExcludeTags: null,

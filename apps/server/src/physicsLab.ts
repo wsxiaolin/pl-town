@@ -14,6 +14,21 @@ type PublicWork = {
   id: string; title: string; category: string; author: string; authorId: string;
   verification: string | null; tags: string[]; imageUrl: string; createdAt: number;
   visits: number; stars: number; comments: number; remixes: number;
+  language: string;
+};
+
+// The upstream QueryExperiments API documents a Languages/ExcludeLanguages
+// filter, but it is not reliably honored for tag-based queries (a
+// `Languages:['Chinese']` knowledge-base query still returns English works).
+// Apply the language filter locally against each record's actual Language
+// field so non-Chinese works never leak into the Chinese knowledge base.
+const recordLanguage = (item: unknown): string => String((item as { Language?: unknown }).Language ?? '');
+
+const languageAllowed = (item: unknown, languages: string[] | null, excludeLanguages: string[] | null): boolean => {
+  const language = recordLanguage(item);
+  if (Array.isArray(excludeLanguages) && excludeLanguages.length > 0 && excludeLanguages.includes(language)) return false;
+  if (Array.isArray(languages) && languages.length > 0 && !languages.includes(language)) return false;
+  return true;
 };
 
 let session: ApiSession | null = null;
@@ -132,7 +147,7 @@ export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'di
       'x-API-Version': String(API_VERSION),
     },
     body: JSON.stringify({ Query: {
-      Category: scope === 'discussion' ? 'Discussion' : 'Experiment', Languages: [], ExcludeLanguages: null,
+      Category: scope === 'discussion' ? 'Discussion' : 'Experiment', Languages: scope === 'knowledge' ? ['Chinese'] : [], ExcludeLanguages: null,
       Tags: scope === 'knowledge' ? ['知识库'] : scope === 'featured' ? ['精选'] : null, ExcludeTags: null,
       ModelTags: null, ModelID: null, ParentID: null, UserID: null, Special: null,
       From: null, Skip: 0, Take: 24, Days: 0, Sort: 0, ShowAnnouncement: false,
@@ -143,7 +158,9 @@ export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'di
   const payload = await response.json() as Record<string, unknown>;
   if (payload.Status !== 200) throw new Error(`Physics Lab works request failed: ${typeof payload.Message === 'string' ? payload.Message : 'unknown response'}`);
   const values = Array.isArray((payload.Data as { $values?: unknown[] } | undefined)?.$values) ? (payload.Data as { $values: unknown[] }).$values : [];
+  const languages = scope === 'knowledge' ? ['Chinese'] : null;
   const works = values
+    .filter((item: unknown) => languageAllowed(item, languages, null))
     .filter((item: unknown) => scope !== 'senate' || VOLUNTEER_ROLES.has(((item as { User?: { Verification?: string } }).User ?? {}).Verification ?? ''))
     .map((item: unknown): PublicWork => {
       const record = item as { ID?: unknown; Subject?: unknown; Category?: unknown; User?: { Nickname?: unknown; ID?: unknown; Verification?: string | null }; Tags?: unknown; Image?: unknown; CreationDate?: unknown; Visits?: unknown; Stars?: unknown; Comments?: unknown; Remixes?: unknown };
@@ -154,6 +171,7 @@ export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'di
       tags: Array.isArray(record.Tags) ? record.Tags.filter((tag: unknown) => typeof tag === 'string' && !String(tag).startsWith('Type-')).slice(0, 5) : [],
       imageUrl: imageUrl(String(record.ID), Number(record.Image) || 0), createdAt: Number(record.CreationDate) || 0,
       visits: Number(record.Visits) || 0, stars: Number(record.Stars) || 0, comments: Number(record.Comments) || 0, remixes: Number(record.Remixes) || 0,
+      language: recordLanguage(item),
       };
     });
   cacheWorks(scope, works);
@@ -180,9 +198,13 @@ export async function queryPublicWorks(input: unknown) {
   const payload = await response.json() as Record<string, unknown>;
   if (!response.ok || payload.Status !== 200) throw new Error(typeof payload.Message === 'string' ? payload.Message : `Physics Lab works request failed (${response.status})`);
   const values = Array.isArray((payload.Data as { $values?: unknown[] } | undefined)?.$values) ? (payload.Data as { $values: unknown[] }).$values : [];
-  const works = values.map((item: unknown): PublicWork => {
-    const record = item as { ID?: unknown; Subject?: unknown; Category?: unknown; User?: { Nickname?: unknown; ID?: unknown; Verification?: string | null }; Tags?: unknown; Image?: unknown; CreationDate?: unknown; Visits?: unknown; Stars?: unknown; Comments?: unknown; Remixes?: unknown };
-    return { id:String(record.ID), title:String(record.Subject||'Untitled work'), category:String(record.Category||(query.Category as string)), author:String(record.User?.Nickname||'Anonymous'), authorId:String(record.User?.ID||''), verification:record.User?.Verification||null, tags:Array.isArray(record.Tags)?record.Tags.filter((tag:unknown)=>typeof tag==='string'&&!String(tag).startsWith('Type-')).slice(0,5):[], imageUrl:imageUrl(String(record.ID),Number(record.Image)||0), createdAt:Number(record.CreationDate)||0, visits:Number(record.Visits)||0, stars:Number(record.Stars)||0, comments:Number(record.Comments)||0, remixes:Number(record.Remixes)||0 };
-  });
+  const languages = safeStringList(query.Languages);
+  const excludeLanguages = safeStringList(query.ExcludeLanguages);
+  const works = values
+    .filter((item: unknown) => languageAllowed(item, languages, excludeLanguages))
+    .map((item: unknown): PublicWork => {
+      const record = item as { ID?: unknown; Subject?: unknown; Category?: unknown; User?: { Nickname?: unknown; ID?: unknown; Verification?: string | null }; Tags?: unknown; Image?: unknown; CreationDate?: unknown; Visits?: unknown; Stars?: unknown; Comments?: unknown; Remixes?: unknown };
+      return { id:String(record.ID), title:String(record.Subject||'Untitled work'), category:String(record.Category||(query.Category as string)), author:String(record.User?.Nickname||'Anonymous'), authorId:String(record.User?.ID||''), verification:record.User?.Verification||null, tags:Array.isArray(record.Tags)?record.Tags.filter((tag:unknown)=>typeof tag==='string'&&!String(tag).startsWith('Type-')).slice(0,5):[], imageUrl:imageUrl(String(record.ID),Number(record.Image)||0), createdAt:Number(record.CreationDate)||0, visits:Number(record.Visits)||0, stars:Number(record.Stars)||0, comments:Number(record.Comments)||0, remixes:Number(record.Remixes)||0, language:recordLanguage(item) };
+    });
   cacheWorks(cacheKey,works); return {source:'live' as const,cached:false,works};
 }
