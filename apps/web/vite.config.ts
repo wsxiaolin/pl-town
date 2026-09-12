@@ -9,6 +9,8 @@ export default defineConfig({
   base: process.env.BASE_PATH || '/', // GitHub Pages 部署在子路径时注入（如 /pl-town/）
   define: {
     __CF_PAGES__: JSON.stringify(process.env.CF_PAGES === '1'),
+    __TOWN_VITE_API_BASE__: JSON.stringify(process.env.VITE_API_BASE ?? ''),
+    __TOWN_VITE_SERVER_URL__: JSON.stringify(process.env.VITE_SERVER_URL ?? ''),
   },
   server: {
     host: true,

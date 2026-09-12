@@ -1,4 +1,12 @@
 // Physics Lab community API and panel state.
+import { townApiFetch } from '../../core/townApi';
+const fetch = townApiFetch;
+async function readJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text.trim()) throw new Error(`The public archive returned an empty response (${response.status}).`);
+  try { return JSON.parse(text) as T; }
+  catch { throw new Error(`The public archive returned invalid JSON (${response.status}).`); }
+}
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 
 export type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'volunteers';
@@ -348,7 +356,7 @@ export function createCommunityPanelController(options: CommunityPanelController
       const requestKey=`${context}:${JSON.stringify(query)}`;
       if(!worksRequests.has(requestKey)) worksRequests.set(requestKey,request.then(async response=>{
         if(!response.ok) throw new Error('The public archive is temporarily unavailable.');
-        return response.json() as Promise<{ works?: LiveWork[] }>;
+        return readJson<{ works?: LiveWork[] }>(response);
       }).finally(()=>worksRequests.delete(requestKey)));
       const payload=await worksRequests.get(requestKey);
       if(context!==worksContext)return;
