@@ -378,9 +378,7 @@ const http = createServer(async (request, response) => {
   }
   if (request.url?.startsWith('/town-api/')) {
     if (request.method === 'OPTIONS') {
-      const pathname = new URL(request.url, 'http://localhost').pathname;
-      const publicWorks = pathname === '/town-api/works' || pathname === '/town-api/works/query';
-      if (!publicWorks && !requestOriginAllowed(request)) {
+      if (!requestOriginAllowed(request)) {
         response.writeHead(403, headers); response.end(JSON.stringify({ error: 'Request origin is not allowed' })); return;
       }
       response.writeHead(204, headers); response.end(); return;

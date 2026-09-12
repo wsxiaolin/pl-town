@@ -308,14 +308,6 @@ try {
     method: 'POST', headers: { origin: adminOrigin }, body: '{}',
   });
   if (invalidJsonRequest.status !== 415) throw new Error('JSON proxy endpoints must enforce Content-Type');
-  const publicWorksOrigin = 'https://static-preview.example.test';
-  const publicWorks = await fetch(`${adminOrigin}/town-api/works?scope=knowledge`, { headers: { origin: publicWorksOrigin } });
-  if (publicWorks.status !== 200 || publicWorks.headers.get('access-control-allow-origin') !== '*') throw new Error('Public works GET must allow static frontend origins');
-  const publicWorksPreflight = await fetch(`${adminOrigin}/town-api/works/query`, {
-    method: 'OPTIONS',
-    headers: { origin: publicWorksOrigin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' },
-  });
-  if (publicWorksPreflight.status !== 204 || publicWorksPreflight.headers.get('access-control-allow-origin') !== '*') throw new Error('Public works POST preflight must allow static frontend origins');
 
   alice = await connect('Alice');
   bob = await connect('Bob');

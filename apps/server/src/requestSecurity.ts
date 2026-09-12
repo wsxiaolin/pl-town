@@ -86,18 +86,7 @@ export function requestOriginAllowed(request: IncomingMessage, allowMissing = fa
 
 export function corsHeaders(request: IncomingMessage): Record<string, string> {
   const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
-  if (!origin) return {};
-  const pathname = pathOf(request);
-  const publicWorks = pathname === '/town-api/works' || pathname === '/town-api/works/query';
-  if (publicWorks) {
-    return {
-      'access-control-allow-origin': '*',
-      'access-control-allow-headers': 'content-type',
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      vary: 'Origin',
-    };
-  }
-  if (!requestOriginAllowed(request)) return {};
+  if (!origin || !requestOriginAllowed(request)) return {};
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-credentials': 'true',
