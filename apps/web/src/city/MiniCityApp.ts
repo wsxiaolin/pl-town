@@ -1,64 +1,38 @@
 import * as THREE from 'three';
-import { gsap } from 'gsap';
 import { ResourcePool } from '../core/ResourcePool';
-import { InstancedBatch } from '../core/InstancedBatch';
-import { createRenderer, readRenderSettings } from '../rendering/createRenderer';
-import { createProceduralTextureLibrary } from '../rendering/proceduralTextureLibrary';
-import { createBuildingMeshFactory } from '../rendering/buildingMeshFactory';
-import { createWorldDecorations } from '../rendering/worldDecorations';
-import { RENDER_ORDER, SURFACE_Y } from '../rendering/layers';
-import { BUILDING_PLATFORM_HEIGHT, CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, PALETTE, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
+import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
 import { NPC_PROFILES } from './data/npcs';
-import { createCitySurfaces } from '../rendering/createCitySurfaces';
-import { addRealBuildingModels } from '../rendering/realBuildingModels';
-import { destroyCG, initCG, shouldShowCG, startCG } from './cg';
-import { destroyMusterCG } from './musterCg';
+import { shouldShowCG, startCG } from './cg';
 import { startInvasionCG, stopInvasionCG } from './invasionCg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
 import { createCityDialogController, type CityDialogController, type NpcEntityLike } from '../adapters/ui/cityDialogController';
-import { createCommunityPanelController } from '../adapters/ui/communityPanelController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
-import { createWriterCatalogController, type WriterCatalogController } from '../adapters/ui/writerCatalogController';
-import { createNewsstandController, type NewsstandController } from '../adapters/ui/newsstandController';
-import { createAcademyController, type AcademyController } from '../adapters/ui/academyController';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem } from './navigation/roadNavigation';
-import { createNpcSystem, type Npc } from './npcSystem';
-import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
+import type { Npc } from './npcSystem';
 import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
-import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPointController } from './sceneInterestPointController';
-import { createEchoStoryController } from './echo/echoStoryController';
-import { createYesterdaySongController } from './yesterday/yesterdaySongController';
-import { createMagiStoryController } from './magi/magiStoryController';
-import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
-import { createBuildingSceneController } from './buildingSceneController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
-import { addCityFountain, addCityLighting } from './scenePresentationController';
-import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
-import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
-import { isBuildingDestroyed } from './buildingDamage';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
 import { createOnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
-import { createMeshHelpers, type MeshHelpers } from '../rendering/meshFactory';
 import { createThemeClock } from './themeClock';
 import { createInteractionPointer } from './interactionPointer';
 import { showUnlockToast } from './toast';
@@ -69,74 +43,71 @@ import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
 import { createBuildingInteraction } from './buildingInteraction';
-import { createStoryEntryGate } from './storyEntryGate';
-import { createStoryRouter } from './storyRouting';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
-import { isWeather, type Weather } from './weather';
-import { preloadTextureResources } from './textureResourcePreloader';
 import { createIceKingFeatureExperience } from './iceKing/createIceKingFeatureExperience';
 import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
 import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatureRegistry';
 import { createWeatherEffect } from '../rendering/weatherEffect';
 import { createNavigationTargetMarker } from '../rendering/navigationTargetMarker';
+import { createBuildingAvailability, storyLockedBuildingIds } from './buildingAvailability';
+import { addCityLighting, createCityOrthographicCamera, createCityScene, createCityWebRenderer } from './citySceneBootstrap';
+import { createStoryOrchestration, routeNpcDialog, type StoryOrchestration } from './storyOrchestration';
+import { createCityGraphics } from './cityGraphics';
+import { createCityViewControls } from './cityViewControls';
+import { createNpcDistrictFilter } from './npcDistrictFilter';
+import { createIceKingCityHooks } from './iceKingCityHooks';
+import { createCityThemeSync } from './cityThemeSync';
+import { readQuestProgressView } from './cityQuestProgress';
+import { assembleCityWorld } from './cityWorldAssembly';
+import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
+import { createCityRuntimeLifecycle } from './cityRuntimeLifecycle';
+
 const resources = new ResourcePool();
+const MOBILE = () => window.innerWidth <= 680;
+const REDUCED = false;
+const CONFIG = CITY_CONFIG;
+let renderer: THREE.WebGLRenderer;
+const graphics = createCityGraphics(resources, () => renderer);
+const { palette: P, textures: proceduralTextures, mesh: { stdMat } } = graphics;
+
 let clockInterval = 0, trackingInterval = 0;
-let started = false;
-let eventController = new AbortController(), raycastBuildingGroups: THREE.Object3D[] = [];
+let raycastBuildingGroups: THREE.Object3D[] = [];
 const buildingPlotTargets: THREE.Object3D[] = [];
 const labelWorldPosition = new THREE.Vector3();
-const MOBILE  = () => window.innerWidth <= 680;
-const REDUCED = false;
-const P = PALETTE;
-let weather: Weather = 'clear';
-const proceduralTextures = createProceduralTextureLibrary(
-  resources,
-  () => renderer,
-  () => readRenderSettings().anisotropy,
-  () => weather,
-  () => readRenderSettings().textureRendering,
-);
-const TEX = proceduralTextures.backgrounds;
-const _tex = proceduralTextures.repeat;
-const addFacade = proceduralTextures.addFacade;
-const { stdMat, mk, part, refreshWeather }: MeshHelpers = createMeshHelpers(resources, _tex, () => weather);
-
-let renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.OrthographicCamera;
-const pathMats: THREE.MeshStandardMaterial[] = [], groundMats: { mat: THREE.MeshStandardMaterial; night: number; day: number }[] = [], lampGlobes: THREE.MeshStandardMaterial[] = [], buildings: BuildingEntity[] = [], npcList: Npc[] = [];
+let scene: THREE.Scene, camera: THREE.OrthographicCamera;
+const pathMats: THREE.MeshStandardMaterial[] = [];
+const groundMats: { mat: THREE.MeshStandardMaterial; night: number; day: number }[] = [];
+const lampGlobes: THREE.MeshStandardMaterial[] = [];
+const buildings: BuildingEntity[] = [];
+const npcList: Npc[] = [];
 let cursorChar: THREE.Group | null = null;
-let playerPath: THREE.Vector3[] = [];
-let playerMarker: THREE.Group | null = null; // 玩家头顶的三角标记，用于高亮
-let cameraZoom: number; // 当前视野宽度，由滚轮/双指缩放调整
-let preIceCameraZoom: number = CITY_CONFIG.cameraNearSize;
+let playerMarker: THREE.Group | null = null;
 let lastFrameTime = performance.now();
-let isNight    = false; // 由社区时间自动决定
-const STORY_LOCKED_BUILDINGS = new Set(BUILDING_DEFS.filter((building) => building.storyLocked).map((building) => building.id));
-let currentFilter = 'all';
-const cameraTarget = new THREE.Vector3(0,0,0);
-// The interior camera is kept above the roof line and inside the floor footprint.
-// The roof is hidden while inside, so this avoids a near-wall/roof clip while
-// still letting the camera look down into the complete room.
+let isNight = false;
+const residences: ResidenceEntity[] = [];
+const availability = createBuildingAvailability({
+  storyLockedIds: storyLockedBuildingIds(BUILDING_DEFS),
+  getResidences: () => residences,
+});
 let cityDialogs: CityDialogController | null = null;
-let echoStoryController: ReturnType<typeof createEchoStoryController>;
-let yesterdaySongController: ReturnType<typeof createYesterdaySongController>;
-let magiStoryController: ReturnType<typeof createMagiStoryController>;
-let overcoatStoryController: ReturnType<typeof createOvercoatStoryController>;
+let stories: StoryOrchestration;
 let mapController: ReturnType<typeof createMapController>;
 let loginController: ReturnType<typeof createLoginController>;
 let onboardingTutorial: ReturnType<typeof createOnboardingTutorialController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
-let playerController: ReturnType<typeof createPlayerController>, movementInputController: ReturnType<typeof createMovementInputController>;
+let playerController: ReturnType<typeof createPlayerController>;
+let movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
 let cameraPanController: ReturnType<typeof createCameraPanController>;
-let filmCityCinematicActive = false;
 let progressionController: ReturnType<typeof createProgressionController>;
-let buildingSceneController: ReturnType<typeof createBuildingSceneController>;
-let buildingLabelController: ReturnType<typeof createBuildingLabelController>;
-let communityPanels: ReturnType<typeof createCommunityPanelController>, writerCatalogController: WriterCatalogController, newsstandController: NewsstandController, academyController: AcademyController;
+let communityPanels: CityHudPanels['communityPanels'];
+let writerCatalogController: CityHudPanels['writerCatalog'];
+let newsstandController: CityHudPanels['newsstand'];
+let academyController: CityHudPanels['academy'];
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
-let worldDecorations: ReturnType<typeof createWorldDecorations>;
-let npcSystem: ReturnType<typeof createNpcSystem>;
+let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
+let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
@@ -148,38 +119,29 @@ buildingFeatureRegistry.register(createIceKingBuildingFeature({
 let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
 let navigationTargetMarker: ReturnType<typeof createNavigationTargetMarker> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
-let questEventSequence = 0, activeStoryActorIds = new Set<string>();
-let echoActiveActors = new Set<string>();
-let yesterdayActiveActors = new Set<string>();
-let magiActiveActors = new Set<string>();
-let overcoatActiveActors = new Set<string>();
-function mergeActiveStoryActorIds() {
-  activeStoryActorIds = new Set([...echoActiveActors, ...yesterdayActiveActors, ...magiActiveActors, ...overcoatActiveActors]);
-  npcSystem?.updateNpcSchedules();
-}
-
-const storyEntryGate = createStoryEntryGate(() => [
-  ['echo', echoStoryController], ['yesterday', yesterdaySongController], ['magi', magiStoryController], ['overcoat', overcoatStoryController]]);
-const storyRouter = createStoryRouter({
-  listControllers: () => [
-    ['echo', echoStoryController], ['yesterday', yesterdaySongController], ['magi', magiStoryController], ['overcoat', overcoatStoryController]],
-  gate: storyEntryGate,
-  showToast: showUnlockToast,
-});
+let questEventSequence = 0;
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
-const residences: ResidenceEntity[] = [];
-
-const mouse2D     = new THREE.Vector2(-9999, -9999);
-const raycaster   = new THREE.Raycaster();
+const mouse2D = new THREE.Vector2(-9999, -9999);
+const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
-const CONFIG = CITY_CONFIG;
 
-const PLH = BUILDING_PLATFORM_HEIGHT;
+const view = createCityViewControls({
+  defaultZoom: CONFIG.cameraNearSize,
+  createCamera: createCityOrthographicCamera,
+  getCameraController: () => cameraController,
+  getPlayerController: () => playerController,
+  getNavigationTargetMarker: () => navigationTargetMarker,
+});
+const districtFilter = createNpcDistrictFilter({
+  queryButtons: () => document.querySelectorAll('.pf-btn') as NodeListOf<HTMLElement>,
+  onChange: () => npcSystem?.updateNpcSchedules(),
+  showToast: showUnlockToast,
+});
 
 const themeClock = createThemeClock({
-  getSkyTextures: () => TEX,
+  getSkyTextures: () => proceduralTextures.backgrounds,
   getScene: () => scene,
   getPalette: () => P,
   getPathMaterials: () => pathMats,
@@ -189,17 +151,22 @@ const themeClock = createThemeClock({
   setIsNight: (value) => { isNight = value; },
   getGameClock: () => gameClock,
   setGameClock: (value) => { gameClock = value; },
-  announceGuide: () => {
-    echoStoryController?.announceGuide();
-    yesterdaySongController?.announceGuide();
-    magiStoryController?.announceGuide();
-    overcoatStoryController?.announceGuide();
-  },
+  announceGuide: () => stories?.announceGuide(),
   invalidateMapShot: () => mapController?.invalidateShot(),
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
   saveStats,
   checkAchievements,
+});
+
+const themeSync = createCityThemeSync({
+  applyClock: (night, instant) => themeClock.applyTheme(night, instant),
+  syncClock: () => themeClock.syncTimeAndTheme(),
+  setWaterDaylight: (daylight, instant) => {
+    sceneInterestPoints?.setWaterDaylight(daylight, instant);
+    worldDecorations?.setWaterDaylight(daylight, instant);
+  },
+  refreshWeatherVisual: () => weatherEffect?.set(graphics.weather.get()),
 });
 
 const interactionPointer = createInteractionPointer({
@@ -212,23 +179,23 @@ const interactionPointer = createInteractionPointer({
   getCursorChar: () => cursorChar,
   getBuildings: () => buildings,
   getSceneInterestPoints: () => sceneInterestPoints,
-  getEchoStoryController: () => echoStoryController,
+  getEchoStoryController: () => stories?.echo,
   getCityDialogs: () => cityDialogs,
   getConfig: () => CONFIG,
-  isBuildingUnavailable,
-  isResidenceUnavailable,
+  isBuildingUnavailable: availability.isBuildingUnavailable,
+  isResidenceUnavailable: availability.isResidenceUnavailable,
   findRaycastBuilding,
-  raycastUserData,
-  npcForRaycast,
-  nearestNpcTo,
+  raycastUserData: (object, key) => multiplayerHousing.raycastUserData(object, key),
+  npcForRaycast: () => npcSystem.npcForRaycast(),
+  nearestNpcTo: (position, radius) => npcSystem.nearestNpcTo(position, radius),
   openNpcDialog,
-  openResidence,
-  onYouClick,
-  movePlayerTo,
-  selectNavigationTarget,
-  clearNavigationTarget,
-  navigateTo,
-  interactWithSceneInterestPoint,
+  openResidence: (residenceId) => multiplayerHousing.openResidence(residenceId),
+  onYouClick: () => npcSystem.onYouClick(),
+  movePlayerTo: (target) => playerController?.moveTo(target),
+  selectNavigationTarget: (target) => view.selectNavigationTarget(target),
+  clearNavigationTarget: () => view.clearNavigationTarget(),
+  navigateTo: (building) => buildingInteraction.navigateTo(building),
+  interactWithSceneInterestPoint: () => undefined,
   interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
 });
@@ -237,10 +204,10 @@ const interactionTracker = createInteractionTracker({
   getStats,
   saveStats,
   checkAchievements,
-  updateWelcome,
+  updateWelcome: () => {},
   getProgressionController: () => progressionController,
   getQuestRuntime: () => questRuntime,
-  getEchoStoryController: () => echoStoryController,
+  getEchoStoryController: () => stories?.echo,
   getCamera: () => camera,
   getQuestEventSequence: () => questEventSequence,
   incrementQuestEventSequence: () => { questEventSequence++; },
@@ -276,8 +243,8 @@ const frameLoop = createFrameLoop({
   updateWeather: (delta) => weatherEffect?.update(delta),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
-  npcYieldToPlayer,
-  isStoryLockedBuilding,
+  npcYieldToPlayer: (npc) => npcSystem.npcYieldToPlayer(npc),
+  isStoryLockedBuilding: availability.isStoryLocked,
 });
 
 const roadNavigation = createRoadNavigationSystem({
@@ -287,13 +254,6 @@ const roadNavigation = createRoadNavigationSystem({
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
 });
-const FOUNTAIN_CLEAR = roadNavigation.fountainClear;
-const buildRoadPath = roadNavigation.buildRoadPath;
-const buildingRoadEntry = roadNavigation.buildingRoadEntry;
-const pointInAnyBuilding = roadNavigation.pointInAnyBuilding;
-const cacheBuildingBoxes = roadNavigation.cacheBuildingBoxes;
-const nearestRoadCoord = roadNavigation.nearestRoadCoord;
-const clamp = roadNavigation.clamp;
 
 const burnCityEffect = createBurnCityEffect({
   getScene: () => scene,
@@ -312,33 +272,29 @@ const filmCityExperience = createFilmCityExperienceController({
   dialogs: () => cityDialogs,
   getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
   purchase: () => multiplayerHousing?.progression.purchaseFilmCityExperience() ?? Promise.resolve(false),
-  getCameraSnapshot: () => ({ x: cameraTarget.x, z: cameraTarget.z, zoom: cameraZoom }),
+  getCameraSnapshot: () => view.snapshot(),
   playShots: (shots, onComplete) => cameraController?.playSequence(shots, onComplete),
   stopShots: () => cameraController?.stop(),
-  restoreCamera: (snapshot) => {
-    cameraZoom = snapshot.zoom;
-    updateCameraProjection(cameraZoom);
-    cameraController?.setTarget(snapshot.x, snapshot.z, true);
-  },
+  restoreCamera: (snapshot) => view.restoreSnapshot(snapshot),
   setCinematicActive: (active) => {
-    filmCityCinematicActive = active;
+    view.setCinematic(active);
     movementInputController?.setLocked(active);
   },
-  clearPlayerPath: () => { playerPath = []; },
+  clearPlayerPath: () => view.clearPlayerPath(),
   showToast: showUnlockToast,
 });
 
 const buildingInteraction = createBuildingInteraction({
-  isBuildingUnavailable,
+  isBuildingUnavailable: availability.isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
-  getStoryRouter: () => storyRouter,
+  getStoryRouter: () => stories?.router,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
   getAcademyController: () => academyController,
-  trackInteraction,
+  trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
   interactWithFeature: buildingFeatureRegistry.interact,
@@ -346,142 +302,162 @@ const buildingInteraction = createBuildingInteraction({
 
 const eventBindings = createEventBindings({
   getCanvas: () => document.getElementById('c') as HTMLElement,
-  getSignal: () => eventController.signal,
+  getSignal: () => lifecycle.signal,
   getRenderer: () => renderer,
-  onMouseMove,
-  onCanvasClick,
+  onMouseMove: (event) => interactionPointer.onMouseMove(event),
+  onCanvasClick: (event) => interactionPointer.onCanvasClick(event),
   consumeSuppressedCanvasClick: () => cameraPanController?.consumeSuppressedClick() ?? false,
   onViewInteraction: () => cameraPanController?.notifyViewInteraction(),
-  clamp,
-  getCameraZoom: () => cameraZoom,
-  setCameraZoom: (value) => { cameraZoom = value; },
-  updateCameraProjection,
+  clamp: roadNavigation.clamp,
+  getCameraZoom: () => view.getZoom(),
+  setCameraZoom: (value) => view.setZoom(value),
+  updateCameraProjection: (zoom) => view.updateProjection(zoom),
   getConfig: () => CONFIG,
-  onYouClick,
+  onYouClick: () => npcSystem.onYouClick(),
   closeRenderSettings: () => eventBindings.closeRenderSettings(),
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getMapController: () => mapController,
   getWriterCatalogController: () => writerCatalogController,
   getAcademyController: () => academyController,
-  toggleMapMode,
+  toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
-  closeNpcDialog,
+  closeNpcDialog: () => cityDialogs?.closeNpc(),
   getLoginController: () => loginController,
   isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
 });
 
-// Unlock tiers reference world decoration helpers, which are created during init().
 let UNLOCK_TIERS = createUnlockTiers(
   (positions) => worldDecorations?.addLamps(positions),
   (positions) => worldDecorations?.addTrees(positions),
-  (x: number, y: number, z: number, rotY: number) => worldDecorations?.addArch(x, y, z, rotY),
-  (x: number, y: number, z: number, rotY: number) => worldDecorations?.addBench(x, y, z, rotY),
+  (x, y, z, rotY) => worldDecorations?.addArch(x, y, z, rotY),
+  (x, y, z, rotY) => worldDecorations?.addBench(x, y, z, rotY),
 );
 
 function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
+function findRaycastBuilding(hits: readonly THREE.Intersection[]) {
+  return findBuildingFromRaycastHits({ hits, buildings, readUserData: (object, key) => multiplayerHousing.raycastUserData(object, key), isUnavailable: availability.isBuildingUnavailable });
+}
+function openNpcDialog(npc: Npc) {
+  routeNpcDialog(
+    stories.router,
+    cityDialogs,
+    npc.profile.id,
+    () => cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined),
+    () => interactionTracker.recordNpcInteraction(npc.profile.id),
+  );
+}
+
 function init() {
-  document.body.dataset.weather = weather;
-  updateWeatherState(weather);
-  setupRenderer();
+  graphics.weather.set(graphics.weather.get());
+  renderer = createCityWebRenderer();
   cameraController = createCameraController({
     getCamera: () => camera,
-    getZoom: () => cameraZoom,
-    setZoom: (zoom) => { cameraZoom = zoom; },
-    getTarget: () => cameraTarget,
-    isInteriorActive: () => Boolean(echoStoryController?.isInteriorView() || iceKingFeature?.sanctum.isActive()),
+    getZoom: () => view.getZoom(),
+    setZoom: (zoom) => view.setZoom(zoom),
+    getTarget: () => view.cameraTarget,
+    isInteriorActive: () => Boolean(stories?.echo.isInteriorView() || iceKingFeature?.sanctum.isActive()),
     defaultInteriorCenter: ECHO_OBSERVATORY_AREA.interior,
     getInteriorCenter: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum.center : ECHO_OBSERVATORY_AREA.interior,
     getInteriorCameraOffset: () => iceKingFeature?.sanctum.isActive() ? [13, 22, 17] : null,
     getInteriorFollowsTarget: () => Boolean(iceKingFeature?.sanctum.isActive()),
     cameraOffset: CAMERA_OFFSET,
   });
-  setupCamera(); proceduralTextures.initialize(); setupScene(); setupLighting();
-  navigationTargetMarker = createNavigationTargetMarker(scene);
-  window.addEventListener('minicity:textures-ready', () => {
-    refreshWeather(); proceduralTextures.refreshWeather(); weatherEffect?.set(weather);
-  }, { once: true, signal: eventController.signal });
-  worldDecorations = createWorldDecorations({
-    scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
-    buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
-    getIsNight: () => isNight, makeMaterial: stdMat, makeMesh: mk, addPart: part,
-    addRaycastGroup: (group) => raycastBuildingGroups.push(group),
-    addObstacleGroup: (group) => roadNavigation.registerObstacleGroup(group),
-    waterRendering: readRenderSettings().waterRendering,
+  camera = view.createCamera();
+  view.applyInitialView();
+  proceduralTextures.initialize();
+  scene = createCityScene(isNight, proceduralTextures.backgrounds, P);
+  installDebugApi({
+    getScene: () => scene,
+    getCamera: () => camera,
+    getRenderer: () => renderer,
+    getCameraZoom: () => view.getZoom(),
+    getThree: () => THREE,
+    getNpcList: () => npcList,
+    getCursorChar: () => cursorChar,
+    getNavigation: () => roadNavigation,
+    getPlayerPath: () => view.getPlayerPath(),
+    getBuildings: () => buildings,
+    getResidences: () => residences,
+    openNpcDialog,
+    navigateTo: (building) => buildingInteraction.navigateTo(building),
+    isBuildingUnavailable: availability.isBuildingUnavailable,
+    destroyBuilding,
+    destroyResidence,
+    destroyAll,
+    restoreBuilding,
+    restoreResidence,
+    restoreAll,
+    openModal: (building) => buildingInteraction.openModal(building),
+    interactWithSceneInterestPoint: (id) => interactionPointer.interactWithSceneInterestPoint(id),
+    getSceneInterestPoints: () => sceneInterestPoints,
+    burnCity: () => burnCityEffect.trigger(),
+    burnCityActive: () => burnCityEffect.isActive(),
+    burnCityProgress: () => burnCityEffect.getProgress(),
+    playInvasionCG: startInvasionCG,
+    stopInvasionCG,
+    getWeather: () => graphics.weather.get(),
+    setWeather: (value) => graphics.weather.set(value),
+    getIceSanctum: () => iceKingFeature?.sanctum ?? null,
+    getTutorial: () => onboardingTutorial,
   });
-  npcSystem = createNpcSystem({
-    scene, profiles: NPC_PROFILES, npcList,
+  addCityLighting(scene, MOBILE, isNight);
+  navigationTargetMarker = createNavigationTargetMarker(scene);
+  window.addEventListener('minicity:textures-ready', () => graphics.refreshWeatherLooks(), { once: true, signal: lifecycle.signal });
+  const world = assembleCityWorld({
+    scene,
+    resources,
+    graphics,
+    reduced: REDUCED,
+    isMobile: MOBILE,
+    isNight,
+    getIsNight: () => isNight,
+    roadNavigation,
+    buildings,
+    residences,
+    pathMats,
+    groundMats,
+    lampGlobes,
+    buildingPlotTargets,
+    npcList,
     actors: {
       get cursorChar() { return cursorChar; },
       set cursorChar(value) { cursorChar = value; },
       get playerMarker() { return playerMarker; },
       set playerMarker(value) { playerMarker = value; },
     },
-    raycaster, roadCoords: ROAD_COORDS, reduced: REDUCED, isMobile: MOBILE,
-    getGameClock: () => gameClock, getCurrentFilter: () => currentFilter,
-    nearestRoadCoord, buildRoadPath, makeMaterial: stdMat, makeMesh: mk,
-    makeCharacterMaterial: (partName, color, factory) => resources.material(
-      { kind: 'character', partName, color },
-      factory,
-    ),
-    view: {
-      get mapMode() { return Boolean(mapController?.isOpen()); },
-      get dialogOpen() { return Boolean(cityDialogs?.isOpen()); },
-      get cameraZoom() { return cameraZoom; },
-      set cameraZoom(value) { cameraZoom = value; },
-    },
-    updateCameraProjection, getActiveStoryActorIds: () => activeStoryActorIds,
+    raycaster,
+    getGameClock: () => gameClock,
+    getCurrentFilter: () => districtFilter.get(),
+    getCameraZoom: () => view.getZoom(),
+    setCameraZoom: (zoom) => view.setZoom(zoom),
+    updateCameraProjection: (zoom) => view.updateProjection(zoom),
+    getMapMode: () => Boolean(mapController?.isOpen()),
+    getDialogOpen: () => Boolean(cityDialogs?.isOpen()),
+    getActiveStoryActorIds: () => stories?.getActiveStoryActorIds() ?? new Set(),
+    isBuildingUnavailable: availability.isBuildingUnavailable,
+    isStoryLocked: availability.isStoryLocked,
+    interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
+    onModelsLoaded: () => buildingDamageController?.applyPersisted(),
   });
-  createCitySurfaces({
-    scene,
-    isNight,
-    roadCoords: ROAD_COORDS,
-    cityLimit: CITY_LIMIT,
-    colors: { asphalt: P.ASPHALT, dayPath: P.DAY_PATH, nightPath: P.NIGHT_PATH },
-    createMaterial: stdMat,
-    createMesh: mk,
-    pathMaterials: pathMats,
-    groundMaterials: groundMats,
-    addLamps,
-  });
-  addFountain();
-  buildingSceneController = createBuildingSceneController({
-    scene,
-    definitions: BUILDING_DEFS,
-    builders: SHAPE_FNS,
-    addFacade,
-    material: stdMat,
-    addPlot: (plot) => buildingPlotTargets.push(plot),
-    addBuilding: (building) => buildings.push(building),
-    isNight: () => isNight,
-  });
-  buildingSceneController.addBuildings();
-  raycastBuildingGroups = [...buildings.map(b => b.group), ...buildingPlotTargets];
-  addEchoObservatoryArea({
-    scene,
-    makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => stdMat(parameters)),
-  }).forEach(group => roadNavigation.registerObstacleGroup(group));
-  cacheBuildingBoxes(); addDecorations(); addCharacters();
-  sceneInterestPoints = createSceneInterestPoints({ scene, makeMaterial: stdMat, makeMesh: mk, waterRendering: readRenderSettings().waterRendering });
-  sceneInterestPoints.obstacleRoots.forEach((root) => roadNavigation.registerObstacleGroup(root));
-  addRealBuildingModels(scene, buildings)
-    .then(() => { cacheBuildingBoxes(); buildingDamageController?.applyPersisted(); })
-    .catch(error => console.error('3D model loading failed', error));
-  buildingLabelController = createBuildingLabelController({ getBuildings: () => buildings, isStoryLocked: isBuildingUnavailable, interact: interactOrWalk });
-  buildingLabelController.addLabels(); buildingLabelController.applyRenames(); applyStoryLockedBuildings();
-  communityPanels = createCommunityPanelController({ setPhoneOpen, showUnlockToast });
-  writerCatalogController = createWriterCatalogController({ document });
-  newsstandController = createNewsstandController({ document, signal: eventController.signal });
-  academyController = createAcademyController(document);
+  worldDecorations = world.worldDecorations;
+  npcSystem = world.npcSystem;
+  sceneInterestPoints = world.sceneInterestPoints;
+  raycastBuildingGroups = world.raycastBuildingGroups;
+  const hud = createCityHudPanels(document, lifecycle.signal, (open) => multiplayerHousing?.setPhoneOpen(open));
+  communityPanels = hud.communityPanels;
+  writerCatalogController = hud.writerCatalog;
+  newsstandController = hud.newsstand;
+  academyController = hud.academy;
   multiplayerHousing = createMultiplayerHousingController({
-    scene, signal: eventController.signal, residences, getCursorChar: () => cursorChar,
-    makeCharacter, showLoginEntry, showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding,
-    fountainClear: FOUNTAIN_CLEAR, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode, communityPanels,
-    isResidenceUnavailable,
+    scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
+    makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
+    fountainClear: roadNavigation.fountainClear, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
+    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
+    isResidenceUnavailable: availability.isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
-    setWeather: (value) => updateWeatherState(value),
+    setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
   });
   buildingDamageController = createBuildingDamageController({
@@ -500,57 +476,29 @@ function init() {
     unlockAchievement: (id) => multiplayerHousing?.progression.unlockAchievement(id),
     showToast: showUnlockToast,
   });
-  echoStoryController = createEchoStoryController({
-    document,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
-    consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
-    setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
-    setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
+  stories = createStoryOrchestration({
+    echo: {
+      document,
+      consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
+      setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
+      getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
+      clearPlayerPath: () => view.clearPlayerPath(),
+      setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
+      stopCameraTween: () => cameraController?.stop(),
+      getCameraZoom: () => view.getZoom(),
+      setCameraZoom: (zoom) => view.setZoom(zoom),
+      updateCameraProjection: (zoom) => view.updateProjection(zoom),
+      isMobile: MOBILE,
+      getScene: () => scene,
+      sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: 0, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
+      goToObservatory: () => { cursorChar && view.setTarget(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1], false); },
+    },
+    getQuestContext: () => ({ ...readQuestProgressView(multiplayerHousing), gameDay: townGameDay() }),
+    awardAchievement: awardDirectAchievement,
+    showToast: showUnlockToast,
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
-    awardAchievement: (id, name) => progressionController?.awardDirectAchievement(id, name),
-    showToast: showUnlockToast,
-    getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
-    clearPlayerPath: () => { playerPath = []; },
-    setCameraTarget: (x, z, instant) => cameraController?.setTarget(x, z, instant),
-    stopCameraTween: () => cameraController?.stop(),
-    getCameraZoom: () => cameraZoom,
-    setCameraZoom: (zoom) => { cameraZoom = zoom; },
-    updateCameraProjection: (zoom) => cameraController?.updateProjection(zoom),
-    isMobile: MOBILE,
-    getScene: () => scene,
-    sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: 0, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
-    goToObservatory: () => { cursorChar && setCameraTarget(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1], false); },
   });
-  echoStoryController.setupScene(scene);
-  echoStoryController.setupGuide();
-  echoStoryController.restoreAchievements();
-  // ── 昨日之歌 · 支线剧情 ──────────────────────────────────────
-  yesterdaySongController = createYesterdaySongController({
-    awardAchievement: awardDirectAchievement,
-    showToast: showUnlockToast,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
-    onActiveActorsChanged: (ids) => { yesterdayActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
-  });
-  yesterdaySongController.announceGuide();
-  yesterdaySongController.syncActiveActors();
-  // ── 麦琪的礼物 · 支线剧情 ──────────────────────────────────────
-  magiStoryController = createMagiStoryController({
-    awardAchievement: awardDirectAchievement,
-    showToast: showUnlockToast,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
-    onActiveActorsChanged: (ids) => { magiActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
-  });
-  magiStoryController.announceGuide();
-  magiStoryController.syncActiveActors();
-  // ── 今晚别走那条街 · 支线剧情 ──────────────────────────────────
-  overcoatStoryController = createOvercoatStoryController({
-    awardAchievement: awardDirectAchievement,
-    showToast: showUnlockToast,
-    getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
-    onActiveActorsChanged: (ids) => { overcoatActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
-  });
-  overcoatStoryController.announceGuide();
-  overcoatStoryController.syncActiveActors();
+  stories.setupEcho(scene);
   mapController = createMapController({
     document,
     getScene: () => scene,
@@ -559,50 +507,53 @@ function init() {
     getStats,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
-    isStoryLocked: isBuildingUnavailable,
+    isStoryLocked: availability.isBuildingUnavailable,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
-    setCameraTarget,
-    movePlayerTo,
-    clearPlayerPath: () => { playerPath = []; },
-    renderMapHouseTags,
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
+    movePlayerTo: (target) => playerController?.moveTo(target),
+    clearPlayerPath: () => view.clearPlayerPath(),
+    renderMapHouseTags: () => multiplayerHousing.renderMapHouseTags(),
     openResidence: () => undefined,
   });
-  mapController.setup(eventController.signal);
-  movementInputController=createMovementInputController({document,window,signal:eventController.signal,onManualStart:()=>{playerPath=[];interactionPointer.clearPending();clearNavigationTarget();}});
-  cameraPanController=createCameraPanController({
-    canvas: document.getElementById('c') as HTMLElement, document, window, signal: eventController.signal,
-    getCamera: () => camera, getCameraTarget: () => cameraTarget,
+  mapController.setup(lifecycle.signal);
+  movementInputController = createMovementInputController({
+    document, window, signal: lifecycle.signal,
+    onManualStart: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
+  });
+  cameraPanController = createCameraPanController({
+    canvas: document.getElementById('c') as HTMLElement, document, window, signal: lifecycle.signal,
+    getCamera: () => camera, getCameraTarget: () => view.cameraTarget,
     getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
-    setCameraTarget, stopCameraMotion: () => cameraController?.stop(),
-    isBlocked: () => filmCityCinematicActive || Boolean(mapController?.isOpen())
-      || Boolean(cityDialogs?.isOpen()) || Boolean(echoStoryController?.isInteriorView()),
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant), stopCameraMotion: () => cameraController?.stop(),
+    isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
+      || Boolean(cityDialogs?.isOpen()) || Boolean(stories?.echo.isInteriorView()),
   });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
-  }, { signal: eventController.signal });
+  }, { signal: lifecycle.signal });
   playerController = createPlayerController({
     getCursor: () => cursorChar,
     getCamera: () => camera,
-    getCameraTarget: () => cameraTarget,
-    setCameraTarget,
-    getPlayerPath: () => playerPath,
-    setPlayerPath: (path) => { playerPath = path; },
+    getCameraTarget: () => view.cameraTarget,
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
+    getPlayerPath: () => view.getPlayerPath(),
+    setPlayerPath: (path) => view.setPlayerPath(path),
     isDialogOpen: () => Boolean(cityDialogs?.isOpen()),
     isMapOpen: () => Boolean(mapController?.isOpen()),
-    buildRoadPath,
-    clamp,
+    buildRoadPath: roadNavigation.buildRoadPath,
+    clamp: roadNavigation.clamp,
     playerSpeed: CONFIG.playerSpeed,
     getNpcs: () => npcList,
-    getEcho: () => echoStoryController,
+    getEcho: () => stories?.echo,
     getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
-    onIdle: handlePlayerIdle,
+    onIdle: () => interactionPointer.handlePlayerIdle(),
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
-    addDistance: flushDistance,
+    addDistance: (amount) => interactionTracker.flushDistance(amount),
     getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
     resolveMovement: (from, target, result) => roadNavigation.resolveMovement(from, target, result),
-    isInputLocked: () => filmCityCinematicActive,
-    isCinematicCameraActive: () => filmCityCinematicActive,
+    isInputLocked: () => view.isCinematic(),
+    isCinematicCameraActive: () => view.isCinematic(),
     isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
   });
   loginController = createLoginController({
@@ -614,7 +565,7 @@ function init() {
     startIntro: startCG,
     proceed: proceedToCity,
   });
-  onboardingTutorial = createOnboardingTutorialController({ document, signal: eventController.signal });
+  onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });
   statsPanelController = createStatsPanelController({
     getStats,
     getUserId,
@@ -626,180 +577,163 @@ function init() {
     achievements: ACHIEVEMENTS,
     unlockTiers: UNLOCK_TIERS,
   });
-  cityDialogs=createCityDialogController({
+  cityDialogs = createCityDialogController({
     document,
     buildingContent: BUILDING_CONTENT,
-    getQuestAction: (npcId)=>questRuntime.getNpcAction(npcId,getQuestProgressView()),
-    performQuestAction: (action,at)=>questRuntime.performNpcAction(action,at),
-    onNpcInteracted: recordNpcInteraction,
-    onDialogueAction: (action)=>{
-      if(action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
-      if(action.startsWith('open-url:')) window.location.href=action.slice(9);
+    getQuestAction: (npcId) => questRuntime.getNpcAction(npcId, readQuestProgressView(multiplayerHousing)),
+    performQuestAction: (action, at) => questRuntime.performNpcAction(action, at),
+    onNpcInteracted: (npcId) => interactionTracker.recordNpcInteraction(npcId),
+    onDialogueAction: (action) => {
+      if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
+      if (action.startsWith('open-url:')) window.location.href = action.slice(9);
       buildingFeatureRegistry.handleDialogueAction(action, 'city-dialog');
     },
-    pauseNpcs,
-    resumeNpcs,
+    pauseNpcs: () => npcSystem.pauseNpcs(),
+    resumeNpcs: () => npcSystem.resumeNpcs(),
     showToast: showUnlockToast,
     musicHallLyrics: MUSIC_HALL_LYRICS,
     memorialRoster: MEMORIAL_ROSTER,
-    signal: eventController.signal,
+    signal: lifecycle.signal,
   });
   cityDialogs.setup();
-  weatherEffect = createWeatherEffect({ scene, getCursor: () => cursorChar,
-    restoreSky: () => themeClock.restoreSky(), onWeatherChanged: (next) => { if (next) document.body.dataset.cityWeather = next; else delete document.body.dataset.cityWeather; } }); weatherEffect.set(weather);
+  weatherEffect = createWeatherEffect({
+    scene,
+    getCursor: () => cursorChar,
+    restoreSky: () => themeClock.restoreSky(),
+    onWeatherChanged: (next) => {
+      if (next) document.body.dataset.cityWeather = next;
+      else delete document.body.dataset.cityWeather;
+    },
+  });
+  graphics.setWeatherVisual(weatherEffect);
+  weatherEffect.set(graphics.weather.get());
+  const iceHooks = createIceKingCityHooks({
+    defaultZoom: CONFIG.cameraNearSize,
+    wellZoom: 5.2,
+    beachZoom: 5.5,
+    iceZoom: (mobile) => (mobile ? 9.5 : 13.5),
+    isMobile: MOBILE,
+    canAdjustCamera: () => Boolean(camera),
+    getZoom: () => view.getZoom(),
+    setZoom: (zoom) => view.applyZoom(zoom),
+    captureIceZoom: () => view.captureIceZoom(),
+    restoreIceZoom: () => view.restoreIceZoom(),
+    setWellVision: (phase) => {
+      if (phase) document.body.dataset.wellVision = phase;
+      else delete document.body.dataset.wellVision;
+    },
+    closeMapIfOpen: () => { if (mapController?.isOpen()) mapController.toggle(); },
+    closeHud: () => {
+      multiplayerHousing?.setPhoneOpen(false);
+      statsPanelController?.close();
+      eventBindings.closeRenderSettings();
+    },
+    clearTravel: () => { view.clearPlayerPath(); interactionPointer.clearPending(); },
+    setWeather: (weather) => graphics.weather.set(weather),
+    invalidateMap: () => mapController?.invalidateShot(),
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
+    focusCamera: (x, z) => cameraController?.focus(x, z),
+    sendLocalPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
+    getCursor: () => cursorChar,
+    setWellPhaseVisual: (phase) => sceneInterestPoints?.setWellPhase(phase),
+    setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
+  });
   iceKingFeature = createIceKingFeatureExperience({
-    scene, makeCharacter,
+    scene, makeCharacter: (head, body) => npcSystem.makeCharacter(head, body),
     makeMaterial: (parameters) => resources.material({ kind: 'ice-sanctum', ...parameters }, () => stdMat(parameters)),
     getCursor: () => cursorChar, dialogs: () => cityDialogs,
     progression: multiplayerHousing.progression,
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
-    onEnter: () => {
-      if (mapController?.isOpen()) mapController.toggle();
-      setPhoneOpen(false); statsPanelController?.close(); eventBindings.closeRenderSettings();
-      preIceCameraZoom = cameraZoom; cameraZoom = MOBILE() ? 9.5 : 13.5;
-      updateCameraProjection(cameraZoom);
-      playerPath = []; interactionPointer.clearPending();
-    },
-    onReturn: (weather) => {
-      updateWeatherState(weather === 'rain' ? 'rain' : 'clear');
-      cameraZoom = preIceCameraZoom; updateCameraProjection(cameraZoom);
-      mapController?.invalidateShot();
-      setCameraTarget(cursorChar?.position.x ?? 20, cursorChar?.position.z ?? 26, true);
-      multiplayerHousing?.sendLocalPosition({ x: cursorChar?.position.x ?? 20, y: 0, z: cursorChar?.position.z ?? 26, rotation: cursorChar?.rotation.y }, performance.now());
-    },
+    onEnter: () => iceHooks.onEnter(),
+    onReturn: (weather) => iceHooks.onReturn(weather),
     setCameraTarget: (x, z, instant) => cameraController?.setTarget(x, z, instant),
     focusCamera: (x, z, focusOptions) => cameraController?.focus(x, z, focusOptions),
     stopCameraFocus: () => cameraController?.stop(),
   });
-  sceneInterestPointController=createSceneInterestPointController({
+  sceneInterestPointController = createSceneInterestPointController({
     dialogs: cityDialogs,
     inventory: {
       isOnline: () => multiplayerHousing.progression.isOnline(),
-      hasItem: (itemId, count=1) => multiplayerHousing.progression.isOnline()
+      hasItem: (itemId, count = 1) => multiplayerHousing.progression.isOnline()
         && (multiplayerHousing.progression.getProgress().inventory[itemId] ?? 0) >= count,
       consumeItem: (itemId, count) => multiplayerHousing.progression.consumeItem(itemId, count),
-      claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId), hasAchievement: (achievementId) => multiplayerHousing.progression.getProgress().achievements.includes(achievementId),
+      claimReward: (rewardId) => multiplayerHousing.progression.claimReward(rewardId),
+      hasAchievement: (achievementId) => multiplayerHousing.progression.getProgress().achievements.includes(achievementId),
     },
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
-    interactWithStory: (id) => cityDialogs ? echoStoryController.interactInterestPoint(id, cityDialogs) : false,
+    interactWithStory: (id) => cityDialogs ? stories.echo.interactInterestPoint(id, cityDialogs) : false,
     interactWithFeature: (id) => iceKingFeature?.iceWall.interact(id) ?? false,
-    setWellPhase: (phase) => {
-      sceneInterestPoints?.setWellPhase(phase);
-      if (!camera) return;
-      if (phase === 'focus' || phase === 'engulf') {
-        cameraZoom = Math.min(cameraZoom, 5.2);
-        updateCameraProjection(cameraZoom);
-        document.body.dataset.wellVision = phase;
-      } else {
-        cameraZoom = CONFIG.cameraNearSize;
-        updateCameraProjection(cameraZoom);
-        delete document.body.dataset.wellVision;
-      }
-    },
-    setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
-    focusBeachEncounter: () => {
-      cameraZoom = 5.5;
-      updateCameraProjection(cameraZoom);
-      cameraController?.focus(-41.2, 11.5);
-    },
+    setWellPhase: (phase) => iceHooks.setWellPhase(phase),
+    setBeachEncounterPhase: (phase) => iceHooks.setBeachEncounterPhase(phase),
+    focusBeachEncounter: () => iceHooks.focusBeachEncounter(),
   });
-  setupEvents(); setupFilter();
-  applyTheme(isNight, true);
-  initAnimations();
-  clockInterval = window.setInterval(syncTimeAndTheme, 1000);
-  syncTimeAndTheme();
+  eventBindings.setupEvents();
+  districtFilter.setup((button, onClick) => {
+    (button as HTMLElement).addEventListener('click', onClick, { signal: lifecycle.signal });
+  });
+  themeSync.applyTheme(isNight, true);
+  sceneAnimations.initAnimations();
+  clockInterval = window.setInterval(themeSync.syncTimeAndTheme, 1000);
+  themeSync.syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
-  updateWelcome();
-
   loginController.checkLogin();
-  setupMultiplayerUI();
+  multiplayerHousing.setupUI();
 }
 
-function setupRenderer() {
-  const canvas = document.getElementById('c') as HTMLCanvasElement;
-  renderer = createRenderer(canvas);
+function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
+  const entrance = () => {
+    sceneAnimations.entranceAnimation();
+    if (cursorChar) cursorChar.visible = true;
+    trackingInterval = startTimeTracking();
+    localStorage.removeItem('minicityPassword');
+  };
+  // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
+  if (password === undefined && pl === undefined) entrance();
+  else loginController?.holdCityEntrance(entrance);
+  multiplayerHousing.connect(nickname, password, pl);
+  checkAchievements();
 }
-function setupCamera() {
-  cameraZoom=CONFIG.cameraNearSize;
-  const vs = cameraZoom;
-  camera = new THREE.OrthographicCamera(-vs,vs,vs,-vs,0.1,120);
-  updateCameraProjection(vs);
-  setCameraTarget(0,0,true);
-}
-function setupScene() {
-  scene = new THREE.Scene();
-  scene.background = isNight ? TEX.skyNight : TEX.skyDay;
-  if (!scene.background) scene.background = new THREE.Color(isNight ? P.NIGHT_BG : P.DAY_BG);
-  installDebugApi({
-    getScene: () => scene,
-    getCamera: () => camera,
-    getRenderer: () => renderer,
-    getCameraZoom: () => cameraZoom,
-    getThree: () => THREE,
-    getNpcList: () => npcList,
-    getCursorChar: () => cursorChar,
-    getNavigation: () => roadNavigation,
-    getPlayerPath: () => playerPath,
-    getBuildings: () => buildings,
-    getResidences: () => residences,
-    openNpcDialog,
-    navigateTo,
-    isBuildingUnavailable,
-    destroyBuilding,
-    destroyResidence,
-    destroyAll,
-    restoreBuilding,
-    restoreResidence,
-    restoreAll,
-    openModal,
-    interactWithSceneInterestPoint,
-    getSceneInterestPoints: () => sceneInterestPoints,
-    burnCity: () => burnCityEffect.trigger(),
-    burnCityActive: () => burnCityEffect.isActive(),
-    burnCityProgress: () => burnCityEffect.getProgress(),
-    playInvasionCG: startInvasionCG,
-    stopInvasionCG,
-    getWeather: () => weather,
-    setWeather: (value) => updateWeatherState(value),
-    getIceSanctum: () => iceKingFeature?.sanctum ?? null,
-    getTutorial: () => onboardingTutorial,
-  });
-}
-function setupLighting() { addCityLighting(scene, MOBILE, isNight); }
-function addFountain() { addCityFountain({ scene, palette: P, part }); }
 
-const buildingMeshFactory = createBuildingMeshFactory({
-  palette: P,
-  platformHeight: PLH,
-  makeMaterial: stdMat,
-  makeMesh: mk,
-  addPart: part,
+function disposeSession() {
+  filmCityExperience.dispose();
+  frameLoop.stop();
+  clearInterval(clockInterval);
+  clearInterval(trackingInterval);
+  multiplayerHousing?.destroy();
+  iceKingFeature?.dispose();
+  weatherEffect?.dispose();
+  iceKingFeature = null;
+  weatherEffect = null;
+  graphics.setWeatherVisual(null);
+  npcList.forEach((npc) => npc.tween?.kill());
+  npcSystem?.destroy();
+  mapController?.destroy();
+  navigationTargetMarker?.dispose();
+  navigationTargetMarker = null;
+  renderer?.dispose();
+  renderer?.forceContextLoss();
+  sceneInterestPoints?.dispose();
+  scene?.clear();
+  resources.dispose();
+  buildingPlotTargets.length = 0;
+  sceneInterestPoints = null;
+  sceneInterestPointController = null;
+  stories?.dispose();
+}
+
+const lifecycle = createCityRuntimeLifecycle({
+  reduced: REDUCED,
+  isNight: () => isNight,
+  initCity: init,
+  startTutorial: () => onboardingTutorial?.start(),
+  proceedToCity,
+  showLogin: () => loginController?.showLogin(),
+  disposeSession,
 });
 
-const SHAPE_FNS = buildingMeshFactory.builders;
-
-function addDecorations() { worldDecorations.addDecorations(); }
-function addTrees(positions: readonly (readonly [number, number, number])[]) { worldDecorations.addTrees(positions); }
-function addLamps(positions: readonly (readonly [number, number, number])[]) { worldDecorations.addLamps(positions); }
-function addArch(x: number, y: number, z: number, rotY: number) { worldDecorations.addArch(x, y, z, rotY); }
-function addBench(x: number, y: number, z: number, rotY: number) { worldDecorations.addBench(x, y, z, rotY); }
-function makeCharacter(headHex: number, bodyHex: number) { return npcSystem.makeCharacter(headHex, bodyHex); }
-function addCharacters() { npcSystem.addCharacters(); }
-function onYouClick() { npcSystem.onYouClick(); }
-function updateNpcSchedules() { npcSystem.updateNpcSchedules(); }
-function npcYieldToPlayer(npc: Npc) { npcSystem.npcYieldToPlayer(npc); }
-function pauseNpcs() { npcSystem.pauseNpcs(); }
-function resumeNpcs() { npcSystem.resumeNpcs(); }
-function nearestNpcTo(position: THREE.Vector3, radius: number) { return npcSystem.nearestNpcTo(position, radius); }
-function npcForRaycast() { return npcSystem.npcForRaycast(); }
-function setupEvents() { eventBindings.setupEvents(); }
-function isStoryLockedBuilding(building: BuildingEntity) { return STORY_LOCKED_BUILDINGS.has(building.id); }
-function isBuildingUnavailable(building: BuildingEntity) {
-  return isStoryLockedBuilding(building) || isBuildingDestroyed(building);
-}
 export function destroyBuilding(buildingId: string): boolean {
   return buildingDamageController?.destroyBuilding(buildingId) ?? false;
 }
@@ -818,181 +752,5 @@ export function restoreResidence(residenceId: string): boolean {
 export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
-function isResidenceUnavailable(residenceId: string): boolean {
-  const residence = residences.find((item) => item.id === residenceId);
-  return !residence || isBuildingDestroyed(residence);
-}
-function applyStoryLockedBuildings() { applyStoryLockedBuildingPresentation(buildings.filter(isStoryLockedBuilding)); }
-function onMouseMove(e: MouseEvent) { interactionPointer.onMouseMove(e); }
-function setupMultiplayerUI() { multiplayerHousing.setupUI(); }
-function setupMultiplayer(nickname: string, password?: string, pl?: { login: string; password: string }) { multiplayerHousing.connect(nickname, password, pl); }
-function showLoginEntry() { loginController?.showLoginEntry(); }
-function showLoginOverlay() { loginController?.showLogin(); }
-function updateRemotePlayers(delta: number) { multiplayerHousing.updateRemotePlayers(delta); }
-function setPhoneOpen(open: boolean) { multiplayerHousing?.setPhoneOpen(open); }
-function renderMapHouseTags() { multiplayerHousing.renderMapHouseTags(); }
-function openResidence(residenceId: string) { multiplayerHousing.openResidence(residenceId); }
-function closeResidencePanel() { multiplayerHousing.closeResidencePanel(); }
-function navigateToResidence(residenceId: string) { multiplayerHousing.navigateToResidence(residenceId); }
-function raycastUserData(object: THREE.Object3D | null, key: string) { return multiplayerHousing.raycastUserData(object, key); }
-function findRaycastBuilding(hits: readonly THREE.Intersection[]) { return findBuildingFromRaycastHits({ hits, buildings, readUserData: raycastUserData, isUnavailable: isBuildingUnavailable }); }
-function onCanvasClick(event: MouseEvent) { interactionPointer.onCanvasClick(event); }
-
-function talkToOrWalk(npc: Npc) { interactionPointer.talkToOrWalk(npc); }
-
-function interactOrWalk(b: BuildingEntity) { interactionPointer.interactOrWalk(b); }
-
-function navigateTo(b: BuildingEntity) { buildingInteraction.navigateTo(b); }
-function openModal(building: BuildingEntity) { buildingInteraction.openModal(building); }
-function closeModal() { buildingInteraction.closeModal(); }
-
-function interactWithSceneInterestPoint(id: SceneInterestPointId) { interactionPointer.interactWithSceneInterestPoint(id); }
-
-function applyTheme(night: boolean, instant?: boolean) {
-  themeClock.applyTheme(night, instant);
-  sceneInterestPoints?.setWaterDaylight(night ? 0 : 1, instant);
-  worldDecorations?.setWaterDaylight(night ? 0 : 1, instant);
-}
-function syncTimeAndTheme() { themeClock.syncTimeAndTheme(); weatherEffect?.set(weather); }
-
-function updateWeatherState(next: Weather): void {
-  if (!isWeather(next)) return;
-  document.body.dataset.weather = next;
-  const changed = next !== weather;
-  weather = next;
-  weatherEffect?.set(next);
-  if (!changed) return;
-  refreshWeather();
-  proceduralTextures.refreshWeather();
-}
-
-function entranceAnimation() { sceneAnimations.entranceAnimation(); }
-function initAnimations() { sceneAnimations.initAnimations(); }
-function updateLabels() { frameLoop.updateLabels(); }
-
-function toggleMapMode() { mapController?.toggle(); }
-function updateCameraProjection(vs: number) { cameraController?.updateProjection(vs); }
-
-function setCameraTarget(x: number, z: number, instant?: boolean) { cameraController?.setTarget(x,z,instant); }
-
-function movePlayerTo(target: THREE.Vector3) { playerController?.moveTo(target); }
-
-function selectNavigationTarget(target: THREE.Vector3) { if (playerController?.moveTo(target)) navigationTargetMarker?.show(target); }
-
-function clearNavigationTarget() { navigationTargetMarker?.hide(); }
-
-function handlePlayerIdle() { interactionPointer.handlePlayerIdle(); }
-
-function flushDistance(amount: number) { interactionTracker.flushDistance(amount); }
-
-function trackInteraction(buildingId: string) { interactionTracker.trackInteraction(buildingId); }
-function updateWelcome() { /* Cloud progression owns the unique-building threshold and inventory entry. */ }
-
-function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
-  const entrance = () => { entranceAnimation(); if(cursorChar){ cursorChar.visible=true; } trackingInterval=startTimeTracking(); localStorage.removeItem('minicityPassword'); };
-  // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
-  if (password === undefined && pl === undefined) entrance(); else loginController?.holdCityEntrance(entrance);
-  setupMultiplayer(nickname, password, pl);
-  checkAchievements();
-}
-
-function setupFilter() {
-  document.querySelectorAll('.pf-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>setFilter((btn as HTMLElement).dataset.filter ?? ''));
-  });
-}
-
-function setFilter(filter: string) {
-  currentFilter=filter;
-  document.querySelectorAll('.pf-btn').forEach(b=>b.classList.toggle('active',(b as HTMLElement).dataset.filter===filter));
-  updateNpcSchedules();
-  if(filter==='friends'){
-    showUnlockToast('no friends online yet — invite someone!');
-  }
-}
-
-function getQuestProgressView() {
-  return multiplayerHousing?.progression.getQuestProgressView() ?? {
-    flags:{},
-    inventory:{},
-    achievements:new Set(),
-    unlockedBuildings:new Set(),
-    unlockedDistricts:new Set(),
-  };
-}
-
-function recordNpcInteraction(npcId: string) { interactionTracker.recordNpcInteraction(npcId); }
-
-function openNpcDialog(npc: Npc) {
-  const storyResult = cityDialogs ? storyRouter.routeNpc(npc.profile.id, cityDialogs) : 'unhandled';
-  if (storyResult === 'handled') {
-    recordNpcInteraction(npc.profile.id);
-    return;
-  }
-  if (storyResult === 'blocked') return;
-  cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined);
-}
-function closeNpcDialog() { cityDialogs?.closeNpc(); }
-
-export function startMiniCity() {
-  if(started)return;
-  started=true;
-  eventController=new AbortController();
-  void preloadTextureResources(readRenderSettings().textureRendering, eventController.signal).then(() => {
-    if (!started) return;
-    try { init(); } catch (error) { console.error('City initialization failed', error); }
-    window.dispatchEvent(new CustomEvent('minicity:city-ready'));
-    onboardingTutorial?.start();
-  }).catch(() => {
-    if (!started) return;
-    try { init(); } catch (error) { console.error('City initialization failed', error); }
-    window.dispatchEvent(new CustomEvent('minicity:city-ready'));
-    onboardingTutorial?.start();
-  });
-  initCG({
-    onFinish: () => {
-      showUnlockToast('全屏效果更好哦');
-      if(localStorage.getItem('minicityUser')) proceedToCity();
-      else loginController?.showLogin();
-    },
-    reduced: REDUCED,
-  });
-  document.body.classList.remove('day','night');
-  document.body.classList.add(isNight?'night':'day');
-}
-
-export function destroyMiniCity() {
-  if(!started)return;
-  started=false;
-  filmCityExperience.dispose();
-  frameLoop.stop();
-  clearInterval(clockInterval);
-  clearInterval(trackingInterval);
-  multiplayerHousing?.destroy();
-  iceKingFeature?.dispose(); weatherEffect?.dispose();
-  iceKingFeature=null; weatherEffect=null;
-  destroyCG();
-  stopInvasionCG();
-  destroyMusterCG();
-  eventController.abort();
-  npcList.forEach(npc=>npc.tween?.kill());
-  npcSystem?.destroy();
-  gsap.globalTimeline.clear();
-  mapController?.destroy();
-  navigationTargetMarker?.dispose();
-  navigationTargetMarker=null;
-  renderer?.dispose();
-  renderer?.forceContextLoss();
-  sceneInterestPoints?.dispose();
-  scene?.clear();
-  resources.dispose();
-  buildingPlotTargets.length=0;
-  sceneInterestPoints=null;
-  sceneInterestPointController=null;
-  document.getElementById('labelsWrap')?.replaceChildren();
-  document.getElementById('mapIcons')?.replaceChildren();
-  echoStoryController?.dispose();
-  yesterdaySongController?.dispose();
-  magiStoryController?.dispose();
-  overcoatStoryController?.dispose();
-}
+export function startMiniCity() { lifecycle.start(); }
+export function destroyMiniCity() { lifecycle.destroy(); }

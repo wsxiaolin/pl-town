@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" role="img" aria-label="极光庆典占位背景">
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070c26"/>
+      <stop offset="0.55" stop-color="#182257"/>
+      <stop offset="1" stop-color="#2c3d7a"/>
+    </linearGradient>
+    <linearGradient id="auroraA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#54ffd0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#54ffd0" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="auroraB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9b7bff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#9b7bff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mountain" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26306a"/>
+      <stop offset="1" stop-color="#0b1130"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#night)"/>
+  <g fill="#ffffff" opacity="0.9">
+    <circle cx="140" cy="90" r="2.4"/><circle cx="300" cy="60" r="1.6"/>
+    <circle cx="520" cy="130" r="2.2"/><circle cx="700" cy="70" r="1.8"/>
+    <circle cx="900" cy="140" r="2.6"/><circle cx="1100" cy="80" r="1.7"/>
+    <circle cx="1180" cy="190" r="2.2"/><circle cx="420" cy="200" r="1.5"/>
+  </g>
+  <path d="M-60 60 C 240 10 420 210 720 90 C 980 -14 1140 120 1340 40 L1340 300 L-60 300 Z" fill="url(#auroraA)" opacity="0.75"/>
+  <path d="M-60 150 C 200 90 460 300 760 170 C 1010 60 1180 200 1340 120 L1340 360 L-60 360 Z" fill="url(#auroraB)" opacity="0.6"/>
+  <path d="M0 520 L180 380 L330 500 L520 330 L700 510 L880 400 L1040 520 L1200 420 L1280 500 L1280 720 L0 720 Z" fill="url(#mountain)"/>
+  <path d="M0 600 L160 520 L300 600 L470 500 L640 610 L820 520 L980 610 L1160 530 L1280 600 L1280 720 L0 720 Z" fill="#0a0f2a"/>
+  <g>
+    <g transform="translate(360 560)">
+      <ellipse cx="0" cy="-42" rx="26" ry="34" fill="#ffd77a" opacity="0.28"/>
+      <circle cx="0" cy="-42" r="16" fill="#ffcf63"/>
+    </g>
+    <g transform="translate(640 540)">
+      <ellipse cx="0" cy="-42" rx="26" ry="34" fill="#7bffdd" opacity="0.28"/>
+      <circle cx="0" cy="-42" r="16" fill="#8dffe3"/>
+    </g>
+    <g transform="translate(920 566)">
+      <ellipse cx="0" cy="-42" rx="26" ry="34" fill="#ffb3e6" opacity="0.28"/>
+      <circle cx="0" cy="-42" r="16" fill="#ffb3e6"/>
+    </g>
+  </g>
+  <path d="M0 690 C 200 660 360 706 560 686 C 780 662 960 708 1180 684 L1280 692 L1280 720 L0 720 Z" fill="#151d47" opacity="0.8"/>
+</svg>
