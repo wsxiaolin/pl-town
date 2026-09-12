@@ -56,49 +56,18 @@
   transform: none;
 }
 
-.activity-panel-topbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 24px;
-  border-bottom: 1px solid rgba(140, 174, 255, 0.14);
-  background: linear-gradient(180deg, #121c33, #0d1526);
-}
-.activity-panel-brand {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-}
-.activity-panel-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #5b8cff, #8a5bff 55%, #ff7a9c);
-  box-shadow: 0 6px 18px rgba(91, 140, 255, 0.35);
-}
-.activity-panel-brand-kicker {
-  display: block;
-  color: #6f86b5;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-}
-.activity-panel-brand h2 {
-  margin-top: 3px;
-  color: #f2f6ff;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
 .activity-panel-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
   flex: none;
   width: 34px;
   height: 34px;
   border: 1px solid rgba(170, 195, 255, 0.28);
   border-radius: 8px;
-  background: transparent;
+  background: rgba(10, 16, 32, 0.58);
+  backdrop-filter: blur(6px);
   color: #c9d8f8;
   font-size: 18px;
   cursor: pointer;
@@ -214,7 +183,7 @@
 }
 .activity-panel-hero-copy {
   position: absolute;
-  top: 42px;
+  top: 56px;
   right: 46px;
   width: min(460px, 52%);
   text-align: left;
@@ -260,37 +229,29 @@
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
 }
 
-@media (max-width: 680px) {
-  .activity-panel-overlay { padding: 0; }
-  .activity-panel-shell {
-    width: 100vw;
-    height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
-  .activity-panel-body { flex-direction: column; }
+@media (max-width: 960px) {
   .activity-panel-list {
-    width: auto;
-    flex-direction: row;
-    gap: 8px;
-    padding: 12px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: 0;
-    border-bottom: 1px solid rgba(140, 174, 255, 0.12);
+    width: 200px;
+    padding: 12px 10px;
   }
   .activity-panel-item {
-    flex: none;
-    width: 208px;
-    grid-template-columns: auto 1fr;
+    gap: 9px;
+    padding: 7px 7px 7px 6px;
   }
-  .activity-panel-item-badge { display: none; }
+  .activity-panel-thumb {
+    width: 56px;
+    height: 40px;
+  }
+  .activity-panel-item-copy strong { font-size: 13px; }
+  .activity-panel-item-copy small { font-size: 10px; }
+  .activity-panel-item-badge {
+    padding: 2px 6px;
+    font-size: 9px;
+  }
   .activity-panel-hero-copy {
-    top: auto;
-    right: 20px;
-    bottom: 28px;
-    left: 20px;
-    width: auto;
+    top: 48px;
+    right: 28px;
+    width: min(460px, 68%);
   }
-  .activity-panel-description { font-size: 13px; }
+  .activity-panel-title { font-size: clamp(28px, 4vw, 38px); }
 }
