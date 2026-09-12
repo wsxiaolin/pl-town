@@ -249,9 +249,20 @@
     font-size: 9px;
   }
   .activity-panel-hero-copy {
-    top: 48px;
-    right: 28px;
-    width: min(460px, 68%);
+    top: 18px;
+    right: auto;
+    left: 22px;
+    width: calc(100% - 44px);
   }
-  .activity-panel-title { font-size: clamp(28px, 4vw, 38px); }
+  .activity-panel-kicker { margin-top: 12px; }
+  .activity-panel-title {
+    margin-top: 7px;
+    font-size: clamp(28px, 4vw, 38px);
+  }
+  .activity-panel-subtitle { margin-top: 8px; }
+  .activity-panel-description {
+    max-width: 620px;
+    margin-top: 10px;
+    line-height: 1.65;
+  }
 }
