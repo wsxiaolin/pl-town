@@ -84,6 +84,18 @@ export function requestOriginAllowed(request: IncomingMessage, allowMissing = fa
   return originAllowed(origin, allowMissing);
 }
 
+export function corsHeaders(request: IncomingMessage): Record<string, string> {
+  const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
+  if (!origin || !requestOriginAllowed(request)) return {};
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-headers': 'content-type, x-town-pl-session, x-town-work-category',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    vary: 'Origin',
+  };
+}
+
 export const jsonSecurityHeaders = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store',
