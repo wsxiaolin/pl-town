@@ -13,10 +13,7 @@ export interface MemorialRoster {
  */
 export const MEMORIAL_ROSTER: MemorialRoster = {
   title: '物实永退用户纪念碑',
-  subtitle: [
-    '他们曾经是小镇的居民，如今已经离开我们了',
-    '不完全统计数据来自于胡桃',
-  ],
+  subtitle: [],
   names: [
     '小董',
     'Goodenough',
