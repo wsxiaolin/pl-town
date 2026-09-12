@@ -266,10 +266,15 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (error) { error.textContent = message; error.hidden = false; }
         // Nickname belongs to a Physics Lab account: reveal the ownership
         // verification fields so the claimant can prove they are the owner.
+        // The verify-section heading/sub copy already explains the situation, so
+        // do not also surface the red error line.
+
         // The town password is kept so the retry only needs the Physics Lab
         // credentials; other failures clear it as before.
+
         const verifySection = document.getElementById('plVerifySection');
         if (code === 'pl-verification-required' && verifySection) {
+          if (error) { error.textContent = ''; error.hidden = true; }
           gate?.onVerificationRequired();
         } else if (passwordInput && verifySection?.hidden !== false) {
           passwordInput.value = '';

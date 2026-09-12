@@ -27,7 +27,7 @@ function stubGateWebSocket(page: Page): void {
         const stage = (window as unknown as { __gateStage?: GateStage }).__gateStage;
         queueMicrotask(() => {
           if (stage === 'verify') {
-            this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'error', message: '这个昵称已属于物实社区，请验证所属权', code: 'pl-verification-required' }) }));
+            this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'error', message: '这个昵称已属于物实社区，请用同名的物实账号登录凭据只用于本次验证，小城不会存储', code: 'pl-verification-required' }) }));
             return;
           }
           if (stage === 'ok' || stage === 'ok-verified') {
@@ -85,7 +85,8 @@ test.describe('Physics Lab verification gate', () => {
 
     const verifySection = page.locator('#plVerifySection');
     await expect(verifySection).toBeVisible();
-    await expect(page.locator('#loginError')).toContainText('物实');
+    await expect(page.locator('#plVerifySection .pl-verify-sub')).toContainText('请用同名的物实账号登录，凭据只用于本次验证，小城不会存储');
+    await expect(page.locator('#loginError')).toBeHidden();
     const button = page.locator('#loginBtn');
     await expect(button).toBeEnabled();
     await expect(button).toHaveText('确认物实身份');
