@@ -198,6 +198,9 @@
   font-weight: 700;
   letter-spacing: 0.08em;
 }
+.activity-panel-badge[hidden] {
+  display: none;
+}
 .activity-panel-kicker {
   display: block;
   margin-top: 16px;
