@@ -1,10 +1,11 @@
 // Resolve HTTP API requests for static hosting and local development.
-const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
+declare const __TOWN_VITE_API_BASE__: string;
+declare const __TOWN_VITE_SERVER_URL__: string;
 
 const apiBase = (): string => {
-  const explicit = env.VITE_API_BASE?.trim();
+  const explicit = __TOWN_VITE_API_BASE__.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
-  const server = env.VITE_SERVER_URL?.trim();
+  const server = __TOWN_VITE_SERVER_URL__.trim();
   if (server) {
     try {
       const url = new URL(server);
