@@ -458,6 +458,7 @@ function init() {
     isResidenceUnavailable: availability.isResidenceUnavailable,
     getLegacyAchievements: () => getStats().achievements || [],
     setWeather: (value) => graphics.weather.set(value),
+    getLoginGate: () => loginController?.asLoginGate() ?? null,
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -682,12 +683,17 @@ function init() {
   multiplayerHousing.setupUI();
 }
 
-function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string) {
-  sceneAnimations.entranceAnimation();
-  if (cursorChar) cursorChar.visible = true;
-  trackingInterval = startTimeTracking();
-  localStorage.removeItem('minicityPassword');
-  multiplayerHousing.connect(nickname, password);
+function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
+  const entrance = () => {
+    sceneAnimations.entranceAnimation();
+    if (cursorChar) cursorChar.visible = true;
+    trackingInterval = startTimeTracking();
+    localStorage.removeItem('minicityPassword');
+  };
+  // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
+  if (password === undefined && pl === undefined) entrance();
+  else loginController?.holdCityEntrance(entrance);
+  multiplayerHousing.connect(nickname, password, pl);
   checkAchievements();
 }
 

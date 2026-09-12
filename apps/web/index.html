@@ -403,13 +403,23 @@
   <!-- Login overlay -->
   <div class="login-overlay hidden" id="loginOverlay" role="dialog" aria-label="Welcome to MiniCity" style="display:none">
     <div class="login-box">
-      <p class="login-title">边界已经开启。</p>
-      <p class="login-sub">留下昵称和密码，成为这座城唯一身份的居民。</p>
-      <input class="login-input" id="loginInput" type="text" placeholder="昵称（至少两个字，中文/英文/数字）"
+      <p class="login-title login-credential">边界已经开启。</p>
+      <p class="login-sub login-credential">留下昵称和密码，成为这座城唯一身份的居民。</p>
+      <input class="login-input login-credential" id="loginInput" type="text" placeholder="昵称（至少两个字，中文/英文/数字）"
              maxlength="40" autocomplete="off" spellcheck="false" />
-      <input class="login-input" id="loginPassword" type="password" placeholder="密码"
+      <input class="login-input login-credential" id="loginPassword" type="password" placeholder="密码（新居民至少 10 个字符）"
              maxlength="128" autocomplete="off" spellcheck="false" />
       <p class="login-error" id="loginError" role="alert" hidden></p>
+      <div class="pl-verify" id="plVerifySection" hidden>
+        <p class="pl-verify-title">这个昵称已属于物实社区</p>
+        <p class="pl-verify-sub">请用同名的物实账号登录，确认你就是它的主人；或者换一个昵称直接入城。凭据只用于本次向物实官方验证，小城不会存储。</p>
+        <input class="login-input" id="plLoginInput" type="text" placeholder="物实账号（注册邮箱）"
+               maxlength="128" autocomplete="off" spellcheck="false" />
+        <input class="login-input" id="plPasswordInput" type="password" placeholder="物实密码"
+               maxlength="128" autocomplete="off" spellcheck="false" />
+        <button class="pl-verify-back" id="plVerifyBack" type="button">换个昵称</button>
+      </div>
+      <p class="login-warning login-credential">这座城只认「昵称＋密码」：密码没有找回通道，一旦忘记，这个名字就永远留在城门外。简单密码容易被攻击，请使用长度 10 以上、不易猜测的密码。</p>
       <button class="login-btn" id="loginBtn">签下名字，进入小城</button>
     </div>
   </div>

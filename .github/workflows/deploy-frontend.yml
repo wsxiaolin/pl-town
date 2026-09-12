@@ -37,6 +37,7 @@ jobs:
         run: npm run build -w @minicity/web
         env:
           BASE_PATH: /pl-town/
+          VITE_SERVER_URL: wss://pl-town.onrender.com
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

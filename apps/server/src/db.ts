@@ -187,6 +187,9 @@ db.exec(`
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'password_hash')) db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
   if (!columns.some((column) => column.name === 'session_expires_at')) db.exec('ALTER TABLE users ADD COLUMN session_expires_at TEXT');
+  // Physics Lab account link: set when a resident proved ownership of a
+  // nickname that already exists in the Physics Lab community.
+  if (!columns.some((column) => column.name === 'pl_user_id')) db.exec('ALTER TABLE users ADD COLUMN pl_user_id TEXT');
   if (!columns.some((column) => column.name === 'disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
 }
 {
@@ -241,11 +244,11 @@ db.exec('COMMIT');
 
 const now = () => new Date().toISOString();
 
-const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
+const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, plUserId: row.pl_user_id, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
-export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string): User {
+export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string, plUserId: string | null = null): User {
   const timestamp = now();
-  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, session_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, sessionExpiresAt, timestamp, timestamp);
+  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, session_expires_at, pl_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, sessionExpiresAt, plUserId, timestamp, timestamp);
   return getUser(id)!;
 }
 export function getUserByToken(tokenHash: string): User | null {
@@ -499,10 +502,11 @@ export function registerUserAtomic(
   ip: string,
   sinceIso: string,
   max: number,
+  plUserId: string | null = null,
 ): { allowed: boolean } {
   return db.transaction(() => {
     if (countRegistrationsForIp(ip, sinceIso) >= max) return { allowed: false };
-    createUser(userId, tokenHash, nickname, passwordHash, expiresAt);
+    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
     db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
     return { allowed: true };
   })();

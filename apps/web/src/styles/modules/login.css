@@ -24,6 +24,38 @@
   outline: 2px solid var(--blue);
   outline-offset: 4px;
 }
+.verified-name {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  gap: 4px;
+}
+.verified-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.verified-name-suffix { flex: 0 0 auto; }
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #2f8f63;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 1px;
+  flex: 0 0 auto;
+  font-style: normal;
+}
+.verified-badge::before { content: '✓'; }
+.phone-owner.verified-name { justify-content: center; }
 
 /* ===== LOGIN OVERLAY ===== */
 .login-overlay {
@@ -97,6 +129,53 @@
   color: #c0392b;
 }
 
+/* Physics Lab ownership verification, revealed only when a claimed nickname
+   already belongs to a Physics Lab community account. */
+.pl-verify {
+  width: 100%;
+  margin: -8px 0 16px;
+  padding: 14px 16px 6px;
+  border: 1px solid rgba(59, 105, 172, 0.35);
+  border-radius: 10px;
+  background: rgba(59, 105, 172, 0.05);
+}
+.pl-verify .login-input { margin-bottom: 18px; }
+.pl-verify .login-input + .login-input { margin-top: 0; }
+.pl-verify-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #3b69ac;
+}
+.pl-verify-sub {
+  margin: 0 0 14px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-light);
+}
+.pl-verify-back {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #3b69ac;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 8px 0;
+}
+.pl-verify-back:hover { text-decoration: underline; }
+
+/* Standing risk note: residents sign in with nickname + password only, and
+   the password cannot be recovered once forgotten. */
+.login-warning {
+  width: 100%;
+  margin: -14px 0 18px;
+  font-size: 11px;
+  line-height: 1.65;
+  color: #8a6d3b;
+}
+
 .login-btn {
   background: var(--blue);
   color: #fff;
@@ -112,4 +191,3 @@
 }
 .login-btn:hover { opacity: 0.85; transform: translateY(-1px); }
 .login-btn:active { transform: none; }
-

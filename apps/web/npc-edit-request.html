@@ -43,6 +43,11 @@
       <form id="loginForm">
         <label>居民昵称<input id="loginNickname" autocomplete="username" maxlength="40" required /></label>
         <label>密码<input id="loginPassword" type="password" autocomplete="current-password" maxlength="128" required /></label>
+        <div id="plVerification" hidden>
+          <p class="hint">该昵称已绑定物实社区账号，请填写对应的物实账号凭据完成验证。</p>
+          <label>物实账号<input id="plLogin" autocomplete="username" maxlength="160" /></label>
+          <label>物实密码<input id="plPassword" type="password" autocomplete="current-password" maxlength="256" /></label>
+        </div>
         <div class="actions"><button class="primary" type="submit" id="loginButton">登录并继续</button></div>
       </form>
       <div class="status" id="loginStatus" hidden></div>

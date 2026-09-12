@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { MultiplayerClient, type House, type HousingRequest, type NetPlayerProgress, type NetProgressionCatalog, type NetUser, type NetWeather } from '../../network/MultiplayerClient';
 import { createCloudProgressionController } from './cloudProgressionController';
 import { createCommunityPanelController, type SocialKind } from './communityPanelController';
+import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
+import { renderVerifiedName } from './verifiedBadge';
 
 interface RemotePlayer {
   mesh: THREE.Group;
@@ -17,6 +19,7 @@ interface HousePanelState {
   mode: string | null;
 }
 
+/** Bridges the WebSocket auth lifecycle into the login-overlay state machine. */
 export interface MultiplayerHousingOptions {
   scene: THREE.Scene;
   signal: AbortSignal;
@@ -37,6 +40,7 @@ export interface MultiplayerHousingOptions {
   getLegacyAchievements?: () => string[];
   isResidenceUnavailable?: (residenceId: string) => boolean;
   setWeather?: (weather: NetWeather) => void;
+  getLoginGate?: () => LoginGate | null;
 }
 
 export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
@@ -47,6 +51,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     getLegacyAchievements = () => [],
     isResidenceUnavailable = () => false,
     setWeather = () => {},
+    getLoginGate = () => null,
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -54,6 +59,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
   } = communityPanels;
   let multiplayer: MultiplayerClient | null = null;
   const remotePlayers = new Map<string, RemotePlayer>();
+  const verifiedIds = new Set<string>();
   let lastNetworkPosition = 0;
   let onlinePlayers: NetUser[] = [];
   let currentHouses: House[] = [];
@@ -182,7 +188,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     updatePhoneBadge();
   }
   
-  function setupMultiplayer(nickname: string, password?: string) {
+  function setupMultiplayer(nickname: string, password?: string, pl?: { login: string; password: string }) {
     if (multiplayer) return;
     multiplayer = new MultiplayerClient({
       connection: (state) => {
@@ -193,11 +199,24 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         dot?.classList.toggle('connected', state === 'connected');
         fab?.classList.toggle('connected', state === 'connected');
         if (state !== 'connected' && count) count.textContent = state === 'connecting' ? '连接中' : '离线';
+        // While the resident is still signing in, a dropped socket means the
+        // server never confirmed the identity: stop retrying behind the user's
+        // back and hand control back to the signing overlay instead.
+        const gate = getLoginGate();
+        if (state === 'disconnected' && gate?.isWaiting()) {
+          const failedClient = multiplayer;
+          multiplayer = null;
+          failedClient?.close();
+          gate.onConnectionLost();
+        }
       },
       connected: (user, players, houses) => {
+        verifiedIds.clear();
+        [user, ...players].forEach((player) => { if (player.verified) verifiedIds.add(player.id); });
+        getLoginGate()?.onAuthorized(user.verified);
         onlinePlayers = players.filter((player) => player.id !== user.id);
         const owner = document.getElementById('phoneOwner');
-        if (owner) owner.textContent = `${user.nickname} 的手机`;
+        if (owner) renderVerifiedName(owner, user.nickname, Boolean(user.verified), { suffix: ' 的手机' });
         const cursor = getCursorChar();
         if (cursor) {
           const unsafe = Math.hypot(user.position.x, user.position.z) < FOUNTAIN_CLEAR || pointInAnyBuilding(user.position.x, user.position.z);
@@ -213,13 +232,13 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         renderHouseList(houses);
         updateOnlineCount(players.length);
       },
-      playerJoined: (player) => { onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
+      playerJoined: (player) => { if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id); onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
       playerMoved: (id, position) => {
         const remote = remotePlayers.get(id);
         if (remote) { remote.target.set(position.x, position.y, position.z); remote.rotation = position.rotation ?? remote.rotation; }
       },
-      playerLeft: (id) => { onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
-      chat: (message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id),
+      playerLeft: (id) => { verifiedIds.delete(id); onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
+      chat: (message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id, verifiedIds.has(message.userId)),
       chatRemoved: (message) => removeChat(message.messageId),
       houses: renderHouseList,
       requests: (requests) => {
@@ -233,7 +252,9 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       weather: setWeather,
-      authenticationFailed: (message) => {
+      authenticationFailed: (message, code) => {
+        const gate = getLoginGate();
+        gate?.onAuthFailed();
         const previousNickname = localStorage.getItem('minicityUser') || nickname;
         localStorage.removeItem('minicityUser');
         multiplayer?.close();
@@ -242,8 +263,17 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
         const error = document.getElementById('loginError');
         if (input) input.value = previousNickname;
-        if (passwordInput) passwordInput.value = '';
         if (error) { error.textContent = message; error.hidden = false; }
+        // Nickname belongs to a Physics Lab account: reveal the ownership
+        // verification fields so the claimant can prove they are the owner.
+        // The town password is kept so the retry only needs the Physics Lab
+        // credentials; other failures clear it as before.
+        const verifySection = document.getElementById('plVerifySection');
+        if (code === 'pl-verification-required' && verifySection) {
+          gate?.onVerificationRequired();
+        } else if (passwordInput && verifySection?.hidden !== false) {
+          passwordInput.value = '';
+        }
         showLoginEntry();
         showLoginOverlay();
         showUnlockToast(message);
@@ -255,7 +285,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         showUnlockToast(message);
       },
     });
-    multiplayer.connect(nickname, password);
+    multiplayer.connect(nickname, password, pl);
   }
   
   function updateOnlineCount(count: number) {
@@ -294,12 +324,12 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     }
   }
   
-  function appendChat(messageId: number, nickname: string, text: string, own: boolean) {
+  function appendChat(messageId: number, nickname: string, text: string, own: boolean, verified: boolean) {
     const log = document.getElementById('chatLog');
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
     row.dataset.messageId = String(messageId);
-    const author = document.createElement('b'); author.textContent = nickname; author.title = nickname;
+    const author = document.createElement('b'); renderVerifiedName(author, nickname, verified); author.title = nickname;
     const body = document.createElement('span'); body.textContent = text;
     row.append(author, body); log.appendChild(row);
     while (log.children.length > 80) log.firstElementChild?.remove();
@@ -456,8 +486,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     house.members.forEach((member) => {
       const chip = document.createElement('span');
       chip.className = `hc-chip${member.userId === house.ownerId ? ' owner' : ''}${member.userId === mine ? ' me' : ''}`;
-      chip.textContent = member.userId === house.ownerId ? `${member.nickname} · 房主` : member.nickname;
-      chip.title = chip.textContent;
+      renderVerifiedName(chip, member.nickname, Boolean(member.verified), { suffix: member.userId === house.ownerId ? ' · 房主' : '' });
+      chip.title = member.nickname;
       members.appendChild(chip);
     });
     card.append(head, bar, members);
@@ -519,7 +549,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       }
       candidates.forEach((player) => {
         const row = document.createElement('div'); row.className = 'hc-person';
-        const name = document.createElement('span'); name.className = 'hc-person-name'; name.textContent = player.nickname;
+        const name = document.createElement('span'); name.className = 'hc-person-name'; renderVerifiedName(name, player.nickname, Boolean(player.verified));
         const pendingInvite = currentHousingRequests.some((request) => request.kind === 'invite' && request.buildingId === house.buildingId && request.requesterId === mine && request.targetId === player.id);
         const inviteAction = houseActionButton(pendingInvite ? '已邀请' : '邀请', false, () => {
           if (pendingInvite) return;
@@ -541,7 +571,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       }
       others.forEach((member) => {
         const row = document.createElement('div'); row.className = 'hc-person';
-        const name = document.createElement('span'); name.className = 'hc-person-name'; name.textContent = member.nickname;
+        const name = document.createElement('span'); name.className = 'hc-person-name'; renderVerifiedName(name, member.nickname, Boolean(member.verified));
         row.append(name,
           houseActionButton('转让', false, () => {
             housePanelState = { houseId: null, mode: null };

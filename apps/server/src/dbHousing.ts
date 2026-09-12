@@ -1,15 +1,15 @@
 import { db } from './db.js';
 import type { HouseRow, HousingRequestRow } from './dbRows.js';
 
-export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string }> };
+export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string; verified: boolean }> };
 export type HousingRequest = { id: number; buildingId: string; houseName: string | null; ownerId: string; ownerNickname: string; requesterId: string; requesterNickname: string; targetId: string; targetNickname: string; kind: 'invite' | 'application'; createdAt: string };
 const now = () => new Date().toISOString();
 
 export function listHouses(): House[] {
   const rows = db.prepare(`SELECT h.*, u.nickname AS owner_nickname FROM houses h JOIN users u ON u.id = h.owner_id ORDER BY h.building_id`).all() as HouseRow[];
-  const memberRows = db.prepare('SELECT hm.building_id, hm.user_id, u.nickname FROM house_members hm JOIN users u ON u.id = hm.user_id ORDER BY hm.building_id, hm.joined_at').all() as Array<{ building_id: string; user_id: string; nickname: string }>;
-  const members = new Map<string, Array<{ userId: string; nickname: string }>>();
-  for (const member of memberRows) { const list = members.get(member.building_id) ?? []; list.push({ userId: member.user_id, nickname: member.nickname }); members.set(member.building_id, list); }
+  const memberRows = db.prepare('SELECT hm.building_id, hm.user_id, u.nickname, u.pl_user_id FROM house_members hm JOIN users u ON u.id = hm.user_id ORDER BY hm.building_id, hm.joined_at').all() as Array<{ building_id: string; user_id: string; nickname: string; pl_user_id: string | null }>;
+  const members = new Map<string, Array<{ userId: string; nickname: string; verified: boolean }>>();
+  for (const member of memberRows) { const list = members.get(member.building_id) ?? []; list.push({ userId: member.user_id, nickname: member.nickname, verified: member.pl_user_id !== null }); members.set(member.building_id, list); }
   return rows.map((row) => ({ buildingId: row.building_id, name: row.name, ownerId: row.owner_id, ownerNickname: row.owner_nickname, members: members.get(row.building_id) ?? [] }));
 }
 export function getHouse(buildingId: string): House | null { return listHouses().find((house) => house.buildingId === buildingId) ?? null; }
