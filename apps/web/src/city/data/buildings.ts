@@ -1054,7 +1054,11 @@ export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
   beacon: {
     name: "灯塔",
     slogan: "为还没到的人亮着。",
-    dialog: ["塔顶的灯日夜不灭。", "「总有人在路上。总有人需要一盏灯。」"],
+    dialog: [
+      "塔顶的灯日夜不灭。",
+      "「总有人在路上。总有人需要一盏灯。」",
+      "这座灯塔也照亮着社区伙伴的努力——pl light，一个由社区成员辰寅开发维护的服务平台，提供社区作品评审、社区编辑器等配套服务。",
+    ],
   },
   banana_palace: {
     name: "布拿拉宫",
