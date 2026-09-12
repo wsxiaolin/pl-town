@@ -260,15 +260,6 @@ export function createCommunityPanelController(options: CommunityPanelController
     try{const response=await fetch('/town-api/pl/social/follow',{method:'POST',headers:{'content-type':'application/json','x-town-pl-session':session},body:JSON.stringify({targetId,action:follow?1:0})});const payload=await response.json() as { error?: string };if(!response.ok)throw new Error(payload.error);button.textContent=follow?'已关注':'已取消';}catch(error){showUnlockToast(error instanceof Error?error.message:'Unable to update follow.');}finally{button.disabled=false;}
   }
   
-  const PUBLIC_WORKS = [
-    { id:'field-guide', title:'New Resident Field Guide', author:'TurtleSim', role:'Steward', year:'2026', category:'Guides', tags:['onboarding','city'], abstract:'A practical route through the city for first-time residents.', status:'Updated' },
-    { id:'building-atlas', title:'Architecture Atlas: Main District', author:'Greybox', role:'Volunteer', year:'2026', category:'Research', tags:['architecture','map'], abstract:'Measured notes and visual records for the civic buildings.', status:'Featured' },
-    { id:'oral-history', title:'Voices from the Plaza', author:'Stardust Press', role:'Volunteer', year:'2025', category:'Stories', tags:['oral history','residents'], abstract:'Short conversations collected around the central plaza.', status:'Archive' },
-    { id:'mutual-aid', title:'Mutual Aid Handbook', author:'Commons Group', role:'Contributor', year:'2026', category:'Guides', tags:['community','help'], abstract:'Requests, responses and repeatable ways to help a neighbour.', status:'Updated' },
-    { id:'night-survey', title:'After Dark: A Lighting Survey', author:'Aster', role:'Volunteer', year:'2025', category:'Research', tags:['night','infrastructure'], abstract:'A walkability study of lamps, crossings and public space.', status:'Archive' },
-    { id:'city-code', title:'Open City Protocol', author:'Senate Working Group', role:'Steward', year:'2026', category:'Civic', tags:['governance','proposal'], abstract:'A living proposal for transparent decisions and public records.', status:'In review' },
-    { id:'garden-notes', title:'Conservatory Growing Notes', author:'Lin', role:'Contributor', year:'2026', category:'Stories', tags:['plants','care'], abstract:'Seasonal observations from the glasshouse and its keepers.', status:'New' }
-  ];
   let worksContext: string='knowledgebase';
   let worksTitleOverride='';
   let worksCategory='All';
@@ -378,9 +369,10 @@ export function createCommunityPanelController(options: CommunityPanelController
   }
   function renderWorksPanel(){
     const isSenate=worksContext==='senate';
-    const fallback: PublicWork[]=isSenate?PUBLIC_WORKS.filter(w=>w.role==='Volunteer'||w.role==='Steward'):PUBLIC_WORKS;
-    const source: Array<LiveWork | PublicWork>=liveWorks.length?liveWorks:(worksError?fallback:[]);
-    const filtered=source;
+    // Do not fall back to the static English placeholder catalog on failure:
+    // showing mock entries as if they were live archive records misleads users
+    // into thinking the archive only contains English works.
+    const filtered: Array<LiveWork | PublicWork>=liveWorks.length?liveWorks:[];
     const viewCopy: Record<string, [string, string, string]>={discussion:['BLACK HOLE · DISCUSSIONS','Community discussions','Questions, stories and debates from the discussion district.'],featured:['REVIEW DESK · SELECTED','Selected works','Featured experiments chosen by the community.']};
     const copy=viewCopy[worksContext];
     document.getElementById('worksKicker')!.textContent=copy?.[0]||(isSenate?'UPPER HOUSE · CONTRIBUTIONS':worksContext==='all'?'CITY FEED · NEW WORKS':'KNOWLEDGE BASE · CATALOGUE');
@@ -405,7 +397,13 @@ export function createCommunityPanelController(options: CommunityPanelController
       // Work detail content is temporarily disabled; restore the click handler with the detail drawer.
       return article;
     }));
-    if(!filtered.length){ const empty=document.createElement('p'); empty.className='works-empty'; empty.textContent='No matching records.'; list.appendChild(empty); }
+    if(!filtered.length){
+      const empty=document.createElement('p');
+      empty.className='works-empty';
+      if(worksError){ empty.textContent=`${worksError} Try again in a moment.`; empty.style.color='var(--accent,#c98a3b)'; }
+      else empty.textContent='No matching records.';
+      list.appendChild(empty);
+    }
     if(worksHasMore||worksLoading){
       const sentinel=document.createElement('div'); sentinel.className='works-sentinel';
       if(worksLoading)sentinel.innerHTML='<div class="works-loading"><i></i><span>Retrieving public works</span></div>';
