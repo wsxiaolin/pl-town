@@ -67,9 +67,11 @@ type Callbacks = {
   error?: (message: string) => void;
 };
 
+declare const __TOWN_VITE_SERVER_URL__: string;
+
 const TOKEN_KEY = 'minicityServerToken';
 const serverUrl = (): string => {
-  const configured = (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_SERVER_URL;
+  const configured = __TOWN_VITE_SERVER_URL__.trim();
   if (configured) return configured;
   // Fail closed: without an explicit VITE_SERVER_URL, plaintext ws:// is only
   // ever used for loopback development origins. Nickname/password and the
