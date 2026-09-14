@@ -39,6 +39,7 @@ export type ChatHistoryMessage = { messageId: number; userId: string; nickname: 
 
 /** Latest visible messages, oldest first, so clients can append them straight into the log. */
 export function listRecentChatMessages(limit: number): ChatHistoryMessage[] {
+  // Fetch newest first (hits the primary-key index), then reverse to oldest→newest.
   const rows = db.prepare(`SELECT id, user_id, nickname, text, created_at FROM chat_messages
     WHERE hidden_at IS NULL ORDER BY id DESC LIMIT ?`).all(limit) as Array<{ id: number; user_id: string; nickname: string; text: string; created_at: string }>;
   return rows.reverse().map((row) => ({ messageId: row.id, userId: row.user_id, nickname: row.nickname, text: row.text, createdAt: row.created_at }));
