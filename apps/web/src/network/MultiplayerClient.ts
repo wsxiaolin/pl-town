@@ -35,7 +35,7 @@ export type NetStoryProgress = {
   updatedAt: string;
 };
 export type NetWeather = Weather;
-export type NetChatMessage = { messageId: number; userId: string; nickname: string; text: string };
+export type NetChatMessage = { messageId: number; userId: string; nickname: string; text: string; createdAt: string };
 
 type ServerMessage =
   | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather }
