@@ -18,4 +18,6 @@ const apiBase = (): string => {
   return '';
 };
 
-export const townApiFetch = (path: string, init?: RequestInit): Promise<Response> => fetch(`${apiBase()}${path}`, init);
+export const townApiUrl = (path: string): string => `${apiBase()}${path}`;
+
+export const townApiFetch = (path: string, init?: RequestInit): Promise<Response> => fetch(townApiUrl(path), init);
