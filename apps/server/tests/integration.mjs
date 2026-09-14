@@ -509,6 +509,19 @@ try {
     throw new Error('Chat moderation must call the BigModel moderation endpoint');
   }
 
+  send(bob, { type: 'chat.history' });
+  const chatHistory = await waitFor(bob, 'chat.history', (message) => Array.isArray(message.messages) && message.messages.some((item) => item.text === 'integration-chat'));
+  if (!chatHistory.messages.every((item, index, list) => index === 0 || list[index - 1].messageId < item.messageId)) {
+    throw new Error('Chat history must be ordered oldest to newest');
+  }
+  if (chatHistory.messages.some((item) => item.text === 'integration-blocked')) {
+    throw new Error('Chat history must exclude hidden messages');
+  }
+  const historyAuthor = chatHistory.messages.find((item) => item.text === 'integration-chat');
+  if (historyAuthor.userId !== alice.hello.user.id || historyAuthor.nickname !== 'Alice' || !Number.isInteger(historyAuthor.messageId)) {
+    throw new Error('Chat history must carry the persisted author identity');
+  }
+
     // ── 身份与昵称校验 ─────────────────────────────────────────────
   const oneChar = await connectExpectingError('A');
   if (!oneChar) throw new Error('One-character nickname should be rejected');

@@ -34,6 +34,16 @@ export function listPendingChatModeration(limit = 1_000): Array<{ id: number; te
   return db.prepare("SELECT id, text FROM chat_messages WHERE moderation_status = 'pending' ORDER BY id LIMIT ?").all(limit).map((row) => row as { id: number; text: string });
 }
 
+/** Minimal chat record sent to residents when the phone first loads history. */
+export type ChatHistoryMessage = { messageId: number; userId: string; nickname: string; text: string; createdAt: string };
+
+/** Latest visible messages, oldest first, so clients can append them straight into the log. */
+export function listRecentChatMessages(limit: number): ChatHistoryMessage[] {
+  const rows = db.prepare(`SELECT id, user_id, nickname, text, created_at FROM chat_messages
+    WHERE hidden_at IS NULL ORDER BY id DESC LIMIT ?`).all(limit) as Array<{ id: number; user_id: string; nickname: string; text: string; created_at: string }>;
+  return rows.reverse().map((row) => ({ messageId: row.id, userId: row.user_id, nickname: row.nickname, text: row.text, createdAt: row.created_at }));
+}
+
 export type ChatListFilter = { query?: string; includeHidden?: boolean; onlyHidden?: boolean; onlyFlagged?: boolean; userId?: string; limit: number; offset: number };
 
 export function listChatMessages(input: ChatListFilter): { items: ChatMessage[]; total: number } {
