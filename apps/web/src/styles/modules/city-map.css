@@ -219,7 +219,8 @@
   .map-search-result-meta { max-width: 110px; }
 }
 @media (max-width: 680px) and (pointer: coarse), (max-height: 540px) and (pointer: coarse) {
-  .map-overlay.is-mobile-search-active .map-icon,
+  .map-paper { width: min(calc(100vw - 16px), calc(100dvh - 44px)); }
+  .map-search { display: none; }
   .map-house-tag { display: none; }
 }
 .map-image-wrap img {
