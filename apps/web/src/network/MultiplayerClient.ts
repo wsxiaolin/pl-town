@@ -35,6 +35,7 @@ export type NetStoryProgress = {
   updatedAt: string;
 };
 export type NetWeather = Weather;
+export type NetChatMessage = { messageId: number; userId: string; nickname: string; text: string; createdAt: string };
 
 type ServerMessage =
   | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather }
@@ -42,6 +43,7 @@ type ServerMessage =
   | { type: 'player.moved'; playerId: string; position: NetPosition }
   | { type: 'player.left'; playerId: string }
   | { type: 'chat'; messageId: number; userId: string; nickname: string; text: string }
+  | { type: 'chat.history'; messages: NetChatMessage[] }
   | { type: 'chat.removed'; messageId: number; reason: string }
   | { type: 'housing.updated' | 'housing.list'; houses?: House[] }
   | { type: 'housing.requests'; requests?: HousingRequest[] }
@@ -57,6 +59,7 @@ type Callbacks = {
   playerMoved?: (id: string, position: NetPosition) => void;
   playerLeft?: (id: string) => void;
   chat?: (message: { messageId: number; userId: string; nickname: string; text: string }) => void;
+  chatHistory?: (messages: NetChatMessage[]) => void;
   chatRemoved?: (message: { messageId: number; reason: string }) => void;
   houses?: (houses: House[]) => void;
   requests?: (requests: HousingRequest[]) => void;
@@ -67,9 +70,11 @@ type Callbacks = {
   error?: (message: string) => void;
 };
 
+declare const __TOWN_VITE_SERVER_URL__: string;
+
 const TOKEN_KEY = 'minicityServerToken';
 const serverUrl = (): string => {
-  const configured = (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_SERVER_URL;
+  const configured = __TOWN_VITE_SERVER_URL__.trim();
   if (configured) return configured;
   // Fail closed: without an explicit VITE_SERVER_URL, plaintext ws:// is only
   // ever used for loopback development origins. Nickname/password and the
@@ -113,6 +118,7 @@ export class MultiplayerClient {
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
     else if (message.type === 'chat') this.callbacks.chat?.(message);
+    else if (message.type === 'chat.history') this.callbacks.chatHistory?.(message.messages);
     else if (message.type === 'chat.removed') this.callbacks.chatRemoved?.(message);
     else if (message.type === 'housing.updated' || message.type === 'housing.list') this.callbacks.houses?.(message.houses ?? []);
     else if (message.type === 'housing.requests') this.callbacks.requests?.(message.requests ?? []);
@@ -134,6 +140,7 @@ export class MultiplayerClient {
   send(message: object): boolean { trackClientMessage(message as Record<string, unknown>); if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(JSON.stringify(message)); return true; }
   position(position: NetPosition) { this.send({ type: 'position', position }); }
   chat(text: string) { this.send({ type: 'chat', text }); }
+  chatHistory() { return this.send({ type: 'chat.history' }); }
   housing(type: string, payload: Record<string, unknown> = {}) { this.send({ type: `housing.${type}`, ...payload }); }
   close() { this.closed = true; window.clearTimeout(this.reconnectTimer); this.socket?.close(); this.socket = null; }
 }

@@ -14,10 +14,8 @@ test('Memorial roster keeps the supplied name list verbatim', () => {
   });
 });
 
-test('Memorial roster keeps the two-line subtitle copy', () => {
-  assert.equal(MEMORIAL_ROSTER.subtitle.length, 2);
-  assert.equal(MEMORIAL_ROSTER.subtitle[0], '他们曾经是小镇的居民，如今已经离开我们了');
-  assert.equal(MEMORIAL_ROSTER.subtitle[1], '不完全统计数据来自于胡桃');
+test('Memorial roster keeps the empty subtitle', () => {
+  assert.equal(MEMORIAL_ROSTER.subtitle.length, 0);
 });
 
 test('Memorial roster keeps the unchanged first-page title', () => {

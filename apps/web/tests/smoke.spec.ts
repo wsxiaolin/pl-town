@@ -16,6 +16,58 @@ test('resident phone switches between housing and chat', async ({ page }) => {
   await expect(page.locator('#onlineChatView')).toHaveClass(/active/);
 });
 
+test('resident phone loads the newest 100 chat messages on first open', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).__chatHistoryRequests = 0;
+    const messages = Array.from({ length: 100 }, (_, index) => ({
+      messageId: index + 1,
+      userId: 'other-user',
+      nickname: '历史居民',
+      text: `历史消息 ${index + 1}`,
+    }));
+    const NativeWebSocket = window.WebSocket;
+    class HistoryGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      send(raw: string) {
+        const request = JSON.parse(raw);
+        if (request.type === 'hello') {
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+            type: 'hello', token: 'history-token',
+            user: { id: 'history-user', nickname: 'history-tester', email: null, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [],
+            progress: { currency: 0, inventory: {}, achievements: ['citizen'], unlockedBuildings: [], visitedBuildings: [] },
+            catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
+          }) })));
+        } else if (request.type === 'chat.history') {
+          (window as any).__chatHistoryRequests += 1;
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'chat.history', messages }) })));
+        }
+      }
+      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new HistoryGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+  });
+  await waitForCityReady(page, 'history-tester');
+  const toggle = page.locator('#onlinePanelToggle');
+  await expect(toggle).toHaveClass(/connected/, { timeout: 30_000 });
+
+  await toggle.click({ force: true });
+  const lines = page.locator('#chatLog .chat-line');
+  await expect(lines).toHaveCount(100);
+  await expect(lines.first()).toContainText('历史消息 1');
+  await expect(lines.last()).toContainText('历史消息 100');
+  expect(await page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
+
+  // Reopening the phone keeps the loaded log and must not refetch.
+  await toggle.click({ force: true });
+  await toggle.click({ force: true });
+  await expect(lines).toHaveCount(100);
+  expect(await page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
+});
+
 test('neighborhood landmarks render their plots and open building details', async ({ page }) => {
   await waitForCityReady(page, 'landmark-tester');
 

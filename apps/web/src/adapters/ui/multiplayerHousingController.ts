@@ -67,6 +67,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
   let selectedResidenceId: string | null = null;
   let unreadChats = 0;
   let pendingHousingRequests = 0;
+  let chatHistoryLoaded = false;
+  let chatHistoryRequested = false;
   let residenceClaimId: string | null = null;
   let housePanelState: HousePanelState = { houseId: null, mode: null };
   const progression = createCloudProgressionController({
@@ -80,6 +82,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     },
   });
   const HOUSE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/><path d="M10.2 20v-5h3.6v5"/></svg>';
+  // History loads up to 100 messages, so keep enough room for that plus live chat.
+  const MAX_CHAT_LINES = 200;
 
   function setupMultiplayerUI() {
     progression.setup();
@@ -167,7 +171,17 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     panel.classList.toggle('open', open);
     toggle.classList.toggle('active', open);
     toggle.setAttribute('aria-expanded', String(open));
+    if (open) requestChatHistory();
     if (open && document.querySelector('[data-online-tab="chat"]')?.classList.contains('active')) clearUnreadChats();
+  }
+
+  // The phone pulls the newest 100 public messages once per session. The panel
+  // may open before the socket is authorized, so the connected handler retries.
+  function requestChatHistory() {
+    if (chatHistoryLoaded || chatHistoryRequested || !multiplayer) return;
+    if (!document.getElementById('onlinePanel')?.classList.contains('open')) return;
+    if (!multiplayer.chatHistory()) return;
+    chatHistoryRequested = true;
   }
   
   function bumpUnreadChats() {
@@ -193,6 +207,9 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     multiplayer = new MultiplayerClient({
       connection: (state) => {
         progression.setConnection(state === 'connected');
+        // A reconnect may have missed messages: reload history next time the
+        // phone is open so the log catches up with the server.
+        if (state === 'disconnected') { chatHistoryLoaded = false; chatHistoryRequested = false; }
         const dot = document.getElementById('onlineStateDot');
         const count = document.getElementById('onlineCount');
         const fab = document.getElementById('onlinePanelToggle');
@@ -231,6 +248,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         players.forEach(addRemotePlayer);
         renderHouseList(houses);
         updateOnlineCount(players.length);
+        requestChatHistory();
       },
       playerJoined: (player) => { if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id); onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
       playerMoved: (id, position) => {
@@ -239,6 +257,16 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       },
       playerLeft: (id) => { verifiedIds.delete(id); onlinePlayers = onlinePlayers.filter((player) => player.id !== id); removeRemotePlayer(id); updateOnlineCount(Math.max(1, remotePlayers.size + 1)); },
       chat: (message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id, verifiedIds.has(message.userId)),
+      chatHistory: (messages) => {
+        chatHistoryLoaded = true;
+        chatHistoryRequested = false;
+        const log = document.getElementById('chatLog');
+        if (!log) return;
+        // The snapshot is authoritative: replace whatever live broadcasts already
+        // rendered so the newest 100 messages cannot duplicate.
+        log.replaceChildren();
+        messages.forEach((message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id, verifiedIds.has(message.userId), true));
+      },
       chatRemoved: (message) => removeChat(message.messageId),
       houses: renderHouseList,
       requests: (requests) => {
@@ -266,10 +294,15 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (error) { error.textContent = message; error.hidden = false; }
         // Nickname belongs to a Physics Lab account: reveal the ownership
         // verification fields so the claimant can prove they are the owner.
+        // The verify-section heading/sub copy already explains the situation, so
+        // do not also surface the red error line.
+
         // The town password is kept so the retry only needs the Physics Lab
         // credentials; other failures clear it as before.
+
         const verifySection = document.getElementById('plVerifySection');
         if (code === 'pl-verification-required' && verifySection) {
+          if (error) { error.textContent = ''; error.hidden = true; }
           gate?.onVerificationRequired();
         } else if (passwordInput && verifySection?.hidden !== false) {
           passwordInput.value = '';
@@ -324,7 +357,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     }
   }
   
-  function appendChat(messageId: number, nickname: string, text: string, own: boolean, verified: boolean) {
+  function appendChat(messageId: number, nickname: string, text: string, own: boolean, verified: boolean, silent = false) {
     const log = document.getElementById('chatLog');
     if (!log) return;
     const row = document.createElement('p'); row.className = `chat-line${own ? ' own' : ''}`;
@@ -332,12 +365,12 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     const author = document.createElement('b'); renderVerifiedName(author, nickname, verified); author.title = nickname;
     const body = document.createElement('span'); body.textContent = text;
     row.append(author, body); log.appendChild(row);
-    while (log.children.length > 80) log.firstElementChild?.remove();
+    while (log.children.length > MAX_CHAT_LINES) log.firstElementChild?.remove();
     log.scrollTop = log.scrollHeight;
-    // 手机收起或不在公聊页时，用悬浮按钮角标提示未读
+    // 手机收起或不在公聊页时，用悬浮按钮角标提示未读；回填历史不提示未读
     const panel = document.getElementById('onlinePanel');
     const chatActive = document.querySelector('[data-online-tab="chat"]')?.classList.contains('active');
-    if (!own && (!panel?.classList.contains('open') || !chatActive)) bumpUnreadChats();
+    if (!silent && !own && (!panel?.classList.contains('open') || !chatActive)) bumpUnreadChats();
   }
 
   function removeChat(messageId: number) {

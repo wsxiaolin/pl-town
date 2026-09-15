@@ -125,6 +125,7 @@ Entries discovered by the Agent during task execution should follow this format:
   - Tests 工作流有 `workflow_dispatch`，可用 `gh workflow run test.yml --ref <branch>` 手动触发，但手动触发的运行不会出现在 `gh pr checks` 里，需用 `gh run view <id>` 单独确认结果。
   - AI PR Reviewer 只监听 `pull_request: [opened, synchronize]` 且无 `workflow_dispatch`，事件被吞时无法补触发；审查基于旧提交时需向用户说明增量改动范围。
   - 前端生产/预览构建通过 `deploy-frontend.yml` 注入 `VITE_SERVER_URL: wss://pl-town.onrender.com`，即 PR 预览站也连 Render 生产后端；后端新功能在 PR 合并前无法在预览站验证。
+  - 2026-09-12 复现补充：以 `monkeycode-ai[bot]` 身份 push，以及 close/reopen PR，同样不触发任何 workflow，head SHA 的 run 数直接为 0；用 `gh api repos/wsxiaolin/pl-town/actions/runs?head_sha=<sha>`（`total_count`）确认是否真的没触发。
 
 [Project Knowledge Summary]
 - Date: 2026-09-09

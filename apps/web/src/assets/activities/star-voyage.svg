@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" role="img" aria-label="巡星归程占位背景">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d2a63"/>
+      <stop offset="0.45" stop-color="#2f6fbd"/>
+      <stop offset="0.75" stop-color="#7fc4e8"/>
+      <stop offset="1" stop-color="#ffe2b0"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a4f9c"/>
+      <stop offset="1" stop-color="#062043"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff4d0" stop-opacity="1"/>
+      <stop offset="0.55" stop-color="#ffd27a" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#ffd27a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#sky)"/>
+  <circle cx="960" cy="300" r="180" fill="url(#sun)"/>
+  <circle cx="960" cy="300" r="62" fill="#fff6de"/>
+  <g fill="#ffffff" opacity="0.9">
+    <circle cx="180" cy="120" r="2.6"/><circle cx="320" cy="80" r="1.8"/>
+    <circle cx="470" cy="150" r="2.2"/><circle cx="640" cy="90" r="1.6"/>
+    <circle cx="820" cy="170" r="2.4"/><circle cx="1080" cy="110" r="2"/>
+    <circle cx="250" cy="240" r="1.5"/><circle cx="560" cy="220" r="1.9"/>
+  </g>
+  <path d="M0 470 C 220 430 360 500 600 470 C 840 440 1020 500 1280 462 L1280 720 L0 720 Z" fill="url(#sea)"/>
+  <path d="M0 520 C 240 486 420 552 700 520 C 940 494 1100 548 1280 520 L1280 720 L0 720 Z" fill="#0a2c5c" opacity="0.75"/>
+  <g fill="#eaf3ff" opacity="0.55">
+    <path d="M120 560 q40 -16 80 0 q-40 14 -80 0 Z"/>
+    <path d="M420 600 q50 -18 100 0 q-50 16 -100 0 Z"/>
+    <path d="M900 570 q46 -16 92 0 q-46 14 -92 0 Z"/>
+    <path d="M1120 620 q40 -14 80 0 q-40 12 -80 0 Z"/>
+  </g>
+  <g transform="translate(300 420)">
+    <path d="M0 90 L220 90 L190 130 L30 130 Z" fill="#12294d"/>
+    <rect x="60" y="20" width="18" height="72" fill="#12294d"/>
+    <path d="M78 24 L170 62 L78 74 Z" fill="#f2f6ff"/>
+    <path d="M92 76 L164 62 L164 40 Z" fill="#cfe0ff" opacity="0.85"/>
+    <rect x="44" y="34" width="10" height="58" fill="#12294d"/>
+    <path d="M44 36 L10 74 L44 70 Z" fill="#ffd88a"/>
+  </g>
+  <g fill="#ffffff">
+    <path d="M760 250 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6 Z" opacity="0.95"/>
+    <path d="M1120 220 l5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5 Z" opacity="0.8"/>
+  </g>
+</svg>

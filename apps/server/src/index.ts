@@ -15,7 +15,7 @@ import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather 
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
-import { clientIp, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
+import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
@@ -31,6 +31,7 @@ const physicsSessions = new Map<string, { token: string; authCode: string; user:
 const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGES_PER_SECOND = 60;
 const MAX_CHAT_MESSAGES_PER_TEN_SECONDS = 5;
+const CHAT_HISTORY_LIMIT = 100;
 const MAX_PHYSICS_LOGINS_PER_MINUTE = 10;
 const publicApiRate = new FixedWindowRateLimiter(120, 60_000);
 const publicMutationRate = new FixedWindowRateLimiter(30, 60_000);
@@ -39,6 +40,7 @@ const globalPublicMutationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
+const chatHistoryRate = new FixedWindowRateLimiter(20, 60_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(5, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // Token restores (edit-page load with a stored token) are throttled per IP
@@ -198,6 +200,12 @@ async function handle(client: Client, raw: string) {
         broadcast({ type: 'chat', messageId, userId, nickname: client.user.nickname, text }, undefined);
         chatModeration.enqueue(messageId, text);
       }
+      return;
+    }
+    if (message.type === 'chat.history') {
+      const rate = chatHistoryRate.consume(userId);
+      if (!rate.allowed) return fail(client.socket, 'Chat history rate limit exceeded');
+      send(client.socket, { type: 'chat.history', messages: db.listRecentChatMessages(CHAT_HISTORY_LIMIT) });
       return;
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
@@ -370,13 +378,19 @@ const http = createServer(async (request, response) => {
     getWeather: () => serverWeather,
     setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
   })) return;
-  const headers = jsonSecurityHeaders;
+  const headers = { ...jsonSecurityHeaders, ...corsHeaders(request) };
   if (request.url === '/healthz') { response.writeHead(200, headers); response.end(JSON.stringify({ ok: true })); return; }
   if (request.url === '/readyz') {
     const database = db.databaseStatus();
     response.writeHead(database.ready ? 200 : 503, headers); response.end(JSON.stringify({ ok: database.ready, database, online: clients.size })); return;
   }
   if (request.url?.startsWith('/town-api/')) {
+    if (request.method === 'OPTIONS') {
+      if (!requestOriginAllowed(request)) {
+        response.writeHead(403, headers); response.end(JSON.stringify({ error: 'Request origin is not allowed' })); return;
+      }
+      response.writeHead(204, headers); response.end(); return;
+    }
     const limiter = ['GET', 'HEAD'].includes(request.method ?? '') ? publicApiRate : publicMutationRate;
     const globalLimiter = ['GET', 'HEAD'].includes(request.method ?? '') ? globalPublicApiRate : globalPublicMutationRate;
     const result = limiter.consume(requestIp);

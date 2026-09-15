@@ -47,4 +47,6 @@ BASE_PATH=/
 
 在 Static Site 中把 `/town-api/*` Rewrite 到后端同路径。`ALLOWED_ORIGINS` 支持逗号分隔的多个来源；Cloudflare Pages 分支预览可使用 `https://*.pl-town.pages.dev`，它匹配一层子域，例如 `https://abc.pl-town.pages.dev`。配置值只写 Origin，不包含路径。
 
+Cloudflare Pages 的 Production 与 Preview 环境变量互相独立。当 Preview 环境未设置 `VITE_SERVER_URL` 时，构建产物会回退到项目默认后端地址，避免分支预览把自己的域名当成 API 和 WebSocket 目标。生产环境仍应显式配置 `VITE_SERVER_URL`。
+
 测试结束后删除服务或测试数据。生产上线只使用 `docs/deployment.md` 的独立 Linux 云服务器方案。

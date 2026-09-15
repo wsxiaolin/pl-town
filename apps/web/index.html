@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://pl-town.onrender.com blob: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2378a8ff'/%3E%3Cpath d='M8 24V13h5v11h6V8h5v16z' fill='white'/%3E%3C/svg%3E" />
   <title>物实小城 — MiniCity</title>
   <style id="bootCritical">
@@ -84,6 +84,7 @@
       <button class="logo-user login-required" id="logoUser" type="button" aria-label="登录">登录</button>
     </div>
     <nav class="ui-nav">
+       <button class="map-toggle activity-panel-toggle" id="activityPanelToggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="activityPanelOverlay">活动</button>
        <button class="map-toggle fs-toggle" id="fsToggle" type="button">全屏</button>
        <button class="map-toggle" id="mapToggle" type="button">地图</button>
        <button class="settings-toggle" id="renderSettingsToggle" type="button" aria-label="画面设置" aria-expanded="false">
@@ -411,7 +412,7 @@
       <p class="login-error" id="loginError" role="alert" hidden></p>
       <div class="pl-verify" id="plVerifySection" hidden>
         <p class="pl-verify-title">这个昵称已属于物实社区</p>
-        <p class="pl-verify-sub">请用同名的物实账号登录，确认你就是它的主人；或者换一个昵称直接入城。凭据只用于本次向物实官方验证，小城不会存储。</p>
+        <p class="pl-verify-sub">请用同名的物实账号登录，凭据只用于本次验证，小城不会存储。</p>
         <input class="login-input" id="plLoginInput" type="text" placeholder="物实账号（注册邮箱）"
                maxlength="128" autocomplete="off" spellcheck="false" />
         <input class="login-input" id="plPasswordInput" type="password" placeholder="物实密码"
@@ -490,6 +491,27 @@
         <p class="npc-line" id="npcLine"></p>
       </div>
       <div class="npc-options" id="npcOptions"></div>
+    </div>
+  </div>
+
+  <!-- Activity panel (top-right entry; static catalog with per-activity background) -->
+  <div class="activity-panel-overlay" id="activityPanelOverlay" role="dialog" aria-modal="true" aria-label="活动">
+    <div class="activity-panel-shell">
+      <button class="activity-panel-close" id="activityPanelClose" type="button" aria-label="关闭活动">✕</button>
+      <div class="activity-panel-body">
+        <nav class="activity-panel-list" id="activityPanelList" aria-label="活动列表"></nav>
+        <section class="activity-panel-hero" aria-live="polite">
+          <div class="activity-panel-hero-bg" id="activityPanelHeroBg" aria-hidden="true"></div>
+          <div class="activity-panel-hero-scrim" aria-hidden="true"></div>
+          <div class="activity-panel-hero-copy">
+            <span class="activity-panel-badge" id="activityPanelBadge" hidden></span>
+            <span class="activity-panel-kicker" id="activityPanelKicker"></span>
+            <h3 class="activity-panel-title" id="activityPanelTitle"></h3>
+            <p class="activity-panel-subtitle" id="activityPanelSubtitle"></p>
+            <p class="activity-panel-description" id="activityPanelDescription"></p>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 

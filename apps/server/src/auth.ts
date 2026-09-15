@@ -43,7 +43,7 @@ export class RegistrationLimitError extends Error {
 export class PhysicsLabVerificationRequiredError extends Error {
   readonly code = 'pl-verification-required';
   constructor() {
-    super('这个昵称已属于物实社区，请用对应的物实账号验证身份后再签下，或者换一个昵称');
+    super('这个昵称已属于物实社区，请用同名的物实账号登录凭据只用于本次验证，小城不会存储');
     this.name = 'PhysicsLabVerificationRequiredError';
   }
 }

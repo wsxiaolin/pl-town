@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" role="img" aria-label="流星夜市占位背景">
+  <defs>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#241240"/>
+      <stop offset="0.45" stop-color="#7a2f63"/>
+      <stop offset="0.72" stop-color="#e0684a"/>
+      <stop offset="1" stop-color="#ffc46b"/>
+    </linearGradient>
+    <linearGradient id="street" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1733"/>
+      <stop offset="1" stop-color="#120a1c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd88a" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#ffd88a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#dusk)"/>
+  <g stroke-linecap="round" opacity="0.95">
+    <line x1="240" y1="80" x2="420" y2="200" stroke="#fff3d0" stroke-width="4"/>
+    <line x1="760" y1="50" x2="900" y2="150" stroke="#ffe4a8" stroke-width="3"/>
+    <line x1="1040" y1="110" x2="1200" y2="230" stroke="#ffd0e6" stroke-width="3.5"/>
+  </g>
+  <g fill="#ffffff" opacity="0.85">
+    <circle cx="180" cy="140" r="2"/><circle cx="560" cy="90" r="1.7"/>
+    <circle cx="900" cy="60" r="2.2"/><circle cx="1160" cy="150" r="1.6"/>
+    <circle cx="660" cy="200" r="1.8"/>
+  </g>
+  <circle cx="640" cy="470" r="260" fill="url(#glow)"/>
+  <g fill="#1a0f26">
+    <path d="M0 520 L120 470 L240 520 L240 620 L0 620 Z"/>
+    <path d="M980 500 L1120 440 L1280 500 L1280 630 L980 630 Z"/>
+    <path d="M360 540 L470 500 L580 540 L580 640 L360 640 Z"/>
+    <path d="M700 545 L810 505 L920 545 L920 645 L700 645 Z"/>
+  </g>
+  <rect y="620" width="1280" height="100" fill="url(#street)"/>
+  <g>
+    <g transform="translate(120 470)"><rect x="-26" y="-30" width="52" height="34" rx="6" fill="#e8503c"/><circle cx="0" cy="-4" r="12" fill="#ffd77a"/></g>
+    <g transform="translate(360 500)"><rect x="-26" y="-30" width="52" height="34" rx="6" fill="#e8503c"/><circle cx="0" cy="-4" r="12" fill="#ffd77a"/></g>
+    <g transform="translate(700 505)"><rect x="-26" y="-30" width="52" height="34" rx="6" fill="#e8503c"/><circle cx="0" cy="-4" r="12" fill="#ffd77a"/></g>
+    <g transform="translate(1020 460)"><rect x="-26" y="-30" width="52" height="34" rx="6" fill="#e8503c"/><circle cx="0" cy="-4" r="12" fill="#ffd77a"/></g>
+  </g>
+  <g fill="#ffd9a0" opacity="0.5">
+    <ellipse cx="120" cy="470" rx="40" ry="46"/>
+    <ellipse cx="360" cy="500" rx="40" ry="46"/>
+    <ellipse cx="700" cy="505" rx="40" ry="46"/>
+    <ellipse cx="1020" cy="460" rx="40" ry="46"/>
+  </g>
+</svg>
