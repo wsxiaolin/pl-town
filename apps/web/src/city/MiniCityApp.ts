@@ -40,6 +40,7 @@ import { createEchoStoryController } from './echo/echoStoryController';
 import { createYesterdaySongController } from './yesterday/yesterdaySongController';
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
+import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
@@ -500,8 +501,8 @@ function init() {
     unlockAchievement: (id) => multiplayerHousing?.progression.unlockAchievement(id),
     showToast: showUnlockToast,
   });
+  initStoryTaskGuideWiring({ document, getBuildings: () => buildings, navigateTo, getEchoController: () => echoStoryController, getCursor: () => cursorChar, setCameraTarget });
   echoStoryController = createEchoStoryController({
-    document,
     getQuestContext: () => ({ ...getQuestProgressView(), gameDay: townGameDay() }),
     consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
     setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
@@ -519,7 +520,6 @@ function init() {
     isMobile: MOBILE,
     getScene: () => scene,
     sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: 0, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
-    goToObservatory: () => { cursorChar && setCameraTarget(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1], false); },
   });
   echoStoryController.setupScene(scene);
   echoStoryController.setupGuide();
