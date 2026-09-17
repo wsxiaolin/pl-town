@@ -586,6 +586,11 @@ function init() {
     onDialogueAction: (action) => {
       if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if (action.startsWith('open-url:')) window.location.href = action.slice(9);
+      if (action.startsWith('achievement:')) {
+        const id = action.slice('achievement:'.length);
+        const achievement = ACHIEVEMENTS.find((entry) => entry.id === id);
+        if (achievement) awardDirectAchievement(achievement.id, achievement.name);
+      }
       buildingFeatureRegistry.handleDialogueAction(action, 'city-dialog');
     },
     pauseNpcs: () => npcSystem.pauseNpcs(),

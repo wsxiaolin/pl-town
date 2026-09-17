@@ -6,6 +6,7 @@ import { createSceneInterestPointController } from '../../src/city/sceneInterest
 import { createCatCafeIceWallInteraction } from '../../src/city/iceKing/catCafeIceWallInteraction';
 import { CAT_CAFE_ICE_WALL, ICE_KING_ITEMS } from '../../src/gameplay/content/stories/iceKing/iceKingContent';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
+import { ACHIEVEMENTS } from '../../src/city/progression/achievements';
 import { residenceStyleFor, residenceStyleSeedForLot } from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { isFilmCityClearing } from '../../src/city/data/cityConfig';
@@ -215,4 +216,38 @@ test('west beach encounter grants Tirpitz once and awards the achievement', asyn
   assert.deepEqual(awards, [WORLD_ACHIEVEMENTS.westBeachEncounter.id]);
   assert.ok(phases.includes('revealed') && phases.includes('reward'));
   assert.equal(activeStory?.role, '皮尔皮茨号 ×1');
+});
+
+test('常驻游荡 NPC 莫得全程随机游荡并用对话选项结算成就', () => {
+  const murder = NPC_PROFILES.find((profile) => profile.id === 'murder') as any;
+  assert.ok(murder);
+  assert.equal(murder.name, 'MurД6r');
+  assert.equal(murder.behavior, 'wander');
+  assert.equal(murder.npcType, undefined);
+  assert.equal(murder.storyOnly, undefined);
+  assert.deepEqual(murder.workHours, [0, 24]);
+  assert.equal(murder.patrolRadius * murder.patrolRadius, 3025);
+  // 第一节点四个分支都能到达，且 15 个节点完整闭环。
+  assert.equal(murder.dialog.length, 15);
+  assert.equal(murder.dialog[0].options.length, 4);
+  assert.equal(murder.dialog[10].options.length, 4);
+  assert.equal(murder.dialog[14].text, '「63c3cac707f0fe58a0fdcda2」');
+
+  const achievementIds = new Set(ACHIEVEMENTS.map((achievement) => achievement.id));
+  const actionAchievements: string[] = [];
+  for (const node of murder.dialog) {
+    for (const option of node.options) {
+      if (typeof option.action === 'string' && option.action.startsWith('achievement:')) {
+        actionAchievements.push(option.action.slice('achievement:'.length));
+      }
+      if (option.next !== null) {
+        assert.ok(option.next >= 0 && option.next < murder.dialog.length, `node link ${option.next} out of range`);
+      }
+    }
+  }
+  assert.deepEqual(
+    [...new Set(actionAchievements)].sort(),
+    ['murder_chain', 'murder_contact', 'murder_flirt', 'murder_wanderer', 'murder_watcher'],
+  );
+  actionAchievements.forEach((id) => assert.ok(achievementIds.has(id), `unknown achievement ${id}`));
 });
