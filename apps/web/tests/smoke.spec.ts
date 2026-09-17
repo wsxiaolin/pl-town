@@ -888,9 +888,18 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   await expect(page.locator('#newspaperMeta')).toContainText('星辉周刊 2023.7.23');
   await expect(page.locator('#newspaperStage .np-issue-title')).toHaveText('星辉周刊 2023.7.23');
   await expect(page.locator('#newspaperStage .np-motto')).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-dateline')).toContainText('2023.7.23');
   await expect(page.locator('#newspaperStage .np-body')).toContainText('精知优选');
-  // 单板块版面整版通栏，不出现半栏 + 右侧空白
-  await expect(page.locator('#newspaperStage .np-body .np-col-full')).toHaveCount(1);
+  // 分类名录按栏目落进多栏，条目以紧凑列表排版，而不是每个标签独占一行
+  await expect(page.locator('#newspaperStage .np-group-label').first()).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-item').first()).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-link[data-href]').first()).toBeVisible();
+  // 宽屏下名录保持多栏密排
+  const desktopColumns = await page.evaluate(() => {
+    const groups = document.querySelector('#newspaperStage .np-groups');
+    return groups ? getComputedStyle(groups).columnCount : '0';
+  });
+  expect(Number(desktopColumns)).toBeGreaterThan(1);
 
   // The first issue spans multiple pages; flip to the last one.
   const total = Number(await page.locator('#newspaperPageTotal').textContent());
@@ -902,8 +911,9 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   }
   await expect(page.locator('#newspaperNext')).toBeDisabled();
   await expect(page.locator('#newspaperPageNo')).toHaveText(String(total));
-  // 末版（无 section 的长文收尾）同样整版通栏
-  await expect(page.locator('#newspaperStage .np-body .np-col-full')).toHaveCount(1);
+  // 末版同样渲染出报纸版面，且不出现横向溢出
+  await expect(page.locator('#newspaperStage .np-sheet')).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-story').first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 
   // Going back returns to the catalog without errors.
@@ -965,6 +975,20 @@ test('newsstand hides empty pages and degrades to a single column on mobile', as
   });
   await expect(reader).toHaveClass(/open/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  // 窄屏降为单栏，字号收紧，避免“字大内容少”
+  const mobileLayout = await page.evaluate(() => {
+    const sheet = document.querySelector('#newspaperStage .np-sheet');
+    const groups = document.querySelector('#newspaperStage .np-groups');
+    if (!sheet) return null;
+    return {
+      columns: groups ? getComputedStyle(groups).columnCount : '0',
+      bodyFont: parseFloat(getComputedStyle(sheet).fontSize),
+    };
+  });
+  expect(mobileLayout).not.toBeNull();
+  expect(mobileLayout?.columns).toBe('1');
+  expect(mobileLayout?.bodyFont ?? 0).toBeLessThan(14);
+
   await page.evaluate(() => document.getElementById('newspaperClose')?.click());
   await expect(reader).not.toHaveClass(/open/);
   await page.evaluate(() => document.getElementById('newsstandClose')?.click());

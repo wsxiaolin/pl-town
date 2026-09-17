@@ -1,5 +1,6 @@
 import { NEWSPAPER_CATALOG, type NewspaperCatalogEntry } from '../../city/data/newspapers/newspapers-catalog';
-import type { NewspaperBlock, NewspaperIssue } from '../../city/data/newspapers/newspapers-types';
+import type { NewspaperIssue, NewspaperPage } from '../../city/data/newspapers/newspapers-types';
+import { buildPageLayout, type LayoutGroup, type LayoutItem, type LayoutStory, type PageLayout } from './newsstandLayout';
 
 export interface NewsstandControllerOptions {
   document: Document;
@@ -47,229 +48,147 @@ async function loadIssue(entry: NewspaperCatalogEntry): Promise<NewspaperIssue |
   return list?.find((issue) => issue.id === entry.id);
 }
 
-function renderBlock(document: Document, block: NewspaperBlock): HTMLElement {
-  switch (block.kind) {
-    case 'motto': {
-      const p = document.createElement('p');
-      p.className = 'np-motto';
-      p.textContent = block.text;
-      return p;
-    }
-    case 'separator': {
-      const p = document.createElement('p');
-      p.className = 'np-separator';
-      p.textContent = block.text.replace(/[—–\-=]/g, '—');
-      return p;
-    }
-    case 'section': {
-      const h3 = document.createElement('h3');
-      h3.className = 'np-section';
-      h3.textContent = block.text;
-      return h3;
-    }
-    case 'label': {
-      const p = document.createElement('p');
-      p.className = 'np-label';
-      p.textContent = block.text;
-      return p;
-    }
-    case 'editor': {
-      const p = document.createElement('p');
-      p.className = 'np-editor';
-      p.textContent = block.text;
-      return p;
-    }
-    case 'link': {
-      const span = document.createElement('span');
-      span.className = `np-link np-link-${block.hrefType ?? 'discussion'}`;
-      const badge = document.createElement('i');
-      badge.textContent = block.hrefType === 'experiment' ? '实' : '讨';
-      const text = document.createElement('b');
-      text.textContent = block.text;
-      span.append(badge, text);
-      if (block.href) span.dataset.href = block.href;
-      return span;
-    }
-    default: {
-      const p = document.createElement('p');
-      p.className = 'np-text';
-      p.textContent = block.text;
-      return p;
-    }
-  }
+// ── 报纸渲染 ──────────────────────────────────────────────
+// 版面模型（分栏、栏目、署名、空分类折叠）由 newsstandLayout 计算，
+// 这里只负责把模型映射成 DOM，保持排版逻辑可单测。
+
+function element<K extends keyof HTMLElementTagNameMap>(
+  document: Document,
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-// ── 报纸排版引擎 ──────────────────────────────────────────
-
-/** 一个版面的语义板块（由 section block 切分） */
-interface NewsSection {
-  /** 板块标题，取自 kind=section 的 text；头版前的引导内容为 '' */
-  title: string;
-  /** 该板块的所有 blocks（含 section 标题本身） */
-  blocks: NewspaperBlock[];
-}
-
-/** 按版面内容大小评估板块权重，用于决定栏宽 */
-function estimateSectionWeight(blocks: readonly NewspaperBlock[]): number {
-  let weight = 0;
-  for (const b of blocks) {
-    if (b.kind === 'link') weight += 2;
-    else if (b.kind === 'text') weight += b.text.length > 40 ? 2 : 1;
-    else if (b.kind === 'section') weight += 0;
-    else weight += 1;
-  }
-  return weight;
-}
-
-/** 判断板块是否为"无实质内容"，需过滤 */
-const EMPTY_PATTERNS = [
-  /^无$/, /^暂无$/, /^本周暂无/,
-  /不予收录/, /没有.*冲精.*作品/, /目前没有发现/,
-  /没有支持未满/, /好吧，忘记写了/,
-];
-
-function sectionHasContent(section: NewsSection): boolean {
-  const meaningful = section.blocks.filter(
-    (b) => b.kind !== 'section' && b.kind !== 'separator' && b.kind !== 'motto',
-  );
-  // 含 link 的板块一定保留
-  if (meaningful.some((b) => b.kind === 'link')) return true;
-  // 含非空且非说明性括号文字的板块保留
-  const substantive = meaningful.filter(
-    (b) =>
-      b.kind === 'text' &&
-      b.text.trim() !== '' &&
-      !b.text.startsWith('（') &&
-      !EMPTY_PATTERNS.some((re) => re.test(b.text.trim())),
-  );
-  // 有 label 也算有结构
-  if (meaningful.some((b) => b.kind === 'label')) return substantive.length > 0;
-  return substantive.length > 0;
-}
-
-/** 将扁平 blocks 切分为语义板块 */
-function splitSections(blocks: readonly NewspaperBlock[]): NewsSection[] {
-  const sections: NewsSection[] = [];
-  let current: NewsSection = { title: '', blocks: [] };
-  for (const block of blocks) {
-    if (block.kind === 'section') {
-      if (current.blocks.length > 0) sections.push(current);
-      current = { title: block.text, blocks: [block] };
-    } else {
-      current.blocks.push(block);
-    }
-  }
-  if (current.blocks.length > 0) sections.push(current);
-  return sections;
-}
-
-/** 渲染单个板块容器；fullWidth 时整版通栏（多栏网格中独占一行） */
-function renderSectionColumn(document: Document, section: NewsSection, fullWidth = false): HTMLElement {
-  const col = document.createElement('div');
-  col.className = fullWidth ? 'np-col np-col-full' : 'np-col';
-  for (const block of section.blocks) {
-    col.appendChild(renderBlock(document, block));
-  }
-  return col;
-}
-
-/**
- * 渲染多栏网格。板块数量为奇数时，最后一个板块独占整行（通栏），
- * 避免出现孤立的半栏 + 右侧空白。
- */
-function renderGrid(document: Document, sections: NewsSection[]): HTMLElement {
-  const grid = document.createElement('div');
-  grid.className = 'np-grid';
-  sections.forEach((section, index) => {
-    const lastOrphan = sections.length > 1 && sections.length % 2 === 1 && index === sections.length - 1;
-    grid.appendChild(renderSectionColumn(document, section, lastOrphan));
+function renderMasthead(document: Document, issue: NewspaperIssue, page: NewspaperPage, pageIndex: number): HTMLElement {
+  const masthead = element(document, 'header', 'np-masthead');
+  const title = element(document, 'h2', 'np-issue-title', issue.title);
+  const dateline = element(document, 'p', 'np-dateline');
+  const parts = [page.title, issue.date];
+  parts.forEach((part, index) => {
+    if (index > 0) dateline.append(element(document, 'span', 'np-dateline-dot', '◆'));
+    dateline.append(element(document, 'span', 'np-dateline-item', part));
   });
-  return grid;
+  masthead.append(element(document, 'p', 'np-kicker', `第 ${pageIndex + 1} 版`), title, dateline);
+  return masthead;
+}
+
+function renderItem(document: Document, item: LayoutItem): HTMLLIElement {
+  const li = element(document, 'li', 'np-item');
+  if (item.kind === 'link') {
+    const hrefType = item.hrefType ?? 'discussion';
+    const link = element(document, 'span', `np-link np-link-${hrefType}`);
+    if (item.href) link.dataset.href = item.href;
+    const badge = element(document, 'i');
+    badge.textContent = hrefType === 'experiment' ? '实' : '讨';
+    link.append(badge, element(document, 'b', undefined, item.text));
+    li.append(link);
+  } else {
+    li.append(element(document, 'span', 'np-item-text', item.text));
+  }
+  if (item.byline) li.append(element(document, 'em', 'np-byline', `／${item.byline}`));
+  return li;
+}
+
+function renderItems(document: Document, items: readonly LayoutItem[], multiColumn = false): HTMLUListElement {
+  const list = element(document, 'ul', multiColumn ? 'np-items np-items--multi' : 'np-items');
+  for (const item of items) list.append(renderItem(document, item));
+  return list;
+}
+
+function renderGroup(document: Document, group: LayoutGroup): HTMLElement {
+  const box = element(document, 'div', 'np-group');
+  box.append(element(document, 'h4', 'np-group-label', group.label), renderItems(document, group.items));
+  return box;
+}
+
+function renderProse(document: Document, paragraphs: readonly string[]): HTMLElement {
+  const prose = element(document, 'div', 'np-prose');
+  for (const text of paragraphs) prose.append(element(document, 'p', 'np-paragraph', text));
+  return prose;
+}
+
+function renderStory(document: Document, story: LayoutStory, lead: boolean): HTMLElement {
+  const section = element(document, 'section', lead ? 'np-story np-story--lead' : 'np-story');
+  const head = element(document, 'header', 'np-story-head');
+  head.append(element(document, 'h3', 'np-story-title', story.title));
+  section.append(head);
+
+  for (const note of story.deck) section.append(element(document, 'p', 'np-story-deck', note));
+  for (const band of story.bands) {
+    const row = element(document, 'div', 'np-story-band');
+    row.append(element(document, 'span', 'np-story-band-text', band));
+    section.append(row);
+  }
+  if (story.paragraphs.length > 0) section.append(renderProse(document, story.paragraphs));
+  if (story.loose.length > 0) section.append(renderItems(document, story.loose, story.loose.length > 3));
+
+  if (story.groups.length > 0) {
+    const groups = element(document, 'div', 'np-groups');
+    for (const group of story.groups) groups.append(renderGroup(document, group));
+    section.append(groups);
+  }
+
+  if (story.emptyLabels.length > 0) {
+    const muted = element(document, 'p', 'np-empty-labels');
+    muted.append(element(document, 'span', 'np-empty-labels-title', '本栏暂无'));
+    muted.append(element(document, 'span', 'np-empty-labels-list', story.emptyLabels.join(' · ')));
+    section.append(muted);
+  }
+
+  return section;
+}
+
+function renderFront(document: Document, layout: PageLayout): HTMLElement | null {
+  const empty =
+    layout.motto === null &&
+    layout.separator === null &&
+    layout.frontItems.length === 0 &&
+    layout.frontParagraphs.length === 0;
+  if (empty) return null;
+  const front = element(document, 'div', 'np-front');
+  if (layout.motto !== null) front.append(element(document, 'p', 'np-motto', layout.motto));
+  if (layout.separator !== null) {
+    const band = element(document, 'div', 'np-front-band');
+    band.append(element(document, 'span', 'np-front-band-text', layout.separator));
+    front.append(band);
+  }
+  if (layout.frontParagraphs.length > 0) front.append(renderProse(document, layout.frontParagraphs));
+  if (layout.frontItems.length > 0) front.append(renderItems(document, layout.frontItems, true));
+  return front;
 }
 
 function renderPage(document: Document, issue: NewspaperIssue, pageIndex: number): HTMLElement {
   const page = issue.pages[pageIndex] ?? { title: '头版', blocks: [] };
-  const sheet = document.createElement('article');
-  sheet.className = 'np-sheet';
+  const layout = buildPageLayout(page);
 
-  // ── 报头 ──
-  const masthead = document.createElement('header');
-  masthead.className = 'np-masthead';
-  const kicker = document.createElement('span');
-  kicker.className = 'np-kicker';
-  kicker.textContent = `${issue.series} · 第 ${pageIndex + 1} 版`;
-  const heading = document.createElement('h2');
-  heading.className = 'np-issue-title';
-  heading.textContent = issue.title;
-  const pageLine = document.createElement('p');
-  pageLine.className = 'np-page-caption';
-  pageLine.textContent = page.title;
-  masthead.append(kicker, heading, pageLine);
+  const sheet = element(document, 'article', 'np-sheet');
+  const body = element(document, 'div', 'np-body');
 
-  // ── 正文排版 ──
-  const body = document.createElement('div');
-  body.className = 'np-body';
+  const front = renderFront(document, layout);
+  if (front) body.append(front);
 
-  const allSections = splitSections(page.blocks);
-
-  // 分离头版引导区（motto / separator 等，位于第一个具名板块之前的无名内容）
-  const firstNamedIdx = allSections.findIndex((s) => s.title !== '');
-  const preamble = firstNamedIdx > 0 ? allSections.slice(0, firstNamedIdx) : [];
-  const namedSections = firstNamedIdx >= 0 ? allSections.slice(firstNamedIdx) : allSections;
-
-  // 过滤无实质内容的板块
-  const contentSections = namedSections.filter(sectionHasContent);
-
-  // 引导区（motto + separator）渲染为报头下方的通栏引导
-  if (preamble.length > 0) {
-    const headline = document.createElement('div');
-    headline.className = 'np-headline';
-    for (const sec of preamble) {
-      for (const block of sec.blocks) {
-        headline.appendChild(renderBlock(document, block));
-      }
+  const stories = layout.stories;
+  const hasBody = stories.length > 0 || layout.frontParagraphs.length > 0 || layout.frontItems.length > 0;
+  if (!hasBody) {
+    body.append(element(document, 'div', 'np-blank', '本版暂无内容'));
+  } else if (stories.length > 0) {
+    let leadIndex = 0;
+    for (let index = 1; index < stories.length; index += 1) {
+      const story = stories[index];
+      const best = stories[leadIndex];
+      if (story && best && story.weight > best.weight) leadIndex = index;
     }
-    body.appendChild(headline);
+    stories.forEach((story, index) => {
+      body.append(renderStory(document, story, index === leadIndex));
+    });
   }
 
-  if (contentSections.length === 0) {
-    // 整版无实质内容（如社论/新闻留空的版面）：显示占位而非空白
-    const blank = document.createElement('div');
-    blank.className = 'np-blank';
-    blank.textContent = '本版暂无内容';
-    body.appendChild(blank);
-  } else if (contentSections.length === 1) {
-    // 单板块版面（占绝大多数）：整版通栏，避免半栏 + 右侧空白
-    body.appendChild(renderSectionColumn(document, contentSections[0]!, true));
-  } else {
-    // 多板块版面：权重最高的板块作头条通栏，其余按多栏网格排版
-    const weighted = contentSections.map((s) => ({
-      section: s,
-      weight: estimateSectionWeight(s.blocks),
-    }));
-
-    // 头条判定：板块足够多且权重差距明显时才拆分头条
-    const maxWeight = Math.max(...weighted.map((w) => w.weight));
-    const leadCandidates = weighted.filter((w) => w.weight >= maxWeight * 0.6);
-    const hasLead = leadCandidates.length < weighted.length && contentSections.length >= 3;
-
-    if (hasLead) {
-      const lead = weighted.reduce((best, w) => (w.weight > best.weight ? w : best));
-      const leadCol = renderSectionColumn(document, lead.section, true);
-      leadCol.classList.add('np-col-lead');
-      body.appendChild(leadCol);
-
-      // 其余板块多栏排列
-      const rest = contentSections.filter((s) => s !== lead.section);
-      if (rest.length > 0) {
-        body.appendChild(renderGrid(document, rest));
-      }
-    } else {
-      body.appendChild(renderGrid(document, contentSections));
-    }
-  }
-
-  sheet.append(masthead, body);
+  sheet.append(renderMasthead(document, issue, page, pageIndex), body);
   return sheet;
 }
 
