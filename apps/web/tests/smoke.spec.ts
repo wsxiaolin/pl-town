@@ -911,9 +911,9 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   }
   await expect(page.locator('#newspaperNext')).toBeDisabled();
   await expect(page.locator('#newspaperPageNo')).toHaveText(String(total));
-  // 末版同样渲染出报纸版面，且不出现横向溢出
+  // 末版无栏目标题，长文收尾走头版散文排版
   await expect(page.locator('#newspaperStage .np-sheet')).toBeVisible();
-  await expect(page.locator('#newspaperStage .np-story').first()).toBeVisible();
+  await expect(page.locator('#newspaperStage .np-front')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 
   // Going back returns to the catalog without errors.
