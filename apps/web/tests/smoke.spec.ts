@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { RENDER_SETTINGS, seedCityStorage, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
+import { RENDER_SETTINGS, seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -1026,6 +1026,42 @@ test('newsstand hides empty pages and degrades to a single column on mobile', as
   await page.evaluate(() => document.getElementById('newspaperClose')?.click());
   await expect(reader).not.toHaveClass(/open/);
   await page.evaluate(() => document.getElementById('newsstandClose')?.click());
+  await expect(panel).not.toHaveClass(/open/);
+});
+
+test('mutual aid building opens the PMAG organization panel', async ({ page }) => {
+  test.setTimeout(120_000);
+  await seedCityStorage(page, 'mutual-tester');
+  stubCityWebSocket(page, { user: 'mutual-tester', unlockedBuildings: ['mutualaid'] });
+
+  await page.goto('/');
+  await page.waitForFunction(() => {
+    const mini = (window as any)._mini;
+    return !!mini?.player?.visible;
+  }, undefined, { timeout: 30_000 });
+
+  await page.evaluate(() => (window as any)._mini.interactBuilding('mutualaid'));
+  const panel = page.locator('#mutualAidPanel');
+  await expect(panel).toHaveClass(/open/);
+  await expect(page.locator('#mutualAidTitle')).toHaveText('PMAG-人民互助团');
+  await expect(page.locator('#mutualAidMeta')).toContainText('团体性质：民间组织');
+  await expect(page.locator('#mutualAidMeta')).toContainText('责任编辑：故事里的人');
+  await expect(page.locator('#mutualAidBody .ma-dept-name')).toHaveCount(7);
+  await expect(page.locator('#mutualAidBody')).toContainText('沃尔夫冈');
+  await expect(page.locator('#mutualAidBody .ma-honorary .ma-chip')).toHaveCount(41);
+  await expect(page.locator('#mutualAidBody .ma-dept-name').first()).toHaveText('迎新互助团');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
+  await page.locator('#mutualAidClose').click();
+  await expect(panel).not.toHaveClass(/open/);
+
+  // 移动端视口下重新打开，抽屉仍为单栏且无横向溢出。
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => (window as any)._mini.interactBuilding('mutualaid'));
+  await expect(panel).toHaveClass(/open/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  await page.evaluate(() => document.getElementById('mutualAidClose')?.click());
   await expect(panel).not.toHaveClass(/open/);
 });
 

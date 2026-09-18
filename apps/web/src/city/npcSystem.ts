@@ -259,6 +259,19 @@ export function createNpcSystem(options: NpcSystemOptions) {
     if (npc.walking===false) return;
     if (npc.yielding) return;
     if (!npc.mesh.visible) return;
+    // Wanderers never settle at a home/work anchor: after each arrival they pick
+    // another patrol spot from the (map-wide) pool and keep roaming.
+    if (npc.profile.behavior==='wander') {
+      if (npc.tween) return;
+      if (npc.idleTimer>0) { npc.idleTimer-=1; return; }
+      const wanderSpot=pickPatrolSpot(npc,gameHour);
+      if (wanderSpot && wanderSpot.distanceToSquared(npc.mesh.position)>0.3*0.3) {
+        walkAlongPath(npc, buildRoadPath(npc.mesh.position, wanderSpot));
+      } else {
+        npc.idleTimer=1+Math.random()*3;
+      }
+      return;
+    }
     const target=npcDesiredTarget(npc,gameHour);
     if (npc.mesh.position.distanceToSquared(target)>0.8*0.8 && !npc.tween) { walkAlongPath(npc, buildRoadPath(npc.mesh.position, target)); return; }
     if (npc.tween) return;

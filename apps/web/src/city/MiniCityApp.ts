@@ -20,6 +20,7 @@ import { createRoadNavigationSystem } from './navigation/roadNavigation';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { createSceneInterestPointController } from './sceneInterestPointController';
+import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
@@ -127,6 +128,7 @@ let communityPanels: CityHudPanels['communityPanels'];
 let writerCatalogController: CityHudPanels['writerCatalog'];
 let newsstandController: CityHudPanels['newsstand'];
 let academyController: CityHudPanels['academy'];
+let mutualAidController: CityHudPanels['mutualAid'];
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
@@ -317,6 +319,7 @@ const buildingInteraction = createBuildingInteraction({
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
   getAcademyController: () => academyController,
+  getMutualAidController: () => mutualAidController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
@@ -343,6 +346,7 @@ const eventBindings = createEventBindings({
   getMapController: () => mapController,
   getWriterCatalogController: () => writerCatalogController,
   getAcademyController: () => academyController,
+  getMutualAidController: () => mutualAidController,
   toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
@@ -474,6 +478,7 @@ function init() {
   writerCatalogController = hud.writerCatalog;
   newsstandController = hud.newsstand;
   academyController = hud.academy;
+  mutualAidController = hud.mutualAid;
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
@@ -503,7 +508,6 @@ function init() {
   });
   stories = createStoryOrchestration({
     echo: {
-      document,
       consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
       setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
       getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
@@ -516,12 +520,19 @@ function init() {
       isMobile: MOBILE,
       getScene: () => scene,
       sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: 0, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
-      goToObservatory: () => { cursorChar && view.setTarget(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1], false); },
     },
     getQuestContext: () => ({ ...readQuestProgressView(multiplayerHousing), gameDay: townGameDay() }),
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
+  });
+  initStoryTaskGuideWiring({
+    document,
+    getBuildings: () => buildings,
+    navigateTo: (building) => buildingInteraction.navigateTo(building),
+    getEchoController: () => stories.echo,
+    getCursor: () => cursorChar,
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
   });
   stories.setupEcho(scene);
   mapController = createMapController({
@@ -611,6 +622,11 @@ function init() {
     onDialogueAction: (action) => {
       if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if (action.startsWith('open-url:')) window.location.href = action.slice(9);
+      if (action.startsWith('achievement:')) {
+        const id = action.slice('achievement:'.length);
+        const achievement = ACHIEVEMENTS.find((entry) => entry.id === id);
+        if (achievement) awardDirectAchievement(achievement.id, achievement.name);
+      }
       buildingFeatureRegistry.handleDialogueAction(action, 'city-dialog');
     },
     pauseNpcs: () => npcSystem.pauseNpcs(),

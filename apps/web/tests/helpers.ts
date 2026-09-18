@@ -49,21 +49,27 @@ export async function waitForCityReady(page: Page, user = 'tester'): Promise<voi
 }
 
 /**
- * Stub the game WebSocket for newsstand tests: answers `hello` with a resident
- * who has already visited the 报摊, so `interactBuilding('newsstand')` opens
- * the catalog without any server round-trips.
+ * Stub the game WebSocket with a connected resident who has already unlocked the
+ * given buildings. Answers `hello` and `progress.building.visit`, so
+ * `interactBuilding(...)` opens the matching panel without server round-trips.
  */
-export function stubNewsstandWebSocket(page: Page, user = 'news-tester', weather = 'clear'): void {
-  void page.addInitScript(({ u, w }) => {
+export function stubCityWebSocket(
+  page: Page,
+  options: { user?: string; weather?: string; unlockedBuildings?: readonly string[] } = {},
+): void {
+  const user = options.user ?? 'tester';
+  const weather = options.weather ?? 'clear';
+  const unlockedBuildings = options.unlockedBuildings ?? ['newsstand'];
+  void page.addInitScript(({ u, w, unlocked }) => {
     const NativeWebSocket = window.WebSocket;
-    class NewsGameWebSocket extends EventTarget {
+    class StubGameWebSocket extends EventTarget {
       readyState = NativeWebSocket.CONNECTING;
       progress = {
         currency: 0,
         inventory: {},
         achievements: ['citizen'],
-        unlockedBuildings: ['newsstand'],
-        visitedBuildings: ['activity', 'library', 'newsstand'],
+        unlockedBuildings: unlocked,
+        visitedBuildings: ['activity', 'library', ...unlocked],
       };
       catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
@@ -72,8 +78,8 @@ export function stubNewsstandWebSocket(page: Page, user = 'news-tester', weather
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
           response = {
-            type: 'hello', token: 'news-token',
-            user: { id: 'news-user', nickname: u, email: null, position: { x: 0, y: 0, z: -6 } },
+            type: 'hello', token: 'stub-token',
+            user: { id: 'stub-user', nickname: u, email: null, position: { x: 0, y: 0, z: -6 } },
             players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog, weather: w,
           };
         } else if (request.type === 'progress.building.visit') {
@@ -87,9 +93,18 @@ export function stubNewsstandWebSocket(page: Page, user = 'news-tester', weather
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
-      construct(Target, args) { return String(args[0]).includes(':8787') ? new NewsGameWebSocket() : Reflect.construct(Target, args); },
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new StubGameWebSocket() : Reflect.construct(Target, args); },
     }) });
-  }, { u: user, w: weather });
+  }, { u: user, w: weather, unlocked: [...unlockedBuildings] });
+}
+
+/**
+ * Stub the game WebSocket for newsstand tests: answers `hello` with a resident
+ * who has already visited the 报摊, so `interactBuilding('newsstand')` opens
+ * the catalog without any server round-trips.
+ */
+export function stubNewsstandWebSocket(page: Page, user = 'news-tester', weather = 'clear'): void {
+  stubCityWebSocket(page, { user, weather, unlockedBuildings: ['newsstand'] });
 }
 
 /**

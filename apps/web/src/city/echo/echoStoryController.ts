@@ -5,7 +5,7 @@ import { ECHO_STORY } from '../../gameplay/content/stories/echo/echoStory';
 import type { StoryConditionContext, StoryEffect, StoryEvent } from '../../gameplay/stories/types';
 import { LocalStorageStoryRepository } from '../../adapters/storage/stories/LocalStorageStoryRepository';
 import { createStoryDialogFlow } from '../../adapters/ui/stories/storyDialogFlow';
-import { createEchoObservatoryGuide } from '../../adapters/ui/echoObservatoryGuide';
+
 import { getStoryPhase } from '../../gameplay/stories/StoryRuntime';
 import type { CityDialogController } from '../../adapters/ui/cityDialogController';
 
@@ -39,7 +39,6 @@ type Cursor = {
 };
 
 export type EchoStoryControllerOptions = {
-  document: Document;
   getQuestContext: () => StoryConditionContext;
   consumeItem: (itemId: string, quantity: number) => void;
   setStoryPoints: (ids: readonly string[]) => void;
@@ -57,14 +56,12 @@ export type EchoStoryControllerOptions = {
   isMobile: () => boolean;
   getScene: () => THREE.Scene | null;
   sendLocalPosition: (cursor: Cursor) => void;
-  goToObservatory: () => void;
 };
 
 export type EchoStoryController = ReturnType<typeof createEchoStoryController>;
 
 export function createEchoStoryController(options: EchoStoryControllerOptions) {
   let navigation: InteriorNavigation | null = null;
-  let guide: ReturnType<typeof createEchoObservatoryGuide> | null = null;
   let echoExteriorCameraZoom = 7;
   let echoInteriorView = false;
 
@@ -91,7 +88,6 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   }
 
   function handleStoryEvent(event: StoryEvent): void {
-    guide?.applyEvent(event);
     const achievement = ECHO_STORY_ACHIEVEMENTS[event.type];
     if (achievement) options.awardAchievement(achievement.id, achievement.name);
     if (event.type === 'echo.cabin.entered') teleportToCabin();
@@ -113,10 +109,6 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   }
 
   function setupGuide(): void {
-    guide = createEchoObservatoryGuide(options.document, () => {
-      if (story.state().nodeId === 'confrontation-active') teleportFromCabin();
-      else options.goToObservatory();
-    });
     announceGuide();
     syncWorldInteractions();
     syncActiveActors();
@@ -206,11 +198,9 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   function announceGuide(): void { story.announceGuide(); }
   function syncWorldInteractions(): void { story.syncWorldInteractions(); }
   function syncActiveActors(): void { story.syncActiveActors(); }
-  function updateGuide(camera: THREE.Camera): void { guide?.update(camera); }
+  function updateGuide(_camera: THREE.Camera): void {}
 
   function dispose(): void {
-    guide?.dispose();
-    guide = null;
     navigation = null;
     echoInteriorView = false;
     echoExteriorCameraZoom = 7;

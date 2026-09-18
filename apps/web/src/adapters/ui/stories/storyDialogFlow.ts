@@ -1,5 +1,6 @@
 import { StoryRuntime, getStoryPhase } from '../../../gameplay/stories/StoryRuntime';
 import type { StoryConditionContext, StoryDefinition, StoryEffect, StoryEvent, StoryRepository } from '../../../gameplay/stories/types';
+import { publishStoryGuideEvent } from '../storyTaskGuide';
 import type { CityDialogController } from '../cityDialogController';
 
 export function createStoryDialogFlow(
@@ -26,14 +27,19 @@ export function createStoryDialogFlow(
     const guide = runtime.state().activeGuide;
     const available = runtime.isNodeAvailable(options.getContext?.());
     const guideVisible = runtime.isGuideVisible(options.getContext?.());
-    const guideState = `${node.id}:${available ? 'available' : 'waiting'}:${guideVisible ? 'visible' : 'hidden'}`;
+    // A guide must never leak onto the HUD before the player has entered the
+    // story (fresh saves publish the start node's guide otherwise), and it must
+    // disappear once the story concludes. Only an in-progress story shows one.
+    const phase = getStoryPhase(definition, runtime.state());
+    const entered = phase === 'active';
+    const guideState = `${node.id}:${available ? 'available' : 'waiting'}:${guideVisible ? 'visible' : 'hidden'}:${entered ? 'entered' : 'idle'}`;
     if (announcedGuideState === guideState) return;
     announcedGuideState = guideState;
-    if (!guide || !available || !guideVisible) {
-      runtime.publish('story.guide.cleared', { nodeId: node.id });
+    if (!guide || !available || !guideVisible || !entered) {
+      publishStoryGuideEvent(runtime.publish('story.guide.cleared', { storyId: definition.id, nodeId: node.id }));
       return;
     }
-    runtime.publish('story.guide.updated', { title: guide.title, objective: guide.objective, nodeId: node.id });
+    publishStoryGuideEvent(runtime.publish('story.guide.updated', { storyId: definition.id, title: guide.title, objective: guide.objective, nodeId: node.id }));
   };
 
   const syncWorldInteractions = (): void => {
@@ -44,8 +50,15 @@ export function createStoryDialogFlow(
   const syncActiveActors = (): void => options.onActiveActorsChanged?.(runtime.node().activeActorIds ?? []);
 
   const sentences = (text: string): string[] => {
-    const matches = text.match(/[^。！？\n]+(?:[。！？]+|$)/g)?.map((line) => line.trim()).filter(Boolean);
-    return matches?.length ? matches : [text];
+    // Split per line first so an unpunctuated paragraph is never dropped, then
+    // break each line on sentence-ending punctuation while keeping trailing
+    // closing quotes/brackets attached (e.g. 「……这不就是我住的地方？」).
+    const matches = text
+      .split('\n')
+      .flatMap((line) => line.match(/[^。！？]+[。！？]+[」』）】”’]*|[^。！？]+$/g) ?? [])
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return matches.length ? matches : [text];
   };
 
   const open = (dialogs: CityDialogController, sentenceIndex = 0): void => {

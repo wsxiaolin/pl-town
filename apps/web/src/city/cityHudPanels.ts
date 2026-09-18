@@ -2,6 +2,7 @@ import { createCommunityPanelController } from '../adapters/ui/communityPanelCon
 import { createWriterCatalogController } from '../adapters/ui/writerCatalogController';
 import { createNewsstandController } from '../adapters/ui/newsstandController';
 import { createAcademyController } from '../adapters/ui/academyController';
+import { createMutualAidPanelController } from '../adapters/ui/mutualAidPanelController';
 import { createActivityPanelController } from '../adapters/ui/activityPanelController';
 import { showUnlockToast } from './toast';
 
@@ -11,6 +12,7 @@ export function createCityHudPanels(document: Document, signal: AbortSignal, set
     writerCatalog: createWriterCatalogController({ document }),
     newsstand: createNewsstandController({ document, signal }),
     academy: createAcademyController(document),
+    mutualAid: createMutualAidPanelController(document),
     activity: createActivityPanelController({ document, signal }),
   };
 }
