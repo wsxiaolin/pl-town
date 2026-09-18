@@ -20,6 +20,7 @@ import { createRoadNavigationSystem } from './navigation/roadNavigation';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { createSceneInterestPointController } from './sceneInterestPointController';
+import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
@@ -482,7 +483,6 @@ function init() {
   });
   stories = createStoryOrchestration({
     echo: {
-      document,
       consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
       setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
       getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
@@ -495,12 +495,19 @@ function init() {
       isMobile: MOBILE,
       getScene: () => scene,
       sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: 0, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
-      goToObservatory: () => { cursorChar && view.setTarget(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1], false); },
     },
     getQuestContext: () => ({ ...readQuestProgressView(multiplayerHousing), gameDay: townGameDay() }),
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
+  });
+  initStoryTaskGuideWiring({
+    document,
+    getBuildings: () => buildings,
+    navigateTo: (building) => buildingInteraction.navigateTo(building),
+    getEchoController: () => stories.echo,
+    getCursor: () => cursorChar,
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
   });
   stories.setupEcho(scene);
   mapController = createMapController({
