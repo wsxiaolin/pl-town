@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { RENDER_SETTINGS, waitForCityBooted } from './helpers';
+import { RENDER_SETTINGS, seedCityStorage, stubNewsstandWebSocket, waitForCityBooted } from './helpers';
 
 test('echo story entry stays suspended and the guide header stays hidden', async ({ page }) => {
   await page.addInitScript(({ settings }) => {
@@ -40,4 +40,35 @@ test('an in-progress story locks other story entries with a toast', async ({ pag
   // must be blocked by the mutual-exclusion gate and surface a toast.
   await page.evaluate(() => (window as any)._mini.interactNpc('linche'));
   await expect(page.locator('#utText')).toContainText('剧情正在进行中');
+});
+
+test('昨日之歌指引只做相机导航并需在报摊亲自推进', async ({ page }) => {
+  const user = 'yesterday-guide-tester';
+  stubNewsstandWebSocket(page, user);
+  await seedCityStorage(page, user);
+  await page.addInitScript(() => {
+    // Resume 昨日之歌 at the "go find 秋嫂" beat so the guide is active.
+    localStorage.setItem('minicityStory.side.yesterday.spring-1997.v1', JSON.stringify({
+      storyId: 'side.yesterday.spring-1997',
+      nodeId: 'diary-recognized',
+      flags: {},
+      visitCount: 1,
+      updatedAt: 1,
+    }));
+  });
+  await waitForCityBooted(page);
+
+  const guide = page.locator('.echo-story-nav');
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText('报摊');
+
+  // Clicking the HUD guide only pans the camera. It must NOT trigger the
+  // newsstand interaction the player is meant to walk to in person.
+  await guide.click();
+  await expect(page.locator('#npcOverlay')).not.toHaveClass(/open/);
+
+  // Only the in-person newsstand interaction advances the story to 秋嫂.
+  await page.evaluate(() => (window as any)._mini.interactBuilding('newsstand'));
+  await expect(page.locator('#npcOverlay')).toHaveClass(/open/);
+  await expect(page.locator('#npcName')).toHaveText('秋嫂');
 });

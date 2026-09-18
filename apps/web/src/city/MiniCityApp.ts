@@ -504,9 +504,13 @@ function init() {
   initStoryTaskGuideWiring({
     document,
     getBuildings: () => buildings,
-    navigateTo: (building) => buildingInteraction.navigateTo(building),
     getEchoController: () => stories.echo,
     getCursor: () => cursorChar,
+    getNpcPosition: (npcId) => {
+      const profile = NPC_PROFILES.find((npc) => npc.id === npcId);
+      const coord = profile?.work ?? profile?.home;
+      return coord && coord.length >= 2 ? { x: coord[0]!, z: coord[1]! } : null;
+    },
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
   });
   stories.setupEcho(scene);
