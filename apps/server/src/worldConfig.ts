@@ -16,6 +16,8 @@ export type BuildingOverrides = Record<string, BuildingUnlockState>;
 
 export type WeatherConfig = { value: Weather; autoBroadcast: boolean };
 
+// The generated catalog mirrors exactly the buildings the server manages
+// (BUILDING_PRICES), so validating against it keeps "accepted" == "effective".
 const BUILDING_IDS = new Set(BUILDING_CATALOG.map((building) => building.id));
 const DEFAULT_WEATHER: WeatherConfig = { value: 'clear', autoBroadcast: true };
 const now = () => new Date().toISOString();
@@ -64,7 +66,7 @@ export function getWeatherConfig(): WeatherConfig {
 }
 
 export function setWeatherConfig(config: WeatherConfig): WeatherConfig {
-  const next: WeatherConfig = { value: isWeather(config.value) ? config.value : DEFAULT_WEATHER.value, autoBroadcast: config.autoBroadcast !== false };
+  const next: WeatherConfig = { value: isWeather(config.value) ? config.value : DEFAULT_WEATHER.value, autoBroadcast: config.autoBroadcast === true };
   writeRow('weather', next);
   weatherCache = next;
   return { ...next };
@@ -73,6 +75,12 @@ export function setWeatherConfig(config: WeatherConfig): WeatherConfig {
 export function getBuildingOverrides(): BuildingOverrides {
   if (!overridesCache) overridesCache = parseOverrides(readRow('buildings'));
   return { ...overridesCache };
+}
+
+/** Drop the in-memory cache so the next read reflects the current database (used after an in-process restore). */
+export function resetWorldConfig(): void {
+  weatherCache = null;
+  overridesCache = null;
 }
 
 export function setBuildingOverrides(overrides: BuildingOverrides): BuildingOverrides {

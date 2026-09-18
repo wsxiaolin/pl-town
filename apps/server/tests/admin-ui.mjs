@@ -123,7 +123,10 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('#worldBuildingSelect option').length > 0);
   await page.locator('#worldMap .world-marker').first().waitFor();
   const worldMarkerCount = await page.locator('#worldMap .world-marker').count();
-  if (worldMarkerCount === 0) throw new Error('World view must render building markers');
+  const worldOptionCount = await page.locator('#worldBuildingSelect option').count();
+  if (worldMarkerCount === 0 || worldMarkerCount !== worldOptionCount) {
+    throw new Error(`World view must render one marker per selectable building (markers=${worldMarkerCount}, options=${worldOptionCount})`);
+  }
   await page.locator('#worldBuildingSelect').selectOption('litreview');
   await page.locator('#worldSelected .world-chooser button').first().waitFor();
   await page.locator('#worldSelected .world-chooser button', { hasText: '全局解锁' }).click();

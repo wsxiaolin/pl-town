@@ -8,11 +8,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "db:restore": "node dist/restoreBackup.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "npm run check:building-catalog && tsc -p tsconfig.json --noEmit",
     "test:integration": "npm run build && node tests/integration.mjs && node tests/restore.mjs",
     "test:admin-ui": "npm run build && node tests/admin-ui.mjs",
     "gen:npc-catalog": "node scripts/generateNpcCatalog.mjs",
-    "gen:building-catalog": "node scripts/generateBuildingCatalog.mjs"
+    "gen:building-catalog": "node scripts/generateBuildingCatalog.mjs",
+    "check:building-catalog": "node scripts/generateBuildingCatalog.mjs --check"
   },
   "dependencies": {
     "ali-oss": "^6.23.0",

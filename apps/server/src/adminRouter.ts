@@ -34,6 +34,7 @@ type Context = {
   setWeather: (weather: Weather) => void;
   getWeatherConfig: () => WeatherConfig;
   setWeatherConfig: (config: WeatherConfig) => WeatherConfig;
+  resetWorldConfig: () => void;
   broadcastWorldCatalog: () => void;
 };
 
@@ -330,6 +331,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       context.disconnectAll();
       try {
         const result = db.restoreFromBackupFile(staged.path);
+        context.resetWorldConfig();
         db.recordAdminAudit(principal.actor, 'database.backup.offsite.restore', name, { rowsCopied: result.rowsCopied });
         logger.info('Database restored from off-site backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
         respond(response, 200, { ok: true, integrity: db.verifyDatabase(), rowsCopied: result.rowsCopied });
@@ -495,6 +497,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       if (verification.integrity !== 'ok' || verification.foreignKeyErrors) { error(response, 422, 'BACKUP_UNVERIFIED', '备份完整性校验未通过'); return true; }
       context.disconnectAll();
       const result = db.restoreFromBackupFile(candidatePath);
+      context.resetWorldConfig();
       db.recordAdminAudit(principal.actor, 'database.backup.restore', name, { rowsCopied: result.rowsCopied });
       logger.info('Database restored from backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
       respond(response, 200, { ok: true, integrity: db.verifyDatabase(), rowsCopied: result.rowsCopied });

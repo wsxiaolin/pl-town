@@ -463,6 +463,25 @@ try {
   send(alice, { type: 'progress.building.visit', buildingId: 'writingclub_outer' });
   await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'writingclub_outer');
 
+  // Forced lock: an admin override revokes access even from residents who
+  // already unlocked the building, then clears back to normal.
+  const forceLock = await fetch(`${adminBase}/world/buildings`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ overrides: { activity: 'locked' } }),
+  });
+  if (!forceLock.ok) throw new Error('Admin must be able to force-lock an owned building');
+  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
+  const clearForceLock = await fetch(`${adminBase}/world/buildings`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ overrides: {} }),
+  });
+  if (!clearForceLock.ok) throw new Error('Integration setup must clear building overrides');
+  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.visited' && message.event.buildingId === 'activity');
+
   send(alice, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 2 });
   const purchase = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'shop.purchased');
   if (purchase.progress.inventory.dragonwell_tea !== 2 || purchase.progress.currency !== 1140) throw new Error('Shop purchase must atomically merge inventory and deduct currency');
