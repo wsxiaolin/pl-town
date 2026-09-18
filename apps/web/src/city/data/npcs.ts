@@ -350,4 +350,74 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
       ]},
     ],
   },
+  {
+    // ── 黑洞区常客 · MurД6r（莫得）────────────────────────────────
+    // 常驻非剧情 NPC：behavior 'wander' 使其始终在全图任意路口游荡。
+    // 对话选项里的 `achievement:` 动作由 MiniCityApp 的 onDialogueAction 统一结算。
+    id:'murder', name:'MurД6r', role:'游荡的闲人', core:false, spawnChance:1,
+    behavior:'wander', workHours:[0,24],
+    head:0xE6C3D8, body:0x4A3A6A, home:[0,0], work:[0,0], patrolRadius:55,
+    spawnArea:[0,0,38],
+    dialog:[
+      { text:'「【游荡~】邦邦咔邦，触发了神秘邂逅！」', options:[
+        { text:'你是？', next:2 },
+        { text:'你在干嘛？', next:3 },
+        { text:'怎么又是你？', next:5 },
+        { text:'下一页', next:1 },
+      ]},
+      { text:'「【游荡~】邦邦咔邦，触发了神秘邂逅」', options:[
+        { text:'KSKBL', next:6 },
+        { text:'处吗？', next:8 },
+        { text:'索要联系方式', next:10 },
+        { text:'离开', next:null },
+      ]},
+      { text:'「我是Murder『莫得』，22年老登，闲人一个，你可以在黑洞区的评论区看见我哦」', options:[
+        { text:'你看上去很悠闲的样子', next:3 },
+        { text:'可以一起闲聊吗？', next:9 },
+        { text:'再见', next:null },
+      ]},
+      { text:'「闲逛中，与其说是悠闲，倒不如说是无聊啦【伸了个懒腰】我就喜欢到处看看讨论和实验，在评论区找人聊聊天」', options:[
+        { text:'那我可以和你一起逛街吗？', next:4 },
+        { text:'那我们聊聊天吧', next:9 },
+        { text:'那你自己慢慢逛', next:null },
+      ]},
+      { text:'「可以啊，那就跟紧我吧，我会一直陪着你的」', options:[
+        { text:'跟着莫得一起散步', next:null, action:'achievement:murder_wanderer' },
+      ]},
+      { text:'「我在每个地方观察着你们的一举一动，对了，物实要是有什么好瓜记得喊我吃【」', options:[
+        { text:'行', next:0, action:'achievement:murder_watcher' },
+      ]},
+      { text:'「ZDJD?」', options:[
+        { text:'WKZKBL！', next:7 },
+      ]},
+      { text:'「MPWZBYQSL,NMZZYSWPLWZSBLL」', options:[
+        { text:'真的很帅！', next:0, action:'achievement:murder_chain' },
+      ]},
+      { text:'「艾博士，你还真选这个选项啊【害羞】我在创建这个角色的时候还是单身哦，本人是直的男生勿扰」', options:[
+        { text:'呵呵', next:0, action:'achievement:murder_flirt' },
+      ]},
+      { text:'「呃，我这个人比较社恐啦，当面聊天可能不自在呢，我们可以在线上聊ovo」', options:[
+        { text:'索要联系方式', next:10 },
+        { text:'那算了', next:0 },
+      ]},
+      { text:'「【掏出了随身携带的纸和笔】我把这个带在身上是不是有些怪怪的」', options:[
+        { text:'索要QQ', next:11 },
+        { text:'索要哔哩哔哩', next:12 },
+        { text:'索要快手', next:13 },
+        { text:'索要物实', next:14 },
+      ]},
+      { text:'「166561732」', options:[
+        { text:'收下纸条', next:0, action:'achievement:murder_contact' },
+      ]},
+      { text:'「UID 3546569028668354」', options:[
+        { text:'收下纸条', next:0, action:'achievement:murder_contact' },
+      ]},
+      { text:'「Nunnally_DAISUKI」', options:[
+        { text:'收下纸条', next:0, action:'achievement:murder_contact' },
+      ]},
+      { text:'「63c3cac707f0fe58a0fdcda2」', options:[
+        { text:'收下纸条', next:0, action:'achievement:murder_contact' },
+      ]},
+    ],
+  },
 ];

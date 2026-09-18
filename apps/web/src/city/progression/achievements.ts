@@ -36,6 +36,11 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   { id:'yesterday_witness',name:'见证者',desc:'把三十年前未说出口的故事接住',check:()=>false,directOnly:true },
   { id:'yesterday_silence',name:'沉默是金',desc:'选择让故事停留在沉默里',check:()=>false,directOnly:true },
   { id:'yesterday_true_dawn',name:'昨日之歌',desc:'完成昨日之歌的尾声',check:()=>false,directOnly:true },
+  { id:'murder_wanderer',name:'闲逛者',desc:'跟着莫得一起在城里散步',check:()=>false,directOnly:true },
+  { id:'murder_watcher',name:'视奸者',desc:'听莫得说他观察着每个人的一举一动',check:()=>false,directOnly:true },
+  { id:'murder_chain',name:'再串大四',desc:'和莫得对上了黑洞区的暗号',check:()=>false,directOnly:true },
+  { id:'murder_flirt',name:'搭讪',desc:'对莫得说出了那句搭讪的话',check:()=>false,directOnly:true },
+  { id:'murder_contact',name:'闲聊伙伴',desc:'从莫得那里要到了任意一种联系方式',check:()=>false,directOnly:true },
 ];
 
 export function createUnlockTiers(addLamps: (positions: [number, number, number][]) => void,

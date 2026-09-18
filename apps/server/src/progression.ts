@@ -55,6 +55,11 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   'overcoat.recover': 50,
   'overcoat.witness': 60,
   'overcoat.ghost': 80,
+  murder_wanderer: 0,
+  murder_watcher: 0,
+  murder_chain: 0,
+  murder_flirt: 0,
+  murder_contact: 0,
 });
 
 export const SHOP_PRODUCTS = Object.freeze({
