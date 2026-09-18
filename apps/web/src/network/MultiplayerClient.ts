@@ -22,6 +22,7 @@ export type NetProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
   buildingUnlockable?: Record<string, boolean>;
+  globallyUnlockedBuildings?: string[];
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };
@@ -50,6 +51,7 @@ type ServerMessage =
   | { type: 'progress.updated'; progress: NetPlayerProgress; catalog: NetProgressionCatalog; event?: Record<string, unknown> }
   | { type: 'story.updated'; story: NetStoryProgress; event?: Record<string, unknown> }
   | { type: 'world.weather'; weather: NetWeather }
+  | { type: 'world.catalog'; catalog?: NetProgressionCatalog }
   | { type: 'error'; message?: string; code?: string };
 
 type Callbacks = {
@@ -66,6 +68,7 @@ type Callbacks = {
   progress?: (progress: NetPlayerProgress, catalog: NetProgressionCatalog, event?: Record<string, unknown>) => void;
   story?: (story: NetStoryProgress, event?: Record<string, unknown>) => void;
   weather?: (weather: NetWeather) => void;
+  worldCatalog?: (catalog: NetProgressionCatalog) => void;
   authenticationFailed?: (message: string, code?: string) => void;
   error?: (message: string) => void;
 };
@@ -125,6 +128,7 @@ export class MultiplayerClient {
     else if (message.type === 'progress.updated') this.callbacks.progress?.(message.progress, message.catalog, message.event);
     else if (message.type === 'story.updated') this.callbacks.story?.(message.story, message.event);
     else if (message.type === 'world.weather' && isWeather(message.weather)) this.callbacks.weather?.(message.weather);
+    else if (message.type === 'world.catalog' && message.catalog) this.callbacks.worldCatalog?.(message.catalog);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {

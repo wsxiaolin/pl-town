@@ -182,6 +182,11 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS npc_change_requests_status_idx ON npc_change_requests(status, created_at DESC);
   CREATE INDEX IF NOT EXISTS npc_change_requests_npc_idx ON npc_change_requests(npc_id);
+  CREATE TABLE IF NOT EXISTS world_config (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 {
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;

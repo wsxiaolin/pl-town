@@ -32,3 +32,34 @@ test('building availability treats story-lock and destruction independently', ()
   assert.equal(availability.isResidenceUnavailable('residence:1.00:2.00'), true);
   assert.equal(availability.isResidenceUnavailable('missing'), true);
 });
+
+test('applyGloballyUnlocked clears a story lock in place', () => {
+  const group = new THREE.Group();
+  const availability = createBuildingAvailability({
+    storyLockedIds: new Set(['echo_cabin']),
+    getResidences: () => [],
+  });
+
+  assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), true);
+
+  availability.applyGloballyUnlocked(['echo_cabin', 'library']);
+
+  assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), false);
+  assert.equal(availability.isBuildingUnavailable({ id: 'echo_cabin', group }), false);
+  // Unrelated ids in the catalog must never be marked story-locked.
+  assert.equal(availability.isStoryLocked({ id: 'library' }), false);
+});
+
+test('applyGloballyUnlocked is authoritative and re-locks when the id disappears', () => {
+  const availability = createBuildingAvailability({
+    storyLockedIds: new Set(['echo_cabin']),
+    getResidences: () => [],
+  });
+
+  availability.applyGloballyUnlocked(['echo_cabin']);
+  assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), false);
+
+  // Admin turns the global unlock back off: the building locks again.
+  availability.applyGloballyUnlocked([]);
+  assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), true);
+});

@@ -1,4 +1,6 @@
 import type { PlayerProgress } from './types.js';
+import { BUILDING_CATALOG } from './buildingCatalog.js';
+import { getBuildingOverrides, type BuildingUnlockState } from './worldConfig.js';
 
 export const INITIAL_CURRENCY = 1200;
 export const FILM_CITY_EXPERIENCE_PRICE = 400;
@@ -24,6 +26,12 @@ export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
 // story rule while the existing free-unlock buildings retain their behavior.
 export const BUILDING_UNLOCKABLE: Readonly<Record<string, boolean>> = Object.freeze(
   Object.fromEntries(BUILDING_IDS.map((id) => [id, id !== 'litreview'])),
+);
+
+// Mirrors the client BUILDING_DEFS storyLocked flag via the generated catalog,
+// so the admin map and the 3D client agree on which buildings start locked.
+const STORY_LOCKED_BUILDING_IDS: ReadonlySet<string> = new Set(
+  BUILDING_CATALOG.filter((building) => building.storyLocked).map((building) => building.id),
 );
 
 export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.freeze({
@@ -91,6 +99,7 @@ export type ProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
   buildingUnlockable: Record<string, boolean>;
+  globallyUnlockedBuildings: string[];
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };
@@ -100,11 +109,66 @@ export type ProgressionState = {
   catalog: ProgressionCatalog;
 };
 
+export type ResolvedBuildingState = 'locked' | 'unlockable' | 'open';
+export type BuildingUnlockResolution = {
+  id: string;
+  label: string;
+  num: string;
+  x: number;
+  z: number;
+  storyLocked: boolean;
+  override: BuildingUnlockState | null;
+  state: ResolvedBuildingState;
+  defaultState: ResolvedBuildingState;
+};
+
+/**
+ * Resolve the effective access state for every catalog building. Overrides come
+ * from the admin world config; the fallback mirrors the client data: a building
+ * flagged `storyLocked` stays locked until a story rule or an admin override
+ * opens it, every other building is unlockable by residents.
+ */
+export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
+  const overrides = getBuildingOverrides();
+  return BUILDING_CATALOG
+    .filter((building) => building.id in BUILDING_PRICES)
+    .map((building) => {
+      const override = overrides[building.id] ?? null;
+      const defaultState: ResolvedBuildingState = STORY_LOCKED_BUILDING_IDS.has(building.id) || BUILDING_UNLOCKABLE[building.id] !== true ? 'locked' : 'unlockable';
+      const state: ResolvedBuildingState = override === 'locked' ? 'locked'
+        : override === 'open' ? 'open'
+        : defaultState;
+      return { id: building.id, label: building.label, num: building.num, x: building.x, z: building.z, storyLocked: building.storyLocked, override, state, defaultState };
+    });
+}
+
+export function isBuildingGloballyUnlocked(buildingId: string): boolean {
+  return getBuildingOverrides()[buildingId] === 'open';
+}
+
+/** Effective unlockability after admin overrides (a locked building can never be unlocked). */
+export function isBuildingUnlockable(buildingId: string): boolean {
+  const override = getBuildingOverrides()[buildingId];
+  if (override === 'locked') return false;
+  if (override === 'open') return true;
+  if (STORY_LOCKED_BUILDING_IDS.has(buildingId)) return false;
+  return BUILDING_UNLOCKABLE[buildingId] === true;
+}
+
 export function getProgressionCatalog(): ProgressionCatalog {
+  const overrides = getBuildingOverrides();
+  const buildingUnlockable: Record<string, boolean> = {};
+  for (const id of BUILDING_IDS) buildingUnlockable[id] = isBuildingUnlockable(id);
+  const globallyUnlockedBuildings: string[] = [];
+  for (const [id, state] of Object.entries(overrides)) {
+    if (!(id in BUILDING_PRICES)) continue;
+    if (state === 'open' && !globallyUnlockedBuildings.includes(id)) globallyUnlockedBuildings.push(id);
+  }
   return {
     initialCurrency: INITIAL_CURRENCY,
     buildingPrices: { ...BUILDING_PRICES },
-    buildingUnlockable: { ...BUILDING_UNLOCKABLE },
+    buildingUnlockable,
+    globallyUnlockedBuildings,
     achievementRewards: { ...ACHIEVEMENT_REWARDS },
     products: { ...SHOP_PRODUCTS },
   };

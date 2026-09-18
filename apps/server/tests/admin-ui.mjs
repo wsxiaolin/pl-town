@@ -116,6 +116,23 @@ try {
   await page.locator('[data-view="telemetry"]').click();
   await page.locator('#telemetryMetrics .metric').first().waitFor();
   await page.locator('#serverLogs').waitFor();
+
+  // World configuration: weather broadcast + building unlock map.
+  await page.locator('[data-view="world"]').click();
+  await page.locator('#worldBuildingSelect').waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('#worldBuildingSelect option').length > 0);
+  await page.locator('#worldMap .world-marker').first().waitFor();
+  const worldMarkerCount = await page.locator('#worldMap .world-marker').count();
+  const worldOptionCount = await page.locator('#worldBuildingSelect option').count();
+  if (worldMarkerCount === 0 || worldMarkerCount !== worldOptionCount) {
+    throw new Error(`World view must render one marker per selectable building (markers=${worldMarkerCount}, options=${worldOptionCount})`);
+  }
+  await page.locator('#worldBuildingSelect').selectOption('litreview');
+  await page.locator('#worldSelected .world-chooser button').first().waitFor();
+  await page.locator('#worldSelected .world-chooser button', { hasText: '全局解锁' }).click();
+  await page.locator('#worldBuildingsSave').click();
+  await page.locator('#notice').filter({ hasText: '建筑解锁配置已保存' }).waitFor();
+  await page.screenshot({ path: resolve(screenshotDir, 'admin-world.png'), fullPage: true });
   await page.locator('[data-view="overview"]').click();
   await page.locator('#metrics .metric').first().waitFor();
 

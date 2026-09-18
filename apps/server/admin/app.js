@@ -2,6 +2,8 @@ const state = {
   csrf: '', actor: '', view: 'overview', houses: [], users: [], houseDraftMembers: [], houseEditingOwnerId: '',
   chatFilter: 'visible', storyFilter: '', npcs: [], npcSelectedId: '', npcRequestFilter: 'pending',
   offsiteEnabled: false, localBackups: [],
+  worldWeather: '', worldWeatherAuto: false, worldWeatherDraft: '', worldWeatherAutoDraft: false,
+  worldBuildings: [], worldOverrides: {}, worldDraft: {}, worldSelectedId: '',
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -489,8 +491,156 @@ async function reviewNpcRequest(id, action) {
   } catch (error) { showNotice(error.message); }
 }
 
-const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, npc: loadNpcs, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress, telemetry: loadTelemetry };
-const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', npc: 'NPC 管理', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务', telemetry: '运行监控' };
+async function loadWorld() {
+  const world = await api('/world');
+  const weather = world.weather || {};
+  state.worldWeather = weather.value || '';
+  state.worldWeatherAuto = Boolean(weather.autoBroadcast);
+  state.worldWeatherDraft = state.worldWeather;
+  state.worldWeatherAutoDraft = state.worldWeatherAuto;
+  state.worldBuildings = world.states || [];
+  state.worldOverrides = {};
+  state.worldBuildings.forEach((building) => { if (building.override) state.worldOverrides[building.id] = building.override; });
+  state.worldDraft = { ...state.worldOverrides };
+  if (!state.worldBuildings.some((building) => building.id === state.worldSelectedId)) state.worldSelectedId = state.worldBuildings[0]?.id || '';
+  renderWorldWeatherOptions();
+  renderWorldWeather();
+  renderWorldBuildingOptions();
+  renderWorldMap();
+  renderWorldSelected();
+  renderWorldDirty();
+}
+function renderWorldBuildingOptions() {
+  const select = $('#worldBuildingSelect');
+  select.replaceChildren(...state.worldBuildings.map((building) => {
+    const option = node('option', `${building.label || building.id}（${building.num || building.id}）`);
+    option.value = building.id;
+    return option;
+  }));
+  select.value = state.worldSelectedId;
+}
+function selectWorldBuilding(buildingId) {
+  state.worldSelectedId = buildingId;
+  const select = $('#worldBuildingSelect');
+  if (select) select.value = buildingId;
+  renderWorldMap();
+  renderWorldSelected();
+}
+const WEATHER_LABELS = { clear: '晴天', rain: '下雨', snow: '下雪', 'snow-deep': '大雪' };
+function renderWorldWeatherOptions() {
+  const select = $('#worldWeatherSelect');
+  const values = Object.keys(WEATHER_LABELS);
+  const current = state.worldWeatherDraft;
+  if (current && !values.includes(current)) values.unshift(current);
+  select.replaceChildren(...values.map((value) => { const option = node('option', WEATHER_LABELS[value] || value); option.value = value; return option; }));
+  select.value = current;
+  $('#worldWeatherAuto').checked = state.worldWeatherAutoDraft;
+}
+function renderWorldWeather() {
+  const select = $('#worldWeatherSelect'); if (select) select.value = state.worldWeatherDraft;
+  $('#worldWeatherAuto').checked = state.worldWeatherAutoDraft;
+  $('#worldWeatherState').textContent = state.worldWeather || '未设置';
+  const dirty = state.worldWeatherDraft !== state.worldWeather || state.worldWeatherAutoDraft !== state.worldWeatherAuto;
+  $('#worldWeatherDirty').textContent = dirty ? '有未保存的更改' : '';
+}
+function worldEffectiveState(building) {
+  const override = Object.prototype.hasOwnProperty.call(state.worldDraft, building.id) ? state.worldDraft[building.id] : null;
+  if (override === 'open') return 'open';
+  if (override === 'locked') return 'locked';
+  return building.defaultState === 'unlockable' ? 'unlockable' : 'locked';
+}
+function renderWorldMap() {
+  const svg = $('#worldMap');
+  if (!state.worldBuildings.length) { svg.replaceChildren(); return; }
+  const xs = state.worldBuildings.map((building) => building.x);
+  const zs = state.worldBuildings.map((building) => building.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const span = Math.max(maxX - minX, maxZ - minZ, 1) * 1.15;
+  const centerX = (minX + maxX) / 2, centerZ = (minZ + maxZ) / 2;
+  const project = (value, center) => 50 + ((value - center) / span) * 100;
+  const marks = state.worldBuildings.map((building) => {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('class', `world-marker world-marker--${worldEffectiveState(building)}${building.id === state.worldSelectedId ? ' is-selected' : ''}`);
+    group.setAttribute('tabindex', '0');
+    group.setAttribute('role', 'button');
+    group.setAttribute('aria-label', `${building.label || building.id}（${building.id}）`);
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', project(building.x, centerX).toFixed(2));
+    circle.setAttribute('cy', project(building.z, centerZ).toFixed(2));
+    circle.setAttribute('r', '2.6');
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = `${building.label || building.id}（${building.id}）`;
+    group.append(circle, title);
+    group.addEventListener('click', () => selectWorldBuilding(building.id));
+    group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectWorldBuilding(building.id); } });
+    return group;
+  });
+  svg.replaceChildren(...marks);
+}
+function renderWorldSelected() {
+  const container = $('#worldSelected');
+  const building = state.worldBuildings.find((candidate) => candidate.id === state.worldSelectedId);
+  if (!building) { container.replaceChildren(node('p', '点击地图上的建筑进行配置', 'empty')); return; }
+  const heading = node('div', undefined, 'world-selected-heading');
+  heading.append(node('strong', building.label || building.id), node('small', building.id));
+  const effective = worldEffectiveState(building);
+  const override = Object.prototype.hasOwnProperty.call(state.worldDraft, building.id) ? state.worldDraft[building.id] : null;
+  const meta = node('p', undefined, 'world-selected-meta');
+  meta.textContent = `剧情默认：${building.storyLocked ? '剧情锁定' : '按剧情可解锁'}　当前生效：${{ open: '全局解锁', locked: '已锁定', unlockable: '可解锁' }[effective]}`;
+  const chooser = node('div', undefined, 'world-chooser');
+  [['default', '恢复默认'], ['locked', '强制锁定'], ['open', '全局解锁']].forEach(([value, label]) => {
+    const button = node('button', label, value === 'open' ? 'primary' : 'secondary'); button.type = 'button';
+    button.classList.toggle('is-active', (value === 'default' && override === null) || override === value);
+    button.addEventListener('click', () => {
+      if (value === 'default') delete state.worldDraft[building.id]; else state.worldDraft[building.id] = value;
+      renderWorldMap(); renderWorldSelected(); renderWorldDirty();
+    });
+    chooser.append(button);
+  });
+  container.replaceChildren(heading, meta, chooser);
+}
+function renderWorldDirty() {
+  const count = Object.keys(state.worldDraft).length;
+  const dirty = JSON.stringify(sortedEntries(state.worldDraft)) !== JSON.stringify(sortedEntries(state.worldOverrides));
+  $('#worldBuildingSummary').textContent = count ? `${count} 项自定义` : '全部默认';
+  $('#worldBuildingsDirty').textContent = dirty ? '有未保存的更改' : '';
+}
+function sortedEntries(map) {
+  return Object.keys(map).sort().map((key) => [key, map[key]]);
+}
+async function saveWorldBuildings() {
+  const button = $('#worldBuildingsSave'); button.disabled = true;
+  try {
+    const overrides = {};
+    state.worldBuildings.forEach((building) => {
+      const override = state.worldDraft[building.id];
+      if (override === 'open' || override === 'locked') overrides[building.id] = override;
+    });
+    const data = await api('/world/buildings', { method: 'POST', body: JSON.stringify({ overrides }) });
+    state.worldOverrides = {};
+    (data.states || []).forEach((building) => { if (building.override) state.worldOverrides[building.id] = building.override; });
+    state.worldDraft = { ...state.worldOverrides };
+    renderWorldMap(); renderWorldSelected(); renderWorldDirty();
+    showNotice(`建筑解锁配置已保存，共 ${Object.keys(state.worldOverrides).length} 项自定义`, true);
+  } catch (error) { showNotice(error.message); } finally { button.disabled = false; }
+}
+function resetWorldBuildings() {
+  state.worldDraft = { ...state.worldOverrides };
+  renderWorldMap(); renderWorldSelected(); renderWorldDirty();
+}
+async function applyWorldWeather() {
+  const button = $('#worldWeatherApply'); button.disabled = true;
+  try {
+    const data = await api('/world/weather', { method: 'POST', body: JSON.stringify({ weather: state.worldWeatherDraft, autoBroadcast: state.worldWeatherAutoDraft }) });
+    state.worldWeather = data.weather?.value ?? state.worldWeatherDraft;
+    state.worldWeatherAuto = Boolean(data.weather?.autoBroadcast ?? state.worldWeatherAutoDraft);
+    renderWorldWeather();
+    showNotice('天气配置已保存并广播', true);
+  } catch (error) { showNotice(error.message); } finally { button.disabled = false; }
+}
+
+const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, world: loadWorld, npc: loadNpcs, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress, telemetry: loadTelemetry };
+const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', world: '世界配置', npc: 'NPC 管理', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务', telemetry: '运行监控' };
 async function switchView(view) {
   state.view = view; $$('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.view === view));
   $$('.view').forEach((page) => { const active = page.dataset.page === view; page.hidden = !active; page.classList.toggle('active', active); });
@@ -524,5 +674,11 @@ $('#houseDialogSubmit').addEventListener('click', () => void submitHouseEditor()
 $('#houseDialogMemberAdd').addEventListener('click', addHouseMember);
 $('#refreshLogsButton').addEventListener('click', () => void loadTelemetry());
 $('#clearTelemetryButton').addEventListener('click', () => confirmAction('清空监控数据', '将删除全部用户事件与错误报告记录，不可恢复。', async () => { await api('/telemetry/clear', { method: 'POST' }); showNotice('监控数据已清空', true); await loadTelemetry(); }));
+$('#worldWeatherSelect').addEventListener('change', (event) => { state.worldWeatherDraft = event.target.value; renderWorldWeather(); });
+$('#worldWeatherAuto').addEventListener('change', (event) => { state.worldWeatherAutoDraft = event.target.checked; renderWorldWeather(); });
+$('#worldBuildingSelect').addEventListener('change', (event) => selectWorldBuilding(event.target.value));
+$('#worldWeatherApply').addEventListener('click', () => void applyWorldWeather());
+$('#worldBuildingsSave').addEventListener('click', () => void saveWorldBuildings());
+$('#worldBuildingsReset').addEventListener('click', resetWorldBuildings);
 
 try { const session = await api('/session'); session.authenticated ? showApp(session) : showLogin(); } catch { showLogin(); }

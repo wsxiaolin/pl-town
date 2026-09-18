@@ -55,3 +55,50 @@ test('repeatable rewards retry the same sequence after a lost acknowledgement', 
   assert.equal(await retriedClaim, true);
   assert.equal([...values.keys()].some((key) => key.startsWith('minicityPendingReward:')), false);
 });
+
+test('a world.catalog push globally unlocks a building without touching saved progress', () => {
+  const values = new Map<string, string>([['minicityUser', 'world-tester']]);
+  const localStorage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  } as Storage;
+  const document = {
+    defaultView: { localStorage },
+    getElementById: () => null,
+    querySelector: () => null,
+  } as unknown as Document;
+  const commands: Array<{ type: string; buildingId?: string }> = [];
+  const controller = createCloudProgressionController({
+    document,
+    signal: new AbortController().signal,
+    showToast: () => undefined,
+    send: (command) => { commands.push(command); return true; },
+    openPhoneView: () => undefined,
+  });
+  controller.setConnection(true);
+  const baseCatalog = {
+    ...EMPTY_PROGRESSION_CATALOG,
+    buildingPrices: { litreview: 0 },
+    buildingUnlockable: { litreview: true },
+  };
+  controller.applySnapshot({ ...EMPTY_PLAYER_PROGRESS, unlockedBuildings: [] }, baseCatalog);
+
+  assert.equal(controller.interactBuilding('litreview', () => undefined), true);
+  assert.deepEqual(commands.at(-1), { type: 'progress.building.unlock', buildingId: 'litreview' });
+  controller.applySnapshot(
+    { ...EMPTY_PLAYER_PROGRESS, unlockedBuildings: [] },
+    baseCatalog,
+    { type: 'building.unlocked', buildingId: 'litreview', purchased: true },
+  );
+  controller.applySnapshot(
+    { ...EMPTY_PLAYER_PROGRESS, unlockedBuildings: [] },
+    baseCatalog,
+    { type: 'building.visited', buildingId: 'litreview' },
+  );
+
+  controller.applyCatalog({ ...baseCatalog, globallyUnlockedBuildings: ['litreview'] });
+  assert.equal(controller.interactBuilding('litreview', () => undefined), true);
+  assert.deepEqual(commands.at(-1), { type: 'progress.building.visit', buildingId: 'litreview' });
+  assert.deepEqual(controller.getProgress().unlockedBuildings, []);
+});

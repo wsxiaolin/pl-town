@@ -17,6 +17,8 @@ import { logger } from './logger.js';
 import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './requestSecurity.js';
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
+import { resolveBuildingUnlockStates } from './progression.js';
+import { sanitizeOverrides, setBuildingOverrides, type WeatherConfig } from './worldConfig.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 import type { Weather } from './types.js';
 
@@ -30,6 +32,10 @@ type Context = {
   startedAt: number;
   getWeather: () => Weather;
   setWeather: (weather: Weather) => void;
+  getWeatherConfig: () => WeatherConfig;
+  setWeatherConfig: (config: WeatherConfig) => WeatherConfig;
+  resetWorldConfig: () => void;
+  broadcastWorldCatalog: () => void;
 };
 
 type AdminAsset = { type: string; body: Buffer };
@@ -142,9 +148,40 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const body = await readJson(request, 1_024);
     const weather = typeof body.weather === 'string' ? body.weather : '';
     if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
-    context.setWeather(weather);
+    // Keep the legacy endpoint in sync with the persisted world config: it sets
+    // the weather while preserving the current auto-broadcast preference.
+    context.setWeatherConfig({ value: weather, autoBroadcast: context.getWeatherConfig().autoBroadcast });
     db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather });
     respond(response, 200, { ok: true, weather }); return true;
+  }
+
+  // World configuration: weather global broadcast + building unlock overrides.
+  if (request.method === 'GET' && path === '/admin/api/world') {
+    respond(response, 200, {
+      weather: context.getWeatherConfig(),
+      states: resolveBuildingUnlockStates(),
+    });
+    return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/world/weather') {
+    const body = await readJson(request, 1_024);
+    const weather = typeof body.weather === 'string' ? body.weather : '';
+    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
+    const current = context.getWeatherConfig();
+    const autoBroadcast = body.autoBroadcast === undefined ? current.autoBroadcast : body.autoBroadcast;
+    if (typeof autoBroadcast !== 'boolean') { error(response, 400, 'INVALID_BODY', 'autoBroadcast must be a boolean'); return true; }
+    const config = context.setWeatherConfig({ value: weather, autoBroadcast });
+    db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather, autoBroadcast });
+    respond(response, 200, { ok: true, weather: config }); return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/world/buildings') {
+    const body = await readJson(request, 32_000);
+    const overrides = sanitizeOverrides(body.overrides);
+    if (!overrides) { error(response, 400, 'INVALID_OVERRIDES', '建筑解锁配置无效'); return true; }
+    const saved = setBuildingOverrides(overrides);
+    db.recordAdminAudit(principal.actor, 'world.buildings.update', undefined, { overrides: saved });
+    context.broadcastWorldCatalog();
+    respond(response, 200, { ok: true, overrides: saved, states: resolveBuildingUnlockStates() }); return true;
   }
   if (request.method === 'GET' && path === '/admin/api/overview') {
     const databaseBytes = (() => { try { return statSync(DATABASE_PATH).size; } catch { return 0; } })();
@@ -293,6 +330,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       context.disconnectAll();
       try {
         const result = db.restoreFromBackupFile(staged.path);
+        context.resetWorldConfig();
         db.recordAdminAudit(principal.actor, 'database.backup.offsite.restore', name, { rowsCopied: result.rowsCopied });
         logger.info('Database restored from off-site backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
         respond(response, 200, { ok: true, integrity: db.verifyDatabase(), rowsCopied: result.rowsCopied });
@@ -458,6 +496,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       if (verification.integrity !== 'ok' || verification.foreignKeyErrors) { error(response, 422, 'BACKUP_UNVERIFIED', '备份完整性校验未通过'); return true; }
       context.disconnectAll();
       const result = db.restoreFromBackupFile(candidatePath);
+      context.resetWorldConfig();
       db.recordAdminAudit(principal.actor, 'database.backup.restore', name, { rowsCopied: result.rowsCopied });
       logger.info('Database restored from backup', { name, actor: principal.actor, rowsCopied: result.rowsCopied });
       respond(response, 200, { ok: true, integrity: db.verifyDatabase(), rowsCopied: result.rowsCopied });

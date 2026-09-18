@@ -41,6 +41,7 @@ export interface MultiplayerHousingOptions {
   isResidenceUnavailable?: (residenceId: string) => boolean;
   setWeather?: (weather: NetWeather) => void;
   getLoginGate?: () => LoginGate | null;
+  onWorldCatalog?: (catalog: NetProgressionCatalog) => void;
 }
 
 export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
@@ -52,6 +53,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     isResidenceUnavailable = () => false,
     setWeather = () => {},
     getLoginGate = () => null,
+    onWorldCatalog = () => {},
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -277,9 +279,11 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       },
       progress: (progress, catalog, event) => {
         progression.applySnapshot(progress, catalog, event);
+        if (catalog) onWorldCatalog(catalog);
         if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       weather: setWeather,
+      worldCatalog: (catalog) => { progression.applyCatalog(catalog); onWorldCatalog(catalog); },
       authenticationFailed: (message, code) => {
         const gate = getLoginGate();
         gate?.onAuthFailed();

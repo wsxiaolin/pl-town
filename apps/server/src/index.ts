@@ -13,7 +13,8 @@ import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, BUILDING_UNLOCKABLE, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
@@ -58,7 +59,7 @@ function consumePhysicsLoginAttempt(ip: string): boolean {
   physicsLoginAttempts.set(ip, attempt);
   return allowed;
 }
-let serverWeather: Weather = 'clear';
+let serverWeather: Weather = getWeatherConfig().value;
 // The edit page only needs the identity fields for its dropdown; the full
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
@@ -84,7 +85,19 @@ function broadcastHousingState() {
   housingBroadcastTimer.unref();
 }
 function broadcastWeather() { broadcast({ type: 'world.weather', weather: serverWeather }); }
-setInterval(broadcastWeather, 60_000).unref();
+// The periodic broadcast is the "global broadcast" toggle: when the admin turns
+// it off, weather only travels on join and on an explicit admin apply.
+// getWeatherConfig() is cached; the cache is only invalidated by resetWorldConfig
+// (the in-process restore path), which is exactly when this needs to re-read.
+setInterval(() => { if (getWeatherConfig().autoBroadcast) broadcastWeather(); }, 60_000).unref();
+let lastWorldCatalogJson = '';
+function broadcastWorldCatalog() {
+  const catalog = getProgressionCatalog();
+  const json = JSON.stringify(catalog);
+  if (json === lastWorldCatalogJson) return;
+  lastWorldCatalogJson = json;
+  broadcast({ type: 'world.catalog', catalog });
+}
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;
@@ -211,16 +224,16 @@ async function handle(client: Client, raw: string) {
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
-      if (BUILDING_UNLOCKABLE[message.buildingId] !== true) return fail(client.socket, 'Building is story-locked');
+      if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       const progress = db.getPlayerProgress(userId);
-      if (!progress.unlockedBuildings.includes(message.buildingId)) return fail(client.socket, 'Building is locked');
+      if (!progress.unlockedBuildings.includes(message.buildingId) && !isBuildingGloballyUnlocked(message.buildingId)) return fail(client.socket, 'Building is locked');
       const result = db.recordBuildingVisit(userId, message.buildingId);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'building.visited', buildingId: message.buildingId, welcomeItemsGranted: result.welcomeItemsGranted } });
       return;
     }
     if (message.type === 'progress.building.unlock') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
-      if (BUILDING_UNLOCKABLE[message.buildingId] !== true) return fail(client.socket, 'Building is story-locked');
+      if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       try {
         const result = db.purchaseBuilding(userId, message.buildingId, BUILDING_PRICES[message.buildingId]!);
         send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'building.unlocked', buildingId: message.buildingId, purchased: result.unlocked } });
@@ -377,6 +390,10 @@ const http = createServer(async (request, response) => {
     startedAt,
     getWeather: () => serverWeather,
     setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
+    getWeatherConfig: () => getWeatherConfig(),
+    setWeatherConfig: (config) => { const next = setWeatherConfig(config); serverWeather = next.value; broadcastWeather(); return next; },
+    resetWorldConfig: () => { resetWorldConfig(); serverWeather = getWeatherConfig().value; },
+    broadcastWorldCatalog,
   })) return;
   const headers = { ...jsonSecurityHeaders, ...corsHeaders(request) };
   if (request.url === '/healthz') { response.writeHead(200, headers); response.end(JSON.stringify({ ok: true })); return; }
