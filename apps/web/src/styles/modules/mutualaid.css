@@ -1,0 +1,334 @@
+/* 互助团组织面板：右侧抽屉，展示 PMAG-人民互助团的静态组织资料。 */
+.mutualaid-panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 216;
+  width: min(560px, 100vw);
+  height: 100dvh;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #2a1618;
+  color: #f4e7d3;
+  box-shadow: -24px 0 58px rgba(20, 8, 9, .42);
+  transform: translateX(102%);
+  visibility: hidden;
+  transition: transform .32s cubic-bezier(.16, 1, .3, 1), visibility .32s;
+}
+
+.mutualaid-panel.open {
+  transform: none;
+  visibility: visible;
+}
+
+.mutualaid-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 30px 28px 22px;
+  border-bottom: 1px solid rgba(244, 231, 211, .22);
+  background: linear-gradient(180deg, rgba(224, 90, 79, .16), transparent);
+}
+
+.mutualaid-heading {
+  min-width: 0;
+}
+
+.mutualaid-kicker {
+  color: #e6b45a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+.mutualaid-head h2 {
+  margin-top: 9px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(24px, 5vw, 30px);
+  font-weight: 500;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.mutualaid-head p {
+  max-width: 34em;
+  margin-top: 8px;
+  color: #d8c3b6;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.mutualaid-close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(244, 231, 211, .45);
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.mutualaid-close:hover,
+.mutualaid-close:focus-visible {
+  border-color: #e6b45a;
+  color: #e6b45a;
+}
+
+.mutualaid-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 28px 34px;
+  overscroll-behavior: contain;
+}
+
+.ma-section {
+  margin-top: 26px;
+}
+
+.ma-section:first-child {
+  margin-top: 0;
+}
+
+.ma-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #e6b45a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+.ma-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(230, 180, 90, .32);
+}
+
+.ma-motto {
+  padding: 18px 20px;
+  border: 1px solid rgba(230, 180, 90, .4);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.ma-motto q {
+  display: block;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 17px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.ma-motto-author {
+  margin-top: 10px;
+  color: #cbb2a4;
+  font-size: 12px;
+  text-align: right;
+}
+
+.ma-welcome {
+  margin-top: 14px;
+  color: #f0d59a;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.ma-notice + .ma-notice {
+  margin-top: 12px;
+}
+
+.ma-notice {
+  color: #ddcabf;
+  font-size: 13px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.ma-card {
+  padding: 16px 18px;
+  border: 1px solid rgba(244, 231, 211, .16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.ma-card + .ma-card {
+  margin-top: 12px;
+}
+
+.ma-role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ma-role + .ma-role {
+  margin-top: 8px;
+}
+
+.ma-role-label {
+  flex: none;
+  min-width: 4.5em;
+  color: #cbb2a4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ma-role-note {
+  color: #ddcabf;
+  font-size: 13px;
+}
+
+.ma-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ma-chip {
+  max-width: 100%;
+  padding: 2px 9px;
+  border: 1px solid rgba(230, 180, 90, .38);
+  border-radius: 999px;
+  background: rgba(230, 180, 90, .1);
+  color: #f3e7d5;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.ma-chip-lead {
+  border-color: rgba(224, 90, 79, .6);
+  background: rgba(224, 90, 79, .16);
+  color: #ffd9c9;
+}
+
+.ma-dept-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 19px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.ma-dept-summary {
+  margin-top: 8px;
+  color: #ddcabf;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.ma-dept-req {
+  margin-top: 8px;
+  padding-left: 14px;
+  border-left: 2px solid rgba(230, 180, 90, .42);
+  color: #cbb2a4;
+  font-size: 12px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.ma-dept-roles {
+  margin-top: 12px;
+}
+
+.ma-dept-members {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(244, 231, 211, .2);
+}
+
+.ma-note {
+  margin-top: 14px;
+  color: #bda69a;
+  font-size: 12px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.ma-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(230, 180, 90, .16);
+  color: #f0d59a;
+  overflow-wrap: anywhere;
+}
+
+.ma-link::before {
+  content: '讨';
+  font-size: 9px;
+  font-weight: 700;
+  opacity: .8;
+}
+
+.ma-diplomacy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.ma-diplomacy-row + .ma-diplomacy-row {
+  margin-top: 8px;
+}
+
+.ma-relation {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(224, 90, 79, .18);
+  color: #ffd0be;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ma-branch {
+  color: #bda69a;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.ma-announce-empty {
+  color: #bda69a;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.ma-honorary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ma-honorary .ma-chip {
+  border-color: rgba(244, 231, 211, .26);
+  background: rgba(255, 255, 255, .05);
+}
+
+@media (max-width: 680px) {
+  .mutualaid-head { padding: 24px 20px 18px; }
+  .mutualaid-head h2 { font-size: 25px; }
+  .mutualaid-body { padding: 16px 20px 28px; }
+  .ma-motto { padding: 15px 16px; }
+  .ma-motto q { font-size: 15px; }
+  .ma-dept-name { font-size: 17px; }
+  .mutualaid-close { width: 32px; height: 32px; font-size: 20px; }
+}
+
+@media (max-width: 380px) {
+  .mutualaid-head { padding-inline: 16px; }
+  .mutualaid-body { padding-inline: 16px; }
+  .ma-card { padding: 13px 14px; }
+}

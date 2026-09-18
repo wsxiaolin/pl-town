@@ -8,6 +8,7 @@ export function bindCityUiEvents(options: {
   closeWriterCatalog: () => void;
   closeAcademy: () => void;
   closeAcademyReader: () => void;
+  closeMutualAid: () => void;
   closeWorkDetail: () => void;
   toggleWorkStar: () => void;
   loadWorkComments: () => void;
@@ -44,6 +45,7 @@ export function bindCityUiEvents(options: {
   document.getElementById('writerCatalogClose')?.addEventListener('click', options.closeWriterCatalog, { signal });
   document.getElementById('academyClose')?.addEventListener('click', options.closeAcademy, { signal });
   document.getElementById('academyReaderClose')?.addEventListener('click', options.closeAcademyReader, { signal });
+  document.getElementById('mutualAidClose')?.addEventListener('click', options.closeMutualAid, { signal });
   document.getElementById('workDetailClose')?.addEventListener('click', options.closeWorkDetail, { signal });
   document.getElementById('workStar')?.addEventListener('click', options.toggleWorkStar, { signal });
   document.getElementById('workCommentsTab')?.addEventListener('click', options.loadWorkComments, { signal });
@@ -55,7 +57,7 @@ export function bindCityUiEvents(options: {
     if (event.key !== 'Escape') return;
     if (options.isMapOpen()) return options.toggleMap();
     if (document.getElementById('academyReader')?.classList.contains('open')) return options.closeAcademyReader();
-    options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeModal(); options.closeNpcDialog();
+    options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeMutualAid(); options.closeModal(); options.closeNpcDialog();
   }, { signal });
   document.getElementById('loginBtn')?.addEventListener('click', options.login, { signal });
   document.getElementById('loginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
