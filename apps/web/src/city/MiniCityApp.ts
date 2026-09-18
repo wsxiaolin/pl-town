@@ -481,6 +481,18 @@ function init() {
     unlockAchievement: (id) => multiplayerHousing?.progression.unlockAchievement(id),
     showToast: showUnlockToast,
   });
+  initStoryTaskGuideWiring({
+    document,
+    getBuildings: () => buildings,
+    getEchoController: () => stories.echo,
+    getCursor: () => cursorChar,
+    getNpcPosition: (npcId) => {
+      const profile = NPC_PROFILES.find((npc) => npc.id === npcId);
+      const coord = profile?.work ?? profile?.home;
+      return coord && coord.length >= 2 ? { x: coord[0]!, z: coord[1]! } : null;
+    },
+    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
+  });
   stories = createStoryOrchestration({
     echo: {
       consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
@@ -500,14 +512,6 @@ function init() {
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
-  });
-  initStoryTaskGuideWiring({
-    document,
-    getBuildings: () => buildings,
-    navigateTo: (building) => buildingInteraction.navigateTo(building),
-    getEchoController: () => stories.echo,
-    getCursor: () => cursorChar,
-    setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
   });
   stories.setupEcho(scene);
   mapController = createMapController({

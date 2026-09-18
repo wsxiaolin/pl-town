@@ -3,6 +3,15 @@ import type { StoryConditionContext, StoryDefinition, StoryEffect, StoryEvent, S
 import { publishStoryGuideEvent } from '../storyTaskGuide';
 import type { CityDialogController } from '../cityDialogController';
 
+export function splitStorySentences(text: string): string[] {
+  const matches = text
+    .split('\n')
+    .flatMap((line) => line.match(/[^。！？]+[。！？]+[」』）】”’]*|[^。！？]+$/g) ?? [])
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return matches.length ? matches : [text];
+}
+
 export function createStoryDialogFlow(
   definition: StoryDefinition,
   repository: StoryRepository,
@@ -35,6 +44,9 @@ export function createStoryDialogFlow(
     const guideState = `${node.id}:${available ? 'available' : 'waiting'}:${guideVisible ? 'visible' : 'hidden'}:${entered ? 'entered' : 'idle'}`;
     if (announcedGuideState === guideState) return;
     announcedGuideState = guideState;
+    // Untouched stories skip persist: publishing `story.guide.cleared` would
+    // write `$event:story.guide.cleared` into a save the player never opened.
+    if (!entered && phase !== 'concluded') return;
     if (!guide || !available || !guideVisible || !entered) {
       publishStoryGuideEvent(runtime.publish('story.guide.cleared', { storyId: definition.id, nodeId: node.id }));
       return;
@@ -49,17 +61,7 @@ export function createStoryDialogFlow(
 
   const syncActiveActors = (): void => options.onActiveActorsChanged?.(runtime.node().activeActorIds ?? []);
 
-  const sentences = (text: string): string[] => {
-    // Split per line first so an unpunctuated paragraph is never dropped, then
-    // break each line on sentence-ending punctuation while keeping trailing
-    // closing quotes/brackets attached (e.g. 「……这不就是我住的地方？」).
-    const matches = text
-      .split('\n')
-      .flatMap((line) => line.match(/[^。！？]+[。！？]+[」』）】”’]*|[^。！？]+$/g) ?? [])
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return matches.length ? matches : [text];
-  };
+  const sentences = (text: string): string[] => splitStorySentences(text);
 
   const open = (dialogs: CityDialogController, sentenceIndex = 0): void => {
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);

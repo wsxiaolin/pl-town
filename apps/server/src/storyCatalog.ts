@@ -185,7 +185,6 @@ const YESTERDAY_NODES: StoryNodeSummary[] = [
 // Keep this in sync with yesterdaySong.ts (definitionVersion 1).
 const YESTERDAY_EDGES: StoryEdgeSummary[] = [
   { from: 'diary-discovery', to: 'diary-recognized', kind: 'choice', label: '翻开日记' },
-  { from: 'diary-recognized', to: 'qiu-intro', kind: 'choice', label: '去报摊找秋嫂' },
   { from: 'qiu-intro', to: 'wednesday-wait', kind: 'choice', label: '把日记给秋嫂看' },
   { from: 'wednesday-wait', to: 'painter-arrives', kind: 'choice', label: '在报摊等候' },
   { from: 'painter-arrives', to: 'ending-witness', kind: 'choice', label: '把日记推到他面前' },
@@ -194,8 +193,8 @@ const YESTERDAY_EDGES: StoryEdgeSummary[] = [
   { from: 'ending-silence', to: 'epilogue-cats', kind: 'choice', label: '继续' },
   { from: 'epilogue-cats', to: 'epilogue-complete', kind: 'choice', label: '结束' },
   { from: 'archive', to: 'diary-discovery', kind: 'building', label: 'find-diary' },
-  { from: 'newsstand', to: 'diary-recognized', kind: 'building', label: 'talk-to-qiu' },
-  { from: 'newsstand', to: 'wednesday-wait', kind: 'building', label: 'wait-wednesday' },
+  { from: 'newsstand', to: 'qiu-intro', kind: 'building', label: 'talk-to-qiu' },
+  { from: 'newsstand', to: 'painter-arrives', kind: 'building', label: 'wait-wednesday' },
   { from: 'qiu', to: 'qiu-intro', kind: 'actor', label: 'show-diary-to-qiu' },
   { from: 'huaweng', to: 'painter-arrives', kind: 'actor', label: 'approach-painter' },
 ];
