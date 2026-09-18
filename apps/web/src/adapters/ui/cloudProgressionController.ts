@@ -149,6 +149,14 @@ export function createCloudProgressionController(options: Options) {
     }
   }
 
+  // A world-config change (admin building unlock overrides) refreshes the
+  // catalog for already-connected residents without touching their progress.
+  function applyCatalog(nextCatalog: ProgressionCatalog | undefined): void {
+    if (!nextCatalog) return;
+    catalog = nextCatalog;
+    render();
+  }
+
   function describeEvent(event?: ProgressionEvent): void {
     if (!event) return;
     if (event.welcomeItemsGranted) options.showToast('背包已解锁，获得城市导览册和居民纪念徽章');
@@ -255,7 +263,8 @@ else if (event.type === 'shop.purchased') {
   function interactBuilding(buildingId: string, continueInteraction: () => void): boolean {
     if (!online) { offlineNotice(); return false; }
     if (pendingBuilding) return false;
-    if (canInteractWithBuilding(progress, buildingId)) {
+    const globallyUnlocked = catalog.globallyUnlockedBuildings?.includes(buildingId) ?? false;
+    if (globallyUnlocked || canInteractWithBuilding(progress, buildingId)) {
       pendingBuilding = { id: buildingId, phase: 'visit', continueInteraction };
       if (!options.send({ type: 'progress.building.visit', buildingId })) { pendingBuilding = null; return false; }
       return true;
@@ -364,7 +373,7 @@ else if (event.type === 'shop.purchased') {
   function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
-    setup, setConnection, applySnapshot, interactBuilding, unlockAchievement, syncAchievements,
+    setup, setConnection, applySnapshot, applyCatalog, interactBuilding, unlockAchievement, syncAchievements,
  buyProduct, consumeItem, purchaseFilmCityExperience, nextRewardClaimSequence, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),

@@ -280,6 +280,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       weather: setWeather,
+      worldCatalog: (catalog) => progression.applyCatalog(catalog),
       authenticationFailed: (message, code) => {
         const gate = getLoginGate();
         gate?.onAuthFailed();

@@ -27,6 +27,7 @@
         <button class="nav-item active" data-view="overview" type="button">概览</button>
         <button class="nav-item" data-view="users" type="button">居民</button>
         <button class="nav-item" data-view="houses" type="button">住房</button>
+        <button class="nav-item" data-view="world" type="button">世界配置</button>
         <button class="nav-item" data-view="npc" type="button">NPC</button>
         <button class="nav-item" data-view="story" type="button">剧情</button>
         <button class="nav-item" data-view="chat" type="button">聊天审核</button>
@@ -57,6 +58,44 @@
       <section class="view" data-page="houses" hidden>
         <div class="toolbar"><p>住房归属和成员关系，可编辑名称与人数。</p><span id="houseCount"></span></div>
         <div class="table-wrap"><table><thead><tr><th>住房</th><th>房主</th><th>名称</th><th>成员</th><th class="align-right">操作</th></tr></thead><tbody id="houseRows"></tbody></table></div>
+      </section>
+
+      <section class="view" data-page="world" hidden>
+        <div class="two-column world-columns">
+          <section class="panel">
+            <header><div><p class="eyebrow">WEATHER</p><h2>天气全局广播</h2></div><span class="status" id="worldWeatherState">—</span></header>
+            <p class="hint">设置全服天气。开启自动广播后，服务端每分钟向所有在线居民推送当前天气；关闭后仅在居民登录或手动广播时下发。</p>
+            <div class="world-weather">
+              <label class="field-label" for="worldWeatherSelect">当前天气</label>
+              <select id="worldWeatherSelect"></select>
+              <label class="world-switch"><input type="checkbox" id="worldWeatherAuto" /><span>开启自动全局广播</span></label>
+              <div class="world-actions">
+                <button class="primary" id="worldWeatherApply" type="button">应用并广播</button>
+                <span id="worldWeatherDirty" class="world-dirty"></span>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <header><div><p class="eyebrow">BUILDING UNLOCK</p><h2>建筑解锁配置</h2></div><span class="status" id="worldBuildingSummary">—</span></header>
+            <p class="hint">点击地图上的建筑标记或从下拉列表选择目标，再设置其解锁策略。全局解锁会覆盖剧情限制，对所有居民生效。</p>
+            <label class="field-label" for="worldBuildingSelect">选择建筑</label>
+            <select id="worldBuildingSelect"></select>
+            <div class="world-map-wrap">
+              <svg id="worldMap" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="建筑解锁地图"></svg>
+            </div>
+            <div class="world-legend">
+              <span><i class="world-dot world-dot--unlockable"></i>可解锁</span>
+              <span><i class="world-dot world-dot--locked"></i>已锁定</span>
+              <span><i class="world-dot world-dot--open"></i>全局解锁</span>
+            </div>
+            <div class="world-selected" id="worldSelected"></div>
+            <div class="world-actions">
+              <button class="primary" id="worldBuildingsSave" type="button">保存建筑配置</button>
+              <button class="secondary" id="worldBuildingsReset" type="button">放弃更改</button>
+              <span id="worldBuildingsDirty" class="world-dirty"></span>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section class="view" data-page="npc" hidden>

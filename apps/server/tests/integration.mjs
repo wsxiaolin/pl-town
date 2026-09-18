@@ -337,6 +337,43 @@ try {
   });
   if (!restoredWeather.ok) throw new Error('Integration setup must restore the default server weather');
 
+  // World config: GET exposes weather + resolved building unlock states, and
+  // an override opens a story-locked building and broadcasts the new catalog.
+  const worldState = await fetch(`${adminBase}/world`, { headers: { cookie } });
+  const worldPayload = await worldState.json();
+  if (!worldState.ok || worldPayload.weather?.value !== 'clear' || typeof worldPayload.weather?.autoBroadcast !== 'boolean') throw new Error('Admin world GET must expose the persisted weather config');
+  const litreview = worldPayload.states?.find((state) => state.id === 'litreview');
+  if (!litreview || litreview.state !== 'locked' || litreview.defaultState !== 'locked') throw new Error('Admin world GET must resolve litreview as locked by default');
+  const openLitreview = await fetch(`${adminBase}/world/buildings`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ overrides: { litreview: 'open' } }),
+  });
+  const openPayload = await openLitreview.json();
+  if (!openLitreview.ok || openPayload.overrides?.litreview !== 'open') throw new Error('Admin building overrides must persist an open override');
+  const openedState = openPayload.states?.find((state) => state.id === 'litreview');
+  if (openedState?.state !== 'open') throw new Error('An open override must resolve the building as globally unlocked');
+  const catalogMessage = await waitFor(alice, 'world.catalog', (message) => Array.isArray(message.catalog?.globallyUnlockedBuildings));
+  if (!catalogMessage.catalog.globallyUnlockedBuildings.includes('litreview')) throw new Error('Saving overrides must broadcast a catalog with the globally unlocked building');
+  const lockedWeather = await fetch(`${adminBase}/world/weather`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ weather: 'snow', autoBroadcast: false }),
+  });
+  const lockedWeatherPayload = await lockedWeather.json();
+  if (!lockedWeather.ok || lockedWeatherPayload.weather?.value !== 'snow' || lockedWeatherPayload.weather?.autoBroadcast !== false) throw new Error('Admin world weather must persist the broadcast toggle');
+  const restoredWorld = await fetch(`${adminBase}/world/weather`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ weather: 'clear', autoBroadcast: true }),
+  });
+  const clearedOverrides = await fetch(`${adminBase}/world/buildings`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ overrides: {} }),
+  });
+  if (!restoredWorld.ok || !clearedOverrides.ok) throw new Error('Integration setup must restore the default world config');
+
   const overview = await fetch(`${adminBase}/overview`, { headers: { cookie } });
   const overviewPayload = await overview.json();
   if (!overview.ok || overviewPayload.summary.users !== 3 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');

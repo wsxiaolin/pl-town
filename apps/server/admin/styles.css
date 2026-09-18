@@ -173,7 +173,40 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .panel--logs header { flex: 0 0 auto; }
 .panel--logs .log-view { flex: 1 1 auto; max-height: none; margin-bottom: 14px; contain: size; }
 .panel--logs #refreshLogsButton { flex: 0 0 auto; align-self: flex-start; }
-.nowrap, .nowrap .status, .status.nowrap { white-space: nowrap; }
+/* 世界配置 */
+.world-columns { align-items: start; }
+.world-weather { display: grid; gap: 14px; margin-top: 16px; }
+.world-weather .field-label { margin: 0; }
+.world-weather select { width: 100%; }
+#worldBuildingSelect { width: 100%; }
+.world-switch { display: flex; align-items: center; gap: 9px; margin: 0; }
+.world-switch input { width: 16px; height: 16px; }
+.world-switch span { display: inline; margin: 0; color: #4e5a54; font-size: 13px; font-weight: 600; }
+.world-map-wrap { margin: 16px 0 10px; padding: 10px; background: #f7faf9; border: 1px solid #e3e8e5; border-radius: 7px; }
+#worldMap { display: block; width: 100%; height: auto; max-height: 380px; }
+.world-marker { cursor: pointer; }
+.world-marker circle { stroke: #fff; stroke-width: .7; transition: r .12s ease; }
+.world-marker--unlockable circle { fill: #3f7fbf; }
+.world-marker--locked circle { fill: #c0504d; }
+.world-marker--open circle { fill: #1c9c61; }
+.world-marker:hover circle, .world-marker:focus-visible circle { r: 3.4; }
+.world-marker.is-selected circle { stroke: #18201c; stroke-width: 1.4; }
+.world-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; color: #5f6b65; font-size: 12px; }
+.world-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.world-dot { width: 11px; height: 11px; border-radius: 50%; }
+.world-dot--unlockable { background: #3f7fbf; }
+.world-dot--locked { background: #c0504d; }
+.world-dot--open { background: #1c9c61; }
+.world-selected { min-height: 96px; padding: 14px; background: #f8faf9; border: 1px solid #e3e8e5; border-radius: 7px; }
+.world-selected-heading { display: flex; align-items: baseline; gap: 9px; }
+.world-selected-heading strong { font-size: 15px; }
+.world-selected-heading small { color: #7b8680; font-size: 11px; }
+.world-selected-meta { margin: 9px 0 13px; color: #5f6b65; font-size: 12px; }
+.world-chooser { display: flex; flex-wrap: wrap; gap: 8px; }
+.world-chooser .is-active { outline: 2px solid #176b4a; outline-offset: 1px; }
+.world-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.world-dirty { color: #a06a1b; font-size: 12px; }
+.world-legend i { font-style: normal; }
 
 /* NPC 管理 */
 .topology-link { font-size: 12px; font-weight: 650; color: #324039; text-decoration: none; }

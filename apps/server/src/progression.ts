@@ -1,4 +1,6 @@
 import type { PlayerProgress } from './types.js';
+import { BUILDING_CATALOG } from './buildingCatalog.js';
+import { getBuildingOverrides, type BuildingUnlockState } from './worldConfig.js';
 
 export const INITIAL_CURRENCY = 1200;
 export const FILM_CITY_EXPERIENCE_PRICE = 400;
@@ -86,6 +88,7 @@ export type ProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
   buildingUnlockable: Record<string, boolean>;
+  globallyUnlockedBuildings: string[];
   achievementRewards: Record<string, number>;
   products: Record<string, { itemId: string; name: string; unitPrice: number }>;
 };
@@ -95,11 +98,65 @@ export type ProgressionState = {
   catalog: ProgressionCatalog;
 };
 
+export type ResolvedBuildingState = 'locked' | 'unlockable' | 'open';
+export type BuildingUnlockResolution = {
+  id: string;
+  label: string;
+  num: string;
+  x: number;
+  z: number;
+  storyLocked: boolean;
+  override: BuildingUnlockState | null;
+  state: ResolvedBuildingState;
+  defaultState: ResolvedBuildingState;
+};
+
+/**
+ * Resolve the effective access state for every catalog building. Overrides come
+ * from the admin world config; the fallback for litreview (and any building
+ * flagged `storyLocked` in the client data) stays locked until a story rule
+ * opens it.
+ */
+export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
+  const overrides = getBuildingOverrides();
+  return BUILDING_CATALOG
+    .filter((building) => building.id in BUILDING_PRICES)
+    .map((building) => {
+      const override = overrides[building.id] ?? null;
+      const defaultState: ResolvedBuildingState = BUILDING_UNLOCKABLE[building.id] === true ? 'unlockable' : 'locked';
+      const state: ResolvedBuildingState = override === 'locked' ? 'locked'
+        : override === 'open' ? 'open'
+        : defaultState;
+      return { id: building.id, label: building.label, num: building.num, x: building.x, z: building.z, storyLocked: building.storyLocked, override, state, defaultState };
+    });
+}
+
+export function isBuildingGloballyUnlocked(buildingId: string): boolean {
+  return getBuildingOverrides()[buildingId] === 'open';
+}
+
+/** Effective unlockability after admin overrides (a locked building can never be unlocked). */
+export function isBuildingUnlockable(buildingId: string): boolean {
+  const override = getBuildingOverrides()[buildingId];
+  if (override === 'locked') return false;
+  if (override === 'open') return true;
+  return BUILDING_UNLOCKABLE[buildingId] === true;
+}
+
 export function getProgressionCatalog(): ProgressionCatalog {
+  const overrides = getBuildingOverrides();
+  const buildingUnlockable: Record<string, boolean> = { ...BUILDING_UNLOCKABLE };
+  const globallyUnlockedBuildings: string[] = [];
+  for (const [id, state] of Object.entries(overrides)) {
+    if (!(id in BUILDING_PRICES)) continue;
+    if (state === 'locked') buildingUnlockable[id] = false;
+    else if (state === 'open') { buildingUnlockable[id] = true; globallyUnlockedBuildings.push(id); }
+  }
   return {
     initialCurrency: INITIAL_CURRENCY,
     buildingPrices: { ...BUILDING_PRICES },
-    buildingUnlockable: { ...BUILDING_UNLOCKABLE },
+    buildingUnlockable,
+    globallyUnlockedBuildings,
     achievementRewards: { ...ACHIEVEMENT_REWARDS },
     products: { ...SHOP_PRODUCTS },
   };
