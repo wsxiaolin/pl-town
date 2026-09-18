@@ -513,6 +513,9 @@ function init() {
     },
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
   });
+  // Story controllers announce during orchestration construction, before the
+  // global HUD exists. Re-announce once wiring is ready so active guides render.
+  stories.announceGuide();
   stories.setupEcho(scene);
   mapController = createMapController({
     document,
