@@ -87,8 +87,17 @@ function broadcastHousingState() {
 function broadcastWeather() { broadcast({ type: 'world.weather', weather: serverWeather }); }
 // The periodic broadcast is the "global broadcast" toggle: when the admin turns
 // it off, weather only travels on join and on an explicit admin apply.
+// getWeatherConfig() is cached; the cache is only invalidated by resetWorldConfig
+// (the in-process restore path), which is exactly when this needs to re-read.
 setInterval(() => { if (getWeatherConfig().autoBroadcast) broadcastWeather(); }, 60_000).unref();
-function broadcastWorldCatalog() { broadcast({ type: 'world.catalog', catalog: getProgressionCatalog() }); }
+let lastWorldCatalogJson = '';
+function broadcastWorldCatalog() {
+  const catalog = getProgressionCatalog();
+  const json = JSON.stringify(catalog);
+  if (json === lastWorldCatalogJson) return;
+  lastWorldCatalogJson = json;
+  broadcast({ type: 'world.catalog', catalog });
+}
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;

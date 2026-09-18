@@ -9,8 +9,14 @@ export function createBuildingAvailability(options: {
   storyLockedIds: ReadonlySet<string>;
   getResidences: () => readonly ResidenceEntity[];
 }) {
+  // Mutated in place so the stable closures below (captured by value into the
+  // interaction, raycast, label and map layers) observe server-driven global
+  // unlocks without any rewiring.
+  const baseStoryLockedIds = new Set(options.storyLockedIds);
+  const storyLockedIds = new Set(baseStoryLockedIds);
+
   function isStoryLocked(building: Pick<BuildingEntity, 'id'>): boolean {
-    return options.storyLockedIds.has(building.id);
+    return storyLockedIds.has(building.id);
   }
 
   function isBuildingUnavailable(building: Pick<BuildingEntity, 'id' | 'group'>): boolean {
@@ -22,5 +28,17 @@ export function createBuildingAvailability(options: {
     return !residence || isBuildingDestroyed(residence);
   }
 
-  return { isStoryLocked, isBuildingUnavailable, isResidenceUnavailable };
+  // The catalog's `globallyUnlockedBuildings` is authoritative: a story-locked
+  // building is unlocked exactly while it appears there, so an admin turning the
+  // global unlock back off re-locks it for connected residents. Only ids in the
+  // original story-locked set are ever affected.
+  function applyGloballyUnlocked(globallyUnlockedIds: readonly string[]): void {
+    const unlocked = new Set(globallyUnlockedIds);
+    storyLockedIds.clear();
+    for (const id of baseStoryLockedIds) {
+      if (!unlocked.has(id)) storyLockedIds.add(id);
+    }
+  }
+
+  return { isStoryLocked, isBuildingUnavailable, isResidenceUnavailable, applyGloballyUnlocked };
 }

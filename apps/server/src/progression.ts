@@ -28,6 +28,12 @@ export const BUILDING_UNLOCKABLE: Readonly<Record<string, boolean>> = Object.fre
   Object.fromEntries(BUILDING_IDS.map((id) => [id, id !== 'litreview'])),
 );
 
+// Mirrors the client BUILDING_DEFS storyLocked flag via the generated catalog,
+// so the admin map and the 3D client agree on which buildings start locked.
+const STORY_LOCKED_BUILDING_IDS: ReadonlySet<string> = new Set(
+  BUILDING_CATALOG.filter((building) => building.storyLocked).map((building) => building.id),
+);
+
 export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.freeze({
   citizen: 20,
   first_building: 20,
@@ -113,9 +119,9 @@ export type BuildingUnlockResolution = {
 
 /**
  * Resolve the effective access state for every catalog building. Overrides come
- * from the admin world config; the fallback for litreview (and any building
- * flagged `storyLocked` in the client data) stays locked until a story rule
- * opens it.
+ * from the admin world config; the fallback mirrors the client data: a building
+ * flagged `storyLocked` stays locked until a story rule or an admin override
+ * opens it, every other building is unlockable by residents.
  */
 export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
   const overrides = getBuildingOverrides();
@@ -123,7 +129,7 @@ export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
     .filter((building) => building.id in BUILDING_PRICES)
     .map((building) => {
       const override = overrides[building.id] ?? null;
-      const defaultState: ResolvedBuildingState = BUILDING_UNLOCKABLE[building.id] === true ? 'unlockable' : 'locked';
+      const defaultState: ResolvedBuildingState = STORY_LOCKED_BUILDING_IDS.has(building.id) || BUILDING_UNLOCKABLE[building.id] !== true ? 'locked' : 'unlockable';
       const state: ResolvedBuildingState = override === 'locked' ? 'locked'
         : override === 'open' ? 'open'
         : defaultState;
@@ -140,17 +146,18 @@ export function isBuildingUnlockable(buildingId: string): boolean {
   const override = getBuildingOverrides()[buildingId];
   if (override === 'locked') return false;
   if (override === 'open') return true;
+  if (STORY_LOCKED_BUILDING_IDS.has(buildingId)) return false;
   return BUILDING_UNLOCKABLE[buildingId] === true;
 }
 
 export function getProgressionCatalog(): ProgressionCatalog {
   const overrides = getBuildingOverrides();
-  const buildingUnlockable: Record<string, boolean> = { ...BUILDING_UNLOCKABLE };
+  const buildingUnlockable: Record<string, boolean> = {};
+  for (const id of BUILDING_IDS) buildingUnlockable[id] = isBuildingUnlockable(id);
   const globallyUnlockedBuildings: string[] = [];
   for (const [id, state] of Object.entries(overrides)) {
     if (!(id in BUILDING_PRICES)) continue;
-    if (state === 'locked') buildingUnlockable[id] = false;
-    else if (state === 'open') { buildingUnlockable[id] = true; globallyUnlockedBuildings.push(id); }
+    if (state === 'open' && !globallyUnlockedBuildings.includes(id)) globallyUnlockedBuildings.push(id);
   }
   return {
     initialCurrency: INITIAL_CURRENCY,

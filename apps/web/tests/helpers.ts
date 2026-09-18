@@ -91,3 +91,64 @@ export function stubNewsstandWebSocket(page: Page, user = 'news-tester', weather
     }) });
   }, { u: user, w: weather });
 }
+
+/**
+ * Stub the game WebSocket and expose `window.__pushWorldCatalog(catalog)` so a
+ * test can simulate the server broadcasting a `world.catalog` override to an
+ * already-connected resident (admin globally unlocking a building live).
+ */
+export function stubWorldCatalogWebSocket(page: Page, user = 'catalog-tester'): void {
+  void page.addInitScript((u) => {
+    const NativeWebSocket = window.WebSocket;
+    class CatalogGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      progress = {
+        currency: 0,
+        inventory: {},
+        achievements: ['citizen'],
+        unlockedBuildings: [],
+        visitedBuildings: [],
+      };
+      catalog = {
+        initialCurrency: 0,
+        buildingPrices: {},
+        buildingUnlockable: {},
+        globallyUnlockedBuildings: [],
+        achievementRewards: {},
+        products: {},
+      };
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      deliver(message: Record<string, unknown>) {
+        this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(message) }));
+      }
+      send(raw: string) {
+        const request = JSON.parse(raw);
+        if (request.type === 'hello') {
+          this.deliver({
+            type: 'hello', token: 'catalog-token',
+            user: { id: 'catalog-user', nickname: u, email: null, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog, weather: 'clear',
+          });
+        } else if (request.type === 'progress.building.visit') {
+          this.deliver({
+            type: 'progress.updated', progress: this.progress, catalog: this.catalog,
+            event: { type: 'building.visited', buildingId: request.buildingId },
+          });
+        }
+      }
+      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
+    }
+    const sockets: CatalogGameWebSocket[] = [];
+    (window as unknown as { __pushWorldCatalog: (catalog: Record<string, unknown>) => void }).__pushWorldCatalog = (catalog) => {
+      sockets.forEach((socket) => socket.deliver({ type: 'world.catalog', catalog }));
+    };
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) {
+        if (!String(args[0]).includes(':8787')) return Reflect.construct(Target, args);
+        const socket = new CatalogGameWebSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    }) });
+  }, user);
+}

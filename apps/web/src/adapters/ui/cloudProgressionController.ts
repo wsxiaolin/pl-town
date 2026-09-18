@@ -151,9 +151,11 @@ export function createCloudProgressionController(options: Options) {
 
   // A world-config change (admin building unlock overrides) refreshes the
   // catalog for already-connected residents without touching their progress.
+  // Merge onto the current catalog so an omitted field in a partial push keeps
+  // its previous value instead of falling back to undefined.
   function applyCatalog(nextCatalog: ProgressionCatalog | undefined): void {
     if (!nextCatalog) return;
-    catalog = nextCatalog;
+    catalog = { ...catalog, ...nextCatalog };
     render();
   }
 

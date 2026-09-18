@@ -51,6 +51,7 @@ import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatur
 import { createWeatherEffect } from '../rendering/weatherEffect';
 import { createNavigationTargetMarker } from '../rendering/navigationTargetMarker';
 import { createBuildingAvailability, storyLockedBuildingIds } from './buildingAvailability';
+import { applyStoryLockedBuildingPresentation, restoreStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
 import { addCityLighting, createCityOrthographicCamera, createCityScene, createCityWebRenderer } from './citySceneBootstrap';
 import { createStoryOrchestration, routeNpcDialog, type StoryOrchestration } from './storyOrchestration';
 import { createCityGraphics } from './cityGraphics';
@@ -90,6 +91,27 @@ const availability = createBuildingAvailability({
   storyLockedIds: storyLockedBuildingIds(BUILDING_DEFS),
   getResidences: () => residences,
 });
+const baseStoryLockedIds = storyLockedBuildingIds(BUILDING_DEFS);
+
+// A server `world.catalog` push can globally unlock (or re-lock) a story-locked
+// building. Update interaction/raycast availability and the scene presentation
+// so an online resident sees the override take effect without a reload.
+function applyWorldCatalog(catalog: { globallyUnlockedBuildings?: readonly string[] }): void {
+  const unlocked = new Set(catalog.globallyUnlockedBuildings ?? []);
+  const toUnlock = buildings.filter((building) => baseStoryLockedIds.has(building.id) && availability.isStoryLocked(building) && unlocked.has(building.id));
+  const toLock = buildings.filter((building) => baseStoryLockedIds.has(building.id) && !availability.isStoryLocked(building) && !unlocked.has(building.id));
+  availability.applyGloballyUnlocked([...unlocked]);
+  if (toLock.length > 0) {
+    applyStoryLockedBuildingPresentation(toLock);
+    toLock.forEach((building) => buildingLabelController?.removeLabel(building));
+  }
+  if (toUnlock.length > 0) {
+    restoreStoryLockedBuildingPresentation(toUnlock);
+    toUnlock.forEach((building) => buildingLabelController?.addLabel(building));
+    buildingLabelController?.applyRenames();
+  }
+  if (toUnlock.length > 0 || toLock.length > 0) mapController?.invalidateShot();
+}
 let cityDialogs: CityDialogController | null = null;
 let stories: StoryOrchestration;
 let mapController: ReturnType<typeof createMapController>;
@@ -108,6 +130,7 @@ let academyController: CityHudPanels['academy'];
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
+let buildingLabelController: ReturnType<typeof assembleCityWorld>['buildingLabelController'];
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
@@ -443,6 +466,7 @@ function init() {
   });
   worldDecorations = world.worldDecorations;
   npcSystem = world.npcSystem;
+  buildingLabelController = world.buildingLabelController;
   sceneInterestPoints = world.sceneInterestPoints;
   raycastBuildingGroups = world.raycastBuildingGroups;
   const hud = createCityHudPanels(document, lifecycle.signal, (open) => multiplayerHousing?.setPhoneOpen(open));
@@ -459,6 +483,7 @@ function init() {
     getLegacyAchievements: () => getStats().achievements || [],
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
+    onWorldCatalog: applyWorldCatalog,
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { RENDER_SETTINGS, seedCityStorage, stubNewsstandWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
+import { RENDER_SETTINGS, seedCityStorage, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -410,6 +410,55 @@ test('story-locked literature review stays unlabelled and non-interactive', asyn
     return { storyLocked, emissiveIntensity };
   });
   expect(lockedAudit).toEqual({ storyLocked: true, emissiveIntensity: 0 });
+});
+
+test('a world.catalog override unlocks a story-locked building for an online resident', async ({ page }) => {
+  stubWorldCatalogWebSocket(page, 'catalog-unlock-tester');
+  await seedCityStorage(page, 'catalog-unlock-tester');
+  await waitForCityBooted(page);
+
+  await expect(page.locator('[data-building-id="litreview"]')).toHaveCount(0);
+  await expect(page.locator('.b-label-item[data-building-id="litreview"]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any)._mini.interactBuilding('litreview'))).toBe(false);
+
+  await page.evaluate(() => (window as any).__pushWorldCatalog({
+    initialCurrency: 0,
+    buildingPrices: {},
+    buildingUnlockable: { litreview: true },
+    globallyUnlockedBuildings: ['litreview'],
+    achievementRewards: {},
+    products: {},
+  }));
+
+  await expect(page.locator('.b-label-item[data-building-id="litreview"]')).toHaveCount(1, { timeout: 10_000 });
+  expect(await page.evaluate(() => (window as any)._mini.interactBuilding('litreview'))).toBe(true);
+
+  const audit = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    let storyLocked = true;
+    let litreviewMeshes = 0;
+    mini.scene.traverse((object: any) => {
+      if (object.userData?.buildingId === 'litreview' && object.material) {
+        storyLocked = Boolean(object.userData?.storyLocked);
+        litreviewMeshes += 1;
+      }
+    });
+    return { storyLocked, litreviewMeshes };
+  });
+  expect(audit.storyLocked).toBe(false);
+  expect(audit.litreviewMeshes).toBeGreaterThan(0);
+
+  // Turning the global unlock back off re-locks the building for the resident.
+  await page.evaluate(() => (window as any).__pushWorldCatalog({
+    initialCurrency: 0,
+    buildingPrices: {},
+    buildingUnlockable: {},
+    globallyUnlockedBuildings: [],
+    achievementRewards: {},
+    products: {},
+  }));
+  await expect(page.locator('.b-label-item[data-building-id="litreview"]')).toHaveCount(0, { timeout: 10_000 });
+  expect(await page.evaluate(() => (window as any)._mini.interactBuilding('litreview'))).toBe(false);
 });
 
 test('map search fuzzily finds a building and keeps the existing teleport flow', async ({ page }) => {

@@ -159,7 +159,6 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'GET' && path === '/admin/api/world') {
     respond(response, 200, {
       weather: context.getWeatherConfig(),
-      online: context.online(),
       states: resolveBuildingUnlockStates(),
     });
     return true;
