@@ -17,6 +17,7 @@ export type BuildingInteractionOptions = {
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   getAcademyController?: () => { open: () => void; close: () => void; closeReader: () => void } | null;
+  getMutualAidController?: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
@@ -27,7 +28,6 @@ const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityP
   bulletin: ['inventory'], news: ['inventory'],
   community: ['social', 'profile'], records: ['social', 'mine'],
   tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
-  mutualaid: ['social', 'following'],
 };
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
@@ -64,6 +64,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     if (storyResult === 'handled') { options.trackInteraction(b.id); return; }
     if (storyResult === 'blocked') return;
     if (b.isStats) { options.getStatsPanelController()?.open(); options.trackInteraction('stats'); return; }
+    if (b.id === 'mutualaid') {
+      options.getMutualAidController?.()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();
       options.trackInteraction(b.id);

@@ -105,6 +105,7 @@ let communityPanels: CityHudPanels['communityPanels'];
 let writerCatalogController: CityHudPanels['writerCatalog'];
 let newsstandController: CityHudPanels['newsstand'];
 let academyController: CityHudPanels['academy'];
+let mutualAidController: CityHudPanels['mutualAid'];
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
@@ -294,6 +295,7 @@ const buildingInteraction = createBuildingInteraction({
   getWriterCatalogController: () => writerCatalogController,
   getNewsstandController: () => newsstandController,
   getAcademyController: () => academyController,
+  getMutualAidController: () => mutualAidController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
@@ -320,6 +322,7 @@ const eventBindings = createEventBindings({
   getMapController: () => mapController,
   getWriterCatalogController: () => writerCatalogController,
   getAcademyController: () => academyController,
+  getMutualAidController: () => mutualAidController,
   toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
@@ -450,6 +453,7 @@ function init() {
   writerCatalogController = hud.writerCatalog;
   newsstandController = hud.newsstand;
   academyController = hud.academy;
+  mutualAidController = hud.mutualAid;
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
