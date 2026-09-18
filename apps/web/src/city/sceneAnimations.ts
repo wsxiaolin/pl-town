@@ -9,6 +9,7 @@ export type SceneAnimationsOptions = {
 export function createSceneAnimations(options: SceneAnimationsOptions) {
   function entranceAnimation() {
     options.getBuildings().forEach((b, i) => {
+      if (b.group.userData.constructionPending) { b.group.position.y = 0; return; }
       gsap.to(b.group.position, { y: 0, duration: 0.85, delay: 0.1 + i * 0.06, ease: 'back.out(1.6)' });
     });
     gsap.from('.welcome-block', { opacity: 0, y: 8, duration: 0.9, delay: 0.2, ease: 'power2.out' });

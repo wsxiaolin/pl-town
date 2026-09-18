@@ -90,7 +90,7 @@ export function corsHeaders(request: IncomingMessage): Record<string, string> {
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-credentials': 'true',
-    'access-control-allow-headers': 'content-type, x-town-pl-session, x-town-work-category',
+    'access-control-allow-headers': 'content-type, if-none-match, x-town-pl-session, x-town-work-category',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     vary: 'Origin',
   };

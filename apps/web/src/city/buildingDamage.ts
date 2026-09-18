@@ -135,6 +135,7 @@ function toLocalBounds(group: THREE.Group): THREE.Box3 {
 }
 
 export function applyBuildingDestroyedPresentation(building: DamageableBuilding): boolean {
+  if (building.group.userData.constructionPending) return false;
   if (building.group.userData.buildingState === 'damaged') return false;
 
   snapshotBuilding(building);
@@ -204,6 +205,7 @@ export function refreshBuildingDestroyedPresentation(building: DamageableBuildin
 }
 
 export function reapplyBuildingDestroyedPresentation(building: DamageableBuilding): boolean {
+  if (building.group.userData.constructionPending) return false;
   if (building.group.userData.buildingState === 'damaged' && restoreBuildingPresentation(building)) {
     return applyBuildingDestroyedPresentation(building);
   }

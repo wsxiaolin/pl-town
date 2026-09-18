@@ -5,6 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
 import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
+import { initializeCityGovernance } from './cityGovernanceSchema.js';
 
 type Verification = { sha256: string; bytes: number; userVersion: number; applicationId: number };
 type Manifest = { version: 1; backups: Record<string, { bytes: number; createdAt: string; sha256: string; userVersion: number; applicationId: number; verifiedAt: string }> };
@@ -119,6 +120,10 @@ async function main(): Promise<void> {
     await copyFile(candidatePath, stagedPath);
     const staged = new Database(stagedPath, { fileMustExist: true });
     try {
+      staged.transaction(() => {
+        initializeCityGovernance(staged);
+        staged.prepare('UPDATE city_meta SET epoch = ? WHERE id = 1').run(randomUUID());
+      })();
       const timestamp = new Date().toISOString();
       staged.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(timestamp);
       staged.pragma('wal_checkpoint(TRUNCATE)');

@@ -1,4 +1,7 @@
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
+import { initializeCityGovernance } from './cityGovernanceSchema.js';
+import { CITY_CONSTRUCTION_CONFIG } from './data/cityConstructionConfig.js';
 import { DATA_DIR, DATABASE_PATH } from './config.js';
 import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
 import { ensureProgress, addInventory } from './playerProgressDefaults.js';
@@ -239,6 +242,7 @@ db.prepare(`
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_unique ON users (nickname COLLATE NOCASE)');
   }
 }
+initializeCityGovernance(db);
 db.pragma(`application_id = ${MINICITY_APPLICATION_ID}`);
 db.pragma(`user_version = ${MINICITY_SCHEMA_VERSION}`);
 db.exec('COMMIT');
@@ -248,6 +252,10 @@ db.exec('COMMIT');
 }
 
 const now = () => new Date().toISOString();
+const cityBuildingBuilt = (buildingId: string): boolean => {
+  const project = CITY_CONSTRUCTION_CONFIG.projects.find((entry) => entry.buildingId === buildingId);
+  return !project || Boolean((db.prepare('SELECT built FROM city_projects WHERE id = ?').get(project.id) as { built: number } | undefined)?.built);
+};
 
 const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, plUserId: row.pl_user_id, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
@@ -291,6 +299,7 @@ export function getPlayerProgress(userId: string): PlayerProgress {
 }
 
 export function recordBuildingVisit(userId: string, buildingId: string): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
+  if (!cityBuildingBuilt(buildingId)) throw new Error('Building is not built');
   let welcomeItemsGranted = false;
   db.transaction(() => {
     ensureProgress(db, userId, now());
@@ -323,6 +332,7 @@ export function unlockAchievement(userId: string, achievementId: string, currenc
 }
 
 export function purchaseBuilding(userId: string, buildingId: string, price: number): { progress: PlayerProgress; unlocked: boolean } {
+  if (!cityBuildingBuilt(buildingId)) throw new Error('Building is not built');
   let unlocked = false;
   db.transaction(() => {
     ensureProgress(db, userId, now());
@@ -528,16 +538,14 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
   // We avoid ATTACH because the just-written backup may hold a lock that
   // blocks a second writer, and ATTACH cannot open WAL files read-only.
   const probe = new Database(backupPath, { readonly: true, fileMustExist: true });
-  const liveTables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name);
-  const backupTables = new Set((probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name));
   let rowsCopied = 0;
-  // PRAGMA foreign_keys is a no-op inside an active transaction, so disable it
-  // here (before BEGIN) so child tables can be cleared before parent rows are
-  // deleted without tripping a FOREIGN KEY constraint. Enforcement is restored
-  // in a finally; the foreign_key_check pragma reports violations regardless
-  // of the enforcement flag, so verification still runs inside the transaction.
-  db.pragma('foreign_keys = OFF');
   try {
+    const liveTables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name);
+    const backupTables = new Set((probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_minicity-%'").all() as Array<{ name: string }>).map((row) => row.name));
+    // PRAGMA foreign_keys is a no-op inside an active transaction, so disable it
+    // before BEGIN. Verification still runs inside the transaction regardless
+    // of enforcement, and cleanup restores enforcement even after failure.
+    db.pragma('foreign_keys = OFF');
     db.transaction(() => {
       for (const table of backupTables) {
         if (!liveTables.includes(table)) continue;
@@ -559,6 +567,8 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
       for (const table of liveTables) {
         if (!backupTables.has(table)) db.prepare(`DELETE FROM ${quoteIdent(table)}`).run();
       }
+      initializeCityGovernance(db);
+      db.prepare('UPDATE city_meta SET epoch = ? WHERE id = 1').run(randomUUID());
       // foreign_key_check reports violations even with enforcement off, so we
       // can verify before commit and throw to roll the restore back.
       const integrity = String(db.pragma('integrity_check', { simple: true }));
@@ -570,9 +580,9 @@ export function restoreFromBackupFile(backupPath: string): { rowsCopied: number 
       db.prepare("UPDATE users SET token_hash = lower(hex(randomblob(32))), session_expires_at = NULL, updated_at = ?").run(now());
     })();
   } finally {
-    db.pragma('foreign_keys = ON');
+    try { db.pragma('foreign_keys = ON'); }
+    finally { probe.close(); }
   }
-  probe.close();
   return { rowsCopied };
 }
 

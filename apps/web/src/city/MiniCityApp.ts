@@ -134,6 +134,7 @@ let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
 let buildingLabelController: ReturnType<typeof assembleCityWorld>['buildingLabelController'];
 let sceneInterestPoints: SceneInterestPoints | null = null;
+let constructionScene: ReturnType<typeof assembleCityWorld>['constructionScene'] | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
 const buildingFeatureRegistry = createBuildingFeatureRegistry();
@@ -354,12 +355,8 @@ const eventBindings = createEventBindings({
   isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
 });
 
-let UNLOCK_TIERS = createUnlockTiers(
-  (positions) => worldDecorations?.addLamps(positions),
-  (positions) => worldDecorations?.addTrees(positions),
-  (x, y, z, rotY) => worldDecorations?.addArch(x, y, z, rotY),
-  (x, y, z, rotY) => worldDecorations?.addBench(x, y, z, rotY),
-);
+// Public decorations are driven exclusively by city construction snapshots.
+let UNLOCK_TIERS = createUnlockTiers(() => {}, () => {}, () => {}, () => {});
 
 function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }
@@ -472,6 +469,7 @@ function init() {
   npcSystem = world.npcSystem;
   buildingLabelController = world.buildingLabelController;
   sceneInterestPoints = world.sceneInterestPoints;
+  constructionScene = world.constructionScene;
   raycastBuildingGroups = world.raycastBuildingGroups;
   const hud = createCityHudPanels(document, lifecycle.signal, (open) => multiplayerHousing?.setPhoneOpen(open));
   communityPanels = hud.communityPanels;
@@ -761,6 +759,8 @@ function disposeSession() {
   renderer?.dispose();
   renderer?.forceContextLoss();
   sceneInterestPoints?.dispose();
+  constructionScene?.dispose();
+  constructionScene = null;
   scene?.clear();
   resources.dispose();
   buildingPlotTargets.length = 0;

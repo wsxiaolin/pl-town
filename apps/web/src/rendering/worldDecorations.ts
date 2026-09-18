@@ -75,56 +75,11 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   function addDecorations() {
     const existingSceneChildren = new Set(scene.children);
     addDistrictBuildings();
-    addMarketStalls(-9, 6, 4, 0);
-    addMarketStalls(6, -12, 3, 1);
-    addTrees([[-4.2,0,-3.8],[3.6,0,-5.2],[4.2,0,3.4]]);
     addLamps([[-2.2,0,-3.0],[2.4,0,2.8]]);
-    addBench(-3.9,0,2.4,0); addObelisk(3.3,0,-3.6); addSignpost(-4.0,0,-5.0);
-    addTrees([[-6.2,0,-4.2],[6.5,0,-4.0],[-6.5,0,5.2],[6.0,0,5.8],[-3.0,0,6.5],[5.5,0,-7.0]]);
-    addLamps([[-3.2,0,-1.8],[3.5,0,1.5],[-1.8,0,4.5]]);
-    addArch(-5.5,0,-6.2,Math.PI/5);
-    addSphereStack(5.2,0,5.0); addStoneRing(5.8,0,-5.5); addGazebo(5.8,0,5.9);
-    addMonolith(-5.8,0,5.8,0.4); addSteppingStones(-4.5,0,3.5); addHedgeRow(4.5,0,-2.0);
-    addPlanter(-2.8,0,-5.3); addPlanter(-2.0,0,-5.8);
-    addBollards(2.0,0,-2.8); addBench(5.1,0,-1.8,Math.PI/2);
-    addStackedColumn(-5.5,0,2.0); addWallSection(5.5,0,-2.0,0);
-    addPavers();
-    // (Original two addPond calls at (-18,18) and (18,-18) removed — positions were wrong.)
-    addFlowerbed(-3.0, 0, 4.0); addFlowerbed(3.0, 0, -4.0);
-    addLamps([[0+1.9,0,-18.9],[0-1.9,0,18.9],[-18.9,0,0+1.9],[18.9,0,0-1.9]]);
-    ROAD_COORDS.forEach(p=>{
-      addLamps([[p+1.9,0,-18.9],[p-1.9,0,18.9],[-18.9,0,p+1.9],[18.9,0,p-1.9]]);
-    });
-    // ── New city-life additions ──
-    // One grass patch + one pond at the city edge, each with a straight short path
-    // leading out from the inner road grid, with 2 small buildings beside the feature.
-    // (Removes the 4 cardinal community-park patches — too symmetric and not city-like.)
-    addEdgeGrassAndPond();
-    // Inner-city greenery — boulevard trees and one city grass patch
-    addInnerCityGreenery();
-    // ── 外环装饰 ──
-    addTrees([[-15,0,-15],[-21,0,-21],[-27,0,-27],[-12,0,-27],[-27,0,-12],
-              [27,0,27],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],
-              [-27,0,27],[-21,0,27],[-27,0,0],[27,0,0],[0,0,-27],[0,0,27],
-              [-30,0,0],[30,0,0],[0,0,-30],[0,0,30],
-              [-36,0,-36],[36,0,36],[36,0,-36],[-36,0,36]]);
-    addLamps([[-18,0,-18],[-18,0,18],[18,0,-18],[18,0,18],
-              [-24,0,-6],[-24,0,6],[24,0,-6],[24,0,6],
-              [-6,0,-24],[6,0,-24],[-6,0,24],[6,0,24],
-              [-30,0,-6],[-30,0,6],[30,0,-6],[30,0,6],
-              [-6,0,-30],[6,0,-30],[-6,0,30],[6,0,30]]);
-    addArch(-21,0,-21,Math.PI/6);
-    addGazebo(-21,0,0); addGazebo(21,0,0);
-    addBench(-15,0,-15,0); addBench(15,0,15,Math.PI/2);
-    addBench(-15,0,15,Math.PI/3); addBench(15,0,-15,Math.PI);
-    addSphereStack(-15,0,15); addSphereStack(15,0,-15);
-    addStoneRing(-21,0,12); addStoneRing(21,0,-12);
-    addMonolith(-21,0,-21,0.5);
-    addPond(-24, -24, 3.0); addPond(24, 24, 2.5);
-    addFlowerbed(-15, 0, 15); addFlowerbed(15, 0, -15);
-    for(let v of [-27,-21,-15,15,21,27]) {
-      addTrees([[v,0,-3],[v,0,3],[-3,0,v],[3,0,v]]);
-    }
+    addSignpost(-4.0,0,-5.0);
+    // Keep the original residential lots; public greenery is cloud-owned.
+    addSuburbHouse(12, 32, 90);
+    addSuburbHouse(-12, -32, -90);
     const decorationRoots = scene.children.filter((child)=>!existingSceneChildren.has(child));
     batchStaticMeshes(scene, decorationRoots, interactiveDecorationRoots);
     residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots);
@@ -520,7 +475,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   // ── Characters ────────────────────────────────────────────────────────────────
 
   return {
-    addDecorations, addTrees, addLamps, addArch, addBench,
+    addDecorations, addLamps,
     setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
     // Advances pond ripples (ponds drift slower than the sea) and the shared
     // day/night water tint; called from the main frame loop.
