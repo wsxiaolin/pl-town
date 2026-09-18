@@ -149,13 +149,12 @@ export const YESTERDAY_SONG: StoryDefinition = {
         {
           id: "recognize-rooftop",
           label: "……这不就是我住的地方？",
-          next: "diary-clue",
+          next: "diary-recognized",
         },
       ],
     },
-    "diary-clue": {
-      savepoint: false,
-      id: "diary-clue",
+    "diary-recognized": {
+      id: "diary-recognized",
       title: "昨日之歌",
       role: "旧城居民",
       guide: {
@@ -165,32 +164,9 @@ export const YESTERDAY_SONG: StoryDefinition = {
       text: "你合上日记，心跳有点快。\n\n你每天经过的那个天台——三十年前，有人在那里被认真地注视过。\n\n你把日记揣进口袋。报摊的秋嫂消息最灵通，也许她知道什么。",
       choices: [
         {
-          id: "head-to-newsstand",
-          label: "",
-          next: "diary-recognized",
-          hidden: true,
-          autoAdvance: true,
-        },
-      ],
-    },
-    // 线索节点只负责把任务指引挂到左上角并关闭对话；玩家必须亲自走到报摊，
-    // 由 newsstand 的建筑交互触发 talk-to-qiu，才能继续。
-    "diary-recognized": {
-      id: "diary-recognized",
-      title: "昨日之歌",
-      role: "旧城居民",
-      interactionOnly: true,
-      guide: {
-        title: "昨日之歌 · 线索",
-        objective: "去报摊找秋嫂聊聊，看看她认不认识照片里的人。",
-      },
-      text: "你合上日记，往报摊的方向走去。",
-      choices: [
-        {
           id: "talk-to-qiu",
           label: "去报摊找秋嫂",
           next: "qiu-intro",
-          hidden: true,
         },
       ],
     },
@@ -252,13 +228,10 @@ export const YESTERDAY_SONG: StoryDefinition = {
     },
 
     // ─── Act 3: 周三 ──────────────────────────────────────────────
-    // 等待节点只做状态与任务指引；玩家必须在下一次游戏日亲自回到报摊，
-    // 由 newsstand 的建筑交互触发 wait-wednesday，进入周三的相遇。
     "wednesday-wait": {
       id: "wednesday-wait",
       title: "昨日之歌",
       role: "旧城居民",
-      interactionOnly: true,
       // 需要过一天才进入（周三）
       unlockAfterGameDays: 1,
       guide: {
@@ -270,26 +243,10 @@ export const YESTERDAY_SONG: StoryDefinition = {
         {
           id: "wait-wednesday",
           label: "坐下来等",
-          next: "wednesday-arrived",
+          next: "painter-arrives",
           effects: [
             { type: "flag.set", flagId: "yesterday.waiting-wednesday", value: true },
           ],
-        },
-      ],
-    },
-    "wednesday-arrived": {
-      savepoint: false,
-      id: "wednesday-arrived",
-      title: "昨日之歌",
-      role: "旧城居民",
-      text: "周三到了。\n\n你一大早就去了报摊，坐在窗边那个位置。秋嫂给你倒了杯茶，什么也没问。",
-      choices: [
-        {
-          id: "go-meet-painter",
-          label: "",
-          next: "painter-arrives",
-          hidden: true,
-          autoAdvance: true,
         },
       ],
     },
