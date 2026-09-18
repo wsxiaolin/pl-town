@@ -22,7 +22,7 @@ export function isCityBuildingBuilt(buildingId: string): boolean {
   if (!project) return true;
   return Boolean((db.prepare('SELECT built FROM city_projects WHERE id = ?').get(project.id) as { built: number } | undefined)?.built);
 }
-export function isCityBuildingFunded(buildingId: string): boolean {
+export function isCityProjectBuilt(buildingId: string): boolean {
   return CITY_CONSTRUCTION_CONFIG.projects.some((entry) => entry.buildingId === buildingId) && isCityBuildingBuilt(buildingId);
 }
 export function mutateCity(user: User, kind: 'donate' | 'decorate', body: Record<string, unknown>): { state: CityState; progress: PlayerProgress; acceptedAmount: number; operationRevision: number; requestId: string; replayed: boolean } {
@@ -40,7 +40,7 @@ export function mutateCity(user: User, kind: 'donate' | 'decorate', body: Record
       if (previous.fingerprint !== fingerprint) throw new HttpBodyError('requestId already used with different parameters', 409);
       return { state: getCityState(), progress: getPlayerProgress(user.id), acceptedAmount: previous.accepted_amount, operationRevision: previous.revision, requestId, replayed: true };
     }
-    // A committed retry remains valid after a config upgrade; new spending uses the current catalog.
+    // New operations must use the current catalog version.
     if (body.configVersion !== CITY_CONSTRUCTION_CONFIG.version) throw new HttpBodyError('City config changed; reload config', 409);
     let acceptedAmount: number;
     if (kind === 'donate') {

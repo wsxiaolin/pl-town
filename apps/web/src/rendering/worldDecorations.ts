@@ -3,9 +3,8 @@ import * as THREE from 'three';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { createPondWaterSurface, type AnimatedWaterSurface } from './animatedWater';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
-import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
+import { footprintOverlapsMainRoad, isFilmCityClearing } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
@@ -14,62 +13,34 @@ type Palette = Record<string, number>;
 
 type Vec3 = readonly [number, number, number];
 
-// ── Pond water tuning (lightweight animated shader, no mirror) ───────────────
-// Ponds should read calm, shallow and clear: ripples drift far slower than the
-// sea (which itself runs at 0.55), and the tint stays deep enough to never wash
-// out to white. Ponds deliberately avoid the mirror Water shader so the sea is
-// the only mirror surface in the scene.
-const POND_WATER_DAY = new THREE.Color(0x3b7691);
-const POND_WATER_NIGHT = new THREE.Color(0x15283c);
-const POND_SUN_DAY = new THREE.Color(0x8fb0c8);
-const POND_SUN_NIGHT = new THREE.Color(0x263b50);
-const POND_SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
-const POND_TIME_SCALE = 0.16;
-// Ponds are a few units across, so the normal tiles need a higher density
-// than the sea's default size=1 or the whole pond would sample one flat texel.
-const POND_RIPPLE_SIZE = 14;
-
 export interface WorldDecorationsOptions {
   scene: THREE.Scene;
   resources: ResourcePool;
   palette: Palette;
-  roadCoords: readonly number[];
   cityLimit: number;
   buildings: BuildingEntity[];
   residences: ResidenceEntity[];
-  pathMaterials: THREE.MeshStandardMaterial[];
   lampMaterials: THREE.MeshStandardMaterial[];
   getIsNight: () => boolean;
   makeMaterial: MeshHelpers['stdMat'];
-  makeMesh: MeshHelpers['mk'];
   addPart: MeshHelpers['part'];
   addRaycastGroup: (group: THREE.Object3D) => void;
   addObstacleGroup?: (group: THREE.Object3D) => void;
-  waterRendering: boolean;
 }
 
 export function createWorldDecorations(options: WorldDecorationsOptions) {
   const {
-    scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
-    buildings, residences, pathMaterials: pathMats, lampMaterials: lampGlobes,
-    getIsNight, makeMaterial: stdMat, makeMesh: mk, addPart: part, addRaycastGroup,
-    addObstacleGroup, waterRendering,
+    scene, resources, palette: P, cityLimit: CITY_LIMIT,
+    buildings, residences, lampMaterials: lampGlobes,
+    getIsNight, makeMaterial: stdMat, addPart: part, addRaycastGroup,
+    addObstacleGroup,
   } = options;
-  const pondSurfaces: AnimatedWaterSurface[] = [];
-  let treeTrunks: InstancedBatch | undefined, treeCrowns: InstancedBatch | undefined, lampPosts: InstancedBatch | undefined, lampLights: InstancedBatch | undefined;
+  let lampPosts: InstancedBatch | undefined, lampLights: InstancedBatch | undefined;
   let decorationObstacleBounds: THREE.Box3[] | null = null;
   let residenceVisualBatch: RetainedStaticMeshBatch | null = null;
   const residenceRoots: RetainedStaticMeshRoot[] = [];
   const interactiveDecorationRoots = new Set<THREE.Object3D>();
   const orangeGroveCenter={x:-15,z:-3};
-  const roadWidth=(position: number)=>position===0?MAIN_ROAD_WIDTH:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
-
-  function treeCenterIsOnRoad(x: number, z: number) {
-    return ROAD_COORDS.some((position)=>
-      Math.abs(x-position)<=roadWidth(position)/2
-      || Math.abs(z-position)<=roadWidth(position)/2,
-    );
-  }
 
   // ── Building ground plots ──
   function addDecorations() {
@@ -83,76 +54,6 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     const decorationRoots = scene.children.filter((child)=>!existingSceneChildren.has(child));
     batchStaticMeshes(scene, decorationRoots, interactiveDecorationRoots);
     residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots);
-  }
-  
-  // ── Edge grass + edge pond with short straight paths and small buildings ─────
-  function addEdgeGrassAndPond() {
-    // Edge grass: NE of city, just outside the ring road
-    // Grass patch at (15, 30), straight path from (15, 26) going north
-    const grassX = 15, grassZ = 30, grassR = 2.5;
-    const grassMat = stdMat({color:0xA8C888, roughness:1, tex:'grass', rx:grassR/1.5, ry:grassR/1.5});
-    const grass = new THREE.Mesh(new THREE.CircleGeometry(grassR, 32), grassMat);
-    grass.rotation.x = -Math.PI/2; grass.position.set(grassX, 0.05, grassZ); grass.receiveShadow = true;
-    scene.add(grass);
-    // A couple of trees on the grass
-    addTrees([[grassX-1.2, 0, grassZ+0.6], [grassX+1.0, 0, grassZ-0.8]]);
-    addFlowerbed(grassX, 0, grassZ-1.5);
-    // Straight path from ring-road side to grass — going north from (15, 25) to (15, 27.5)
-    // (clear of any buildings on either side per user request)
-    const pathMat = stdMat({color:0xE8E7E4, roughness:1, tex:'road', rx:1, ry:2});
-    pathMats.push(pathMat);
-    const path1 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 5.5), pathMat);
-    path1.position.set(15, 0.04, 27.5); path1.receiveShadow = true; scene.add(path1);
-    // One small building beside the feature; the path itself stays open.
-    addSuburbHouse(12, 32, 90);
-  
-    // Straight path from the ring road to the nearby suburb house.
-    const path2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 5.5), pathMat);
-    path2.position.set(-15, 0.04, -27.5); path2.receiveShadow = true; scene.add(path2);
-    // One small building beside the feature; the path itself stays open.
-    addSuburbHouse(-12, -32, -90);
-  }
-  
-  // ── Inner-city greenery: boulevard trees + city grass + city pond ───────────
-  function addInnerCityGreenery() {
-    // Boulevard trees along main road (x=0 and z=0), on both sides — skip intersections
-    const treeSpots: Vec3[] = [];
-    for (let p = -33; p <= 33; p += 3) {
-      if (p === 0) continue;            // skip central plaza
-      if (ROAD_COORDS.includes(p)) continue;  // skip intersections (would clash with plaza)
-      treeSpots.push([1.8, 0, p], [-1.8, 0, p]);   // both sides of x=0 road
-      treeSpots.push([p, 0, 1.8], [p, 0, -1.8]);   // both sides of z=0 road
-    }
-    addTrees(treeSpots);
-  
-    // City grass patch — placed in a gap between district blocks (off the road grid)
-    // Position (5, 5) is between blocks at (3, 3) and (9, 9) — clear of roads.
-    addCityGrassPatch(5, 5, 1.4);
-  
-    // A few extra tree clusters scattered between buildings
-    addTrees([[ 5.5, 0, -5.5], [-5.5, 0,  5.5]]);
-  }
-  
-  function addCityGrassPatch(cx: number, cz: number, r: number) {
-    const grassMat = stdMat({color:0xA8C888, roughness:1, tex:'grass', rx:r, ry:r});
-    const grass = new THREE.Mesh(new THREE.CircleGeometry(r, 24), grassMat);
-    grass.rotation.x = -Math.PI/2; grass.position.set(cx, 0.05, cz); grass.receiveShadow = true;
-    scene.add(grass);
-    // A small tree at the center
-    addTrees([[cx, 0, cz]]);
-    // Flowerbeds around
-    for (let i = 0; i < 3; i++) {
-      const a = (i/3)*Math.PI*2 + 0.7;
-      addFlowerbed(cx + Math.cos(a)*r*0.6, 0, cz + Math.sin(a)*r*0.6);
-    }
-    // Stone border
-    const curbMat = stdMat({color:0xC4A86D, roughness:0.8, tex:'stone', rx:1, ry:1});
-    for (let i = 0; i < 12; i++) {
-      const a = (i/12)*Math.PI*2;
-      const stone = part(null, new THREE.SphereGeometry(0.08, 6, 6), curbMat);
-      stone.position.set(cx+Math.cos(a)*r, 0.05, cz+Math.sin(a)*r);
-      scene.add(stone);
-    }
   }
   
   function addDistrictBuildings() {
@@ -214,22 +115,6 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot); interactiveDecorationRoots.add(plot); addRaycastGroup(plot);
   }
   
-  function addTrees(positions: readonly Vec3[]) {
-    if (!treeTrunks) {
-      treeTrunks = new InstancedBatch(scene,
-        resources.geometry(new THREE.CylinderGeometry(0.06,0.09,0.38,8)),
-        resources.material({kind:'tree-trunk'},()=>stdMat({color:0xE0DFDC,roughness:0.9,tex:'wood',rx:1,ry:1})), 512);
-      treeCrowns = new InstancedBatch(scene,
-        resources.geometry(new THREE.SphereGeometry(0.30,12,12)),
-        resources.material({kind:'tree-crown'},()=>stdMat({color:0x6F9F4F,roughness:0.85,tex:'grass',rx:2,ry:2})), 512);
-    }
-    positions.forEach(([x,,z]) => {
-      if(Math.hypot(x-orangeGroveCenter.x,z-orangeGroveCenter.z)<2.4)return;
-      if(treeCenterIsOnRoad(x,z))return;
-      treeTrunks!.add(x,0.19,z);
-      treeCrowns!.add(x,0.66,z);
-    });
-  }
   function addLamps(positions: readonly Vec3[]) {
     if (!lampPosts) {
       const postMaterial=resources.material({kind:'lamp-post'},()=>stdMat({color:0xCDCCCA,roughness:0.7,tex:'metal',rx:1,ry:1}));
@@ -250,173 +135,12 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       lampLights!.add(x,1.28,z);
     });
   }
-  function addBench(x: number, y: number, z: number, rotY: number) {
-    const g=new THREE.Group();
-    part(g,new THREE.BoxGeometry(0.68,0.07,0.26),{color:0xEEEDEA,roughness:0.75,tex:'wood',rx:1,ry:1},[0,0.17,0]);
-    part(g,new THREE.BoxGeometry(0.68,0.20,0.05),{color:0xE2E1DE,roughness:0.8,tex:'wood',rx:1,ry:1},[0,0.30,-0.105]);
-    g.position.set(x,y,z); g.rotation.y=rotY; scene.add(g);
-  }
-  function addObelisk(x: number, y: number, z: number) {
-    const g=new THREE.Group();
-    part(g,new THREE.BoxGeometry(0.42,0.13,0.42),{color:0xEAE9E6,roughness:0.75,tex:'stone',rx:1,ry:1},[0,0.065,0]);
-    part(g,new THREE.BoxGeometry(0.17,1.35,0.17),{color:0xF8F7F5,roughness:0.4,tex:'stone',rx:1,ry:2},[0,0.13+0.675,0]);
-    const tip=part(g,new THREE.ConeGeometry(0.13,0.28,4),{color:0xE6E5E2,roughness:0.5,tex:'stone',rx:1,ry:1},[0,0.13+1.35+0.14,0]);
-    tip.rotation.y=Math.PI/4; g.position.set(x,y,z); scene.add(g);
-  }
   function addSignpost(x: number, y: number, z: number) {
     const g=new THREE.Group();
     part(g,new THREE.CylinderGeometry(0.03,0.03,0.9,8),{color:0xD0CFCC,roughness:0.8,tex:'wood',rx:1,ry:1},[0,0.45,0]);
     part(g,new THREE.BoxGeometry(0.36,0.18,0.04),{color:0xF0EFEC,roughness:0.5,tex:'wood',rx:1,ry:1},[0.18,0.72,0]);
     g.position.set(x,y,z); scene.add(g);
   }
-  function addArch(x: number, y: number, z: number, rotY: number) {
-    const g=new THREE.Group(), m={color:0xECEBE8,roughness:0.7,tex:'stone',rx:1,ry:1};
-    part(g,new THREE.BoxGeometry(0.4,0.10,1.9),m,[0,0.05,0],false);
-    [-0.78,0.78].forEach(pz=>part(g,new THREE.BoxGeometry(0.22,1.55,0.22),m,[0,0.1+0.775,pz]));
-    part(g,new THREE.BoxGeometry(0.22,0.24,1.78),m,[0,0.1+1.55+0.12,0]);
-    g.position.set(x,y,z); g.rotation.y=rotY; scene.add(g);
-  }
-  function addSphereStack(x: number, y: number, z: number) {
-    const g=new THREE.Group(), m={color:0xF0EFEC,roughness:0.3,tex:'stone',rx:1,ry:1};
-    part(g,new THREE.BoxGeometry(0.52,0.14,0.52),{color:0xE0DFDC,roughness:0.75,tex:'stone',rx:1,ry:1},[0,0.07,0]);
-    let cy=0.14; [0.30,0.21,0.14].forEach(r=>{cy+=r;part(g,new THREE.SphereGeometry(r,14,14),m,[0,cy,0]);cy+=r;});
-    g.position.set(x,y,z); scene.add(g);
-  }
-  function addStoneRing(x: number, y: number, z: number) {
-    const m={color:0xE4E3E0,roughness:0.85,tex:'stone',rx:1,ry:1};
-    for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2;const s=part(null,new THREE.CylinderGeometry(0.10,0.13,0.48,8),m);s.position.set(x+Math.cos(a)*0.95,0.24,z+Math.sin(a)*0.95);s.castShadow=true;scene.add(s);}
-  }
-  function addGazebo(x: number, y: number, z: number) {
-    const g=new THREE.Group();
-    const corners: Array<[number, number]> = [[0.85,0.85],[-0.85,0.85],[0.85,-0.85],[-0.85,-0.85]];
-    corners.forEach(([cx,cz])=>part(g,new THREE.CylinderGeometry(0.08,0.08,1.4,10),{color:0xEDECE9,roughness:0.6,tex:'stone',rx:1,ry:1},[cx,0.7,cz]));
-    part(g,new THREE.BoxGeometry(2.1,0.1,2.1),{color:0xF0EFEC,roughness:0.5,tex:'rooftile',rx:2,ry:2},[0,1.45,0]);
-    const tip=part(g,new THREE.ConeGeometry(0.82,0.65,4),{color:0xE8E7E4,roughness:0.6,tex:'rooftile',rx:2,ry:1},[0,1.5+0.325,0]);
-    tip.rotation.y=Math.PI/4; g.position.set(x,y,z); scene.add(g);
-  }
-  function addMonolith(x: number, y: number, z: number, rotY: number) {
-    const g=new THREE.Group();
-    part(g,new THREE.BoxGeometry(0.65,0.12,0.65),{color:0xDFDEDB,roughness:0.8,tex:'stone',rx:1,ry:1},[0,0.06,0]);
-    part(g,new THREE.BoxGeometry(0.13,2.1,0.72),{color:0xF4F3F0,roughness:0.25,tex:'stone',rx:1,ry:3},[0,0.12+1.05,0]);
-    g.position.set(x,y,z); g.rotation.y=rotY; scene.add(g);
-  }
-  function addSteppingStones(x: number, y: number, z: number) {
-    const stones: Array<[number, number]> = [[0,0],[0.72,0.25],[1.42,0.42],[2.1,0.25],[2.78,-0.08]];
-    stones.forEach(([dx,dz])=>{
-      const s=part(null,new THREE.CylinderGeometry(0.20,0.23,0.06,10),{color:0xE2E1DE,roughness:0.9,tex:'stone',rx:1,ry:1});
-      s.position.set(x+dx,0.03,z+dz); s.receiveShadow=true; scene.add(s);
-    });
-  }
-  function addHedgeRow(x: number, y: number, z: number) {
-    const g=new THREE.Group();
-    [0,0.62,1.22].forEach((dx,i)=>{
-      const r=0.30+i*0.02, h=0.55+i*0.08;
-      const b=mk(new THREE.SphereGeometry(r,10,10),stdMat({color:0xECEBE8,roughness:0.9}));
-      b.position.set(dx,h*0.55+0.05,0); b.scale.y=h; b.castShadow=true; g.add(b);
-    });
-    g.position.set(x,y,z); scene.add(g);
-  }
-  function addPlanter(x: number, y: number, z: number) {
-    const g=new THREE.Group();
-    part(g,new THREE.CylinderGeometry(0.20,0.15,0.30,12),{color:0xE4E3E0,roughness:0.8,tex:'stone',rx:1,ry:1},[0,0.15,0]);
-    part(g,new THREE.SphereGeometry(0.22,10,10),{color:0xEEEDEA,roughness:0.85},[0,0.48,0]);
-    g.position.set(x,y,z); scene.add(g);
-  }
-  function addBollards(x: number, y: number, z: number) {
-    [0,0.48,0.96,1.44].forEach(dx=>{
-      const b=part(null,new THREE.CylinderGeometry(0.07,0.07,0.48,8),{color:0xD8D7D4,roughness:0.6,tex:'metal',rx:1,ry:1});
-      b.position.set(x+dx,0.24,z); b.castShadow=true; scene.add(b);
-    });
-  }
-  function addStackedColumn(x: number, y: number, z: number) {
-    const g=new THREE.Group();
-    part(g,new THREE.CylinderGeometry(0.38,0.38,0.10,16),{color:0xE0DFDC,roughness:0.75,tex:'stone',rx:2,ry:1},[0,0.05,0]);
-    part(g,new THREE.CylinderGeometry(0.22,0.28,0.55,12),{color:0xEEEDEA,roughness:0.4,tex:'stone',rx:1,ry:1},[0,0.10+0.275,0]);
-    const mid=part(g,new THREE.CylinderGeometry(0.16,0.20,0.42,10),{color:0xF2F1EE,roughness:0.35,tex:'stone',rx:1,ry:1},[0,0.65+0.21,0]);
-    mid.rotation.y=0.4;
-    part(g,new THREE.SphereGeometry(0.15,12,12),{color:0xF8F7F5,roughness:0.2},[0,0.65+0.42+0.15,0]);
-    g.position.set(x,y,z); scene.add(g);
-  }
-  function addWallSection(x: number, y: number, z: number, rotY: number) {
-    const g=new THREE.Group();
-    part(g,new THREE.BoxGeometry(2.2,0.42,0.22),{color:0xE8E7E4,roughness:0.85,tex:'stone',rx:2,ry:1},[0,0.21,0]);
-    part(g,new THREE.BoxGeometry(2.2,0.1,0.28),{color:0xEEEDEB,roughness:0.7,tex:'stone',rx:2,ry:1},[0,0.42+0.05,0]);
-    g.position.set(x,y,z); g.rotation.y=rotY; scene.add(g);
-  }
-  function addPavers() {
-    const paverPositions: Array<[number, number, number]> = [[-1.9,0,-1.9],[1.9,0,-1.9],[-1.9,0,1.9],[1.9,0,1.9]];
-    paverPositions.forEach(([x,,z])=>{
-      const p=mk(new THREE.BoxGeometry(0.6,0.04,0.6),stdMat({color:0xE4E3E0,roughness:0.9,tex:'stone',rx:1,ry:1}));
-      // Pavers sit beside the central fountain. Raise their whole volume above
-      // the plaza overlay instead of intersecting its shallow depth layer.
-      p.position.set(x,0.07,z); p.receiveShadow=true; scene.add(p);
-    });
-  }
-  
-  function addFlowerbed(x: number, y: number, z: number) {
-    const g = new THREE.Group();
-    part(g, new THREE.CylinderGeometry(0.28, 0.24, 0.14, 12), {color:0xC4A86D, roughness:0.7, tex:'wood', rx:1, ry:1}, [0, 0.07, 0]);
-    const flowerColors = [0xE85858, 0xE8A838, 0xA858E8, 0xF8F4E8];
-    for (let i = 0; i < 6; i++) {
-      const a = (i/6)*Math.PI*2, r = 0.15;
-      part(g, new THREE.SphereGeometry(0.06, 8, 8), {color:flowerColors[i%4], roughness:0.8}, [Math.cos(a)*r, 0.14, Math.sin(a)*r], false);
-    }
-    part(g, new THREE.SphereGeometry(0.08, 8, 8), {color:0xE85858, roughness:0.8}, [0, 0.14, 0], false);
-    g.position.set(x, y, z); scene.add(g);
-  }
-  
-  function addPond(cx: number, cz: number, r: number) {
-    if (waterRendering) {
-      // Sandy bed under a translucent surface — the water reads shallow and clear.
-      const bed = new THREE.Mesh(
-        new THREE.CircleGeometry(r, 24),
-        stdMat({ color: 0xD8CFA6, roughness: 0.95, tex: 'ground', rx: Math.max(1, r / 1.5), ry: Math.max(1, r / 1.5) }),
-      );
-      bed.rotation.x = -Math.PI/2; bed.position.set(cx, 0.042, cz); bed.receiveShadow = true;
-      scene.add(bed);
-      // Lightweight animated water (no mirror render target): the sea is the
-      // only mirror Water object, so it never gets corrupted by nested mirror
-      // passes. The bed sits below the surface (no overlap with the lawn at
-      // 0.04) so the surrounding ground never z-fights through the pond.
-      const surface = createPondWaterSurface(new THREE.CircleGeometry(r, 24), {
-        sunDirection: POND_SUN_DIRECTION,
-        waterColorDay: POND_WATER_DAY,
-        waterColorNight: POND_WATER_NIGHT,
-        sunColorDay: POND_SUN_DAY,
-        sunColorNight: POND_SUN_NIGHT,
-        timeScale: POND_TIME_SCALE,
-        size: POND_RIPPLE_SIZE,
-        alpha: 0.98,
-      });
-      const pond = surface.water;
-      pond.renderOrder = RENDER_ORDER.water;
-      pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.058, cz);
-      scene.add(pond);
-      pondSurfaces.push(surface);
-    } else {
-      const waterMat = stdMat({color:0xA8C8F0, roughness:0.05, metalness:0.2, tex:'water', rx:2, ry:2});
-      const pond = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
-      // Keep the water above the lawn/plaza surface (SURFACE_Y.landscape=0.04) so
-      // the surrounding ground never z-fights through the pond.
-      pond.renderOrder = RENDER_ORDER.water;
-      pond.rotation.x = -Math.PI/2; pond.position.set(cx, 0.055, cz); scene.add(pond);
-    }
-    // Stone border
-    for (let i = 0; i < 12; i++) {
-      const a = (i/12)*Math.PI*2;
-      const stone = part(null, new THREE.SphereGeometry(0.15, 8, 8), {color:0xC4A86D, roughness:0.7, tex:'stone', rx:1, ry:1});
-      stone.position.set(cx+Math.cos(a)*r, 0.09, cz+Math.sin(a)*r);
-      scene.add(stone);
-    }
-    // Lily pads
-    for (let i = 0; i < 3; i++) {
-      const a = Math.random()*Math.PI*2, d = Math.random()*r*0.6;
-      const lily = part(null, new THREE.CircleGeometry(0.12+Math.random()*0.05, 8), {color:0x5A8A3A, roughness:0.9, tex:'grass', rx:1, ry:1});
-      lily.rotation.x = -Math.PI/2; lily.position.set(cx+Math.cos(a)*d, 0.08, cz+Math.sin(a)*d);
-      scene.add(lily);
-    }
-  }
-  
   function addSuburbHouse(x: number, z: number, rotDeg: number) {
     const g = new THREE.Group();
     const bw = 1.2, bh = 0.9;
@@ -449,41 +173,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     scene.add(g);
   }
   
-  function addMarketStalls(x: number, z: number, count: number, dir: number) {
-    const colors = [0xE8A838, 0x3B6FE0, 0xE85858, 0x5A8A3A, 0xA858E8];
-    for (let i = 0; i < count; i++) {
-      const px = dir === 0 ? x + i * 1.5 : x;
-      const pz = dir === 1 ? z + i * 1.5 : z;
-      const g = new THREE.Group();
-      // Posts
-      [-0.5, 0.5].forEach(dx =>
-        part(g, new THREE.BoxGeometry(0.08, 1.2, 0.08), {color:0xC4A86D, roughness:0.6, tex:'wood', rx:1, ry:1}, [dx, 0.6, 0]));
-      // Striped awning
-      part(g, new THREE.BoxGeometry(1.2, 0.05, 0.9), {color:colors[i%5], roughness:0.5, tex:'fabric', rx:1, ry:1}, [0, 1.2, 0]);
-      // Table
-      part(g, new THREE.BoxGeometry(1.0, 0.5, 0.6), {color:0xC4A86D, roughness:0.6, tex:'wood', rx:1, ry:1}, [0, 0.25, 0.3]);
-      // Goods
-      part(g, new THREE.BoxGeometry(0.3, 0.2, 0.3), {color:0xB8956B, roughness:0.7, tex:'wood', rx:1, ry:1}, [-0.2, 0.6, 0.3], false);
-      part(g, new THREE.BoxGeometry(0.25, 0.15, 0.25), {color:colors[(i+1)%5], roughness:0.6}, [0.2, 0.58, 0.3], false);
-      part(g, new THREE.SphereGeometry(0.07, 8, 8), {color:0xE85858, roughness:0.8}, [-0.1, 0.68, 0.3], false);
-      g.position.set(px, 0, pz);
-      g.userData.collisionGroup='market-stall';
-      scene.add(g); interactiveDecorationRoots.add(g); addRaycastGroup(g); addObstacleGroup?.(g);
-    }
-  }
-  
-  // ── Characters ────────────────────────────────────────────────────────────────
-
   return {
     addDecorations, addLamps,
     setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
-    // Advances pond ripples (ponds drift slower than the sea) and the shared
-    // day/night water tint; called from the main frame loop.
-    update(elapsedSeconds: number) {
-      for (const surface of pondSurfaces) surface.update(elapsedSeconds);
-    },
-    setWaterDaylight(value: number, instant = false) {
-      for (const surface of pondSurfaces) surface.setDaylight(value, instant);
-    },
+    update(_elapsedSeconds: number) {},
+    setWaterDaylight(_value: number, _instant = false) {},
   };
 }

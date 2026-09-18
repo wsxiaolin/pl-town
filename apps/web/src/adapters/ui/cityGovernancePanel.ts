@@ -1,4 +1,4 @@
-import { applyCityState, decorateCity, donateCity, getCityConfig, getCityState, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
+import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -24,7 +24,8 @@ function render(): void {
   const header = document.createElement('header');
   header.className = 'city-governance-head';
   const title = document.createElement('h2');
-  title.textContent = activeBuilding ? '城市治理' : '城市治理';
+  const activeProject = config?.projects.find((project) => project.buildingId === activeBuilding);
+  title.textContent = activeProject ? `城市治理 · ${activeProject.name}` : '城市治理';
   header.append(title, button('关闭', closeCityGovernancePanel));
   root.append(header);
   const tabs = document.createElement('nav');
@@ -43,7 +44,11 @@ function render(): void {
   body.className = 'city-governance-body';
   if (!config || !state) {
     body.append(document.createTextNode('城市建设数据暂时不可用，请稍后重试。'));
-    body.append(button('重试', () => window.dispatchEvent(new CustomEvent('minicity:city-retry'))));
+    body.append(button('重试', () => {
+      const retry = body.querySelector('button');
+      if (retry instanceof HTMLButtonElement) retry.disabled = true;
+      void loadCityGovernance().finally(render);
+    }));
     root.append(body);
     return;
   }
@@ -70,6 +75,8 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
   for (const project of projects) {
     const saved = progress.find((entry) => entry.id === project.id);
     const item = card(project.name, project.description);
+    item.dataset.buildingId = project.buildingId ?? '';
+    item.classList.toggle('active', project.buildingId === activeBuilding);
     const detail = document.createElement('p');
     detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
     item.append(detail);
@@ -134,3 +141,12 @@ export function openCityGovernancePanel(buildingId = ''): void {
 }
 
 export function closeCityGovernancePanel(): void { root?.classList.remove('open'); }
+
+export function disposeCityGovernancePanel(): void {
+  unsubscribe?.();
+  unsubscribe = null;
+  root?.remove();
+  root = null;
+  activeBuilding = '';
+  activeTab = 'collective';
+}

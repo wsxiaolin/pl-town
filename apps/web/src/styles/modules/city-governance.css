@@ -10,6 +10,7 @@
 .city-governance-body { flex: 1; overflow: auto; padding: 1rem 1.5rem 2rem; }
 .city-governance-list { display: grid; gap: .75rem; }
 .city-governance-card { padding: 1rem; border: 1px solid #ffffff1c; border-radius: .7rem; background: #ffffff08; }
+.city-governance-card.active { border-color: #d2a75b; box-shadow: inset 3px 0 #d2a75b; }
 .city-governance-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
 .city-governance-card p { margin: .35rem 0; color: #ccd8cd; font-size: .85rem; line-height: 1.5; }
 .city-governance-card button { margin-top: .5rem; background: #335c4b; }

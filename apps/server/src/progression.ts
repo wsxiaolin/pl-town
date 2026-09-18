@@ -1,5 +1,5 @@
 import type { PlayerProgress } from './types.js';
-import { isCityBuildingBuilt, isCityBuildingFunded } from './cityGovernance.js';
+import { isCityBuildingBuilt, isCityProjectBuilt } from './cityGovernance.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { getBuildingOverrides, type BuildingUnlockState } from './worldConfig.js';
 
@@ -138,14 +138,14 @@ export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
       const override = overrides[building.id] ?? null;
       const defaultState: ResolvedBuildingState = STORY_LOCKED_BUILDING_IDS.has(building.id) || BUILDING_UNLOCKABLE[building.id] !== true ? 'locked' : 'unlockable';
       const state: ResolvedBuildingState = !isCityBuildingBuilt(building.id) || override === 'locked' ? 'locked'
-        : override === 'open' || (isCityBuildingFunded(building.id) && defaultState !== 'locked') ? 'open'
+        : override === 'open' || (isCityProjectBuilt(building.id) && defaultState !== 'locked') ? 'open'
         : defaultState;
       return { id: building.id, label: building.label, num: building.num, x: building.x, z: building.z, storyLocked: building.storyLocked, override, state, defaultState };
     });
 }
 
 export function isBuildingGloballyUnlocked(buildingId: string): boolean {
-  return isBuildingUnlockable(buildingId) && (getBuildingOverrides()[buildingId] === 'open' || isCityBuildingFunded(buildingId));
+  return isBuildingUnlockable(buildingId) && (getBuildingOverrides()[buildingId] === 'open' || isCityProjectBuilt(buildingId));
 }
 
 /** Effective unlockability after admin overrides (a locked building can never be unlocked). */

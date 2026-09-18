@@ -103,10 +103,11 @@ export function applyCityState(next: unknown): boolean {
 }
 
 export function isConstructionPending(buildingId: string): boolean {
-  if (!config) return !['activity', 'bulletin', 'laws', 'news', 'mutualaid', 'archive', 'guesthouse', 'kingice', 'writingclub_outer'].includes(buildingId);
+  // Keep the regular city usable while the optional governance service is unavailable.
+  if (!config || !state || state.configVersion !== config.version) return false;
   if (config.initialBuiltBuildingIds.includes(buildingId)) return false;
   const project = config.projects.find((item) => item.buildingId === buildingId);
-  if (!project || !state || state.configVersion !== config.version) return true;
+  if (!project) return false;
   return !state.projects.some((item) => item.id === project.id && item.built);
 }
 
@@ -125,6 +126,9 @@ async function mutate(path: string, body: Record<string, unknown>, requestId: st
   if (!token) throw new Error('请先登录');
   const response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
   const payload = await response.json() as { state?: CityState; error?: string };
+  if (response.status === 409) {
+    await loadCityGovernance();
+  }
   if (!response.ok || !validState(payload.state)) throw new Error(payload.error ?? '治理请求失败，请重试');
   applyCityState(payload.state);
   return payload.state;

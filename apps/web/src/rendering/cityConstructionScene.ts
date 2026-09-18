@@ -9,10 +9,6 @@ type Kind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
 type Item = { key: string; kind: Kind | 'road'; x: number; z: number; width?: number; depth?: number };
 type Visual = { signature: string; root: THREE.Group; glow?: THREE.MeshStandardMaterial; light?: THREE.PointLight };
 
-// These stay available during the initial config request. The cloud config
-// becomes authoritative as soon as it arrives.
-const essentialBuildings = new Set(['activity', 'bulletin', 'laws', 'news', 'mutualaid', 'archive', 'guesthouse', 'kingice', 'writingclub_outer']);
-
 export function createCityConstructionScene(options: {
   scene: THREE.Scene;
   buildings: BuildingEntity[];
@@ -127,11 +123,11 @@ export function createCityConstructionScene(options: {
     const restored: BuildingEntity[] = [];
     let changed = false;
     for (const building of options.buildings) {
-      const pending = config
-        ? (!config.initialBuiltBuildingIds.includes(building.id) && (isConstructionPending(building.id)
-          || !state || state.configVersion !== config.version
-          || !config.projects.some((project) => project.buildingId === building.id && state.projects.some((entry) => entry.id === project.id && entry.built))))
-        : !essentialBuildings.has(building.id);
+      // A missing or mismatched snapshot means the governance service is
+      // unavailable. Preserve the normal city until a trusted snapshot arrives.
+      const pending = Boolean(config && state && state.configVersion === config.version
+        && !config.initialBuiltBuildingIds.includes(building.id)
+        && isConstructionPending(building.id));
       building.group.userData.constructionPending = pending;
       for (const attachment of options.buildingAttachments?.get(building.id) ?? []) {
         if (pending && !detachedAttachments.has(attachment)) {
