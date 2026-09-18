@@ -56,6 +56,11 @@ export function initializeCityGovernance(db: Database.Database): void {
     db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
     const progress = db.prepare('SELECT funded, built FROM city_projects WHERE id = ?').get(project.id) as { funded: number; built: number };
     if (!Number.isSafeInteger(progress.funded) || progress.funded > project.cost || Boolean(progress.built) !== (progress.funded === project.cost)) throw new Error(`Invalid city project progress: ${project.id}`);
+    // Preserve buildings unlocked before city governance existed. Their project
+    // rows become completed without charging users or rewriting their progress.
+    if (project.buildingId && !progress.built && db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(project.buildingId)) {
+      db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
+    }
   }
   const existing = db.prepare('SELECT id FROM city_projects').all() as Array<{ id: string }>;
   if (existing.some((entry) => !ids.has(entry.id))) throw new Error('City projects cannot be removed');

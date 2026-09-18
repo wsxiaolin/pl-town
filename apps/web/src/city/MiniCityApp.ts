@@ -355,8 +355,12 @@ const eventBindings = createEventBindings({
   isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
 });
 
-// Public decorations are driven exclusively by city construction snapshots.
-let UNLOCK_TIERS = createUnlockTiers(() => {}, () => {}, () => {}, () => {});
+let UNLOCK_TIERS = createUnlockTiers(
+  (positions) => worldDecorations?.addLamps(positions),
+  (positions) => worldDecorations?.addTrees(positions),
+  (x, y, z, rotY) => worldDecorations?.addArch(x, y, z, rotY),
+  (x, y, z, rotY) => worldDecorations?.addBench(x, y, z, rotY),
+);
 
 function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
 function checkAchievements() { progressionController?.checkAchievements(); }

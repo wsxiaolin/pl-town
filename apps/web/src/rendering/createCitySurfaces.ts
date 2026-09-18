@@ -126,9 +126,9 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     const roadWidth = (position: number) => position === 0 ? MAIN_ROAD_WIDTH : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
     const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road', district = '') => {
       const material = createLayerMaterial({
-        color: pathColor,
+        color: main ? colors.asphalt : pathColor,
         roughness: 1,
-        tex: 'ground',
+        tex: texture,
         rx: Math.max(1, width / 3),
         ry: Math.max(1, depth / 3),
       });
@@ -156,7 +156,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       const road = createMesh(new THREE.BoxGeometry(1.35, 0.04, length), createLayerMaterial({
         color: pathColor,
         roughness: 1,
-        tex: 'ground',
+        tex: 'pavement',
         rx: 1,
         ry: Math.max(1, length / 3),
       }));
@@ -167,7 +167,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       road.userData.district = 'echo-observatory-road';
       scene.add(road);
     });
-    addLamps([[44, 0, -1.3], [66, 0, 1.3]]);
+    addLamps([[44, 0, -1.3], [52, 0, 1.3], [60, 0, -1.3], [66, 0, 1.3]]);
 
     const minorCoords = roadCoords.filter((position) => position !== 0);
     for (const position of minorCoords) {
@@ -189,11 +189,11 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       }
     }
 
-    const ringMat = createLayerMaterial({ color: pathColor, roughness: 1, tex: 'ground', rx: 8, ry: 8 });
+    const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });
     trackPathMaterial(ringMat);
     addRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
 
-    const pedestrianMat = createLayerMaterial({ color: pathColor, roughness: 1, tex: 'ground', rx: 3, ry: 3 });
+    const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);
     addRing(2.25, 3, pedestrianMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
   }
