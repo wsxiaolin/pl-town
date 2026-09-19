@@ -74,6 +74,57 @@ const ossEnabledConfigCheck = spawnSync(process.execPath, ['--input-type=module'
 if (ossEnabledConfigCheck.status !== 0 || !ossEnabledConfigCheck.stdout.includes('true')) {
   throw new Error(`Production configuration must enable off-site backups with complete OSS credentials:\n${ossEnabledConfigCheck.stderr}`);
 }
+const ossRestoreRequiresConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'false', OSS_RESTORE_ON_EMPTY_START: 'true',
+    BIGMODEL_API_KEY: 'integration-api-key',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (ossRestoreRequiresConfigCheck.status === 0 || !`${ossRestoreRequiresConfigCheck.stdout}${ossRestoreRequiresConfigCheck.stderr}`.includes('require OSS to be configured')) {
+  throw new Error('OSS_RESTORE_ON_EMPTY_START must fail closed when OSS is not configured');
+}
+const deployTokenShortConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai',
+    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: 'key-secret', DEPLOY_SNAPSHOT_TOKEN: 'too-short',
+    BIGMODEL_API_KEY: 'integration-api-key',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (deployTokenShortConfigCheck.status === 0 || !`${deployTokenShortConfigCheck.stdout}${deployTokenShortConfigCheck.stderr}`.includes('DEPLOY_SNAPSHOT_TOKEN must contain at least 32 characters')) {
+  throw new Error('DEPLOY_SNAPSHOT_TOKEN shorter than 32 characters must fail closed');
+}
+const deployTokenRequiresOssConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'false',
+    DEPLOY_SNAPSHOT_TOKEN: 'deploy-snapshot-token-32-chars-ok', BIGMODEL_API_KEY: 'integration-api-key',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (deployTokenRequiresOssConfigCheck.status === 0 || !`${deployTokenRequiresOssConfigCheck.stdout}${deployTokenRequiresOssConfigCheck.stderr}`.includes('DEPLOY_SNAPSHOT_TOKEN requires OSS')) {
+  throw new Error('DEPLOY_SNAPSHOT_TOKEN must fail closed when OSS is not configured');
+}
+const ephemeralOssConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js').then((config) => console.log(`${config.OSS_RESTORE_ON_EMPTY_START}:${config.OSS_UPLOAD_ON_SHUTDOWN}:${config.DEPLOY_SNAPSHOT_TOKEN.length}`))"], {
+  cwd: new URL('..', import.meta.url),
+  env: {
+    ...process.env, NODE_ENV: 'production', DATA_DIR: dataDir, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678',
+    ADMIN_ACCOUNTS_JSON: '', ALLOWED_ORIGINS: 'https://city.example.com', OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai',
+    OSS_BUCKET: 'bucket', OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: 'key-secret',
+    OSS_RESTORE_ON_EMPTY_START: 'true', OSS_UPLOAD_ON_SHUTDOWN: 'true',
+    DEPLOY_SNAPSHOT_TOKEN: 'deploy-snapshot-token-32-chars-ok', BIGMODEL_API_KEY: 'integration-api-key',
+  },
+  encoding: 'utf8', timeout: 5_000,
+});
+if (ephemeralOssConfigCheck.status !== 0 || !ephemeralOssConfigCheck.stdout.includes('true:true:')) {
+  throw new Error(`Ephemeral OSS restore/upload flags must load with complete credentials:\n${ephemeralOssConfigCheck.stderr}\n${ephemeralOssConfigCheck.stdout}`);
+}
 const moderationPort = 8792;
 const moderationRequests = [];
 const moderationServer = createServer(async (request, response) => {
@@ -414,6 +465,8 @@ try {
   const overviewWithOffsite = await fetch(`${adminBase}/overview`, { headers: { cookie } });
   const overviewWithOffsitePayload = await overviewWithOffsite.json();
   if (!overviewWithOffsite.ok || overviewWithOffsitePayload.offsite?.enabled !== false) throw new Error('Admin overview must report off-site backups as disabled when OSS is not configured');
+  const snapshotDisabled = await fetch(`${adminOrigin}/internal/deploy/snapshot`, { method: 'POST' });
+  if (snapshotDisabled.status !== 404) throw new Error('Deploy snapshot endpoint must stay hidden when DEPLOY_SNAPSHOT_TOKEN is not configured');
 
   if (alice.hello.progress.currency !== 1200) throw new Error('New residents must receive configured initial currency');
   if (alice.hello.catalog.buildingPrices.activity !== 0) throw new Error('Building unlocks must be free');
@@ -870,6 +923,51 @@ try {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
+  }
+
+  const snapshotPort = 8795;
+  const snapshotDataDir = mkdtempSync(join(tmpdir(), 'minicity-snapshot-'));
+  const snapshotToken = 'deploy-snapshot-token-32-chars-ok';
+  const snapshotServer = spawn(process.execPath, ['dist/index.js'], {
+    cwd: new URL('..', import.meta.url),
+    env: {
+      ...process.env, NODE_ENV: 'production', PORT: String(snapshotPort), DATA_DIR: snapshotDataDir, HOST: '127.0.0.1',
+      ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin-password-12345678', ADMIN_ACCOUNTS_JSON: '',
+      ALLOWED_ORIGINS: 'https://city.example.com', AUTO_BACKUP_ENABLED: 'false',
+      OSS_ENABLED: 'true', OSS_REGION: 'oss-cn-shanghai', OSS_BUCKET: 'bucket',
+      OSS_ACCESS_KEY_ID: 'key-id', OSS_ACCESS_KEY_SECRET: 'key-secret',
+      DEPLOY_SNAPSHOT_TOKEN: snapshotToken,
+    },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  try {
+    const snapshotBase = `http://127.0.0.1:${snapshotPort}`;
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timed out waiting for the deploy snapshot server')), 10_000);
+      const poll = async () => {
+        try {
+          const response = await fetch(`${snapshotBase}/readyz`);
+          if (response.ok) { clearTimeout(timeout); resolve(); return; }
+        } catch { /* server not listening yet */ }
+        setTimeout(poll, 100);
+      };
+      poll();
+    });
+    const snapshotUrl = `${snapshotBase}/internal/deploy/snapshot`;
+    if ((await fetch(snapshotUrl, { method: 'GET' })).status !== 405) throw new Error('Deploy snapshot must reject non-POST methods');
+    if ((await fetch(snapshotUrl, { method: 'POST' })).status !== 401) throw new Error('Deploy snapshot must reject a missing bearer token');
+    if ((await fetch(snapshotUrl, { method: 'POST', headers: { authorization: 'Bearer wrong-token-wrong-token-wrong-tok' } })).status !== 401) {
+      throw new Error('Deploy snapshot must reject an invalid bearer token');
+    }
+    const emptySnapshot = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
+    if (emptySnapshot.status !== 409) throw new Error('Deploy snapshot must refuse to upload an empty database');
+  } finally {
+    if (snapshotServer.exitCode === null && snapshotServer.signalCode === null) {
+      const exited = new Promise((resolve) => snapshotServer.once('exit', resolve));
+      snapshotServer.kill();
+      await exited;
+    }
+    rmSync(snapshotDataDir, { recursive: true, force: true });
   }
 
   console.log('Integration passed: production fail-closed, origin/CSRF, identity, chat moderation, progression, malicious messages, admin, verified backups, housing, lifecycle, telemetry, NPC change workflow, and story topology');

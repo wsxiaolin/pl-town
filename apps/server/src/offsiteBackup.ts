@@ -3,11 +3,13 @@ import { readdirSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import OSS from 'ali-oss';
-import { listBackups } from './backup.js';
+import { endRestoreExclusive, listBackups, tryBeginRestore } from './backup.js';
+import { verifyBackup } from './backupVerification.js';
 import {
   BACKUP_DIR, OFFSITE_BACKUP_ENABLED, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET,
   OSS_BUCKET, OSS_ENDPOINT, OSS_PREFIX, OSS_REGION, OSS_SECURE,
 } from './config.js';
+import * as db from './db.js';
 import { logger } from './logger.js';
 
 // Off-site backups are a secondary copy of verified local backups. Uploads only
@@ -172,6 +174,43 @@ export function discardStaleStagedBackups(): void {
   for (const name of names) {
     if (!name.startsWith('.offsite-restore-') || !name.endsWith('.sqlite')) continue;
     discardStagedBackup(join(BACKUP_DIR, name));
+  }
+}
+
+export async function latestOffsiteBackup(): Promise<OffsiteBackupInfo | undefined> {
+  const items = await listOffsiteBackups();
+  return items[0];
+}
+
+export async function restoreLatestOffsiteBackupIfEmpty(): Promise<{ restored: boolean; name?: string; rowsCopied?: number }> {
+  const users = db.residentCount();
+  if (users > 0) {
+    logger.info('Skipping off-site restore because the local database already has residents', { users });
+    return { restored: false };
+  }
+  const latest = await latestOffsiteBackup();
+  if (!latest) {
+    logger.info('No off-site backup available to restore on empty start');
+    return { restored: false };
+  }
+  if (!tryBeginRestore()) throw new Error('Restore is in progress');
+  let staged: { path: string; expectedSha256?: string } | undefined;
+  try {
+    staged = await stageOffsiteBackup(latest.name);
+    const verification = await verifyBackup(staged.path);
+    if (verification.integrity !== 'ok' || verification.foreignKeyErrors) {
+      throw new Error(`Backup verification failed (${verification.integrity}, ${verification.foreignKeyErrors} foreign key errors)`);
+    }
+    if (staged.expectedSha256 && staged.expectedSha256 !== verification.sha256) {
+      throw new Error('Off-site backup checksum does not match object metadata');
+    }
+    if (!staged.expectedSha256) logger.warn('Off-site backup has no remote checksum; restoring after integrity check only', { name: latest.name });
+    const result = db.restoreFromBackupFile(staged.path);
+    logger.info('Database restored from off-site backup on empty start', { name: latest.name, rowsCopied: result.rowsCopied });
+    return { restored: true, name: latest.name, rowsCopied: result.rowsCopied };
+  } finally {
+    if (staged) discardStagedBackup(staged.path);
+    endRestoreExclusive();
   }
 }
 

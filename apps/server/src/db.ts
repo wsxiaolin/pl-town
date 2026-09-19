@@ -484,6 +484,10 @@ export function verifyDatabase(): { ok: boolean; message: string } {
   return { ok: message === 'ok', message };
 }
 
+export function residentCount(): number {
+  return (db.prepare('SELECT COUNT(*) AS count FROM users').get() as { count: number }).count;
+}
+
 export function databaseStatus(): { ready: boolean; applicationId: number; schemaVersion: number; sqliteVersion: string } {
   const row = db.prepare('SELECT sqlite_version() AS version').get() as { version: string };
   return {
