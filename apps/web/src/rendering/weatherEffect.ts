@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 import type { Weather } from '../city/weather';
 
+type FogProfile = { color: number; near: number; far: number };
+
+const WEATHER_FOG: Record<Weather, FogProfile | null> = {
+  clear: null,
+  rain: { color: 0x7c94a3, near: 96, far: 168 },
+  snow: { color: 0xbfccd8, near: 104, far: 176 },
+  'snow-deep': { color: 0xb6c4d2, near: 104, far: 176 },
+};
+
 export function createWeatherEffect(options: {
   scene: THREE.Scene;
   getCursor: () => THREE.Object3D | null;
@@ -23,17 +32,25 @@ export function createWeatherEffect(options: {
   options.scene.add(rain);
   let weather: Weather = 'clear';
 
+  function applyFog(next: Weather): void {
+    const profile = WEATHER_FOG[next];
+    if (!profile) {
+      options.scene.fog = null;
+      return;
+    }
+    const current = options.scene.fog;
+    if (current instanceof THREE.Fog && current.color.getHex() === profile.color) return;
+    options.scene.fog = new THREE.Fog(profile.color, profile.near, profile.far);
+  }
+
   function set(next: Weather): void {
     weather = next;
     rain.visible = next === 'rain';
     options.onWeatherChanged?.(next);
-    if (next === 'rain') {
-      options.scene.background = new THREE.Color(0x778f9e);
-      options.scene.fog = new THREE.Fog(0x9eb7bc, 24, 95);
-      return;
-    }
-    options.scene.fog = null;
+    // Weather no longer replaces the sky. Keep the day/night sky visible and
+    // only layer a light depth haze on top so the scene stops looking grey.
     options.restoreSky();
+    applyFog(next);
   }
 
   function update(delta: number): void {

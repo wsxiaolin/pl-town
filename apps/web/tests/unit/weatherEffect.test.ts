@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as THREE from 'three';
 import { createWeatherEffect } from '../../src/rendering/weatherEffect';
 
-test('weather effect restores the shared sky and fog when rain clears or disposes', () => {
+test('weather effect keeps the shared sky and only adds fog while raining', () => {
   const dataset: DOMStringMap = {};
   const scene = new THREE.Scene();
   let restoreCount = 0;
@@ -17,17 +17,18 @@ test('weather effect restores the shared sky and fog when rain clears or dispose
   effect.set('rain');
   assert.equal(dataset.cityWeather, 'rain');
   assert.ok(scene.fog instanceof THREE.Fog);
-  assert.equal((scene.background as THREE.Color).getHex(), 0x778f9e);
+  assert.equal((scene.background as THREE.Color).getHex(), 0xabcdef);
+  assert.equal(restoreCount, 1);
 
   effect.set('clear');
   assert.equal(dataset.cityWeather, 'clear');
   assert.equal(scene.fog, null);
   assert.equal((scene.background as THREE.Color).getHex(), 0xabcdef);
-  assert.equal(restoreCount, 1);
+  assert.equal(restoreCount, 2);
 
   effect.dispose();
   assert.equal(dataset.cityWeather, undefined);
   assert.equal(scene.fog, null);
-  assert.equal(restoreCount, 2);
+  assert.equal(restoreCount, 3);
   assert.equal(scene.children.some((child) => child instanceof THREE.Points), false);
 });
