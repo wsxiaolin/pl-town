@@ -39,7 +39,12 @@ export function createWeatherEffect(options: {
       return;
     }
     const current = options.scene.fog;
-    if (current instanceof THREE.Fog && current.color.getHex() === profile.color) return;
+    if (
+      current instanceof THREE.Fog
+      && current.color.getHex() === profile.color
+      && current.near === profile.near
+      && current.far === profile.far
+    ) return;
     options.scene.fog = new THREE.Fog(profile.color, profile.near, profile.far);
   }
 
