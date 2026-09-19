@@ -24,6 +24,7 @@ export function createCityRuntimeLifecycle(options: {
     if (started) return;
     started = true;
     eventController = new AbortController();
+    window.addEventListener('minicity:login-required', options.showLogin, { signal: eventController.signal });
     const boot = () => {
       if (!started) return;
       void loadCityGovernance(eventController.signal).finally(() => {

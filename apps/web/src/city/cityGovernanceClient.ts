@@ -23,6 +23,7 @@ export type CityGovernanceListener = (config: CityConfig | null, state: CityStat
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
+const pendingRequestIds = new Map<string, string>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -45,7 +46,9 @@ function validState(value: unknown): value is CityState {
 }
 
 async function fetchJson(path: string, signal?: AbortSignal, init?: RequestInit): Promise<Response> {
-  return fetch(townApiUrl(path), { ...init, signal, headers: { accept: 'application/json', ...(init?.headers ?? {}) } });
+  const timeoutSignal = AbortSignal.timeout(8_000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  return fetch(townApiUrl(path), { ...init, signal: requestSignal, headers: { accept: 'application/json', ...(init?.headers ?? {}) } });
 }
 
 export function getCityConfig(): CityConfig | null { return config; }
@@ -117,15 +120,24 @@ export function disposeCityGovernance(): void {
   activeSignal = undefined;
   config = null;
   state = null;
+  pendingRequestIds.clear();
   listeners.clear();
 }
 
-async function mutate(path: string, body: Record<string, unknown>, requestId: string): Promise<CityState> {
+async function mutate(path: string, body: Record<string, unknown>, explicitRequestId?: string): Promise<CityState> {
   if (!config) throw new Error('City configuration unavailable');
   const token = localStorage.getItem('minicityServerToken');
-  if (!token) throw new Error('请先登录');
+  if (!token) {
+    window.dispatchEvent(new CustomEvent('minicity:login-required'));
+    throw new Error('请先登录');
+  }
+  const operationKey = `${path}:${JSON.stringify(body)}`;
+  const requestId = explicitRequestId ?? pendingRequestIds.get(operationKey) ?? makeRequestId();
+  if (!explicitRequestId) pendingRequestIds.set(operationKey, requestId);
   const response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
   const payload = await response.json() as { state?: CityState; error?: string };
+  if (!explicitRequestId && pendingRequestIds.get(operationKey) === requestId) pendingRequestIds.delete(operationKey);
+  if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   if (response.status === 409) {
     await loadCityGovernance();
   }
@@ -135,5 +147,5 @@ async function mutate(path: string, body: Record<string, unknown>, requestId: st
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
-export function donateCity(projectId: string, amount: number, requestId = makeRequestId()) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
-export function decorateCity(plotId: string, decorationId: string, requestId = makeRequestId()) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }
+export function donateCity(projectId: string, amount: number, requestId?: string) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
+export function decorateCity(plotId: string, decorationId: string, requestId?: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }

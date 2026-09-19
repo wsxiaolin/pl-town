@@ -67,6 +67,7 @@ export function assembleCityWorld(options: {
     scene,
     resources,
     palette: PALETTE,
+    roadCoords: ROAD_COORDS,
     cityLimit: CITY_LIMIT,
     buildings: options.buildings,
     residences: options.residences,
@@ -149,6 +150,11 @@ export function assembleCityWorld(options: {
     waterRendering: readRenderSettings().waterRendering,
   });
   sceneInterestPoints.obstacleRoots.forEach((root) => options.roadNavigation.registerObstacleGroup(root));
+  const catCafeAttachments: THREE.Object3D[] = (['cat-cafe-note', 'cat-cafe-ice-wall'] as const)
+    .flatMap((id) => {
+      const object = sceneInterestPoints.entities.get(id)?.object;
+      return object ? [object] : [];
+    });
   const buildingLabelController = createBuildingLabelController({
     getBuildings: () => options.buildings,
     isStoryLocked: options.isBuildingUnavailable,
@@ -169,9 +175,7 @@ export function assembleCityWorld(options: {
     scene,
     buildings: options.buildings,
     getIsNight: options.getIsNight,
-    buildingAttachments: new Map([['catcafe', [...sceneInterestPoints.entities.values()]
-      .filter((entry) => entry.id === 'cat-cafe-note' || entry.object === sceneInterestPoints.obstacleRoots[0])
-      .map((entry) => entry.object)]]),
+    buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
     refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
     refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
     onBuildingRestored: (building) => { void loadModels([building]); },

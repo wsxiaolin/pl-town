@@ -14,7 +14,13 @@ export type CityState = {
 export function getCityState(): CityState {
   const meta = db.prepare('SELECT epoch, revision, config_version AS configVersion FROM city_meta WHERE id = 1').get() as Pick<CityState, 'epoch' | 'revision' | 'configVersion'>;
   const projects = db.prepare('SELECT id, funded, built FROM city_projects ORDER BY id').all() as Array<{ id: string; funded: number; built: number }>;
-  const decorations = db.prepare('SELECT plot_id AS plotId, decoration_id AS decorationId, owner_id AS ownerId, owner_nickname AS ownerNickname FROM city_decorations ORDER BY plot_id').all() as CityState['decorations'];
+  const decorations = db.prepare(`
+    SELECT decorations.plot_id AS plotId, decorations.decoration_id AS decorationId,
+      decorations.owner_id AS ownerId, COALESCE(users.nickname, decorations.owner_nickname) AS ownerNickname
+    FROM city_decorations AS decorations
+    LEFT JOIN users ON users.id = decorations.owner_id
+    ORDER BY decorations.plot_id
+  `).all() as CityState['decorations'];
   return { ...meta, projects: projects.map((entry) => ({ ...entry, built: Boolean(entry.built) })), decorations };
 }
 export function isCityBuildingBuilt(buildingId: string): boolean {

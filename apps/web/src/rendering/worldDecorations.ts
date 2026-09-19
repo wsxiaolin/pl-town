@@ -5,7 +5,7 @@ import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createPondWaterSurface, type AnimatedWaterSurface } from './animatedWater';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
-import { footprintOverlapsMainRoad, isFilmCityClearing } from '../city/data/cityConfig';
+import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
@@ -23,6 +23,7 @@ export interface WorldDecorationsOptions {
   scene: THREE.Scene;
   resources: ResourcePool;
   palette: Palette;
+  roadCoords: readonly number[];
   cityLimit: number;
   buildings: BuildingEntity[];
   residences: ResidenceEntity[];
@@ -36,7 +37,7 @@ export interface WorldDecorationsOptions {
 
 export function createWorldDecorations(options: WorldDecorationsOptions) {
   const {
-    scene, resources, palette: P, cityLimit: CITY_LIMIT,
+    scene, resources, palette: P, roadCoords: ROAD_COORDS, cityLimit: CITY_LIMIT,
     buildings, residences, lampMaterials: lampGlobes,
     getIsNight, makeMaterial: stdMat, addPart: part, addRaycastGroup,
     addObstacleGroup,
@@ -49,6 +50,12 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   const residenceRoots: RetainedStaticMeshRoot[] = [];
   const interactiveDecorationRoots = new Set<THREE.Object3D>();
   const orangeGroveCenter={x:-15,z:-3};
+  const roadWidth=(position: number)=>position===0?MAIN_ROAD_WIDTH:(Math.abs(position)===6||Math.abs(position)===12?1.5:1.0);
+
+  function treeCenterIsOnRoad(x: number, z: number) {
+    return ROAD_COORDS.some((position) => Math.abs(x - position) <= roadWidth(position) / 2
+      || Math.abs(z - position) <= roadWidth(position) / 2);
+  }
 
   // ── Building ground plots ──
   function addDecorations() {
@@ -164,7 +171,11 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       treeTrunks = new InstancedBatch(scene, resources.geometry(new THREE.CylinderGeometry(0.06, 0.09, 0.38, 8)), resources.material({ kind: 'legacy-tree-trunk' }, () => stdMat({ color: 0x6a4a2a, roughness: 0.9 })), 512);
       treeCrowns = new InstancedBatch(scene, resources.geometry(new THREE.SphereGeometry(0.3, 12, 12)), resources.material({ kind: 'legacy-tree-crown' }, () => stdMat({ color: 0x6f9f4f, roughness: 0.85 })), 512);
     }
-    positions.forEach(([x, , z]) => { treeTrunks!.add(x, 0.19, z); treeCrowns!.add(x, 0.66, z); });
+    positions.forEach(([x, , z]) => {
+      if (Math.hypot(x - orangeGroveCenter.x, z - orangeGroveCenter.z) < 2.4 || treeCenterIsOnRoad(x, z)) return;
+      treeTrunks!.add(x, 0.19, z);
+      treeCrowns!.add(x, 0.66, z);
+    });
   }
   function addBench(x: number, y: number, z: number, rotY: number) {
     const group = new THREE.Group();

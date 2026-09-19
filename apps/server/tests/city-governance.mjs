@@ -183,6 +183,9 @@ try {
     const { mutateCity, getCityState } = await import('./dist/cityGovernance.js');
     const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
     const user = getUser('11111111-1111-4111-8111-111111111111');
+    db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run('RenamedResident', user.id);
+    assert.equal(getCityState().decorations.find((entry) => entry.ownerId === user.id).ownerNickname, 'RenamedResident');
+    db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run(user.nickname, user.id);
     db.prepare('UPDATE player_progress SET currency = 0 WHERE user_id = ?').run(user.id);
     const before = getCityState();
     assert.throws(() => mutateCity(user, 'donate', { configVersion: config.version, requestId: 'poor', projectId: 'greenbelt-trees', amount: 1 }), /Insufficient/);

@@ -189,13 +189,51 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       }
     }
 
+    const lineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
+    trackPathMaterial(lineMat);
+    for (let position = -36; position <= 36; position += 2.4) {
+      if (Math.abs(position) < 2.8) continue;
+      addMarking(new THREE.BoxGeometry(0.07, 0.008, 1.15), lineMat, 0, position);
+      addMarking(new THREE.BoxGeometry(1.15, 0.008, 0.07), lineMat, position, 0);
+    }
+
+    const crosswalkRoadCoords = minorCoords
+      .filter((_, index) => index % 2 === 0)
+      .slice(0, Math.ceil(minorCoords.length / 2));
+    for (const x of crosswalkRoadCoords) {
+      const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalkRotated', rx: 1, ry: 1 });
+      trackPathMaterial(material);
+      addMarking(new THREE.BoxGeometry(roadWidth(x), 0.005, MAIN_ROAD_WIDTH), material, x, 0);
+    }
+    for (const z of crosswalkRoadCoords) {
+      const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
+      trackPathMaterial(material);
+      addMarking(new THREE.BoxGeometry(MAIN_ROAD_WIDTH, 0.005, roadWidth(z)), material, 0, z);
+    }
+
     const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });
     trackPathMaterial(ringMat);
     addRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
 
+    const ringLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
+    trackPathMaterial(ringLineMat);
+    addRing(37.96, 38.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking);
+
+    for (let index = 0; index < 8; index++) {
+      const angle = (index / 8) * Math.PI * 2 + Math.PI / 8;
+      addLamps([[Math.cos(angle) * 38, 0, Math.sin(angle) * 38]]);
+    }
+
     const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);
     addRing(2.25, 3, pedestrianMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
+  }
+
+  function addMarking(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, z: number): void {
+    const marking = createMesh(geometry, material);
+    marking.position.set(x, SURFACE_Y.roadMarking, z);
+    marking.renderOrder = RENDER_ORDER.roadMarking;
+    scene.add(marking);
   }
 
   function addRing(inner: number, outer: number, material: THREE.Material, y: number, renderOrder: number): void {
