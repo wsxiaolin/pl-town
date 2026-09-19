@@ -27,11 +27,8 @@ export function createWeatherEffect(options: {
     weather = next;
     rain.visible = next === 'rain';
     options.onWeatherChanged?.(next);
-    if (next === 'rain') {
-      options.scene.background = new THREE.Color(0x778f9e);
-      options.scene.fog = new THREE.Fog(0x9eb7bc, 24, 95);
-      return;
-    }
+    // Precipitation supplies the atmosphere while the city keeps its colors.
+    // Repeated calls also refresh the sky after a day/night transition.
     options.scene.fog = null;
     options.restoreSky();
   }
