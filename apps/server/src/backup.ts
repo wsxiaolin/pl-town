@@ -96,7 +96,7 @@ function pruneBackups(): void {
   if (changed) writeManifest(manifest);
 }
 
-export async function createBackup(reason: 'automatic' | 'startup' | 'manual'): Promise<BackupInfo> {
+export async function createBackup(reason: 'automatic' | 'startup' | 'manual' | 'shutdown' | 'deploy'): Promise<BackupInfo> {
   if (restoreClaimed) throw new Error(RESTORE_IN_PROGRESS);
   if (running) return running;
   running = (async () => {
