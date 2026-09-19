@@ -1,0 +1,20 @@
+.city-governance-panel { position: fixed; inset: 0 0 0 auto; z-index: 230; width: min(560px, 100vw); height: 100dvh; display: flex; flex-direction: column; background: #17211f; color: #f1eadc; box-shadow: -18px 0 48px #0007; transform: translateX(102%); visibility: hidden; transition: transform .25s ease, visibility .25s; }
+.city-governance-panel.open { transform: none; visibility: visible; }
+.city-governance-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.3rem 1.5rem; border-bottom: 1px solid #ffffff24; }
+.city-governance-head h2 { margin: 0; font: 500 clamp(1.3rem, 4vw, 1.8rem)/1.2 Georgia, serif; }
+.city-governance-head button, .city-governance-tabs button, .city-governance-card button, .city-governance-body > button { border: 1px solid #b9d0b055; border-radius: .45rem; padding: .55rem .8rem; background: #ffffff0b; color: inherit; cursor: pointer; }
+.city-governance-head button:focus-visible, .city-governance-tabs button:focus-visible, .city-governance-card button:focus-visible, .city-governance-body > button:focus-visible, .city-governance-card select:focus-visible { outline: 2px solid #e8c477; outline-offset: 2px; }
+.city-governance-tabs { display: flex; gap: .5rem; padding: .8rem 1.5rem 0; }
+.city-governance-tabs button.active { background: #d2a75b; color: #17211f; }
+.city-governance-panel [data-city-status] { margin: .7rem 1.5rem 0; color: #c8d6c8; font-size: .78rem; }
+.city-governance-body { flex: 1; overflow: auto; padding: 1rem 1.5rem 2rem; }
+.city-governance-list { display: grid; gap: .75rem; }
+.city-governance-card { padding: 1rem; border: 1px solid #ffffff1c; border-radius: .7rem; background: #ffffff08; }
+.city-governance-card.active { border-color: #d2a75b; box-shadow: inset 3px 0 #d2a75b; }
+.city-governance-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
+.city-governance-card p { margin: .35rem 0; color: #ccd8cd; font-size: .85rem; line-height: 1.5; }
+.city-governance-card button { margin-top: .5rem; background: #335c4b; }
+.city-governance-card button:disabled { opacity: .55; cursor: wait; }
+.city-governance-card select { max-width: 100%; margin-top: .5rem; padding: .55rem; border: 1px solid #b9d0b055; border-radius: .45rem; background: #202d29; color: inherit; }
+.city-governance-card input { width: min(12rem, 100%); margin-top: .5rem; padding: .55rem; border: 1px solid #b9d0b055; border-radius: .45rem; background: #202d29; color: inherit; }
+@media (max-width: 600px) { .city-governance-panel { width: 100vw; } .city-governance-head, .city-governance-tabs, .city-governance-body { padding-left: 1rem; padding-right: 1rem; } }

@@ -5,6 +5,8 @@ import { stopInvasionCG } from './invasionCg';
 import { preloadTextureResources } from './textureResourcePreloader';
 import { readRenderSettings } from '../rendering/createRenderer';
 import { showUnlockToast } from './toast';
+import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
+import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
 export function createCityRuntimeLifecycle(options: {
   reduced: boolean;
@@ -22,11 +24,15 @@ export function createCityRuntimeLifecycle(options: {
     if (started) return;
     started = true;
     eventController = new AbortController();
+    window.addEventListener('minicity:login-required', options.showLogin, { signal: eventController.signal });
     const boot = () => {
       if (!started) return;
-      try { options.initCity(); } catch (error) { console.error('City initialization failed', error); }
-      window.dispatchEvent(new CustomEvent('minicity:city-ready'));
-      options.startTutorial();
+      void loadCityGovernance(eventController.signal).finally(() => {
+        if (!started) return;
+        try { options.initCity(); } catch (error) { console.error('City initialization failed', error); }
+        window.dispatchEvent(new CustomEvent('minicity:city-ready'));
+        options.startTutorial();
+      });
     };
     void preloadTextureResources(readRenderSettings().textureRendering, eventController.signal).then(boot).catch(boot);
     initCG({
@@ -45,6 +51,9 @@ export function createCityRuntimeLifecycle(options: {
     if (!started) return;
     started = false;
     options.disposeSession();
+    closeCityGovernancePanel();
+    disposeCityGovernancePanel();
+    disposeCityGovernance();
     destroyCG();
     stopInvasionCG();
     destroyMusterCG();

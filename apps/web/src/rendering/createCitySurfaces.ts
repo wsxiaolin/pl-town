@@ -197,12 +197,9 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       addMarking(new THREE.BoxGeometry(1.15, 0.008, 0.07), lineMat, position, 0);
     }
 
-    // Keep crosswalks at half of the grid intersections while retaining a
-    // deterministic spread along the main roads.
-    const nonZeroRoadCoords = roadCoords.filter((position) => position !== 0);
-    const crosswalkRoadCoords = nonZeroRoadCoords
+    const crosswalkRoadCoords = minorCoords
       .filter((_, index) => index % 2 === 0)
-      .slice(0, Math.ceil(nonZeroRoadCoords.length / 2));
+      .slice(0, Math.ceil(minorCoords.length / 2));
     for (const x of crosswalkRoadCoords) {
       const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalkRotated', rx: 1, ry: 1 });
       trackPathMaterial(material);

@@ -134,6 +134,7 @@ let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
 let buildingLabelController: ReturnType<typeof assembleCityWorld>['buildingLabelController'];
 let sceneInterestPoints: SceneInterestPoints | null = null;
+let constructionScene: ReturnType<typeof assembleCityWorld>['constructionScene'] | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
 const buildingFeatureRegistry = createBuildingFeatureRegistry();
@@ -472,6 +473,7 @@ function init() {
   npcSystem = world.npcSystem;
   buildingLabelController = world.buildingLabelController;
   sceneInterestPoints = world.sceneInterestPoints;
+  constructionScene = world.constructionScene;
   raycastBuildingGroups = world.raycastBuildingGroups;
   const hud = createCityHudPanels(document, lifecycle.signal, (open) => multiplayerHousing?.setPhoneOpen(open));
   communityPanels = hud.communityPanels;
@@ -761,6 +763,8 @@ function disposeSession() {
   renderer?.dispose();
   renderer?.forceContextLoss();
   sceneInterestPoints?.dispose();
+  constructionScene?.dispose();
+  constructionScene = null;
   scene?.clear();
   resources.dispose();
   buildingPlotTargets.length = 0;

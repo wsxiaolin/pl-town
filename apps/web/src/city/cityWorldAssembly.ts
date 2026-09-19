@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { ResourcePool } from '../core/ResourcePool';
 import { readRenderSettings } from '../rendering/createRenderer';
 import { createWorldDecorations } from '../rendering/worldDecorations';
+import { createCityConstructionScene } from '../rendering/cityConstructionScene';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
@@ -70,15 +71,12 @@ export function assembleCityWorld(options: {
     cityLimit: CITY_LIMIT,
     buildings: options.buildings,
     residences: options.residences,
-    pathMaterials: options.pathMats,
     lampMaterials: options.lampGlobes,
     getIsNight: options.getIsNight,
     makeMaterial: graphics.mesh.stdMat,
-    makeMesh: graphics.mesh.mk,
     addPart: graphics.mesh.part,
     addRaycastGroup: (group) => raycastBuildingGroups.push(group),
     addObstacleGroup: (group) => options.roadNavigation.registerObstacleGroup(group),
-    waterRendering: readRenderSettings().waterRendering,
   });
   const npcSystem = createNpcSystem({
     scene,
@@ -152,12 +150,11 @@ export function assembleCityWorld(options: {
     waterRendering: readRenderSettings().waterRendering,
   });
   sceneInterestPoints.obstacleRoots.forEach((root) => options.roadNavigation.registerObstacleGroup(root));
-  addRealBuildingModels(scene, options.buildings)
-    .then(() => {
-      options.roadNavigation.cacheBuildingBoxes();
-      options.onModelsLoaded();
-    })
-    .catch((error) => console.error('3D model loading failed', error));
+  const catCafeAttachments: THREE.Object3D[] = (['cat-cafe-note', 'cat-cafe-ice-wall'] as const)
+    .flatMap((id) => {
+      const object = sceneInterestPoints.entities.get(id)?.object;
+      return object ? [object] : [];
+    });
   const buildingLabelController = createBuildingLabelController({
     getBuildings: () => options.buildings,
     isStoryLocked: options.isBuildingUnavailable,
@@ -166,7 +163,28 @@ export function assembleCityWorld(options: {
   buildingLabelController.addLabels();
   buildingLabelController.applyRenames();
   applyStoryLockedBuildingPresentation(options.buildings.filter(options.isStoryLocked));
+  let disposed = false;
+  const loadModels = (buildings: BuildingEntity[]) => addRealBuildingModels(scene, buildings)
+    .then(() => {
+      if (disposed) return;
+      options.roadNavigation.cacheBuildingBoxes();
+      options.onModelsLoaded();
+    })
+    .catch((error) => console.error('3D model loading failed', error));
+  const constructionScene = createCityConstructionScene({
+    scene,
+    buildings: options.buildings,
+    getIsNight: options.getIsNight,
+    buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
+    refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
+    refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
+    onBuildingRestored: (building) => { void loadModels([building]); },
+  });
+  void loadModels(options.buildings);
+  const updateDecorations = worldDecorations.update;
+  worldDecorations.update = (elapsed) => { updateDecorations(elapsed); constructionScene.update(); };
   return {
+    constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
     worldDecorations,
     npcSystem,
     buildingSceneController,

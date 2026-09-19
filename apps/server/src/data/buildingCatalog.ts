@@ -420,6 +420,30 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     x: 3,
     z: -15,
     storyLocked: false
+  },
+  {
+    id: "television_tower",
+    label: "电视塔",
+    num: "50",
+    x: 32,
+    z: -8,
+    storyLocked: false
+  },
+  {
+    id: "fried_chicken_shop",
+    label: "炸鸡店",
+    num: "51",
+    x: 28,
+    z: 2,
+    storyLocked: false
+  },
+  {
+    id: "tavern",
+    label: "酒馆",
+    num: "52",
+    x: 33,
+    z: 3,
+    storyLocked: false
   }
 ]
 );

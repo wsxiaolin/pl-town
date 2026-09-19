@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { getCityState } from './cityGovernance.js';
+import { handleCityRequest } from './cityGovernanceRouter.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
@@ -191,6 +193,7 @@ async function handle(client: Client, raw: string) {
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
     send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
+    send(client.socket, { type: 'city.updated', state: getCityState() });
     broadcast({ type: 'player.joined', player: publicUser(client.user) }, client.user.id); client.authInProgress = false; return;
   }
   requireReady(client, () => {
@@ -385,14 +388,18 @@ const http = createServer(async (request, response) => {
   if (await handleAdminRequest(request, response, {
     online: () => clients.size,
     disconnectUser: (userId) => clients.get(userId)?.socket.close(4003, 'Account status changed'),
-    disconnectAll: () => { for (const client of clients.values()) client.socket.close(4003, 'Database restored'); },
+    disconnectAll: () => {
+      pendingPositions.clear();
+      for (const client of clients.values()) { client.ready = false; client.socket.close(4003, 'Database restored'); }
+      clients.clear();
+    },
     broadcastHousing: broadcastHousingState,
     startedAt,
     getWeather: () => serverWeather,
     setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
     getWeatherConfig: () => getWeatherConfig(),
     setWeatherConfig: (config) => { const next = setWeatherConfig(config); serverWeather = next.value; broadcastWeather(); return next; },
-    resetWorldConfig: () => { resetWorldConfig(); serverWeather = getWeatherConfig().value; },
+    resetWorldConfig: () => { resetWorldConfig(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
     broadcastWorldCatalog,
   })) return;
   const headers = { ...jsonSecurityHeaders, ...corsHeaders(request) };
@@ -421,6 +428,12 @@ const http = createServer(async (request, response) => {
     }
   }
   if (await handleTelemetryCollection(request, response)) return;
+  if (await handleCityRequest(request, response, headers, (userId, result) => {
+    if (!result.replayed) broadcast({ type: 'city.updated', state: result.state });
+    const client = clients.get(userId);
+    if (client) sendProgress(client.socket, userId, { type: 'city.committed', requestId: result.requestId, acceptedAmount: result.acceptedAmount, operationRevision: result.operationRevision, replayed: result.replayed });
+    if (!result.replayed) broadcastWorldCatalog();
+  })) return;
   if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
     response.end(JSON.stringify({ items: npcEditCatalogItems }));

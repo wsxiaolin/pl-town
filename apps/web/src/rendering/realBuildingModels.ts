@@ -82,6 +82,20 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
 
 export async function addRealBuildingModels(_scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
   const bananaBuilding = buildings.find(building => building.id === 'banana_palace');
+  if (!bananaBuilding || bananaBuilding.group.userData.constructionPending) return;
   const banana = await loader.loadAsync(MODEL_URLS.banana);
-  if (bananaBuilding) replaceBuilding(bananaBuilding, banana.scene);
+  if (bananaBuilding.group.parent && !bananaBuilding.group.userData.constructionPending) {
+    replaceBuilding(bananaBuilding, banana.scene);
+  } else {
+    const textures = new Set<THREE.Texture>();
+    banana.scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      object.geometry.dispose();
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+        for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
+        material.dispose();
+      }
+    });
+    textures.forEach((texture) => texture.dispose());
+  }
 }

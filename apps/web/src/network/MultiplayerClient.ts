@@ -1,5 +1,6 @@
 import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
 import { isWeather, type Weather } from '../city/weather';
+import { applyCityState } from '../city/cityGovernanceClient';
 
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
 export type NetUser = { id: string; nickname: string; position: NetPosition; verified?: boolean };
@@ -52,6 +53,7 @@ type ServerMessage =
   | { type: 'story.updated'; story: NetStoryProgress; event?: Record<string, unknown> }
   | { type: 'world.weather'; weather: NetWeather }
   | { type: 'world.catalog'; catalog?: NetProgressionCatalog }
+  | { type: 'city.updated'; state: unknown }
   | { type: 'error'; message?: string; code?: string };
 
 type Callbacks = {
@@ -129,6 +131,7 @@ export class MultiplayerClient {
     else if (message.type === 'story.updated') this.callbacks.story?.(message.story, message.event);
     else if (message.type === 'world.weather' && isWeather(message.weather)) this.callbacks.weather?.(message.weather);
     else if (message.type === 'world.catalog' && message.catalog) this.callbacks.worldCatalog?.(message.catalog);
+    else if (message.type === 'city.updated') applyCityState(message.state);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {
