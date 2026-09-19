@@ -33,8 +33,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
   const {
     scene,
     isNight,
-    roadCoords,
-    cityLimit,
     colors,
     createMaterial,
     createMesh,
@@ -123,7 +121,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
   function addPaths(): void {
     const pathColor = isNight ? colors.nightPath : colors.dayPath;
-    const roadWidth = (position: number) => position === 0 ? MAIN_ROAD_WIDTH : (Math.abs(position) === 6 || Math.abs(position) === 12 ? 1.5 : 1.0);
     const addRoadSegment = (width: number, depth: number, x: number, z: number, main = false, texture = 'road', district = '') => {
       const material = createLayerMaterial({
         color: main ? colors.asphalt : pathColor,
@@ -147,6 +144,8 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     addRoadSegment(38.8, MAIN_ROAD_WIDTH, 23.6, 0, true, 'asphalt');
     addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -39.0, false, 'pavement');
     addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, 39.0, false, 'pavement');
+    addRoadSegment(2.0, MAIN_ROAD_WIDTH, -39.0, 0, false, 'pavement');
+    addRoadSegment(2.0, MAIN_ROAD_WIDTH, 39.0, 0, false, 'pavement');
 
     ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
@@ -169,46 +168,12 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     });
     addLamps([[44, 0, -1.3], [52, 0, 1.3], [60, 0, -1.3], [66, 0, 1.3]]);
 
-    const minorCoords = roadCoords.filter((position) => position !== 0);
-    for (const position of minorCoords) {
-      const width = roadWidth(position);
-      addRoadSegment(width, 32.8, position, -18.6, false, 'pavement');
-      addRoadSegment(width, 32.8, position, 18.6, false, 'pavement');
-    }
-
-    const boundaries = [-cityLimit, ...roadCoords, cityLimit];
-    for (const z of minorCoords) {
-      const width = roadWidth(z);
-      const texture = 'pavement';
-      for (let index = 0; index < boundaries.length - 1; index++) {
-        const left = boundaries[index]!;
-        const right = boundaries[index + 1]!;
-        const start = left + (roadCoords.includes(left) ? roadWidth(left) / 2 : 0);
-        const end = right - (roadCoords.includes(right) ? roadWidth(right) / 2 : 0);
-        if (end > start) addRoadSegment(end - start, width, (start + end) / 2, z, false, texture);
-      }
-    }
-
     const lineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     trackPathMaterial(lineMat);
     for (let position = -36; position <= 36; position += 2.4) {
       if (Math.abs(position) < 2.8) continue;
       addMarking(new THREE.BoxGeometry(0.07, 0.008, 1.15), lineMat, 0, position);
       addMarking(new THREE.BoxGeometry(1.15, 0.008, 0.07), lineMat, position, 0);
-    }
-
-    const crosswalkRoadCoords = minorCoords
-      .filter((_, index) => index % 2 === 0)
-      .slice(0, Math.ceil(minorCoords.length / 2));
-    for (const x of crosswalkRoadCoords) {
-      const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalkRotated', rx: 1, ry: 1 });
-      trackPathMaterial(material);
-      addMarking(new THREE.BoxGeometry(roadWidth(x), 0.005, MAIN_ROAD_WIDTH), material, x, 0);
-    }
-    for (const z of crosswalkRoadCoords) {
-      const material = createLayerMaterial({ color: 0xf0f0ec, roughness: 0.85, tex: 'crosswalk', rx: 1, ry: 1 });
-      trackPathMaterial(material);
-      addMarking(new THREE.BoxGeometry(MAIN_ROAD_WIDTH, 0.005, roadWidth(z)), material, 0, z);
     }
 
     const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });
@@ -218,11 +183,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     const ringLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     trackPathMaterial(ringLineMat);
     addRing(37.96, 38.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking);
-
-    for (let index = 0; index < 8; index++) {
-      const angle = (index / 8) * Math.PI * 2 + Math.PI / 8;
-      addLamps([[Math.cos(angle) * 38, 0, Math.sin(angle) * 38]]);
-    }
 
     const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);

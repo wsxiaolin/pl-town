@@ -103,7 +103,15 @@ try {
   assert.equal(weak.headers.get('access-control-expose-headers'), 'ETag');
   assert.equal((await fetch(`${base}/town-api/city/config`, { headers: { 'if-none-match': '*' } })).status, 304);
   assert.equal((await fetch(`${base}/town-api/city/config`, { headers: { 'if-none-match': '"old"' } })).status, 200);
-  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer']) assert.ok(config.initialBuiltBuildingIds.includes(id));
+  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library']) assert.ok(config.initialBuiltBuildingIds.includes(id));
+  for (const id of ['catcafe', 'school_north', 'teahouse', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop']) {
+    assert.equal(config.initialBuiltBuildingIds.includes(id), false);
+    assert.ok(config.projects.some((entry) => entry.buildingId === id));
+  }
+  assert.ok(config.projects.some((entry) => entry.id === 'east-gate-path' && entry.kind === 'road'));
+  assert.ok(config.projects.some((entry) => entry.id === 'corner-trees-ne' && entry.kind === 'trees'));
+  assert.ok(config.personalPlots.some((entry) => entry.id === 'residence-yard-1'));
+  assert.ok(config.personalPlots.some((entry) => entry.id === 'residence-yard-2'));
   const project = config.projects.find((entry) => entry.buildingId === 'catcafe');
   const a = await resident('city-token-a');
   const b = await resident('city-token-b');
