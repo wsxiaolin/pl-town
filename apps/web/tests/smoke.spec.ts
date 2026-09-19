@@ -155,8 +155,21 @@ test('weather debug API updates the visible weather state', async ({ page }) => 
   await page.evaluate(() => (window as any)._mini.weather.set('rain'));
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
-  await page.evaluate(() => (window as any)._mini.weather.set('snow'));
-  await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('snow');
+  for (const weather of ['rain', 'snow', 'snow-deep', 'clear']) {
+    const state = await page.evaluate((next) => {
+      const mini = (window as any)._mini;
+      const sky = mini.scene.background;
+      mini.weather.set(next);
+      return {
+        skyTexture: mini.scene.background?.isTexture === true,
+        sameSky: mini.scene.background === sky,
+        fog: mini.scene.fog,
+        globalTint: getComputedStyle(document.body, '::after').content,
+      };
+    }, weather);
+    expect(state).toEqual({ skyTexture: true, sameSky: true, fog: null, globalTint: 'none' });
+    await expect(page.locator('body')).toHaveAttribute('data-weather', weather);
+  }
 });
 
 test('server weather messages update the visible weather state', async ({ page }) => {
@@ -164,6 +177,10 @@ test('server weather messages update the visible weather state', async ({ page }
   await waitForCityReady(page, 'weather-network-tester');
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
+  expect(await page.evaluate(() => {
+    const scene = (window as any)._mini.scene;
+    return { skyTexture: scene.background?.isTexture === true, fog: scene.fog };
+  })).toEqual({ skyTexture: true, fog: null });
 });
 
 test('cloud inventory and scene discoveries work in the rendered city', async ({ page }) => {
