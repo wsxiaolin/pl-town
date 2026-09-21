@@ -75,8 +75,22 @@ export function initializeCityGovernance(db: Database.Database): void {
     const previous = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(meta.config_version) as { config_json: string } | undefined;
     if (!previous) throw new Error('Missing persisted city config');
     const old = JSON.parse(previous.config_json) as typeof config;
-    for (const key of ['personalPlots', 'decorations', 'initialBuiltBuildingIds'] as const) {
-      if (JSON.stringify(old[key]) !== JSON.stringify(config[key])) throw new Error(`City ${key} migration requires explicit reconciliation`);
+    if (old.decorations.some((entry) => {
+      const next = config.decorations.find((decoration) => decoration.id === entry.id);
+      return !next || next.kind !== entry.kind;
+    })) throw new Error('City decorations migration requires explicit reconciliation');
+    if (old.personalPlots.some((entry) => {
+      const next = config.personalPlots.find((plot) => plot.id === entry.id);
+      return !next || next.x !== entry.x || next.z !== entry.z || entry.options.some((id) => !next.options.includes(id));
+    })) throw new Error('City personalPlots migration requires explicit reconciliation');
+    const previouslyBuilt = new Set(old.initialBuiltBuildingIds);
+    if (config.initialBuiltBuildingIds.some((id) => !previouslyBuilt.has(id))) {
+      throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
+    }
+    for (const id of old.initialBuiltBuildingIds) {
+      if (!config.initialBuiltBuildingIds.includes(id) && !config.projects.some((project) => project.buildingId === id)) {
+        throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
+      }
     }
   }
   db.prepare('INSERT OR IGNORE INTO city_configs VALUES (?, ?)').run(config.version, json);
