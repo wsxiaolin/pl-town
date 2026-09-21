@@ -1,0 +1,47 @@
+name: Snapshot Render database to OSS
+
+# Render's free disk is ephemeral. Snapshot the live instance to Alibaba Cloud
+# OSS before a deploy so the next boot can restore. Prefer disabling Render
+# auto-deploy and letting this workflow trigger the Deploy Hook after a
+# successful snapshot; otherwise the snapshot still runs as best-effort
+# insurance against a SIGTERM race.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'package-lock.json'
+      - 'package.json'
+      - '.github/workflows/snapshot-offsite.yml'
+      - 'scripts/snapshot-offsite.sh'
+
+concurrency:
+  group: snapshot-offsite
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: Snapshot live Render SQLite to OSS
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Snapshot and optionally deploy
+        env:
+          RENDER_SNAPSHOT_URL: ${{ secrets.RENDER_SNAPSHOT_URL }}
+          DEPLOY_SNAPSHOT_TOKEN: ${{ secrets.DEPLOY_SNAPSHOT_TOKEN }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "${RENDER_SNAPSHOT_URL}" ] || [ -z "${DEPLOY_SNAPSHOT_TOKEN}" ]; then
+            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+              echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are required" >&2
+              exit 1
+            fi
+            echo "Skipping snapshot: configure RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN repository secrets"
+            exit 0
+          fi
+          bash scripts/snapshot-offsite.sh

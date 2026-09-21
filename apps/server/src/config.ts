@@ -130,10 +130,9 @@ export const BACKUP_INTERVAL_MINUTES = integer('BACKUP_INTERVAL_MINUTES', 1_440,
 export const BACKUP_RETENTION_DAYS = integer('BACKUP_RETENTION_DAYS', 30, 1, 3_650);
 export const BACKUP_MAX_FILES = integer('BACKUP_MAX_FILES', 30, 1, 1_000);
 
-// Off-site (Alibaba Cloud OSS) backups, uploaded/downloaded manually from the
-// admin console. The OSS store is a secondary copy: a remote object can only be
-// created from a local verified backup, so every remote backup always has a
-// local original ("remote is a subset of local").
+// Off-site (Alibaba Cloud OSS) backups. Console upload still only accepts a
+// local verified backup. Ephemeral hosts can also restore the latest remote
+// object on empty start, upload on SIGTERM, and accept a CI snapshot POST.
 export const OSS_ENABLED = boolean('OSS_ENABLED', false);
 export const OSS_REGION = process.env.OSS_REGION ?? '';
 export const OSS_BUCKET = process.env.OSS_BUCKET ?? '';
@@ -143,6 +142,12 @@ export const OSS_ENDPOINT = process.env.OSS_ENDPOINT ?? '';
 export const OSS_PREFIX = process.env.OSS_PREFIX ?? 'minicity/backups/';
 export const OSS_SECURE = boolean('OSS_SECURE', true);
 export const OFFSITE_BACKUP_ENABLED = OSS_ENABLED && OSS_BUCKET !== '' && OSS_ACCESS_KEY_ID !== '' && OSS_ACCESS_KEY_SECRET !== '';
+// Ephemeral hosts (Render free disk) lose SQLite on every deploy. Restore the
+// latest OSS object when the local database has no residents, and upload a
+// verified snapshot during SIGTERM so the next boot has something to pull.
+export const OSS_RESTORE_ON_EMPTY_START = boolean('OSS_RESTORE_ON_EMPTY_START', false);
+export const OSS_UPLOAD_ON_SHUTDOWN = boolean('OSS_UPLOAD_ON_SHUTDOWN', false);
+export const DEPLOY_SNAPSHOT_TOKEN = process.env.DEPLOY_SNAPSHOT_TOKEN?.trim() ?? '';
 
 if ((ADMIN_USERNAME && !ADMIN_PASSWORD) || (!ADMIN_USERNAME && ADMIN_PASSWORD)) {
   throw new Error('ADMIN_USERNAME and ADMIN_PASSWORD must be configured together');
@@ -157,6 +162,11 @@ if (IS_PRODUCTION && BIGMODEL_API_KEY && new URL(BIGMODEL_MODERATION_URL).protoc
 if (OSS_ENABLED && !OFFSITE_BACKUP_ENABLED) throw new Error('OSS_ENABLED requires OSS_BUCKET, OSS_ACCESS_KEY_ID, and OSS_ACCESS_KEY_SECRET');
 if (OSS_ENABLED && OSS_REGION === '' && OSS_ENDPOINT === '') throw new Error('OSS_ENABLED requires OSS_REGION or OSS_ENDPOINT');
 if (OSS_ENABLED && OSS_PREFIX.startsWith('/')) throw new Error('OSS_PREFIX must not start with a slash');
+if ((OSS_RESTORE_ON_EMPTY_START || OSS_UPLOAD_ON_SHUTDOWN) && !OFFSITE_BACKUP_ENABLED) {
+  throw new Error('OSS_RESTORE_ON_EMPTY_START and OSS_UPLOAD_ON_SHUTDOWN require OSS to be configured');
+}
+if (DEPLOY_SNAPSHOT_TOKEN && DEPLOY_SNAPSHOT_TOKEN.length < 32) throw new Error('DEPLOY_SNAPSHOT_TOKEN must contain at least 32 characters');
+if (DEPLOY_SNAPSHOT_TOKEN && !OFFSITE_BACKUP_ENABLED) throw new Error('DEPLOY_SNAPSHOT_TOKEN requires OSS to be configured');
 
 for (const directory of [DATA_DIR, LOG_DIR, BACKUP_DIR]) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });

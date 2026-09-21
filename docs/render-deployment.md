@@ -1,6 +1,6 @@
 # Render 临时测试部署
 
-Render 仅用于功能演示和测试，不承载生产数据，也不配置持久磁盘。正式部署见 [零基础云服务器部署指南](./deployment.md)。
+Render 免费计划没有持久磁盘，重启或重新部署会清空 SQLite。本仓库用阿里云 OSS 做异地快照：部署前由 GitHub Actions 把线上库上传到 OSS，新实例启动时若本地没有居民数据就拉最新快照恢复；进程收到 SIGTERM 时再补传一份。正式长期部署见 [零基础云服务器部署指南](./deployment.md)。
 
 ## 后端测试服务
 
@@ -22,6 +22,16 @@ ADMIN_PASSWORD=<至少 16 字符的随机测试密码>
 ALLOWED_ORIGINS=https://<测试前端域名>,https://*.pl-town.pages.dev
 TRUST_PROXY_HOPS=1
 AUTO_BACKUP_ENABLED=false
+OSS_ENABLED=true
+OSS_REGION=oss-cn-hongkong
+OSS_BUCKET=<备份桶>
+OSS_ACCESS_KEY_ID=<RAM AccessKeyId>
+OSS_ACCESS_KEY_SECRET=<RAM AccessKeySecret>
+OSS_PREFIX=minicity/render-backups/
+OSS_SECURE=true
+OSS_RESTORE_ON_EMPTY_START=true
+OSS_UPLOAD_ON_SHUTDOWN=true
+DEPLOY_SNAPSHOT_TOKEN=<至少 32 字符的随机令牌>
 ```
 
 `NODE_ENV=production` 时服务启动前会强制校验：`ALLOWED_ORIGINS` 至少一项、`ADMIN_PASSWORD` 至少 16 字符，任一缺失服务直接拒绝启动。Render 会自动注入 `PORT` 环境变量，服务按其监听，无需手动设置。需要多个测试管理员时，可另设 `ADMIN_ACCOUNTS_JSON='{"operator2":"至少 16 字符的密码"}'`。
@@ -30,7 +40,21 @@ AUTO_BACKUP_ENABLED=false
 
 生产模式下 `ALLOW_ORIGINLESS_WEBSOCKET` 默认关闭，浏览器直连 `wss://<后端域名>` 会携带前端 Origin，只要该 Origin 在 `ALLOWED_ORIGINS` 中即可正常建立 WebSocket。与后端同源的请求（例如托管在后端自身的 `/admin/` 管理面板）始终放行，无需把后端域名加入 `ALLOWED_ORIGINS`。
 
-不要设置 `DATA_DIR` 到所谓长期路径，也不要把 Render 上生成的居民、住房或剧情数据视为可保留数据。Render 默认文件系统是临时的，重启或重新部署可能清空 SQLite。测试账号和密码不得与生产复用。
+不要设置 `DATA_DIR` 到所谓长期路径。Render 默认文件系统是临时的，SQLite 只在当前实例存活期间有效。居民、住房和剧情数据靠 OSS 快照跨部署保留：
+
+1. GitHub Actions `snapshot-offsite.yml` 在推送到 `main`（服务端相关路径）或手动触发时，向线上 `POST /internal/deploy/snapshot`，把当前库上传到 OSS。
+2. 新实例启动时，若本地 `users` 表为空，则下载 OSS 上最新一份已校验备份并恢复后再监听端口。
+3. 旧实例收到 SIGTERM 时再创建并上传一份关机快照，作为 Actions 与健康检查超时之间的兜底。
+
+建议关闭 Render 自动部署，把 Deploy Hook URL 配进 GitHub secret `RENDER_DEPLOY_HOOK_URL`，让快照成功后再触发部署，避免新实例在快照完成前抢先启动。同时配置：
+
+```text
+RENDER_SNAPSHOT_URL=https://pl-town.onrender.com
+DEPLOY_SNAPSHOT_TOKEN=<与 Render 环境变量相同的令牌>
+RENDER_DEPLOY_HOOK_URL=<Render Deploy Hook，可选>
+```
+
+`DEPLOY_SNAPSHOT_TOKEN` 至少 32 字符，只用于 CI；不要把它写进仓库。空库会返回 HTTP 409，工作流按跳过处理，不会覆盖 OSS 上已有快照。首次部署没有远端备份时，服务以空库启动。测试账号和密码不得与生产复用。
 
 Render 的负载均衡器终止 TLS 并将请求转发给服务；其官方安全说明建议应用从 `X-Forwarded-For` 读取真实客户端 IP。因此此单层测试拓扑设置 `TRUST_PROXY_HOPS=1`。[Render Web Services](https://render.com/docs/web-services) [Render DDoS guidance](https://render.com/articles/how-render-handles-ddos-attacks)
 

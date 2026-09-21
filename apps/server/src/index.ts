@@ -5,9 +5,10 @@ import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
-import { startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
-import { discardStaleStagedBackups } from './offsiteBackup.js';
-import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
+import { createBackup, startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
+import { handleDeploySnapshot } from './deploySnapshot.js';
+import { discardStaleStagedBackups, restoreLatestOffsiteBackupIfEmpty, uploadOffsiteBackup } from './offsiteBackup.js';
+import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, OSS_RESTORE_ON_EMPTY_START, OSS_UPLOAD_ON_SHUTDOWN, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import { ChatModerationService } from './chatModerationService.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
@@ -402,6 +403,7 @@ const http = createServer(async (request, response) => {
     resetWorldConfig: () => { resetWorldConfig(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
     broadcastWorldCatalog,
   })) return;
+  if (await handleDeploySnapshot(request, response)) return;
   const headers = { ...jsonSecurityHeaders, ...corsHeaders(request) };
   if (request.url === '/healthz') { response.writeHead(200, headers); response.end(JSON.stringify({ ok: true })); return; }
   if (request.url === '/readyz') {
@@ -681,10 +683,36 @@ http.requestTimeout = 15_000;
 http.headersTimeout = 20_000;
 http.keepAliveTimeout = 5_000;
 http.maxHeadersCount = 100;
-http.listen(PORT, HOST, () => {
+async function boot(): Promise<void> {
   discardStaleStagedBackups();
+  if (OSS_RESTORE_ON_EMPTY_START) {
+    try {
+      const result = await restoreLatestOffsiteBackupIfEmpty();
+      if (result.restored) {
+        resetWorldConfig();
+        serverWeather = getWeatherConfig().value;
+        lastWorldCatalogJson = '';
+      }
+    } catch (error) {
+      logger.error('Off-site restore on empty start failed', { error: String(error) });
+      throw error;
+    }
+  }
   startAutomaticBackups();
-  logger.info(`MiniCity server listening on http://${HOST}:${PORT}`);
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => reject(error);
+    http.once('error', onError);
+    http.listen(PORT, HOST, () => {
+      http.off('error', onError);
+      logger.info(`MiniCity server listening on http://${HOST}:${PORT}`);
+      resolve();
+    });
+  });
+}
+
+void boot().catch((error) => {
+  logger.error('Server boot failed', { error: String(error) });
+  process.exit(1);
 });
 
 let stopping = false;
@@ -699,6 +727,19 @@ const shutdown = async (signal: string) => {
   for (const socket of sockets) socket.close(1001, 'Server shutting down');
   wss.close();
   try { await waitForBackup(); } catch (error) { logger.error('Backup did not finish during shutdown', { error: String(error) }); }
+  if (OSS_UPLOAD_ON_SHUTDOWN) {
+    try {
+      if (db.residentCount() > 0) {
+        const backup = await createBackup('shutdown');
+        await uploadOffsiteBackup(backup.name);
+        logger.info('Shutdown backup uploaded off-site', { name: backup.name, bytes: backup.bytes });
+      } else {
+        logger.info('Skipping shutdown off-site upload because the local database is empty');
+      }
+    } catch (error) {
+      logger.error('Shutdown off-site backup failed', { error: String(error) });
+    }
+  }
   http.close(async () => {
     await moderationStopped;
     db.closeDatabase();
@@ -706,7 +747,7 @@ const shutdown = async (signal: string) => {
     await closeLogger();
     process.exit(0);
   });
-  setTimeout(() => process.exit(1), 10_000).unref();
+  setTimeout(() => process.exit(1), OSS_UPLOAD_ON_SHUTDOWN ? 25_000 : 10_000).unref();
 };
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
