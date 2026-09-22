@@ -25,6 +25,11 @@ const node = (tag, text, className) => {
   if (className) element.className = className;
   return element;
 };
+const svgNode = (tag, attrs = {}) => {
+  const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, String(value));
+  return element;
+};
 const showNotice = (message, success = false) => {
   const box = $('#notice'); box.textContent = message; box.className = `notice${success ? ' success' : ''}`; box.hidden = false;
   window.clearTimeout(showNotice.timer); showNotice.timer = window.setTimeout(() => { box.hidden = true; }, 5000);
@@ -126,7 +131,7 @@ async function loadHouses() {
   const rows = data.items.map((house) => {
     const row = node('tr'); const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const edit = node('button', '编辑'); edit.type = 'button'; edit.addEventListener('click', () => openHouseEditor(house));
-    const remove = node('button', '删除', 'warning'); remove.type = 'button'; remove.addEventListener('click', () => confirmAction('删除住房', `确认删除“${house.name || house.buildingId}”？成员将变为未入住状态，待处理的入住申请也会一并删除。`, () => deleteHouse(house.buildingId)));
+    const remove = node('button', '删除', 'warning'); remove.type = 'button'; remove.addEventListener('click', () => confirmAction('删除住房', `删除「${house.name || house.buildingId}」后，成员会变为未入住。确定继续？`, () => deleteHouse(house.buildingId)));
     group.append(edit, remove); actions.append(group);
     row.append(node('td', house.buildingId), node('td', house.ownerNickname), node('td', house.name || '未命名'), node('td', `${house.members.map((member) => member.nickname).join('、')}（${house.memberCount} 人）`), actions); return row;
   });
@@ -206,7 +211,7 @@ function renderBackupRows(items) {
       finally { verify.disabled = false; }
     });
     const link = node('a', '下载', 'download'); link.href = `/admin/api/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
-    const restore = node('button', '恢复'); restore.type = 'button'; restore.addEventListener('click', () => confirmAction('恢复备份', `将用 ${backup.name} 覆盖当前数据库，所有在线居民会被强制下线并需重新登录。确定继续？`, () => restoreBackup(backup.name)));
+    const restore = node('button', '恢复'); restore.type = 'button'; restore.addEventListener('click', () => confirmAction('恢复备份', `将用 ${backup.name} 覆盖当前数据库，在线居民会全部下线。确定继续？`, () => restoreBackup(backup.name)));
     group.append(verify, link, restore);
     if (state.offsiteEnabled) {
       const offsite = node('button', '上传异地'); offsite.type = 'button';
@@ -235,18 +240,18 @@ async function loadOffsiteBackups() {
   state.offsiteEnabled = true; $('#offsitePanel').hidden = false;
   const rows = data.items.map((backup) => {
     const row = node('tr');
-    const status = backup.orphan ? '本地缺失' : backup.inSync ? '一致' : '校验不一致';
+    const status = backup.orphan ? '缺失' : backup.inSync ? '一致' : '校验不一致';
     const statusCell = node('td'); const badge = node('span', status, `status nowrap${backup.orphan || !backup.inSync ? ' bad' : ''}`); statusCell.append(badge);
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const link = node('a', '下载', 'download'); link.href = `/admin/api/offsite/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
     const restore = node('button', '恢复'); restore.type = 'button';
-    restore.addEventListener('click', () => confirmAction('从异地恢复备份', `将用 OSS 上的 ${backup.name} 覆盖当前数据库，即使本机没有这份备份也可以直接恢复。所有在线居民会被强制下线并需重新登录。确定继续？`, () => restoreOffsiteBackup(backup.name)));
+    restore.addEventListener('click', () => confirmAction('从异地恢复备份', `将用 ${backup.name} 覆盖当前数据库，在线居民会全部下线。确定继续？`, () => restoreOffsiteBackup(backup.name)));
     const del = node('button', '删除', 'warning'); del.type = 'button';
-    del.addEventListener('click', () => confirmAction('删除异地备份', `将从阿里云 OSS 删除 ${backup.name}，本机备份不受影响。确定继续？`, () => deleteOffsite(backup.name)));
+    del.addEventListener('click', () => confirmAction('删除异地备份', `删除 OSS 上的 ${backup.name}，本机备份不受影响。确定继续？`, () => deleteOffsite(backup.name)));
     group.append(link, restore, del); actions.append(group);
     row.append(node('td', backup.name), node('td', formatDate(backup.uploadedAt)), node('td', backup.sha256 ? '已校验' : '—', 'nowrap'), node('td', formatBytes(backup.bytes)), statusCell, actions); return row;
   });
-  $('#offsiteRows').replaceChildren(...(rows.length ? rows : [emptyRow(6, '尚无异地备份，请在上方备份列表点击“上传异地”')]));
+  $('#offsiteRows').replaceChildren(...(rows.length ? rows : [emptyRow(6, '尚无异地备份')]));
   if (changed) renderBackupRows(state.localBackups ?? []);
 }
 async function deleteOffsite(name) {
@@ -254,11 +259,11 @@ async function deleteOffsite(name) {
   catch (error) { showNotice(error.message); }
 }
 async function restoreBackup(name) {
-  try { await api(`/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('备份已恢复，所有居民会话已撤销', true); await Promise.all([loadBackups(), loadOverview()]); }
+      try { await api(`/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('备份已恢复', true); await Promise.all([loadBackups(), loadOverview()]); }
   catch (error) { showNotice(error.message); }
 }
 async function restoreOffsiteBackup(name) {
-  try { await api(`/offsite/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('异地备份已恢复，所有居民会话已撤销', true); await Promise.all([loadBackups(), loadOverview()]); }
+      try { await api(`/offsite/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('异地备份已恢复', true); await Promise.all([loadBackups(), loadOverview()]); }
   catch (error) { showNotice(error.message); }
 }
 async function createBackup() {
@@ -303,7 +308,7 @@ async function loadChat() {
     const identity = node('td'); identity.append(node('strong', author.nickname), node('small', author.userId));
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const ban = node('button', author.disabled ? '已封禁' : '封禁用户', author.disabled ? '' : 'warning'); ban.type = 'button'; ban.disabled = author.disabled;
-    ban.addEventListener('click', () => confirmAction('封禁用户', `确认封禁 ${author.nickname}？该用户会立即下线且无法再次登录。`, () => disableChatAuthor(author)));
+    ban.addEventListener('click', () => confirmAction('封禁用户', `封禁 ${author.nickname} 后将立即下线。确定继续？`, () => disableChatAuthor(author)));
     group.append(ban); actions.append(group);
     row.append(identity, node('td', formatNumber(author.messages)), node('td', formatNumber(author.flagged)), node('td', formatNumber(author.hidden)), node('td', formatDate(author.lastAt)), actions); return row;
   });
@@ -549,33 +554,93 @@ function worldEffectiveState(building) {
   if (override === 'locked') return 'locked';
   return building.defaultState === 'unlockable' ? 'unlockable' : 'locked';
 }
+const WORLD_MAP_ROADS = Object.freeze([-36, -27, -18, -12, -6, 0, 6, 12, 18, 27, 36]);
+const WORLD_MAP_LIMIT = 42;
+function worldMapFrame(buildings) {
+  const xs = buildings.map((building) => building.x);
+  const zs = buildings.map((building) => building.z);
+  const minX = Math.min(-WORLD_MAP_LIMIT, ...xs);
+  const maxX = Math.max(WORLD_MAP_LIMIT, ...xs);
+  const minZ = Math.min(-WORLD_MAP_LIMIT, ...zs);
+  const maxZ = Math.max(WORLD_MAP_LIMIT, ...zs);
+  const span = Math.max(maxX - minX, maxZ - minZ, 1) * 1.08;
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+  const project = (x, z) => ({
+    x: 50 + ((x - centerX) / span) * 100,
+    y: 50 + ((z - centerZ) / span) * 100,
+  });
+  return { project, span };
+}
 function renderWorldMap() {
   const svg = $('#worldMap');
   if (!state.worldBuildings.length) { svg.replaceChildren(); return; }
-  const xs = state.worldBuildings.map((building) => building.x);
-  const zs = state.worldBuildings.map((building) => building.z);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
-  const span = Math.max(maxX - minX, maxZ - minZ, 1) * 1.15;
-  const centerX = (minX + maxX) / 2, centerZ = (minZ + maxZ) / 2;
-  const project = (value, center) => 50 + ((value - center) / span) * 100;
+  const { project, span } = worldMapFrame(state.worldBuildings);
+  const roadWidth = Math.max(0.72, 1.2 / span * 100);
+  const layers = [];
+  const ground = svgNode('rect', { class: 'world-map-ground', x: 0, y: 0, width: 100, height: 100, rx: 1.4 });
+  layers.push(ground);
+  const grid = svgNode('g', { class: 'world-map-grid' });
+  for (let step = -36; step <= 36; step += 6) {
+    const vertical = project(step, 0);
+    const horizontal = project(0, step);
+    grid.append(
+      svgNode('line', { x1: vertical.x.toFixed(2), y1: '2', x2: vertical.x.toFixed(2), y2: '98' }),
+      svgNode('line', { x1: '2', y1: horizontal.y.toFixed(2), x2: '98', y2: horizontal.y.toFixed(2) }),
+    );
+  }
+  layers.push(grid);
+  const roads = svgNode('g', { class: 'world-map-roads' });
+  const start = project(-WORLD_MAP_LIMIT, 0);
+  const end = project(WORLD_MAP_LIMIT, 0);
+  const north = project(0, -WORLD_MAP_LIMIT);
+  const south = project(0, WORLD_MAP_LIMIT);
+  roads.append(
+    svgNode('line', { class: 'world-map-axis', x1: start.x.toFixed(2), y1: start.y.toFixed(2), x2: end.x.toFixed(2), y2: end.y.toFixed(2) }),
+    svgNode('line', { class: 'world-map-axis', x1: north.x.toFixed(2), y1: north.y.toFixed(2), x2: south.x.toFixed(2), y2: south.y.toFixed(2) }),
+  );
+  for (const coord of WORLD_MAP_ROADS) {
+    if (coord === 0) continue;
+    const west = project(-WORLD_MAP_LIMIT, coord);
+    const east = project(WORLD_MAP_LIMIT, coord);
+    const northEnd = project(coord, -WORLD_MAP_LIMIT);
+    const southEnd = project(coord, WORLD_MAP_LIMIT);
+    roads.append(
+      svgNode('line', { x1: west.x.toFixed(2), y1: west.y.toFixed(2), x2: east.x.toFixed(2), y2: east.y.toFixed(2), 'stroke-width': roadWidth.toFixed(2) }),
+      svgNode('line', { x1: northEnd.x.toFixed(2), y1: northEnd.y.toFixed(2), x2: southEnd.x.toFixed(2), y2: southEnd.y.toFixed(2), 'stroke-width': roadWidth.toFixed(2) }),
+    );
+  }
+  layers.push(roads);
+  const plaza = project(0, 0);
+  layers.push(svgNode('circle', { class: 'world-map-plaza', cx: plaza.x.toFixed(2), cy: plaza.y.toFixed(2), r: Math.max(1.8, 4.2 / span * 100).toFixed(2) }));
+  const selected = state.worldBuildings.find((building) => building.id === state.worldSelectedId);
+  if (selected) {
+    const point = project(selected.x, selected.z);
+    layers.push(svgNode('circle', { class: 'world-map-halo', cx: point.x.toFixed(2), cy: point.y.toFixed(2), r: '4.8' }));
+  }
   const marks = state.worldBuildings.map((building) => {
-    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    group.setAttribute('class', `world-marker world-marker--${worldEffectiveState(building)}${building.id === state.worldSelectedId ? ' is-selected' : ''}`);
-    group.setAttribute('tabindex', '0');
-    group.setAttribute('role', 'button');
-    group.setAttribute('aria-label', `${building.label || building.id}（${building.id}）`);
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', project(building.x, centerX).toFixed(2));
-    circle.setAttribute('cy', project(building.z, centerZ).toFixed(2));
-    circle.setAttribute('r', '2.6');
-    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    const point = project(building.x, building.z);
+    const group = svgNode('g', {
+      class: `world-marker world-marker--${worldEffectiveState(building)}${building.id === state.worldSelectedId ? ' is-selected' : ''}`,
+      tabindex: '0',
+      role: 'button',
+      'aria-label': `${building.label || building.id}（${building.id}）`,
+      transform: `translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})`,
+    });
+    const pin = svgNode('rect', { class: 'world-marker-pin', x: '-1.7', y: '-1.7', width: '3.4', height: '3.4', rx: '0.7' });
+    const title = svgNode('title');
     title.textContent = `${building.label || building.id}（${building.id}）`;
-    group.append(circle, title);
+    group.append(pin, title);
+    if (building.id === state.worldSelectedId) {
+      const label = svgNode('text', { class: 'world-marker-label', x: '2.8', y: '-0.2' });
+      label.textContent = building.label || building.id;
+      group.append(label);
+    }
     group.addEventListener('click', () => selectWorldBuilding(building.id));
     group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectWorldBuilding(building.id); } });
     return group;
   });
-  svg.replaceChildren(...marks);
+  svg.replaceChildren(...layers, ...marks);
 }
 function renderWorldSelected() {
   const container = $('#worldSelected');
@@ -621,7 +686,7 @@ async function saveWorldBuildings() {
     (data.states || []).forEach((building) => { if (building.override) state.worldOverrides[building.id] = building.override; });
     state.worldDraft = { ...state.worldOverrides };
     renderWorldMap(); renderWorldSelected(); renderWorldDirty();
-    showNotice(`建筑解锁配置已保存，共 ${Object.keys(state.worldOverrides).length} 项自定义`, true);
+    showNotice('建筑解锁配置已保存', true);
   } catch (error) { showNotice(error.message); } finally { button.disabled = false; }
 }
 function resetWorldBuildings() {
@@ -666,7 +731,17 @@ $('#backupButton').addEventListener('click', () => void createBackup()); $('#ove
 $('#checkpointButton').addEventListener('click', async () => { try { await api('/database/checkpoint', { method: 'POST' }); showNotice('WAL 检查点已执行', true); await loadOverview(); } catch (error) { showNotice(error.message); } });
 $('#logoutButton').addEventListener('click', async () => { try { await api('/logout', { method: 'POST' }); } finally { showLogin(); } });
 $('#chatSearch').addEventListener('submit', (event) => { event.preventDefault(); void loadChat(); });
-$('#chatFilter').addEventListener('change', (event) => { state.chatFilter = event.target.value; void loadChat(); });
+$('#chatFilter').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-filter]');
+  if (!button) return;
+  state.chatFilter = button.dataset.filter;
+  $$('#chatFilter [data-filter]').forEach((item) => {
+    const active = item.dataset.filter === state.chatFilter;
+    item.classList.toggle('is-active', active);
+    item.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  void loadChat();
+});
 $('#npcRequestFilter').addEventListener('change', (event) => { state.npcRequestFilter = event.target.value; void loadNpcRequests(); });
 $('#storySearch').addEventListener('submit', (event) => { event.preventDefault(); void loadStoryProgress(); });
 $('#userDialogSubmit').addEventListener('click', () => void submitUserEditor());

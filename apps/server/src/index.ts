@@ -176,7 +176,7 @@ async function handle(client: Client, raw: string) {
         plVerifyGuard: () => {
           if (!consumePhysicsLoginAttempt(address)) {
             logger.warn('Physics Lab verification rate limit exceeded', { ip: address });
-            throw new Error('物实验证尝试过于频繁，请稍后再试');
+            throw new Error('物实验证过于频繁');
           }
         },
       });
@@ -451,7 +451,7 @@ const http = createServer(async (request, response) => {
       // of edit-page loads cannot starve WebSocket `hello` logins.
       if (!limiter.consume(requestIp).allowed || (!isRestore && !globalAuthenticationRate.consume('global').allowed)) {
         response.writeHead(429, { ...headers, 'retry-after': '60' });
-        response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
+        response.end(JSON.stringify({ error: '登录过于频繁' }));
         return;
       }
       const plBody = typeof body.pl === 'object' && body.pl !== null ? body.pl as { login?: unknown; password?: unknown } : null;
@@ -471,7 +471,7 @@ const http = createServer(async (request, response) => {
             plVerifyGuard: () => {
               if (!consumePhysicsLoginAttempt(requestIp)) {
                 logger.warn('Physics Lab verification rate limit exceeded', { ip: requestIp });
-                throw new Error('物实验证尝试过于频繁，请稍后再试');
+                throw new Error('物实验证过于频繁');
               }
             },
           });
@@ -496,7 +496,7 @@ const http = createServer(async (request, response) => {
       if (!user) throw new HttpBodyError('请先登录', 401);
       if (!npcChangeRequestRate.consume(user.id).allowed) {
         response.writeHead(429, { ...headers, 'retry-after': '60' });
-        response.end(JSON.stringify({ error: '提交过于频繁，请稍后再试' }));
+        response.end(JSON.stringify({ error: '提交过于频繁' }));
         return;
       }
       const npcId = typeof body.npcId === 'string' ? body.npcId.trim() : '';

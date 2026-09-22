@@ -83,17 +83,17 @@ const beginRestore = (response: ServerResponse): boolean => {
 };
 
 async function login(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (!ADMIN_ENABLED) return error(response, 503, 'ADMIN_DISABLED', 'Administration is not configured');
-  if (!requestOriginAllowed(request, process.env.NODE_ENV !== 'production')) return error(response, 403, 'ORIGIN_REJECTED', 'Request origin is not allowed');
-  if (!adminLoginAllowed(request)) return error(response, 429, 'RATE_LIMITED', 'Too many sign-in attempts');
+  if (!ADMIN_ENABLED) return error(response, 503, 'ADMIN_DISABLED', '管理后台未配置');
+  if (!requestOriginAllowed(request, process.env.NODE_ENV !== 'production')) return error(response, 403, 'ORIGIN_REJECTED', '请求来源不被允许');
+  if (!adminLoginAllowed(request)) return error(response, 429, 'RATE_LIMITED', '登录过于频繁');
   const body = await readJson(request, 4_096);
   const username = typeof body.username === 'string' ? body.username : '';
   const password = typeof body.password === 'string' ? body.password : '';
-  if (username.length > 128 || password.length > 256) return error(response, 400, 'INVALID_CREDENTIALS', 'Credentials are invalid');
+  if (username.length > 128 || password.length > 256) return error(response, 400, 'INVALID_CREDENTIALS', '凭据无效');
   const session = createAdminSession(request, response, username, password);
   if (!session) {
     logger.warn('Admin sign-in failed', { ip: clientIp(request) });
-    return error(response, 401, 'INVALID_CREDENTIALS', 'Username or password is incorrect');
+    return error(response, 401, 'INVALID_CREDENTIALS', '用户名或密码不正确');
   }
   db.recordAdminAudit(session.actor, 'admin.login', undefined, { ip: clientIp(request) });
   logger.info('Admin signed in', { actor: session.actor, ip: clientIp(request) });
@@ -131,9 +131,9 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   }
 
   const principal = authenticateAdmin(request);
-  if (!principal) { error(response, 401, 'UNAUTHORIZED', 'Administrator authentication is required'); return true; }
+  if (!principal) { error(response, 401, 'UNAUTHORIZED', '请先登录管理后台'); return true; }
   if (!['GET', 'HEAD'].includes(request.method ?? '') && !authorizeAdminMutation(request, principal)) {
-    error(response, 403, 'CSRF_REJECTED', 'Request verification failed'); return true;
+    error(response, 403, 'CSRF_REJECTED', '请求校验失败'); return true;
   }
 
   if (request.method === 'POST' && path === '/admin/api/logout') {
@@ -147,7 +147,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'POST' && path === '/admin/api/weather') {
     const body = await readJson(request, 1_024);
     const weather = typeof body.weather === 'string' ? body.weather : '';
-    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
+    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', '天气值无效'); return true; }
     // Keep the legacy endpoint in sync with the persisted world config: it sets
     // the weather while preserving the current auto-broadcast preference.
     context.setWeatherConfig({ value: weather, autoBroadcast: context.getWeatherConfig().autoBroadcast });
@@ -166,10 +166,10 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'POST' && path === '/admin/api/world/weather') {
     const body = await readJson(request, 1_024);
     const weather = typeof body.weather === 'string' ? body.weather : '';
-    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', 'Weather value is invalid'); return true; }
+    if (!isWeather(weather)) { error(response, 400, 'INVALID_WEATHER', '天气值无效'); return true; }
     const current = context.getWeatherConfig();
     const autoBroadcast = body.autoBroadcast === undefined ? current.autoBroadcast : body.autoBroadcast;
-    if (typeof autoBroadcast !== 'boolean') { error(response, 400, 'INVALID_BODY', 'autoBroadcast must be a boolean'); return true; }
+    if (typeof autoBroadcast !== 'boolean') { error(response, 400, 'INVALID_BODY', '自动广播参数无效'); return true; }
     const config = context.setWeatherConfig({ value: weather, autoBroadcast });
     db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather, autoBroadcast });
     respond(response, 200, { ok: true, weather: config }); return true;
@@ -202,15 +202,15 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   const userStatus = path.match(/^\/admin\/api\/users\/([0-9a-f-]{36})\/status$/i);
   if (request.method === 'PATCH' && userStatus) {
     const body = await readJson(request, 1_024);
-    if (typeof body.disabled !== 'boolean') { error(response, 400, 'INVALID_BODY', 'disabled must be a boolean'); return true; }
-    if (!db.setUserDisabled(userStatus[1]!, body.disabled)) { error(response, 404, 'USER_NOT_FOUND', 'User was not found'); return true; }
+    if (typeof body.disabled !== 'boolean') { error(response, 400, 'INVALID_BODY', '状态参数无效'); return true; }
+    if (!db.setUserDisabled(userStatus[1]!, body.disabled)) { error(response, 404, 'USER_NOT_FOUND', '用户不存在'); return true; }
     if (body.disabled) context.disconnectUser(userStatus[1]!);
     db.recordAdminAudit(principal.actor, body.disabled ? 'user.disable' : 'user.enable', userStatus[1]);
     respond(response, 200, { ok: true }); return true;
   }
   const userSession = path.match(/^\/admin\/api\/users\/([0-9a-f-]{36})\/revoke-session$/i);
   if (request.method === 'POST' && userSession) {
-    if (!db.revokeUserSession(userSession[1]!)) { error(response, 404, 'USER_NOT_FOUND', 'User was not found'); return true; }
+    if (!db.revokeUserSession(userSession[1]!)) { error(response, 404, 'USER_NOT_FOUND', '用户不存在'); return true; }
     context.disconnectUser(userSession[1]!);
     db.recordAdminAudit(principal.actor, 'user.session.revoke', userSession[1]);
     respond(response, 200, { ok: true }); return true;
@@ -277,7 +277,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   }
   const download = path.match(/^\/admin\/api\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)$/);
   if (request.method === 'GET' && download) {
-    if (!streamBackup(download[1]!, response)) error(response, 404, 'BACKUP_NOT_FOUND', 'Backup was not found');
+    if (!streamBackup(download[1]!, response)) error(response, 404, 'BACKUP_NOT_FOUND', '备份不存在');
     else db.recordAdminAudit(principal.actor, 'database.backup.download', download[1]);
     return true;
   }
@@ -292,28 +292,28 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   // the admin console. Uploads only accept local verified backups. Restore may
   // pull an OSS object that is no longer local, stage it, verify, then discard.
   if (request.method === 'GET' && path === '/admin/api/offsite/backups') {
-    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', '异地备份未配置'); return true; }
     const items = await listOffsiteBackups();
     respond(response, 200, { items, local: listBackups().map((backup) => ({ name: backup.name, sha256: backup.sha256 })) }); return true;
   }
   const offsiteUpload = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)\/upload$/);
   if (request.method === 'POST' && offsiteUpload) {
-    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', '异地备份未配置'); return true; }
     try {
       const backup = await uploadOffsiteBackup(offsiteUpload[1]!);
       db.recordAdminAudit(principal.actor, 'database.backup.offsite.upload', offsiteUpload[1], { bytes: backup.bytes });
       respond(response, 201, { backup }); return true;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
-      if (message === 'Backup was not found' || message === 'Backup was not found locally') { error(response, 404, 'BACKUP_NOT_FOUND', message); return true; }
-      if (message === 'Backup is not verified; re-verify it before uploading') { error(response, 422, 'BACKUP_UNVERIFIED', message); return true; }
+      if (message === 'Backup was not found' || message === 'Backup was not found locally') { error(response, 404, 'BACKUP_NOT_FOUND', '备份不存在'); return true; }
+      if (message === 'Backup is not verified; re-verify it before uploading') { error(response, 422, 'BACKUP_UNVERIFIED', '请先完成备份校验再上传'); return true; }
       logger.error('Off-site backup upload failed', { name: offsiteUpload[1], error: message });
-      error(response, 502, 'OFFSITE_UPLOAD_FAILED', 'Uploading the backup to the object store failed'); return true;
+      error(response, 502, 'OFFSITE_UPLOAD_FAILED', '上传异地备份失败'); return true;
     }
   }
   const offsiteRestore = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)\/restore$/);
   if (request.method === 'POST' && offsiteRestore) {
-    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', '异地备份未配置'); return true; }
     const name = offsiteRestore[1]!;
     const body = await readJson(request, 1_024).catch(() => ({} as Record<string, unknown>));
     if (body.confirm !== true) { error(response, 400, 'CONFIRM_REQUIRED', '恢复备份需要二次确认'); return true; }
@@ -341,9 +341,9 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
-      if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', 'Off-site backup was not found'); return true; }
+      if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', '异地备份不存在'); return true; }
       logger.error('Off-site backup restore failed', { name, error: message });
-      error(response, 502, 'OFFSITE_RESTORE_FAILED', 'Downloading or verifying the off-site backup failed');
+      error(response, 502, 'OFFSITE_RESTORE_FAILED', '下载或校验异地备份失败');
     } finally {
       if (staged) discardStagedBackup(staged.path);
       endRestoreExclusive();
@@ -352,22 +352,22 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   }
   const offsiteDownload = path.match(/^\/admin\/api\/offsite\/backups\/(minicity-[A-Za-z0-9.-]+\.sqlite)$/);
   if (request.method === 'GET' && offsiteDownload) {
-    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
-    if (!await streamOffsiteBackup(offsiteDownload[1]!, response)) { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', 'Off-site backup was not found'); return true; }
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', '异地备份未配置'); return true; }
+    if (!await streamOffsiteBackup(offsiteDownload[1]!, response)) { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', '异地备份不存在'); return true; }
     db.recordAdminAudit(principal.actor, 'database.backup.offsite.download', offsiteDownload[1]);
     return true;
   }
   if (request.method === 'DELETE' && offsiteDownload) {
-    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', 'Off-site OSS backups are not configured'); return true; }
+    if (!offsiteBackupEnabled()) { error(response, 503, 'OFFSITE_DISABLED', '异地备份未配置'); return true; }
     try {
       await deleteOffsiteBackup(offsiteDownload[1]!);
       db.recordAdminAudit(principal.actor, 'database.backup.offsite.delete', offsiteDownload[1]);
       respond(response, 200, { ok: true }); return true;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
-      if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', message); return true; }
+      if (message === 'Backup was not found') { error(response, 404, 'OFFSITE_BACKUP_NOT_FOUND', '异地备份不存在'); return true; }
       logger.error('Off-site backup delete failed', { name: offsiteDownload[1], error: message });
-      error(response, 502, 'OFFSITE_DELETE_FAILED', 'Deleting the backup from the object store failed'); return true;
+      error(response, 502, 'OFFSITE_DELETE_FAILED', '删除异地备份失败'); return true;
     }
   }
   if (request.method === 'POST' && path === '/admin/api/database/checkpoint') {
@@ -398,7 +398,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const id = Number(chatHide[1]);
     if (!Number.isInteger(id) || id <= 0) { error(response, 400, 'INVALID_BODY', '消息 ID 无效'); return true; }
     const hidden = chatHide[2] === 'hide';
-    if (!db.setChatMessageHidden(id, hidden, principal.actor)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在或状态未变'); return true; }
+    if (!db.setChatMessageHidden(id, hidden, principal.actor)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在'); return true; }
     db.recordAdminAudit(principal.actor, hidden ? 'chat.hide' : 'chat.show', String(id));
     respond(response, 200, { ok: true }); return true;
   }
@@ -406,7 +406,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'POST' && chatFlag) {
     const id = Number(chatFlag[1]);
     if (!Number.isInteger(id) || id <= 0) { error(response, 400, 'INVALID_BODY', '消息 ID 无效'); return true; }
-    if (!db.flagChatMessage(id)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在或已标记'); return true; }
+    if (!db.flagChatMessage(id)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在'); return true; }
     db.recordAdminAudit(principal.actor, 'chat.flag', String(id));
     respond(response, 200, { ok: true }); return true;
   }
@@ -511,7 +511,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   // Telemetry: user events, client error reports, server metrics and logs.
   if (await handleTelemetryAdmin(request, response, context, principal.actor)) return true;
 
-  error(response, 404, 'NOT_FOUND', 'Admin endpoint was not found');
+  error(response, 404, 'NOT_FOUND', '接口不存在');
   return true;
 }
 
@@ -519,5 +519,5 @@ export function handleAdminError(response: ServerResponse, caught: unknown): voi
   if (response.headersSent) { response.end(); return; }
   if (caught instanceof HttpBodyError) { error(response, caught.statusCode, 'INVALID_REQUEST', caught.message); return; }
   logger.error('Admin request failed', { error: caught instanceof Error ? caught.message : String(caught) });
-  error(response, 500, 'INTERNAL_ERROR', 'The administration request failed');
+  error(response, 500, 'INTERNAL_ERROR', '管理请求失败');
 }

@@ -64,7 +64,7 @@
         <div class="two-column world-columns">
           <section class="panel">
             <header><div><p class="eyebrow">WEATHER</p><h2>天气全局广播</h2></div><span class="status" id="worldWeatherState">—</span></header>
-            <p class="hint">设置全服天气。开启自动广播后，服务端每分钟向所有在线居民推送当前天气；关闭后仅在居民登录或手动广播时下发。</p>
+            <p class="hint">设置全服天气。开启自动广播后每分钟推送一次；关闭后只在登录或手动广播时下发。</p>
             <div class="world-weather">
               <label class="field-label" for="worldWeatherSelect">当前天气</label>
               <select id="worldWeatherSelect"></select>
@@ -77,7 +77,7 @@
           </section>
           <section class="panel">
             <header><div><p class="eyebrow">BUILDING UNLOCK</p><h2>建筑解锁配置</h2></div><span class="status" id="worldBuildingSummary">—</span></header>
-            <p class="hint">点击地图上的建筑标记或从下拉列表选择目标，再设置其解锁策略。「全局解锁」对所有居民开放，且不改变其永久解锁状态；「强制锁定」会同时拒绝已解锁居民的访问。</p>
+            <p class="hint">点地图或下拉选择建筑后设置策略。「全局解锁」对所有人开放；「强制锁定」会拒绝已解锁居民进入。</p>
             <label class="field-label" for="worldBuildingSelect">选择建筑</label>
             <select id="worldBuildingSelect"></select>
             <div class="world-map-wrap">
@@ -119,7 +119,7 @@
       </section>
 
       <section class="view" data-page="chat" hidden>
-        <div class="toolbar"><form class="search" id="chatSearch"><input id="chatQuery" maxlength="100" placeholder="搜索昵称或聊天内容" aria-label="搜索聊天记录" /><button class="secondary" type="submit">搜索</button></form><select id="chatFilter" aria-label="聊天筛选"><option value="visible">仅显示可见</option><option value="flagged">已标记</option><option value="hidden">已隐藏</option><option value="all">全部</option></select><span id="chatCount"></span></div>
+        <div class="toolbar"><form class="search" id="chatSearch"><input id="chatQuery" maxlength="100" placeholder="搜索昵称或聊天内容" aria-label="搜索聊天记录" /><button class="secondary" type="submit">搜索</button></form><div class="filter-pills" id="chatFilter" role="tablist" aria-label="聊天筛选"><button class="filter-pill is-active" type="button" role="tab" aria-selected="true" data-filter="visible">可见</button><button class="filter-pill" type="button" role="tab" aria-selected="false" data-filter="flagged">已标记</button><button class="filter-pill" type="button" role="tab" aria-selected="false" data-filter="hidden">已隐藏</button><button class="filter-pill" type="button" role="tab" aria-selected="false" data-filter="all">全部</button></div><span id="chatCount"></span></div>
         <div class="table-wrap"><table><thead><tr><th>居民</th><th>内容</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="chatRows"></tbody></table></div>
         <section class="panel chat-author-panel"><div class="table-wrap"><table><thead><tr><th>居民</th><th>消息数</th><th>已标记</th><th>已隐藏</th><th>最近发言</th><th class="align-right">操作</th></tr></thead><tbody id="chatAuthorRows"></tbody></table></div></section>
       </section>
@@ -142,11 +142,11 @@
       </section>
 
       <section class="view" data-page="backups" hidden>
-        <div class="toolbar"><p>SQLite 在线一致性备份，可直接下载到异地存储，或从控制台恢复。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
+        <div class="toolbar"><p>在线一致性备份，可下载或从控制台恢复。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
         <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>创建时间</th><th>校验</th><th>大小</th><th class="align-right">操作</th></tr></thead><tbody id="backupRows"></tbody></table></div>
         <section class="panel panel--offsite" id="offsitePanel" hidden>
           <header><div><p class="eyebrow">OFFSITE OSS</p><h2>异地备份（阿里云 OSS）</h2></div></header>
-          <p class="hint">保存于阿里云 OSS。下载不会在本地产生新备份；恢复会临时拉取对象并覆盖当前数据库，本机缺失时也可直接恢复。</p>
+          <p class="hint">保存在阿里云 OSS。下载不会生成本地副本；缺失的备份也可直接恢复。</p>
           <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>上传时间</th><th>校验</th><th>大小</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="offsiteRows"></tbody></table></div>
         </section>
       </section>

@@ -68,9 +68,9 @@ export async function authenticateAccount(login: string, password: string) {
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok || data.Status !== 200 || !data.AuthCode) {
     const message = typeof data.Message === 'string' ? data.Message : '';
-    if (message === 'Login.Password.Invalid') throw new Error('密码不正确，请检查登录方式和密码');
+    if (message === 'Login.Password.Invalid') throw new Error('密码不正确');
     if (message === 'Login.Invalid') throw new Error('登录名或密码不正确');
-    if (message === 'Login.Expired') throw new Error('登录请求已过期，请稍后重试');
+    if (message === 'Login.Expired') throw new Error('登录请求已过期');
     throw new Error(message || 'Physics Lab 登录失败');
   }
   return { token: typeof data.Token === 'string' ? data.Token : '', authCode: data.AuthCode as string, user: (data.Data as { User?: { ID?: unknown; Nickname?: unknown } } | undefined)?.User ?? null };
