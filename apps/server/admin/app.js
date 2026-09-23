@@ -211,7 +211,7 @@ function renderBackupRows(items) {
       finally { verify.disabled = false; }
     });
     const link = node('a', '下载', 'download'); link.href = `/admin/api/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
-    const restore = node('button', '恢复'); restore.type = 'button'; restore.addEventListener('click', () => confirmAction('恢复备份', `将用 ${backup.name} 覆盖当前数据库，在线居民会全部下线。确定继续？`, () => restoreBackup(backup.name)));
+    const restore = node('button', '恢复'); restore.type = 'button'; restore.addEventListener('click', () => confirmAction('恢复备份', `将用 ${backup.name} 覆盖当前数据库，在线居民会全部下线，需重新登录。确定继续？`, () => restoreBackup(backup.name)));
     group.append(verify, link, restore);
     if (state.offsiteEnabled) {
       const offsite = node('button', '上传异地'); offsite.type = 'button';
@@ -245,7 +245,7 @@ async function loadOffsiteBackups() {
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const link = node('a', '下载', 'download'); link.href = `/admin/api/offsite/backups/${encodeURIComponent(backup.name)}`; link.download = backup.name;
     const restore = node('button', '恢复'); restore.type = 'button';
-    restore.addEventListener('click', () => confirmAction('从异地恢复备份', `将用 ${backup.name} 覆盖当前数据库，在线居民会全部下线。确定继续？`, () => restoreOffsiteBackup(backup.name)));
+    restore.addEventListener('click', () => confirmAction('从异地恢复备份', `将用 ${backup.name} 覆盖当前数据库，在线居民会全部下线，需重新登录。确定继续？`, () => restoreOffsiteBackup(backup.name)));
     const del = node('button', '删除', 'warning'); del.type = 'button';
     del.addEventListener('click', () => confirmAction('删除异地备份', `删除 OSS 上的 ${backup.name}，本机备份不受影响。确定继续？`, () => deleteOffsite(backup.name)));
     group.append(link, restore, del); actions.append(group);
@@ -297,7 +297,7 @@ async function loadChat() {
     else if (message.moderationError) status.title = message.moderationError;
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const hide = node('button', message.hiddenAt ? '显示' : '隐藏', message.hiddenAt ? '' : 'warning'); hide.type = 'button'; hide.addEventListener('click', () => mutateChat(message.id, message.hiddenAt ? 'show' : 'hide'));
-    const flagBtn = node('button', '标记'); flagBtn.type = 'button'; flagBtn.addEventListener('click', () => mutateChat(message.id, 'flag'));
+    const flagBtn = node('button', message.flaggedAt ? '已标记' : '标记'); flagBtn.type = 'button'; flagBtn.disabled = Boolean(message.flaggedAt); flagBtn.addEventListener('click', () => mutateChat(message.id, 'flag'));
     group.append(hide, flagBtn); actions.append(group);
     row.append(identity, meta, status, actions); return row;
   });
@@ -613,29 +613,29 @@ function renderWorldMap() {
   layers.push(roads);
   const plaza = project(0, 0);
   layers.push(svgNode('circle', { class: 'world-map-plaza', cx: plaza.x.toFixed(2), cy: plaza.y.toFixed(2), r: Math.max(1.8, 4.2 / span * 100).toFixed(2) }));
-  const selected = state.worldBuildings.find((building) => building.id === state.worldSelectedId);
-  if (selected) {
-    const point = project(selected.x, selected.z);
+  const selectedBuilding = state.worldBuildings.find((building) => building.id === state.worldSelectedId);
+  if (selectedBuilding) {
+    const point = project(selectedBuilding.x, selectedBuilding.z);
     layers.push(svgNode('circle', { class: 'world-map-halo', cx: point.x.toFixed(2), cy: point.y.toFixed(2), r: '4.8' }));
   }
   const marks = [];
   let selectedMark;
   for (const building of state.worldBuildings) {
     const point = project(building.x, building.z);
-    const selected = building.id === state.worldSelectedId;
+    const isSelected = building.id === state.worldSelectedId;
     const group = svgNode('g', {
-      class: `world-marker world-marker--${worldEffectiveState(building)}${selected ? ' is-selected' : ''}`,
+      class: `world-marker world-marker--${worldEffectiveState(building)}${isSelected ? ' is-selected' : ''}`,
       tabindex: '0',
       role: 'button',
       'aria-label': `${building.label || building.id}（${building.id}）`,
       transform: `translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})`,
     });
-    group.append(svgNode('circle', { class: 'world-marker-hit', r: selected ? '4.2' : '2.8' }));
+    group.append(svgNode('circle', { class: 'world-marker-hit', r: isSelected ? '4.2' : '2.8' }));
     group.append(svgNode('rect', { class: 'world-marker-pin', x: '-1.7', y: '-1.7', width: '3.4', height: '3.4', rx: '0.7' }));
     const title = svgNode('title');
     title.textContent = `${building.label || building.id}（${building.id}）`;
     group.append(title);
-    if (selected) {
+    if (isSelected) {
       const labelX = point.x > 72 ? -3.1 : 2.8;
       const labelY = point.y < 8 ? 4.2 : -0.2;
       const label = svgNode('text', {
@@ -648,7 +648,7 @@ function renderWorldMap() {
     }
     group.addEventListener('click', () => selectWorldBuilding(building.id));
     group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectWorldBuilding(building.id); } });
-    if (selected) selectedMark = group; else marks.push(group);
+    if (isSelected) selectedMark = group; else marks.push(group);
   }
   svg.replaceChildren(...layers, ...marks, ...(selectedMark ? [selectedMark] : []));
 }

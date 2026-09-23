@@ -398,7 +398,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const id = Number(chatHide[1]);
     if (!Number.isInteger(id) || id <= 0) { error(response, 400, 'INVALID_BODY', '消息 ID 无效'); return true; }
     const hidden = chatHide[2] === 'hide';
-    if (!db.setChatMessageHidden(id, hidden, principal.actor)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在'); return true; }
+    if (!db.setChatMessageHidden(id, hidden, principal.actor)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在或状态未变'); return true; }
     db.recordAdminAudit(principal.actor, hidden ? 'chat.hide' : 'chat.show', String(id));
     respond(response, 200, { ok: true }); return true;
   }
@@ -406,7 +406,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'POST' && chatFlag) {
     const id = Number(chatFlag[1]);
     if (!Number.isInteger(id) || id <= 0) { error(response, 400, 'INVALID_BODY', '消息 ID 无效'); return true; }
-    if (!db.flagChatMessage(id)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在'); return true; }
+    if (!db.flagChatMessage(id)) { error(response, 404, 'CHAT_NOT_FOUND', '消息不存在或已标记'); return true; }
     db.recordAdminAudit(principal.actor, 'chat.flag', String(id));
     respond(response, 200, { ok: true }); return true;
   }
