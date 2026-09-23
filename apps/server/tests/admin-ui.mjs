@@ -127,12 +127,35 @@ try {
   if (worldMarkerCount === 0 || worldMarkerCount !== worldOptionCount) {
     throw new Error(`World view must render one marker per selectable building (markers=${worldMarkerCount}, options=${worldOptionCount})`);
   }
+  if (!await page.locator('#worldMap .world-map-roads line').count()) throw new Error('World map must draw the street grid');
+  if (!await page.locator('#worldMap .world-map-plaza').count()) throw new Error('World map must draw the plaza');
+  await page.locator('#worldMap .world-marker-label').first().waitFor();
   await page.locator('#worldBuildingSelect').selectOption('litreview');
   await page.locator('#worldSelected .world-chooser button').first().waitFor();
   await page.locator('#worldSelected .world-chooser button', { hasText: '全局解锁' }).click();
   await page.locator('#worldBuildingsSave').click();
   await page.locator('#notice').filter({ hasText: '建筑解锁配置已保存' }).waitFor();
   await page.screenshot({ path: resolve(screenshotDir, 'admin-world.png'), fullPage: true });
+  await page.locator('[data-view="chat"]').click();
+  await page.locator('#chatCount').filter({ hasText: /共 .+ 条/ }).waitFor();
+  const flaggedChat = page.waitForResponse((response) => {
+    if (!response.ok() || response.request().method() !== 'GET') return false;
+    const url = new URL(response.url());
+    return url.pathname === '/admin/api/chat' && url.searchParams.get('flagged') === '1';
+  });
+  await page.locator('#chatFilter [data-filter="flagged"]').click();
+  const flaggedResponse = await flaggedChat;
+  if (!await page.locator('#chatFilter [data-filter="flagged"][aria-pressed="true"]').count()) {
+    throw new Error('Chat filter pills must mark the active filter');
+  }
+  const flaggedPayload = await flaggedResponse.json();
+  const flaggedCountLabel = `共 ${new Intl.NumberFormat('zh-CN').format(Number(flaggedPayload.total) || 0)} 条`;
+  await page.locator('#chatCount').filter({ hasText: flaggedCountLabel }).waitFor();
+  const flaggedRowCount = await page.locator('#chatRows tr').count();
+  const expectedRows = flaggedPayload.items.length ? flaggedPayload.items.length : 1;
+  if (flaggedRowCount !== expectedRows) {
+    throw new Error(`Chat flagged filter must render the filtered list (rows=${flaggedRowCount}, items=${flaggedPayload.items.length})`);
+  }
   await page.locator('[data-view="overview"]').click();
   await page.locator('#metrics .metric').first().waitFor();
 

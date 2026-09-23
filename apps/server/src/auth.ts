@@ -29,7 +29,7 @@ const sessionExpiry = () => new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000)
 /** Thrown when a per-IP registration cap rejects a new account. */
 export class RegistrationLimitError extends Error {
   constructor() {
-    super('该 IP 的注册数量已达上限，请稍后再试');
+    super('该 IP 注册已达上限');
     this.name = 'RegistrationLimitError';
   }
 }
@@ -43,7 +43,7 @@ export class RegistrationLimitError extends Error {
 export class PhysicsLabVerificationRequiredError extends Error {
   readonly code = 'pl-verification-required';
   constructor() {
-    super('这个昵称已属于物实社区，请用同名的物实账号登录凭据只用于本次验证，小城不会存储');
+    super('该昵称已属于物实社区，请用同名账号验证。凭据只用于本次验证，不会存储。');
     this.name = 'PhysicsLabVerificationRequiredError';
   }
 }
@@ -87,22 +87,22 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   // can only be signed by that account's owner. Fail closed on lookup errors.
   let plUserId: string | null = null;
   const plLookup = await findPhysicsLabUser(nickname).catch(() => {
-    throw new Error('暂时无法确认昵称在物实社区的状态，请稍后再试');
+    throw new Error('暂时无法确认物实昵称，请稍后再试');
   });
   if (plLookup.exists) {
     const pl = input.pl?.login && input.pl?.password ? input.pl : undefined;
     if (!pl) throw new PhysicsLabVerificationRequiredError();
     input.plVerifyGuard?.();
     const plSession = await authenticateAccount(pl.login, pl.password).catch(() => {
-      throw new Error('物实账号验证失败：账号或密码不正确');
+      throw new Error('物实账号或密码不正确');
     });
     const plNickname = String(plSession.user?.Nickname ?? '').trim();
     const plId = String(plSession.user?.ID ?? '').trim();
     if (!plNickname || plNickname.toLowerCase() !== nickname.toLowerCase()) {
-      throw new Error('物实账号验证失败：登录的物实账号与该昵称不一致');
+      throw new Error('物实账号与该昵称不一致');
     }
     if (plLookup.userId && plId && plLookup.userId !== plId) {
-      throw new Error('物实账号验证失败：请使用持有这个昵称的物实账号');
+      throw new Error('请使用持有该昵称的物实账号');
     }
     plUserId = plId || plLookup.userId;
   }
