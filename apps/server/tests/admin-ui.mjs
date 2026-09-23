@@ -127,12 +127,21 @@ try {
   if (worldMarkerCount === 0 || worldMarkerCount !== worldOptionCount) {
     throw new Error(`World view must render one marker per selectable building (markers=${worldMarkerCount}, options=${worldOptionCount})`);
   }
+  if (!await page.locator('#worldMap .world-map-roads line').count()) throw new Error('World map must draw the street grid');
+  if (!await page.locator('#worldMap .world-map-plaza').count()) throw new Error('World map must draw the plaza');
+  await page.locator('#worldMap .world-marker-label').first().waitFor();
   await page.locator('#worldBuildingSelect').selectOption('litreview');
   await page.locator('#worldSelected .world-chooser button').first().waitFor();
   await page.locator('#worldSelected .world-chooser button', { hasText: '全局解锁' }).click();
   await page.locator('#worldBuildingsSave').click();
   await page.locator('#notice').filter({ hasText: '建筑解锁配置已保存' }).waitFor();
   await page.screenshot({ path: resolve(screenshotDir, 'admin-world.png'), fullPage: true });
+  await page.locator('[data-view="chat"]').click();
+  await page.locator('#chatFilter [data-filter="flagged"]').click();
+  if (!await page.locator('#chatFilter [data-filter="flagged"][aria-pressed="true"]').count()) {
+    throw new Error('Chat filter pills must mark the active filter');
+  }
+  await page.locator('#chatRows').waitFor();
   await page.locator('[data-view="overview"]').click();
   await page.locator('#metrics .metric').first().waitFor();
 

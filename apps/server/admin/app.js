@@ -259,11 +259,11 @@ async function deleteOffsite(name) {
   catch (error) { showNotice(error.message); }
 }
 async function restoreBackup(name) {
-      try { await api(`/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('备份已恢复', true); await Promise.all([loadBackups(), loadOverview()]); }
+  try { await api(`/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('备份已恢复', true); await Promise.all([loadBackups(), loadOverview()]); }
   catch (error) { showNotice(error.message); }
 }
 async function restoreOffsiteBackup(name) {
-      try { await api(`/offsite/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('异地备份已恢复', true); await Promise.all([loadBackups(), loadOverview()]); }
+  try { await api(`/offsite/backups/${encodeURIComponent(name)}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); showNotice('异地备份已恢复', true); await Promise.all([loadBackups(), loadOverview()]); }
   catch (error) { showNotice(error.message); }
 }
 async function createBackup() {
@@ -618,29 +618,39 @@ function renderWorldMap() {
     const point = project(selected.x, selected.z);
     layers.push(svgNode('circle', { class: 'world-map-halo', cx: point.x.toFixed(2), cy: point.y.toFixed(2), r: '4.8' }));
   }
-  const marks = state.worldBuildings.map((building) => {
+  const marks = [];
+  let selectedMark;
+  for (const building of state.worldBuildings) {
     const point = project(building.x, building.z);
+    const selected = building.id === state.worldSelectedId;
     const group = svgNode('g', {
-      class: `world-marker world-marker--${worldEffectiveState(building)}${building.id === state.worldSelectedId ? ' is-selected' : ''}`,
+      class: `world-marker world-marker--${worldEffectiveState(building)}${selected ? ' is-selected' : ''}`,
       tabindex: '0',
       role: 'button',
       'aria-label': `${building.label || building.id}（${building.id}）`,
       transform: `translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})`,
     });
-    const pin = svgNode('rect', { class: 'world-marker-pin', x: '-1.7', y: '-1.7', width: '3.4', height: '3.4', rx: '0.7' });
+    group.append(svgNode('circle', { class: 'world-marker-hit', r: selected ? '4.2' : '2.8' }));
+    group.append(svgNode('rect', { class: 'world-marker-pin', x: '-1.7', y: '-1.7', width: '3.4', height: '3.4', rx: '0.7' }));
     const title = svgNode('title');
     title.textContent = `${building.label || building.id}（${building.id}）`;
-    group.append(pin, title);
-    if (building.id === state.worldSelectedId) {
-      const label = svgNode('text', { class: 'world-marker-label', x: '2.8', y: '-0.2' });
+    group.append(title);
+    if (selected) {
+      const labelX = point.x > 72 ? -3.1 : 2.8;
+      const labelY = point.y < 8 ? 4.2 : -0.2;
+      const label = svgNode('text', {
+        class: `world-marker-label${point.x > 72 ? ' world-marker-label--left' : ''}`,
+        x: labelX.toFixed(2),
+        y: labelY.toFixed(2),
+      });
       label.textContent = building.label || building.id;
       group.append(label);
     }
     group.addEventListener('click', () => selectWorldBuilding(building.id));
     group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectWorldBuilding(building.id); } });
-    return group;
-  });
-  svg.replaceChildren(...layers, ...marks);
+    if (selected) selectedMark = group; else marks.push(group);
+  }
+  svg.replaceChildren(...layers, ...marks, ...(selectedMark ? [selectedMark] : []));
 }
 function renderWorldSelected() {
   const container = $('#worldSelected');
@@ -738,7 +748,7 @@ $('#chatFilter').addEventListener('click', (event) => {
   $$('#chatFilter [data-filter]').forEach((item) => {
     const active = item.dataset.filter === state.chatFilter;
     item.classList.toggle('is-active', active);
-    item.setAttribute('aria-selected', active ? 'true' : 'false');
+    item.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   void loadChat();
 });

@@ -196,14 +196,17 @@ dialog { border: 1px solid var(--border); border-radius: 16px; padding: 24px; bo
 .world-map-axis { stroke: #b7c4bc; stroke-width: 1.6; }
 .world-map-plaza { fill: #c5d4cb; stroke: #aebbb3; stroke-width: .35; }
 .world-map-halo { fill: none; stroke: #18201c; stroke-width: .55; stroke-dasharray: 1.1 .7; opacity: .55; }
-.world-marker { cursor: pointer; outline: none; }
+.world-marker { cursor: pointer; }
+.world-marker-hit { fill: transparent; }
 .world-marker-pin { stroke: #fff; stroke-width: .55; }
 .world-marker--unlockable .world-marker-pin { fill: #3f7fbf; }
 .world-marker--locked .world-marker-pin { fill: #c0504d; }
 .world-marker--open .world-marker-pin { fill: #1c9c61; }
 .world-marker:hover .world-marker-pin, .world-marker:focus-visible .world-marker-pin { stroke: #18201c; stroke-width: .9; }
+.world-marker:focus-visible .world-marker-pin { stroke-width: 1.15; }
 .world-marker.is-selected .world-marker-pin { stroke: #18201c; stroke-width: 1.05; }
 .world-marker-label { fill: #24312b; font-size: 2.35px; font-weight: 650; pointer-events: none; paint-order: stroke; stroke: rgba(232, 239, 233, .92); stroke-width: .7px; }
+.world-marker-label--left { text-anchor: end; }
 .world-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; color: #5f6b65; font-size: 12px; }
 .world-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .world-dot { width: 11px; height: 11px; border-radius: 50%; }
