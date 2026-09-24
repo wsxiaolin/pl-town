@@ -1,3 +1,5 @@
+import { PHYSICS_LAB_OAUTH_CLIENT_ID, PHYSICS_LAB_OAUTH_CLIENT_SECRET } from './config.js';
+
 // The upstream base is overridable so integration tests can point the account
 // and content checks at a local stub instead of the live community API.
 const API_BASE = process.env.PHYSICS_LAB_API_BASE || 'https://physics-api-cn.turtlesim.com';
@@ -74,6 +76,34 @@ export async function authenticateAccount(login: string, password: string) {
     throw new Error(message || 'Physics Lab 登录失败');
   }
   return { token: typeof data.Token === 'string' ? data.Token : '', authCode: data.AuthCode as string, user: (data.Data as { User?: { ID?: unknown; Nickname?: unknown } } | undefined)?.User ?? null };
+}
+
+export type PhysicsLabOAuthProfile = { id: string; nickname: string; email: string | null };
+
+/**
+ * Exchange an OAuth2 authorization code for the Physics Lab account profile.
+ * The code was issued by the Physics Lab service through its shared `community`
+ * client; the town presents the same public client id/secret when exchanging.
+ */
+export async function exchangePhysicsLabOAuthCode(code: string): Promise<PhysicsLabOAuthProfile> {
+  const form = new URLSearchParams();
+  form.set('client_id', PHYSICS_LAB_OAUTH_CLIENT_ID);
+  form.set('client_secret', PHYSICS_LAB_OAUTH_CLIENT_SECRET);
+  form.set('code', code);
+  const response = await fetchUpstream(`${API_BASE}/Users/ExchangeToken`, {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: form.toString(), signal: AbortSignal.timeout(15_000),
+  });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const profile = data.profile as { id?: unknown; nickname?: unknown; email?: unknown } | undefined;
+  if (!response.ok || !profile) {
+    const message = typeof data.Message === 'string' ? data.Message : '';
+    throw new Error(message || 'Physics Lab OAuth exchange failed');
+  }
+  const id = typeof profile.id === 'string' ? profile.id.trim() : '';
+  const nickname = typeof profile.nickname === 'string' ? profile.nickname.trim() : '';
+  if (!id || !nickname) throw new Error('Physics Lab OAuth profile is invalid');
+  return { id, nickname, email: typeof profile.email === 'string' && profile.email ? profile.email : null };
 }
 
 export async function requestAccount(session: ApiSession, path: string, body: unknown) {

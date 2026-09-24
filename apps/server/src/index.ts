@@ -1,21 +1,21 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { getCityState } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
-import { authenticate, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
+import { authenticate, authenticateWithPhysicsLabOAuth, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
 import { createBackup, startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { handleDeploySnapshot } from './deploySnapshot.js';
 import { discardStaleStagedBackups, restoreLatestOffsiteBackupIfEmpty, uploadOffsiteBackup } from './offsiteBackup.js';
-import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, OSS_RESTORE_ON_EMPTY_START, OSS_UPLOAD_ON_SHUTDOWN, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
+import { ALLOW_ORIGINLESS_WEBSOCKET, HOST, IS_PRODUCTION, MAX_CONNECTIONS, MAX_CONNECTIONS_PER_IP, MAX_REGISTRATIONS_PER_IP, OSS_RESTORE_ON_EMPTY_START, OSS_UPLOAD_ON_SHUTDOWN, PHYSICS_LAB_OAUTH_AUTHORIZE_URL, PHYSICS_LAB_OAUTH_CALLBACK_PATH, PHYSICS_LAB_OAUTH_ENABLED, PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN, PHYSICS_LAB_OAUTH_STATE_TTL_MS, PORT, REGISTRATION_WINDOW_MINUTES } from './config.js';
 import { ChatModerationService } from './chatModerationService.js';
 import * as db from './db.js';
 import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
-import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
+import { authenticateAccount, exchangePhysicsLabOAuthCode, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
@@ -33,6 +33,10 @@ const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number
 const chatWindows = new Map<string, { startedAt: number; count: number }>();
 const physicsSessions = new Map<string, { token: string; authCode: string; user: Omit<User, 'plUserId'>; expiresAt: number }>();
 const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+// Short-lived, single-use OAuth2 state values for Physics Lab account login.
+// Each value is also echoed in an HttpOnly cookie so the callback can confirm
+// the flow was started by the same browser (login-CSRF protection).
+const oauthLoginStates = new Map<string, { expiresAt: number }>();
 const MAX_MESSAGES_PER_SECOND = 60;
 const MAX_CHAT_MESSAGES_PER_TEN_SECONDS = 5;
 const CHAT_HISTORY_LIMIT = 100;
@@ -52,6 +56,7 @@ const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // budget used by WebSocket `hello` logins. Password sign-ins still use the
 // global limiter to stay consistent with the game login path.
 const npcEditTokenRestoreRate = new FixedWindowRateLimiter(20, 60_000);
+const oauthStartRate = new FixedWindowRateLimiter(30, 60_000);
 // Shared per-IP + global budget for every Physics Lab credential path
 // (ownership verification during sign-in and direct credential relays) so the
 // call sites cannot drift apart.
@@ -72,6 +77,16 @@ const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readySt
 const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position, verified: user.plUserId !== null });
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string, code?: string) => send(socket, { type: 'error', message, ...(code ? { code } : {}) });
+/** Minimal cookie reader for the single HttpOnly state cookie we set ourselves. */
+const readCookie = (header: string | undefined, name: string): string | null => {
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index === -1) continue;
+    if (part.slice(0, index).trim() === name) return part.slice(index + 1).trim();
+  }
+  return null;
+};
 const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
 chatModeration.start();
 let housingBroadcastTimer: NodeJS.Timeout | undefined;
@@ -137,6 +152,7 @@ setInterval(() => {
   for (const [ip, attempt] of physicsLoginAttempts) if (attempt.startedAt < cutoff) physicsLoginAttempts.delete(ip);
   const now = Date.now();
   for (const [id, session] of physicsSessions) if (session.expiresAt <= now) physicsSessions.delete(id);
+  for (const [state, entry] of oauthLoginStates) if (entry.expiresAt <= now) oauthLoginStates.delete(state);
   for (const [id, window] of chatWindows) if (window.startedAt < now - 10_000) chatWindows.delete(id);
 }, 60_000).unref();
 
@@ -620,6 +636,63 @@ const http = createServer(async (request, response) => {
   }
   if(request.method==='POST'&&request.url==='/town-api/pl/logout'){
     const key=request.headers['x-town-pl-session'];if(typeof key==='string')physicsSessions.delete(key);response.writeHead(200,{...headers,'cache-control':'no-store'});response.end(JSON.stringify({ok:true}));return;
+  }
+  // ── Physics Lab OAuth2 account login ────────────────────────────────
+  // The web login overlay calls this to obtain the authorize URL; the town
+  // server holds the state (and mirrors it in an HttpOnly cookie) so the
+  // callback can verify the browser that started the flow.
+  if (request.method === 'GET' && request.url === '/town-api/pl/oauth/start') {
+    if (!PHYSICS_LAB_OAUTH_ENABLED) {
+      response.writeHead(503, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: '物实账号登录尚未配置' })); return;
+    }
+    if (!oauthStartRate.consume(requestIp).allowed) {
+      response.writeHead(429, { ...headers, 'cache-control': 'no-store', 'retry-after': '60' });
+      response.end(JSON.stringify({ error: '请求过于频繁，请稍后再试' })); return;
+    }
+    const state = randomBytes(24).toString('base64url');
+    oauthLoginStates.set(state, { expiresAt: Date.now() + PHYSICS_LAB_OAUTH_STATE_TTL_MS });
+    while (oauthLoginStates.size > 10_000) oauthLoginStates.delete(oauthLoginStates.keys().next().value as string);
+    const redirectUri = `${PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN}${PHYSICS_LAB_OAUTH_CALLBACK_PATH}`;
+    const authorizeUrl = `${PHYSICS_LAB_OAUTH_AUTHORIZE_URL}?redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+    const maxAgeSeconds = Math.floor(PHYSICS_LAB_OAUTH_STATE_TTL_MS / 1000);
+    response.setHeader('Set-Cookie', `mc_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/town-api/auth; Max-Age=${maxAgeSeconds}${IS_PRODUCTION ? '; Secure' : ''}`);
+    response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ url: authorizeUrl })); return;
+  }
+  const oauthCallbackMatch = request.url?.match(/^\/town-api\/auth\/oauth2_basic\/callback(?:\?(.*))?$/);
+  if (request.method === 'GET' && oauthCallbackMatch) {
+    const params = new URLSearchParams(oauthCallbackMatch[1] || '');
+    const code = params.get('code') || '';
+    const state = params.get('state') || '';
+    const clearStateCookie = 'mc_oauth_state=; HttpOnly; SameSite=Lax; Path=/town-api/auth; Max-Age=0';
+    const failRedirect = (reason: string) => {
+      response.setHeader('Set-Cookie', clearStateCookie);
+      response.writeHead(302, { Location: `${PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN}/#pl_error=${encodeURIComponent(reason)}`, 'cache-control': 'no-store' });
+      response.end();
+    };
+    const stored = state ? oauthLoginStates.get(state) : undefined;
+    const cookieState = readCookie(request.headers.cookie, 'mc_oauth_state');
+    // Single-use, unexpired, and bound to the browser that started the flow.
+    if (!state || !stored || stored.expiresAt <= Date.now() || cookieState !== state) return failRedirect('state');
+    oauthLoginStates.delete(state);
+    if (!PHYSICS_LAB_OAUTH_ENABLED) return failRedirect('config');
+    if (!code) return failRedirect('code');
+    if (!consumePhysicsLoginAttempt(requestIp)) return failRedirect('rate');
+    try {
+      const profile = await exchangePhysicsLabOAuthCode(code);
+      const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
+      const result = await authenticateWithPhysicsLabOAuth({ profile, ip: requestIp, registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP } });
+      logger.info('Physics Lab OAuth login', { id: result.user.id, nickname: result.user.nickname, created: result.created, ip: requestIp });
+      response.setHeader('Set-Cookie', clearStateCookie);
+      const location = `${PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN}/#pl_token=${encodeURIComponent(result.token)}&pl_user=${encodeURIComponent(result.user.nickname)}&pl_new=${result.created ? '1' : '0'}`;
+      response.writeHead(302, { Location: location, 'cache-control': 'no-store' });
+      response.end();
+    } catch (error) {
+      logger.warn('Physics Lab OAuth login failed', { ip: requestIp, error: error instanceof Error ? error.message : String(error) });
+      return failRedirect(error instanceof RegistrationLimitError ? 'limit' : 'exchange');
+    }
+    return;
   }
   if(request.method==='POST'&&request.url==='/town-api/pl/social/follow'){
     const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;

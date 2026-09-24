@@ -1,8 +1,9 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { AsyncGate } from './asyncGate.js';
 import { SESSION_TTL_DAYS } from './config.js';
-import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
+import { createUser, getUserByNickname, getUserByPlUserId, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
 import { authenticateAccount, findPhysicsLabUser } from './physicsLab.js';
+import type { PhysicsLabOAuthProfile } from './physicsLab.js';
 import type { User } from './types.js';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -120,4 +121,43 @@ export async function authenticate(input: { token?: string; nickname?: string; p
     createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
   }
   return { user: getUserByToken(tokenHash)!, token: newToken, registered: true };
+}
+
+/**
+ * Sign in through the Physics Lab OAuth2 authorization-code flow. The account
+ * is matched by its stable Physics Lab user id; a first-time signer claims a
+ * resident name equal to their Physics Lab nickname. The resident carries no
+ * town password, so this account can only be entered through Physics Lab.
+ */
+export async function authenticateWithPhysicsLabOAuth(input: {
+  profile: PhysicsLabOAuthProfile;
+  ip?: string;
+  registrationLimit?: { sinceIso: string; max: number };
+}): Promise<{ user: User; token: string; created: boolean }> {
+  const { profile } = input;
+  const linked = getUserByPlUserId(profile.id);
+  if (linked) {
+    const newToken = randomBytes(32).toString('base64url');
+    updateUserToken(linked.id, hash(newToken), sessionExpiry());
+    return { user: getUserByToken(hash(newToken))!, token: newToken, created: false };
+  }
+  const nickname = profile.nickname.normalize('NFKC').trim();
+  if (validateNickname(nickname)) throw new Error('物实昵称包含小城不支持的内容，请先在物实修改昵称');
+  const existing = getUserByNickname(nickname);
+  if (existing) {
+    if (existing.disabled) throw new Error('这个昵称已被停用');
+    throw new Error('这个昵称已被小城账号占用，请在物实使用其他昵称');
+  }
+  const newToken = randomBytes(32).toString('base64url');
+  const tokenHash = hash(newToken);
+  const expiresAt = sessionExpiry();
+  const userId = randomUUID();
+  if (input.ip && input.registrationLimit) {
+    const { sinceIso, max } = input.registrationLimit;
+    const result = registerUserAtomic(userId, tokenHash, nickname, '', expiresAt, input.ip, sinceIso, max, profile.id);
+    if (!result.allowed) throw new RegistrationLimitError();
+  } else {
+    createUser(userId, tokenHash, nickname, '', expiresAt, profile.id);
+  }
+  return { user: getUserByToken(tokenHash)!, token: newToken, created: true };
 }

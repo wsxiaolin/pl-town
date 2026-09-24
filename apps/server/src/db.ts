@@ -242,6 +242,9 @@ db.prepare(`
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_unique ON users (nickname COLLATE NOCASE)');
   }
 }
+// Physics Lab account links are looked up on every OAuth sign-in; a partial
+// index keeps that lookup cheap without constraining the many unlinked rows.
+db.exec('CREATE INDEX IF NOT EXISTS users_pl_user_idx ON users (pl_user_id) WHERE pl_user_id IS NOT NULL');
 initializeCityGovernance(db);
 db.pragma(`application_id = ${MINICITY_APPLICATION_ID}`);
 db.pragma(`user_version = ${MINICITY_SCHEMA_VERSION}`);
@@ -271,6 +274,11 @@ export function getUserByToken(tokenHash: string): User | null {
 export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null; disabled: boolean } | null {
   const row = db.prepare('SELECT id, nickname, password_hash, disabled_at FROM users WHERE nickname = ? COLLATE NOCASE').get(nickname) as { id: string; nickname: string; password_hash: string | null; disabled_at: string | null } | undefined;
   return row ? { id: row.id, nickname: row.nickname, passwordHash: row.password_hash, disabled: Boolean(row.disabled_at) } : null;
+}
+/** Resolve the resident linked to a Physics Lab account id, if any. */
+export function getUserByPlUserId(plUserId: string): User | null {
+  const row = db.prepare('SELECT * FROM users WHERE pl_user_id = ? AND disabled_at IS NULL').get(plUserId) as UserRow | undefined;
+  return row ? rowUser(row) : null;
 }
 export function updateUserToken(id: string, tokenHash: string, sessionExpiresAt: string): void {
   db.prepare('UPDATE users SET token_hash = ?, session_expires_at = ?, updated_at = ? WHERE id = ?').run(tokenHash, sessionExpiresAt, now(), id);

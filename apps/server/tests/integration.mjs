@@ -156,8 +156,18 @@ const physicsLabPort = 8794;
 const physicsLabServer = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
-  const body = JSON.parse(raw || '{}');
   const reply = (status, payload) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload)); };
+  if (request.url === '/Users/ExchangeToken') {
+    const form = new URLSearchParams(raw);
+    if (form.get('client_id') !== 'community' || form.get('client_secret') !== 'a_secret_that_you_dont_know_dont_know_dont_know') {
+      return reply(401, { Status: 401, Message: 'OAuth.Invalid.Client' });
+    }
+    const code = form.get('code');
+    if (code === 'oauth-ok') return reply(200, { access_token: 'stub-oauth-token', token_type: 'bearer', expires_in: 3600, refresh_token: 'stub-oauth-token', profile: { id: 'pl-oauth-1', email: 'oauth@example.com', nickname: 'OAuthResident', avatar: null } });
+    if (code === 'oauth-conflict') return reply(200, { access_token: 'stub-oauth-token', token_type: 'bearer', expires_in: 3600, refresh_token: 'stub-oauth-token', profile: { id: 'pl-oauth-2', email: 'conflict@example.com', nickname: 'Alice', avatar: null } });
+    return reply(401, { Status: 401, Message: 'OAuth.Invalid.Code' });
+  }
+  const body = JSON.parse(raw || '{}');
   if (request.url === '/Users/GetUser') {
     if (body.Name === 'TakenPlResident') return reply(200, { Status: 200, Message: '', Data: { User: { ID: 'pl-owner-1', Nickname: 'TakenPlResident' } } });
     return reply(404, { Status: 404, Message: 'Standard.404', Data: null });
@@ -190,8 +200,10 @@ const server = spawn(process.execPath, ['dist/index.js'], {
     ADMIN_ACCOUNTS_JSON: JSON.stringify({ reviewer: 'integration-reviewer-password' }),
     AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
     // The suite signs up more residents than the production per-IP default.
-    MAX_REGISTRATIONS_PER_IP: '12',
+    MAX_REGISTRATIONS_PER_IP: '24',
     PHYSICS_LAB_API_BASE: `http://127.0.0.1:${physicsLabPort}`,
+    PHYSICS_LAB_OAUTH_AUTHORIZE_URL: 'https://plweb.example/oauth/authorize',
+    PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
     BIGMODEL_API_KEY: 'integration-api-key', BIGMODEL_MODERATION_URL: `http://127.0.0.1:${moderationPort}/moderations`,
   },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -656,6 +668,61 @@ try {
   if (!plFreeName.hello.user?.nickname) throw new Error('A nickname absent from Physics Lab must register without verification');
   if (plFreeName.hello.user.verified !== false) throw new Error('An unverified resident must not be marked verified');
   plFreeName.socket.close();
+
+  // ── 物实 OAuth2 授权码登录 ───────────────────────────────────
+  const startOauth = async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/town-api/pl/oauth/start`);
+    const payload = await response.json();
+    if (!response.ok || typeof payload.url !== 'string' || !payload.url.startsWith('https://plweb.example/oauth/authorize')) throw new Error('OAuth start must return the authorize URL');
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    const cookie = setCookie.split(';', 1)[0];
+    if (!cookie || !setCookie.includes('HttpOnly')) throw new Error('OAuth start must set an HttpOnly state cookie');
+    const state = new URL(payload.url).searchParams.get('state');
+    if (!state) throw new Error('OAuth authorize URL must carry a state');
+    return { cookie, state };
+  };
+  const oauthCallback = `${adminOrigin}/town-api/auth/oauth2_basic/callback`;
+  const browserFlow = await startOauth();
+  const callbackWithoutCookie = await fetch(`${oauthCallback}?code=oauth-ok&state=${encodeURIComponent(browserFlow.state)}`, { redirect: 'manual' });
+  if (callbackWithoutCookie.status !== 302 || !callbackWithoutCookie.headers.get('location')?.includes('pl_error=state')) throw new Error('OAuth callback without the browser state cookie must be rejected');
+  const callbackBadCode = await fetch(`${oauthCallback}?code=wrong&state=${encodeURIComponent(browserFlow.state)}`, { redirect: 'manual', headers: { cookie: browserFlow.cookie } });
+  if (callbackBadCode.status !== 302 || !callbackBadCode.headers.get('location')?.includes('pl_error=exchange')) throw new Error('OAuth callback with an invalid code must fail closed');
+  const callbackReused = await fetch(`${oauthCallback}?code=oauth-ok&state=${encodeURIComponent(browserFlow.state)}`, { redirect: 'manual', headers: { cookie: browserFlow.cookie } });
+  if (!callbackReused.headers.get('location')?.includes('pl_error=state')) throw new Error('OAuth state must be single-use');
+
+  const successFlow = await startOauth();
+  const successCallback = await fetch(`${oauthCallback}?code=oauth-ok&state=${encodeURIComponent(successFlow.state)}`, { redirect: 'manual', headers: { cookie: successFlow.cookie } });
+  const successLocation = successCallback.headers.get('location') ?? '';
+  let sessionToken = null;
+  try { sessionToken = new URL(successLocation).hash ? new URLSearchParams(new URL(successLocation).hash.slice(1)).get('pl_token') : null; } catch { sessionToken = null; }
+  if (successCallback.status !== 302 || !sessionToken) throw new Error('OAuth callback must hand a resident session token back to the web app');
+  const oauthResident = await new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    const timeout = setTimeout(() => { socket.terminate(); reject(new Error('Timed out signing in with the OAuth session token')); }, 5_000);
+    socket.on('message', (raw) => {
+      const message = JSON.parse(raw);
+      if (message.type === 'hello') { clearTimeout(timeout); resolve({ socket, hello: message }); }
+      else if (message.type === 'error') { clearTimeout(timeout); socket.terminate(); reject(new Error(`OAuth session token rejected: ${message.message}`)); }
+    });
+    socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', token: sessionToken })));
+  });
+  if (oauthResident.hello.user?.nickname !== 'OAuthResident') throw new Error('OAuth sign-in must create a resident named after the Physics Lab account');
+  if (oauthResident.hello.user.verified !== true) throw new Error('An OAuth-linked resident must be marked verified');
+  oauthResident.socket.close();
+
+  // A Physics Lab nickname already owned by a town password account must not be
+  // silently taken over.
+  const conflictFlow = await startOauth();
+  const conflictCallback = await fetch(`${oauthCallback}?code=oauth-conflict&state=${encodeURIComponent(conflictFlow.state)}`, { redirect: 'manual', headers: { cookie: conflictFlow.cookie } });
+  if (!conflictCallback.headers.get('location')?.includes('pl_error=exchange')) throw new Error('OAuth sign-in must not take over a nickname owned by a password account');
+
+  // A repeat OAuth sign-in for the same Physics Lab account reuses the resident.
+  const repeatFlow = await startOauth();
+  const repeatCallback = await fetch(`${oauthCallback}?code=oauth-ok&state=${encodeURIComponent(repeatFlow.state)}`, { redirect: 'manual', headers: { cookie: repeatFlow.cookie } });
+  const repeatLocation = repeatCallback.headers.get('location') ?? '';
+  let repeatIsNew = true;
+  try { repeatIsNew = new URL(repeatLocation).hash.includes('pl_new=1'); } catch { repeatIsNew = true; }
+  if (repeatCallback.status !== 302 || repeatIsNew) throw new Error('A repeat OAuth sign-in must reuse the existing resident');
 
   const buildingId = 'residence:3.00:4.00';
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
