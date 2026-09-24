@@ -2,9 +2,9 @@
 //
 // The sea surface (`createAnimatedWaterSurface`) uses a hand-written shader
 // instead of three's mirror `Water`: a single scene-wide planar reflection
-// target is fragile (nesting mirrors corrupts every surface, see MEMORY) and
-// the stock shader washes out under the city's ACES tone mapping. The custom
-// shader builds the look from first principles — sun-glitter specular, fresnel
+// target is fragile (nesting mirrors corrupts every reflective surface in the
+// scene) and the stock shader washes out under the city's ACES tone mapping.
+// The custom shader builds the look from first principles — sun-glitter specular, fresnel
 // sky reflection, a depth-driven colour ramp and an animated foam line — which
 // reads like real game water and stays cheap enough for software rendering.
 //
@@ -56,6 +56,8 @@ export type AnimatedWaterConfig = {
   waveHeight?: number;
   /** Swell speed multiplier. */
   waveSpeed?: number;
+  /** uv.x where the swell starts to flatten toward the shoreline (1 = flat at the sand). */
+  waveShoreFade?: number;
   side?: THREE.Side;
   renderOrder?: number;
 };
@@ -84,6 +86,9 @@ const SEA_VERTEX = /* glsl */ `
 uniform float uTime;
 uniform float uWaveHeight;
 uniform float uWaveSpeed;
+uniform float uShoreDeep;
+uniform float uShoreShallow;
+uniform float uWaveShoreFade;
 varying vec3 vWorldPosition;
 varying vec3 vWaveNormal;
 varying vec2 vUv;
@@ -95,16 +100,20 @@ void main() {
   vec2 xz = p.xz;
   float t = uTime * uWaveSpeed;
 
+  // Flatten the swell as it approaches the sand so the waterline laps the beach
+  // instead of standing as a sloshing wall against the shore ribbon.
+  float shoreFade = 1.0 - smoothstep(uWaveShoreFade, 1.0, uv.x);
+
   float phaseA = xz.x * 0.18 + xz.y * 0.06 + t;
   float phaseB = xz.x * -0.11 + xz.y * 0.27 - t * 0.85;
   float phaseC = xz.x * 0.62 - xz.y * 0.48 + t * 1.6;
 
-  float height = (sin(phaseA) * 0.55 + sin(phaseB) * 0.35 + sin(phaseC) * 0.12) * uWaveHeight;
+  float height = (sin(phaseA) * 0.55 + sin(phaseB) * 0.35 + sin(phaseC) * 0.12) * uWaveHeight * shoreFade;
   p.y += height;
   vWave = uWaveHeight > 0.0001 ? height / uWaveHeight : 0.0;
 
-  float dhdx = (cos(phaseA) * 0.18 * 0.55 + cos(phaseB) * -0.11 * 0.35 + cos(phaseC) * 0.62 * 0.12) * uWaveHeight;
-  float dhdz = (cos(phaseA) * 0.06 * 0.55 + cos(phaseB) * 0.27 * 0.35 + cos(phaseC) * -0.48 * 0.12) * uWaveHeight;
+  float dhdx = (cos(phaseA) * 0.18 * 0.55 + cos(phaseB) * -0.11 * 0.35 + cos(phaseC) * 0.62 * 0.12) * uWaveHeight * shoreFade;
+  float dhdz = (cos(phaseA) * 0.06 * 0.55 + cos(phaseB) * 0.27 * 0.35 + cos(phaseC) * -0.48 * 0.12) * uWaveHeight * shoreFade;
   vec3 localNormal = vec3(-dhdx, 1.0, -dhdz);
 
   vWaveNormal = normalize((modelMatrix * vec4(localNormal, 0.0)).xyz);
@@ -249,6 +258,7 @@ export function createAnimatedWaterSurface(
     uSpecularStrength: { value: config.specularStrength ?? 1.6 },
     uWaveHeight: { value: config.waveHeight ?? 0.08 },
     uWaveSpeed: { value: config.waveSpeed ?? 0.6 },
+    uWaveShoreFade: { value: config.waveShoreFade ?? 0.88 },
     uAlpha: { value: alpha },
   };
   const material = new THREE.ShaderMaterial({
