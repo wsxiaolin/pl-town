@@ -25,7 +25,7 @@ export type EventBindingsOptions = {
   toggleMapMode: () => void;
   closeModal: () => void;
   closeNpcDialog: () => void;
-  getLoginController: () => { login: () => void; validateInput: () => void; showLogin: () => void; resetVerification: () => void } | null;
+  getLoginController: () => { login: () => void; validateInput: () => void; showLogin: () => void; resetVerification: () => void; startPhysicsLabOAuth: () => Promise<void> } | null;
   isMovementOnlyMode?: () => boolean;
 };
 
@@ -121,6 +121,7 @@ export function createEventBindings(options: EventBindingsOptions) {
       closeNpcDialog: options.closeNpcDialog,
       login: () => options.getLoginController()?.login(),
       loginFeedback: () => options.getLoginController()?.validateInput(),
+      startOauthLogin: () => options.getLoginController()?.startPhysicsLabOAuth(),
       resetVerification: () => options.getLoginController()?.resetVerification(),
       showLogin: () => options.getLoginController()?.showLogin(),
       resize: () => {

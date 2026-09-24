@@ -22,6 +22,7 @@ export function bindCityUiEvents(options: {
   closeNpcDialog: () => void;
   login: () => void;
   loginFeedback: () => void;
+  startOauthLogin: () => void;
   resetVerification: () => void;
   showLogin: () => void;
   resize: () => void;
@@ -60,6 +61,7 @@ export function bindCityUiEvents(options: {
     options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeMutualAid(); options.closeModal(); options.closeNpcDialog();
   }, { signal });
   document.getElementById('loginBtn')?.addEventListener('click', options.login, { signal });
+  document.getElementById('plOauthBtn')?.addEventListener('click', () => { void options.startOauthLogin(); }, { signal });
   document.getElementById('loginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
   document.getElementById('loginPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
   document.getElementById('plLoginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });

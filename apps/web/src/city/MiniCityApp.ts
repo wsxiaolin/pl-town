@@ -726,7 +726,9 @@ function init() {
   themeSync.syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
+  const oauthRedirect = consumePhysicsLabOAuthRedirect();
   loginController.checkLogin();
+  if (oauthRedirect.error) loginController.setError(oauthRedirect.error);
   multiplayerHousing.setupUI();
 }
 
@@ -742,6 +744,38 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
   else loginController?.holdCityEntrance(entrance);
   multiplayerHousing.connect(nickname, password, pl);
   checkAchievements();
+}
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  state: '物实登录已过期或被中断，请重新尝试。',
+  config: '物实账号登录尚未配置。',
+  code: '物实登录未返回授权码，请重新尝试。',
+  rate: '物实登录尝试过于频繁，请稍后再试。',
+  limit: '当前网络注册数量已达上限，请稍后再试。',
+  exchange: '物实账号验证失败，请重新尝试。',
+};
+
+/**
+ * Read the resident session handed back by the Physics Lab OAuth callback in
+ * the URL fragment, store it, then scrub the fragment so the token never
+ * lingers in the address bar or browser history.
+ */
+function consumePhysicsLabOAuthRedirect(): { authenticated: boolean; error: string } {
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  if (!hash) return { authenticated: false, error: '' };
+  const params = new URLSearchParams(hash);
+  const token = params.get('pl_token');
+  const nickname = params.get('pl_user');
+  const error = params.get('pl_error');
+  if (!token && !error) return { authenticated: false, error: '' };
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+  if (error) return { authenticated: false, error: OAUTH_ERROR_MESSAGES[error] ?? '物实账号登录失败，请重新尝试。' };
+  if (token && nickname) {
+    localStorage.setItem('minicityServerToken', token);
+    localStorage.setItem('minicityUser', nickname);
+    return { authenticated: true, error: '' };
+  }
+  return { authenticated: false, error: '物实账号登录失败，请重新尝试。' };
 }
 
 function disposeSession() {

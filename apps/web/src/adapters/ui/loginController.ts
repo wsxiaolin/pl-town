@@ -1,4 +1,5 @@
 import type { LegacyStats } from '../../city/progression/legacyStats';
+import { townApiUrl } from '../../core/townApi';
 import { renderVerifiedName } from './verifiedBadge';
 
 /**
@@ -195,6 +196,25 @@ export function createLoginController(options: LoginControllerOptions) {
     options.proceed(name, password, pl);
   }
 
+  /** Redirect the browser to the Physics Lab authorize page (OAuth2 code flow). */
+  async function startPhysicsLabOAuth(): Promise<void> {
+    if (verifying) return;
+    const button = document.getElementById('plOauthBtn') as HTMLButtonElement | null;
+    setError('');
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch(townApiUrl('/town-api/pl/oauth/start'), { headers: { accept: 'application/json' } });
+      const payload = await response.json().catch(() => ({})) as { url?: unknown; error?: unknown };
+      if (!response.ok || typeof payload.url !== 'string' || !payload.url) {
+        throw new Error(typeof payload.error === 'string' ? payload.error : '无法开始物实账号登录');
+      }
+      window.location.href = payload.url;
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '无法开始物实账号登录');
+      if (button) button.disabled = false;
+    }
+  }
+
   function validateInput(): void {
     const input = document.getElementById('loginInput') as HTMLInputElement | null;
     if (!input) return;
@@ -214,5 +234,5 @@ export function createLoginController(options: LoginControllerOptions) {
     setError('');
   }
 
-  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification, resetVerification, setError, endVerifying, holdCityEntrance, asLoginGate };
+  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification, resetVerification, setError, endVerifying, holdCityEntrance, startPhysicsLabOAuth, asLoginGate };
 }
