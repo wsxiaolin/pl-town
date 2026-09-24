@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
+import { SURFACE_Y } from './layers';
 import { WEST_BEACH } from '../city/data/cityConfig';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0b6ea8);
@@ -181,8 +182,8 @@ export function createWestBeach(options: BeachOptions): {
     : null;
   const water = waterSurface
     ? waterSurface.water
-    : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
-  water.position.set(0, 0.06, 0);
+    : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, SURFACE_Y.water, 0]);
+  water.position.set(0, SURFACE_Y.water, 0);
   if (!options.waterRendering) {
     water.castShadow = false;
     water.renderOrder = 3;
