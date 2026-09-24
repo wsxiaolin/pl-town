@@ -3,10 +3,18 @@ import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH } from '../city/data/cityConfig';
 
-const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
-const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
-const DAY_SUN_COLOR = new THREE.Color(0xbdd4e6);
-const NIGHT_SUN_COLOR = new THREE.Color(0x3a4a6a);
+const DAY_WATER_COLOR = new THREE.Color(0x0b6ea8);
+const NIGHT_WATER_COLOR = new THREE.Color(0x05182b);
+const DAY_SHALLOW_COLOR = new THREE.Color(0x5fd9c8);
+const NIGHT_SHALLOW_COLOR = new THREE.Color(0x0f3a4c);
+const DAY_SKY_ZENITH = new THREE.Color(0x2f7fc4);
+const NIGHT_SKY_ZENITH = new THREE.Color(0x081226);
+const DAY_SKY_HORIZON = new THREE.Color(0xcfeaf3);
+const NIGHT_SKY_HORIZON = new THREE.Color(0x1a2c44);
+const DAY_SUN_COLOR = new THREE.Color(0xfff2d8);
+const NIGHT_SUN_COLOR = new THREE.Color(0x6f86b8);
+const DAY_FOAM_COLOR = new THREE.Color(0xf2fdff);
+const NIGHT_FOAM_COLOR = new THREE.Color(0x9fb6c8);
 const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 // The sea used to drift at full shader speed, which read as choppy; scale the
 // time uniform down so the swell rolls visibly slower.
@@ -144,10 +152,31 @@ export function createWestBeach(options: BeachOptions): {
         sunDirection: SUN_DIRECTION,
         waterColorDay: DAY_WATER_COLOR,
         waterColorNight: NIGHT_WATER_COLOR,
+        shallowWaterDay: DAY_SHALLOW_COLOR,
+        shallowWaterNight: NIGHT_SHALLOW_COLOR,
+        skyZenithDay: DAY_SKY_ZENITH,
+        skyZenithNight: NIGHT_SKY_ZENITH,
+        skyHorizonDay: DAY_SKY_HORIZON,
+        skyHorizonNight: NIGHT_SKY_HORIZON,
         sunColorDay: DAY_SUN_COLOR,
         sunColorNight: NIGHT_SUN_COLOR,
-        distortionScale: 3.7,
+        foamColorDay: DAY_FOAM_COLOR,
+        foamColorNight: NIGHT_FOAM_COLOR,
+        distortionScale: 0.85,
         timeScale: SEA_TIME_SCALE,
+        size: 2.5,
+        shoreDeep: 0.5,
+        shoreShallow: 0.985,
+        foamStart: 0.962,
+        foamEnd: 1,
+        foamStrength: 0.9,
+        foamNoiseScale: 0.09,
+        crestFoam: 0.14,
+        hazeStrength: 0.28,
+        waveHeight: 0.09,
+        waveSpeed: 0.7,
+        specularPower: 180,
+        specularStrength: 1.5,
       })
     : null;
   const water = waterSurface
