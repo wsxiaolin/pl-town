@@ -7,6 +7,7 @@
 .city-governance-tabs { display: flex; gap: .5rem; padding: .8rem 1.5rem 0; }
 .city-governance-tabs button.active { background: #d2a75b; color: #17211f; }
 .city-governance-panel [data-city-status] { margin: .7rem 1.5rem 0; color: #c8d6c8; font-size: .78rem; }
+.city-governance-panel [data-city-feedback] { flex-shrink: 0; margin: .75rem 1.5rem 0; padding: .75rem 1rem; border: 1px solid #e7ac8d; border-radius: .5rem; background: #fff0e7; color: #8b2916; line-height: 1.5; }
 .city-governance-body { flex: 1; overflow: auto; padding: 1rem 1.5rem 2rem; }
 .city-governance-list { display: grid; gap: .75rem; }
 .city-governance-card { padding: 1rem; border: 1px solid #ffffff1c; border-radius: .7rem; background: #ffffff08; }
