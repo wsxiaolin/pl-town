@@ -23,8 +23,7 @@ export type CityGovernanceListener = (config: CityConfig | null, state: CityStat
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
-type PendingRequest = { operationKey: string; requestId: string };
-let pendingRequest: PendingRequest | null = null;
+const pendingRequestIds = new Map<string, string>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -121,7 +120,7 @@ export function disposeCityGovernance(): void {
   activeSignal = undefined;
   config = null;
   state = null;
-  pendingRequest = null;
+  pendingRequestIds.clear();
   listeners.clear();
 }
 
@@ -133,8 +132,8 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     throw new Error('请先登录');
   }
   const operationKey = `${path}:${JSON.stringify(body)}`;
-  const requestId = pendingRequest?.operationKey === operationKey ? pendingRequest.requestId : makeRequestId();
-  pendingRequest = { operationKey, requestId };
+  const requestId = pendingRequestIds.get(operationKey) ?? makeRequestId();
+  pendingRequestIds.set(operationKey, requestId);
   let response: Response;
   let payload: { state?: CityState; error?: string };
   try {
@@ -149,18 +148,22 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     // A malformed response may still follow a committed operation, so retain the ID.
     throw new Error('服务器响应格式异常，请重试；重复请求不会重复扣费。');
   }
-  if (pendingRequest?.operationKey === operationKey && pendingRequest.requestId === requestId) pendingRequest = null;
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   if (response.status === 409) {
     await loadCityGovernance();
   }
-  if (!response.ok || !validState(payload.state)) throw new Error(cityOperationError(payload.error));
+  if (!response.ok || !validState(payload.state)) {
+    if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === requestId) {
+      pendingRequestIds.delete(operationKey);
+    }
+    throw new Error(cityOperationError(payload.error));
+  }
+  if (pendingRequestIds.get(operationKey) === requestId) pendingRequestIds.delete(operationKey);
   applyCityState(payload.state);
   return payload.state;
 }
 
-function cityOperationError(error?: string): string {
-  const messages: Record<string, string> = {
+const cityOperationMessages: Record<string, string> = {
     'Invalid requestId': '建设请求无效，请刷新页面后重试。',
     'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
     'Invalid target': '建设目标无效，请重新选择项目或地块。',
@@ -177,11 +180,16 @@ function cityOperationError(error?: string): string {
     'Too many city mutations': '操作太频繁，请稍后重试。',
     'Please sign in': '请先登录后再参与城市建设。',
     'Unknown city endpoint': '城市建设服务暂时不可用，请稍后重试。',
-  };
-  return error && messages[error] ? messages[error] : '建设请求失败，请稍后重试。';
+};
+
+function isDefinitiveRejection(response: Response, error?: string): boolean {
+  return response.status >= 400 && response.status < 500 && Boolean(error && cityOperationMessages[error]);
+}
+
+function cityOperationError(error?: string): string {
+  return error && cityOperationMessages[error] ? cityOperationMessages[error] : '建设请求失败，请稍后重试。';
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
-export function discardPendingCityRequest(): void { pendingRequest = null; }
 export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
 export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }
