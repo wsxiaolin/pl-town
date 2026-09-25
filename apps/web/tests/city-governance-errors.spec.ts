@@ -7,7 +7,7 @@ const scenarios = [
 ] as const;
 for (const [action, failure] of scenarios) {
   test(`${action} preserves the draft across ${failure} and tab changes before retry`, async ({ page }) => {
-    if (action === 'decorate') await page.setViewportSize({ width: 844, height: 390 });
+    if (action === 'decorate') await page.setViewportSize({ width: 600, height: 390 });
     const config = {
       schemaVersion: 1, version: 'error-fixture',
       projects: [{ id: 'build-catcafe', buildingId: 'catcafe', name: '猫猫咖啡厅', description: '共同筹建', kind: 'building', cost: 3000 }],
@@ -63,8 +63,18 @@ for (const [action, failure] of scenarios) {
     const message = failure === 'insufficient coins' ? '金币不足' : '网络连接异常';
     await expect(panel.getByRole('alert')).toContainText(message);
     await expect(actionButton).toBeEnabled();
+    await expect(actionButton).toBeFocused();
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
     if (failure === 'insufficient coins') expect(stateReads).toBeGreaterThanOrEqual(2);
+    if (failure === 'lost response') {
+      if (action === 'donate') {
+        await input.fill('600');
+        await input.fill('500');
+      } else {
+        await input.selectOption('flowers');
+        await input.selectOption('pine');
+      }
+    }
     // Drafts must survive removal of their controls, not just an immediate refresh.
     const currentTab = action === 'donate' ? '城市集体建设' : '个人建设';
     const otherTab = action === 'donate' ? '个人建设' : '城市集体建设';
@@ -79,7 +89,7 @@ for (const [action, failure] of scenarios) {
     const { requestId: firstId, ...first } = requests[0]!;
     const { requestId: retryId, ...retry } = requests[1]!;
     expect(retry).toEqual(first);
-    if (failure === 'lost response') expect(retryId).toBe(firstId);
+    if (failure === 'lost response') expect(retryId).not.toBe(firstId);
     expect(pageErrors).toEqual([]);
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
