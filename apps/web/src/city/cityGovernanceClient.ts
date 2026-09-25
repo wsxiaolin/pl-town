@@ -125,7 +125,7 @@ export function disposeCityGovernance(): void {
 }
 
 async function mutate(path: string, body: Record<string, unknown>, explicitRequestId?: string): Promise<CityState> {
-  if (!config) throw new Error('City configuration unavailable');
+  if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
   const token = localStorage.getItem('minicityServerToken');
   if (!token) {
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
@@ -134,16 +134,36 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
   const operationKey = `${path}:${JSON.stringify(body)}`;
   const requestId = explicitRequestId ?? pendingRequestIds.get(operationKey) ?? makeRequestId();
   if (!explicitRequestId) pendingRequestIds.set(operationKey, requestId);
-  const response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
-  const payload = await response.json() as { state?: CityState; error?: string };
+  let response: Response;
+  let payload: { state?: CityState; error?: string };
+  try {
+    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
+    payload = await response.json() as typeof payload;
+  } catch {
+    // Keep the request ID: a lost response does not mean the server rolled back.
+    throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
+  }
   if (!explicitRequestId && pendingRequestIds.get(operationKey) === requestId) pendingRequestIds.delete(operationKey);
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   if (response.status === 409) {
     await loadCityGovernance();
   }
-  if (!response.ok || !validState(payload.state)) throw new Error(payload.error ?? '治理请求失败，请重试');
+  if (!response.ok || !validState(payload.state)) throw new Error(cityOperationError(payload.error));
   applyCityState(payload.state);
   return payload.state;
+}
+
+function cityOperationError(error?: string): string {
+  const messages: Record<string, string> = {
+    'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
+    'Plot already occupied': '这块地已被建设，请选择其他空地。',
+    'Project already built': '该项目已建成，请选择其他建设项目。',
+    'City config changed; reload config': '建设配置已更新，请确认最新信息后重试。',
+    'Amount must be a positive safe integer': '请输入大于 0 的整数捐款金额。',
+    'Too many city mutations': '操作太频繁，请稍后重试。',
+    'Please sign in': '请先登录后再参与城市建设。',
+  };
+  return error && messages[error] ? messages[error] : '建设请求失败，请稍后重试。';
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }

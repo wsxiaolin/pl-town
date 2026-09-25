@@ -4,6 +4,7 @@ let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
+let operationError = '';
 
 const money = (value: number) => `${value.toLocaleString()} 金币`;
 
@@ -40,6 +41,13 @@ function render(): void {
   status.dataset.cityStatus = 'true';
   status.textContent = state ? `云端进度 #${state.revision}` : '正在等待云端城市配置...';
   root.append(status);
+  if (operationError) {
+    const feedback = document.createElement('p');
+    feedback.dataset.cityFeedback = 'true';
+    feedback.setAttribute('role', 'alert');
+    feedback.textContent = operationError;
+    root.append(feedback);
+  }
   const body = document.createElement('main');
   body.className = 'city-governance-body';
   if (!config || !state) {
@@ -88,8 +96,13 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
         const action = item.querySelector('button');
         if (!(action instanceof HTMLButtonElement)) return;
         action.disabled = true;
+        operationError = '';
+        root?.querySelector('[data-city-feedback]')?.remove();
         try { await donateCity(project.id, Number(amount.value)); render(); }
-        catch (error) { detail.textContent = error instanceof Error ? error.message : '捐款失败，请重试'; action.disabled = false; }
+        catch (error) {
+          operationError = error instanceof Error ? error.message : '捐款失败，请重试';
+          render();
+        }
       }));
     }
     list.append(item);
@@ -117,8 +130,13 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
         const action = item.querySelector('button');
         if (!(action instanceof HTMLButtonElement)) return;
         action.disabled = true;
+        operationError = '';
+        root?.querySelector('[data-city-feedback]')?.remove();
         try { await decorateCity(plot.id, select.value); render(); }
-        catch (error) { action.textContent = error instanceof Error ? error.message : '建设失败，请重试'; action.disabled = false; }
+        catch (error) {
+          operationError = error instanceof Error ? error.message : '建设失败，请重试';
+          render();
+        }
       }));
     }
     list.append(item);
@@ -140,7 +158,10 @@ export function openCityGovernancePanel(buildingId = ''): void {
   root.querySelector<HTMLButtonElement>('.city-governance-head button')?.focus();
 }
 
-export function closeCityGovernancePanel(): void { root?.classList.remove('open'); }
+export function closeCityGovernancePanel(): void {
+  root?.classList.remove('open');
+  operationError = '';
+}
 
 export function disposeCityGovernancePanel(): void {
   unsubscribe?.();
@@ -149,4 +170,5 @@ export function disposeCityGovernancePanel(): void {
   root = null;
   activeBuilding = '';
   activeTab = 'collective';
+  operationError = '';
 }
