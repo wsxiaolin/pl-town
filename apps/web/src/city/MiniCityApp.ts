@@ -726,6 +726,9 @@ function init() {
   themeSync.syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
+  // Rendering is withheld until the boot precompile finished (see
+  // prepareFirstFrame) so the first visible frame is never a freeze.
+  frameLoop.holdRender();
   loginController.checkLogin();
   multiplayerHousing.setupUI();
 }
@@ -774,13 +777,15 @@ function disposeSession() {
 }
 
 /**
- * Heavy-boot precompile: links every shader program in the scene and renders
- * a few warm-up frames so the mirror water, sky and lighting programs are all
- * resident before the visitor sees the city. Never blocks entry on failure.
+ * Boot precompile: links every shader program in the scene and renders a few
+ * warm-up frames (mirror water, sky, lighting programs + GPU texture upload)
+ * so the first visible frame is instant. Runs on BOTH heavy and light boots;
+ * the frame loop stays held until this resolves. Never blocks entry on
+ * failure — releaseRender always runs.
  */
 async function prepareFirstFrame(onProgress?: (fraction: number) => void): Promise<void> {
-  if (!renderer || !scene || !camera) return;
   try {
+    if (!renderer || !scene || !camera) return;
     onProgress?.(0.15);
     await renderer.compileAsync(scene, camera);
     onProgress?.(0.7);
@@ -792,6 +797,8 @@ async function prepareFirstFrame(onProgress?: (fraction: number) => void): Promi
     onProgress?.(1);
   } catch (error) {
     console.error('First-frame precompile failed', error);
+  } finally {
+    frameLoop.releaseRender();
   }
 }
 

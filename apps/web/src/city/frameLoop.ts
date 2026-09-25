@@ -43,6 +43,11 @@ export type FrameLoopOptions = {
 
 export function createFrameLoop(options: FrameLoopOptions) {
   let animationFrame = 0;
+  // First-frame gate: rendering stays held until the heavy/light boot
+  // precompile (compileAsync + warm-up frames) has finished, so the visitor
+  // never sees the shader-compilation freeze. Held ticks still advance
+  // lastFrameTime, so the delta stays smooth on release (it is clamped anyway).
+  let renderHeld = false;
 
   function updateLabels() {
     updateCityLabels({
@@ -59,6 +64,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const now = performance.now();
     const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
     options.setLastFrameTime(now);
+    if (renderHeld) return;
     const playerController = options.getPlayerController();
     playerController?.updateMovement(delta);
     options.updateWeather?.(delta);
@@ -92,6 +98,9 @@ export function createFrameLoop(options: FrameLoopOptions) {
 
   function start() { animationFrame = requestAnimationFrame(loop); }
   function stop() { cancelAnimationFrame(animationFrame); }
+  /** Withhold rendering until the boot precompile has warmed the GPU. */
+  function holdRender() { renderHeld = true; }
+  function releaseRender() { renderHeld = false; }
 
-  return { start, stop, updateLabels };
+  return { start, stop, holdRender, releaseRender, updateLabels };
 }

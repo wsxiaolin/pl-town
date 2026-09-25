@@ -121,17 +121,26 @@ export function createCityRuntimeLifecycle(options: {
     }
     if (!started) return;
 
-    if (heavy && options.prepareFirstFrame) {
+    // Precompile runs on BOTH paths: the frame loop is held until the
+    // programs are linked and the warm-up frames uploaded textures, so the
+    // reveal never lands on a shader-compilation freeze (light boots used to
+    // freeze exactly there when the visitor skipped the splash early).
+    if (heavy) {
       pipeline.beginStage('precompile');
       try {
-        await options.prepareFirstFrame((fraction) => {
+        await options.prepareFirstFrame?.((fraction) => {
           pipeline.setStageProgress('precompile', fraction);
           if (fraction < 1) pipeline.setDetail(`预编译着色器与首帧预热 ${Math.round(fraction * 100)}%`);
         });
       } catch (error) {
         console.error('First-frame precompile failed', error);
       }
-      if (!started) return;
+    } else {
+      await options.prepareFirstFrame?.().catch((error) => console.error('First-frame precompile failed', error));
+    }
+    if (!started) return;
+
+    if (heavy) {
       pipeline.beginStage('ready');
       pipeline.setStageProgress('ready', 1);
       pipeline.setDetail('一切就绪');
