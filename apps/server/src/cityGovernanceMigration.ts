@@ -30,7 +30,11 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
   const preserved = new Set(previousInitial.filter((id) => !config.initialBuiltBuildingIds.includes(id)));
   // Previously global-open buildings without a construction ledger row were
   // standing before this policy. Existing pending projects still need funding.
-  const overrides = db.prepare("SELECT value_json FROM world_config WHERE key = 'buildings'").get() as { value_json: string } | undefined;
+  // Offline restores can read schema 5 backups from before world_config existed.
+  const hasWorldConfig = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'world_config'").get();
+  const overrides = hasWorldConfig
+    ? db.prepare("SELECT value_json FROM world_config WHERE key = 'buildings'").get() as { value_json: string } | undefined
+    : undefined;
   if (overrides) {
     const states = JSON.parse(overrides.value_json) as Record<string, unknown>;
     for (const project of config.projects) {
