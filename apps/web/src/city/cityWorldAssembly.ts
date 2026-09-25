@@ -60,6 +60,7 @@ export function assembleCityWorld(options: {
   isStoryLocked: (building: BuildingEntity) => boolean;
   interactOrWalk: (building: BuildingEntity) => void;
   onModelsLoaded: () => void;
+  onConstructionChanged: () => void;
 }) {
   const { scene, resources, graphics } = options;
   const raycastBuildingGroups: THREE.Object3D[] = [];
@@ -175,9 +176,10 @@ export function assembleCityWorld(options: {
     scene,
     buildings: options.buildings,
     getIsNight: options.getIsNight,
+    buildingPlots: options.buildingPlotTargets,
     buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
     refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
-    refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
+    refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); options.onConstructionChanged(); },
     onBuildingRestored: (building) => { void loadModels([building]); },
   });
   void loadModels(options.buildings);

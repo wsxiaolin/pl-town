@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { CITY_CONSTRUCTION_CONFIG as config } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
+import { reconcileInitialBuildings } from './cityGovernanceMigration.js';
 
 // Called inside both the schema migration and the in-process restore transaction.
 export function initializeCityGovernance(db: Database.Database): void {
@@ -16,6 +17,7 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (!(db.prepare('PRAGMA table_info(city_meta)').all() as Array<{ name: string }>).some((column) => column.name === 'epoch')) {
     db.exec("ALTER TABLE city_meta ADD COLUMN epoch TEXT NOT NULL DEFAULT ''");
   }
+  const preservedBuildings = reconcileInitialBuildings(db, config);
   const json = JSON.stringify(config);
   const unique = (values: string[]) => new Set(values).size === values.length;
   const validId = (value: string) => /^[A-Za-z0-9._:-]{1,100}$/.test(value);
@@ -57,9 +59,10 @@ export function initializeCityGovernance(db: Database.Database): void {
     db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
     const progress = db.prepare('SELECT funded, built FROM city_projects WHERE id = ?').get(project.id) as { funded: number; built: number };
     if (!Number.isSafeInteger(progress.funded) || progress.funded > project.cost || Boolean(progress.built) !== (progress.funded === project.cost)) throw new Error(`Invalid city project progress: ${project.id}`);
-    // Preserve buildings unlocked before city governance existed. Their project
-    // rows become completed without charging users or rewriting their progress.
-    if (project.buildingId && !progress.built && db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(project.buildingId)) {
+    // Reconcile legacy defaults and unlocks into completed project rows without
+    // debiting residents or inventing payment/idempotency records.
+    if (project.buildingId && !progress.built && (preservedBuildings.has(project.buildingId)
+      || (!old && db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(project.buildingId)))) {
       db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
     }
   }

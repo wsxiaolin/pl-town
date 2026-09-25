@@ -20,7 +20,7 @@ export function createBuildingAvailability(options: {
   }
 
   function isBuildingUnavailable(building: Pick<BuildingEntity, 'id' | 'group'>): boolean {
-    return isStoryLocked(building) || isBuildingDestroyed(building);
+    return building.group.userData.constructionPending === true || isStoryLocked(building) || isBuildingDestroyed(building);
   }
 
   function isResidenceUnavailable(residenceId: string): boolean {

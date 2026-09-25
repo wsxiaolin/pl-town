@@ -13,6 +13,7 @@ const MAX_CONSTRUCTION_POINT_LIGHTS = 8;
 export function createCityConstructionScene(options: {
   scene: THREE.Scene;
   buildings: BuildingEntity[];
+  buildingPlots?: readonly THREE.Object3D[];
   buildingAttachments?: ReadonlyMap<string, readonly THREE.Object3D[]>;
   getIsNight: () => boolean;
   refreshCollisions: () => void;
@@ -24,6 +25,7 @@ export function createCityConstructionScene(options: {
   options.scene.add(root);
   const hidden = new Map<BuildingEntity, { children: THREE.Object3D[]; labelY?: number; body?: THREE.Mesh }>();
   const visuals = new Map<string, Visual>();
+  const detachedPlots = new Map<THREE.Object3D, THREE.Object3D>();
   const detachedAttachments = new Map<THREE.Object3D, THREE.Object3D[]>();
   let disposed = false;
   let night = options.getIsNight();
@@ -137,6 +139,22 @@ export function createCityConstructionScene(options: {
         && !config.initialBuiltBuildingIds.includes(building.id)
         && isConstructionPending(building.id));
       building.group.userData.constructionPending = pending;
+      // Plot planes live directly in the scene, outside the building group.
+      // Detach them so both rendering and plot raycasts lose the empty lot.
+      for (const plot of options.buildingPlots ?? []) {
+        if (plot.userData.buildingId !== building.id) continue;
+        if (pending && plot.parent) {
+          detachedPlots.set(plot, plot.parent);
+          plot.removeFromParent();
+          plot.visible = false;
+          changed = true;
+        } else if (!pending && detachedPlots.has(plot)) {
+          detachedPlots.get(plot)!.add(plot);
+          detachedPlots.delete(plot);
+          plot.visible = true;
+          changed = true;
+        }
+      }
       for (const attachment of options.buildingAttachments?.get(building.id) ?? []) {
         if (pending && !detachedAttachments.has(attachment)) {
           detachedAttachments.set(attachment, [...attachment.children]);
@@ -221,6 +239,8 @@ export function createCityConstructionScene(options: {
         building.labelY = saved.labelY;
       });
       hidden.clear();
+      detachedPlots.forEach((parent, plot) => { parent.add(plot); plot.visible = true; });
+      detachedPlots.clear();
       detachedAttachments.forEach((children, attachment) => attachment.add(...children));
       detachedAttachments.clear();
       root.removeFromParent();

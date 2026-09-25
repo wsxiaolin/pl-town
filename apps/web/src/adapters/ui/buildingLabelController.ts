@@ -20,7 +20,10 @@ export function createBuildingLabelController(options: {
   }
 
   function addLabels(): void {
-    options.getBuildings().filter((building) => !options.isStoryLocked(building)).forEach(addLabel);
+    options.getBuildings().forEach((building) => {
+      if (options.isStoryLocked(building)) removeLabel(building);
+      else addLabel(building);
+    });
   }
 
   function removeLabel(building: BuildingEntity): void {

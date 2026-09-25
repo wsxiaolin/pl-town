@@ -468,6 +468,7 @@ function init() {
     isStoryLocked: availability.isStoryLocked,
     interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
     onModelsLoaded: () => buildingDamageController?.applyPersisted(),
+    onConstructionChanged: () => mapController?.invalidateShot(),
   });
   worldDecorations = world.worldDecorations;
   npcSystem = world.npcSystem;

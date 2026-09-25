@@ -63,3 +63,14 @@ test('applyGloballyUnlocked is authoritative and re-locks when the id disappears
   availability.applyGloballyUnlocked([]);
   assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), true);
 });
+
+test('construction visibility also blocks interaction until the project is completed', () => {
+  const group = new THREE.Group();
+  const availability = createBuildingAvailability({ storyLockedIds: new Set(), getResidences: () => [] });
+  const building = { id: 'library', group };
+  group.userData.constructionPending = true;
+  availability.applyGloballyUnlocked(['library']);
+  assert.equal(availability.isBuildingUnavailable(building), true);
+  group.userData.constructionPending = false;
+  assert.equal(availability.isBuildingUnavailable(building), false);
+});

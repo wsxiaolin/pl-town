@@ -105,7 +105,10 @@ try {
   assert.equal(weak.headers.get('access-control-expose-headers'), 'ETag');
   assert.equal((await fetch(`${base}/town-api/city/config`, { headers: { 'if-none-match': '*' } })).status, 304);
   assert.equal((await fetch(`${base}/town-api/city/config`, { headers: { 'if-none-match': '"old"' } })).status, 200);
-  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library']) assert.ok(config.initialBuiltBuildingIds.includes(id));
+  assert.deepEqual(config.initialBuiltBuildingIds, ['commons']);
+  const freshState = await (await fetch(`${base}/town-api/city/state`)).json();
+  assert.ok(freshState.projects.every((entry) => !entry.built && entry.funded === 0));
+  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library']) assert.ok(config.projects.some((entry) => entry.buildingId === id));
   for (const id of ['catcafe', 'school_north', 'teahouse', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop']) {
     assert.equal(config.initialBuiltBuildingIds.includes(id), false);
     assert.ok(config.projects.some((entry) => entry.buildingId === id));
@@ -351,17 +354,51 @@ try {
     noAreaNext.personalPlots[0].x += 0.1;
     assert.throws(() => reconcileAreaCatalog(noAreaPrevious, noAreaNext), /personal plot ledger changed/);
     // A pre-city backup seeds clean construction state and operations.
+    // Restore an actual previous ledger policy: standing core buildings become
+    // completed projects, while paid progress and request replay records survive.
+    const oldPath = ${JSON.stringify(join(dataDir, 'city-old-policy.sqlite'))};
+    await backupDatabase(oldPath);
+    const oldDb = new Database(oldPath);
+    const legacyBuildingIds = ['catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop', 'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse', 'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall', 'wushi_restaurant', 'tavern'];
+    const oldConfig = { ...config, version: '2026-09-19.1',
+      projects: config.projects.filter((project) => !project.buildingId || legacyBuildingIds.includes(project.buildingId)),
+      initialBuiltBuildingIds: ['commons', ...config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)],
+    };
+    oldDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
+    oldDb.prepare('UPDATE city_meta SET config_version = ?').run(oldConfig.version);
+    for (const project of config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId))) oldDb.prepare('DELETE FROM city_projects WHERE id = ?').run(project.id);
+    const oldOperations = oldDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+    const oldMoney = oldDb.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all();
+    const oldPaid = oldDb.prepare('SELECT * FROM city_projects ORDER BY id').all();
+    oldDb.close();
+    restoreFromBackupFile(oldPath);
+    assert.equal(getCityState().configVersion, config.version);
+    for (const id of oldConfig.initialBuiltBuildingIds.filter((id) => id !== 'commons')) assert.equal(getCityState().projects.find((project) => project.id === 'build-' + id).built, true);
+    for (const paid of oldPaid) assert.deepEqual(db.prepare('SELECT * FROM city_projects WHERE id = ?').get(paid.id), paid);
+    assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldOperations);
+    assert.deepEqual(db.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all(), oldMoney);
+    const migrated = getCityState();
+    db.transaction(() => initializeCityGovernance(db))();
+    assert.deepEqual(getCityState(), migrated);
+    // A pre-city backup preserves historical defaults and explicit unlocks,
+    // but cannot retain city operations that did not exist in that snapshot.
     const legacyPath = ${JSON.stringify(join(dataDir, 'city-legacy.sqlite'))};
     await backupDatabase(legacyPath);
     const legacy = new Database(legacyPath);
     legacy.pragma('foreign_keys = OFF');
     for (const table of ['city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs']) legacy.exec('DROP TABLE ' + table);
+    legacy.prepare('INSERT OR IGNORE INTO player_building_unlocks VALUES (?, ?, ?)').run(user.id, 'academy', new Date().toISOString());
+    legacy.prepare("INSERT INTO world_config (key, value_json, updated_at) VALUES ('buildings', ?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify({ beacon: 'open' }), new Date().toISOString());
     legacy.pragma('user_version = 5');
     legacy.close();
     restoreFromBackupFile(legacyPath);
     resetWorldConfig();
     assert.equal(getCityState().revision, 0);
-    assert.ok(getCityState().projects.every((project) => !project.built && project.funded === 0));
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-library').built, true);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-academy').built, true);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-beacon').built, true);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-shrine').built, false);
+    assert.equal(getCityState().projects.find((project) => project.id === 'greenbelt-trees').funded, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM city_operations').get().n, 0);
     db.prepare('UPDATE player_progress SET currency = 100 WHERE user_id = ?').run(user.id);
     const beforeAbort = getCityState();

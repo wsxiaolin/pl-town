@@ -182,6 +182,17 @@ await new Promise((resolve, reject) => {
   physicsLabServer.once('error', reject);
   physicsLabServer.listen(physicsLabPort, '127.0.0.1', resolve);
 });
+// This suite exercises access, shopping and stories in an established town.
+// Fresh construction and migration policies are covered by city-governance.mjs.
+const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e', `
+  const { db, closeDatabase } = await import('./dist/db.js');
+  const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
+  for (const project of config.projects.filter((entry) => entry.buildingId)) {
+    db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
+  }
+  closeDatabase();
+`], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
+if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout);
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
@@ -251,7 +262,7 @@ const waitFor = (client, type, predicate = () => true) => {
   return new Promise((resolve, reject) => {
     const existing = client.messages.find((message) => message.type === type && predicate(message));
     if (existing) return resolve(existing);
-    const timeout = setTimeout(() => { writeFileSync('/tmp/server-startup-dump.log', serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
+    const timeout = setTimeout(() => { writeFileSync(join(tmpdir(), 'server-startup-dump.log'), serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
     const listener = (raw) => {
       const message = JSON.parse(raw);
       if (message.type !== type || !predicate(message)) return;
@@ -499,7 +510,9 @@ try {
   send(alice, { type: 'progress.building.visit', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
 
-  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  // The core House of Commons still exercises personal unlock validation;
+  // collectively completed projects are open to everyone.
+  send(alice, { type: 'progress.building.visit', buildingId: 'commons' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is locked');
   send(alice, { type: 'progress.building.unlock', buildingId: 'activity' });
   await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'activity' && message.progress.currency === 1200);

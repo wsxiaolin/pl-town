@@ -405,7 +405,8 @@ export function createMapController(options: MapControllerOptions) {
 
   function invalidateShot(): void {
     shotData = null;
-    if (open) updateImage();
+    if (tipBuilding && options.isStoryLocked(tipBuilding)) closeTip();
+    if (open) { updateImage(); renderSearchResults(); }
   }
 
   function destroy(): void {
