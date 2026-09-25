@@ -42,7 +42,7 @@ async function start() {
   server = spawn(process.execPath, ['dist/index.js'], { cwd, env: { ...env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', (chunk) => { logs += chunk; });
   server.stderr.on('data', (chunk) => { logs += chunk; });
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     try { if ((await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(500) })).ok) return; } catch { /* wait for listener */ }
     if (server.exitCode !== null) throw new Error(logs);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -51,10 +51,12 @@ async function start() {
 }
 async function stop() {
   for (const socket of sockets.splice(0)) socket.terminate();
-  if (server && server.exitCode === null) {
-    const exited = once(server, 'exit');
-    server.kill('SIGTERM');
-    const timeout = setTimeout(() => server.kill('SIGKILL'), 5000);
+  const child = server;
+  server = undefined;
+  if (child && child.exitCode === null && child.signalCode === null) {
+    const exited = once(child, 'exit');
+    child.kill('SIGTERM');
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 5000);
     await exited;
     clearTimeout(timeout);
   }
@@ -112,6 +114,11 @@ try {
   assert.ok(config.projects.some((entry) => entry.id === 'corner-trees-ne' && entry.kind === 'trees'));
   assert.ok(config.personalPlots.some((entry) => entry.id === 'residence-yard-1'));
   assert.ok(config.personalPlots.some((entry) => entry.id === 'residence-yard-2'));
+  assert.equal(config.personalAreas.length, 4);
+  assert.ok(config.personalAreas.every((area) => area.plotIds.length >= 20));
+  assert.equal(new Set(config.personalAreas.flatMap((area) => area.plotIds)).size, 88);
+  assert.equal(config.projects.find((entry) => entry.id === 'greenbelt-trees').placements.length, 2);
+  for (const id of ['north-community-garden', 'south-community-grove']) assert.ok(config.projects.find((entry) => entry.id === id).placements.length >= 8);
   const project = config.projects.find((entry) => entry.buildingId === 'catcafe');
   const a = await resident('city-token-a');
   const b = await resident('city-token-b');
@@ -177,6 +184,32 @@ try {
   const competitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'plot-race', plotId: config.personalPlots[2].id, decorationId: 'flowers' })));
   assert.deepEqual(competitors.map((entry) => entry.status).sort(), [200, 409]);
   assert.equal(competitors.find((entry) => entry.status === 200).body.acceptedAmount, 80);
+  await stop();
+  await start();
+  const areaBody = { token: 'city-token-a', requestId: 'area-build', areaId: 'north-meadow', decorationId: 'flowers', quantity: 5 };
+  for (const quantity of [0, -1, 1.5, '2', null, 101, Number.MAX_SAFE_INTEGER + 1]) await post('decorate', { ...areaBody, quantity }, 400);
+  await post('decorate', { ...areaBody, areaId: 'missing' }, 404);
+  await post('decorate', { ...areaBody, plotId: plot.id }, 400);
+  await post('decorate', { ...areaBody, quantity: 21 }, 409);
+  const areaBuilt = await post('decorate', areaBody);
+  assert.equal(areaBuilt.acceptedAmount, 400);
+  assert.equal(areaBuilt.state.decorations.filter((entry) => entry.plotId.startsWith('north-meadow-')).length, 5);
+  const areaReplay = await post('decorate', areaBody);
+  assert.equal(areaReplay.replayed, true);
+  assert.equal(areaReplay.state.revision, areaBuilt.state.revision);
+  assert.equal(areaReplay.progress.currency, areaBuilt.progress.currency);
+  await post('decorate', { ...areaBody, quantity: 4 }, 409);
+  const areaCompetitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'area-race', areaId: 'east-park', decorationId: 'flowers', quantity: 24 })));
+  assert.deepEqual(areaCompetitors.map((entry) => entry.status).sort(), [200, 409]);
+  const areaWinner = areaCompetitors.find((entry) => entry.status === 200).body;
+  assert.equal(areaWinner.acceptedAmount, 24 * 80);
+  assert.equal(areaWinner.state.decorations.filter((entry) => entry.plotId.startsWith('east-park-')).length, 24);
+  assert.equal(areaWinner.state.revision, areaBuilt.state.revision + 1);
+  const duplicateBatch = await Promise.all([1, 2].map(() => post('decorate', { ...areaBody, token: 'city-token-b', requestId: 'area-duplicate', areaId: 'south-meadow', quantity: 3 })));
+  assert.equal(duplicateBatch.filter((entry) => entry.replayed).length, 1);
+  assert.equal(duplicateBatch[0].progress.currency, duplicateBatch[1].progress.currency);
+  const publicArea = await post('donate', { token: 'city-token-b', requestId: 'area-public', projectId: 'north-community-garden', amount: 640 });
+  assert.equal(publicArea.state.projects.find((entry) => entry.id === 'north-community-garden').built, true);
   const beforeRestart = await (await fetch(`${base}/town-api/city/state`)).json();
   await stop();
   await start();
@@ -200,7 +233,10 @@ try {
     assert.deepEqual(getCityState(), before);
     assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-plot', plotId: config.personalPlots[1].id, decorationId: 'oak' }), /Insufficient/);
     assert.deepEqual(getCityState(), before);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM city_operations WHERE request_id IN ('poor', 'poor-plot')").get().n, 0);
+    assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-area', areaId: 'west-park', decorationId: 'flowers', quantity: 20 }), /Insufficient/);
+    assert.deepEqual(getCityState(), before);
+    assert.equal(db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM city_operations WHERE request_id IN ('poor', 'poor-plot', 'poor-area')").get().n, 0);
     assert.throws(() => purchaseBuilding(user.id, 'academy', 0), /not built/);
     assert.throws(() => recordBuildingVisit(user.id, 'academy'), /not built/);
     const { setBuildingOverrides, resetWorldConfig } = await import('./dist/worldConfig.js');
@@ -230,6 +266,41 @@ try {
     db.prepare('UPDATE city_configs SET config_json = ? WHERE version = ?').run(stored, config.version);
     // Failed restore must roll back every table and close its source handle.
     const Database = (await import('better-sqlite3')).default;
+    // Reconstruct a real pre-area backup: its historical config, receipts and
+    // purchased single plots must survive the explicit additive reconciliation.
+    const preAreaPath = ${JSON.stringify(join(dataDir, 'city-pre-area.sqlite'))};
+    await backupDatabase(preAreaPath);
+    const preArea = new Database(preAreaPath);
+    const oldConfig = structuredClone(config);
+    const newPlotIds = new Set(oldConfig.personalAreas.flatMap((area) => area.plotIds));
+    oldConfig.personalPlots = oldConfig.personalPlots.filter((plot) => !newPlotIds.has(plot.id));
+    oldConfig.projects = oldConfig.projects.filter((project) => !['north-community-garden', 'south-community-grove'].includes(project.id));
+    delete oldConfig.personalAreas;
+    oldConfig.version = '2026-09-19.1';
+    preArea.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
+    preArea.prepare('UPDATE city_meta SET config_version = ? WHERE id = 1').run(oldConfig.version);
+    preArea.prepare('DELETE FROM city_configs WHERE version = ?').run(config.version);
+    for (const id of newPlotIds) preArea.prepare('DELETE FROM city_decorations WHERE plot_id = ?').run(id);
+    for (const id of ['north-community-garden', 'south-community-grove']) preArea.prepare('DELETE FROM city_projects WHERE id = ?').run(id);
+    preArea.prepare("DELETE FROM city_operations WHERE request_id LIKE 'area-%'").run();
+    for (const operation of preArea.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
+      const fingerprint = JSON.parse(operation.fingerprint);
+      fingerprint[3] = oldConfig.version;
+      preArea.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
+    }
+    const oldDecorations = preArea.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all();
+    const oldReceipts = preArea.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+    const oldBalance = preArea.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency;
+    preArea.close();
+    restoreFromBackupFile(preAreaPath);
+    assert.equal(getCityState().configVersion, config.version);
+    assert.deepEqual(db.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all(), oldDecorations);
+    assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldReceipts);
+    const oldReplay = mutateCity(user, 'donate', { configVersion: oldConfig.version, requestId: 'first', projectId: 'build-catcafe', amount: 100 });
+    assert.equal(oldReplay.replayed, true);
+    assert.equal(oldReplay.progress.currency, oldBalance);
+    assert.ok(getCityState().projects.filter((project) => ['north-community-garden', 'south-community-grove'].includes(project.id)).every((project) => project.funded === 0 && !project.built));
+    restoreFromBackupFile(path);
     const damagedPath = ${JSON.stringify(join(dataDir, 'city-damaged.sqlite'))};
     await backupDatabase(damagedPath);
     const damaged = new Database(damagedPath);

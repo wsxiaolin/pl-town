@@ -9,6 +9,7 @@ export type CityProject = {
 export type CityConfig = {
   schemaVersion: number; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
+  personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
   decorations: CityDecoration[]; initialBuiltBuildingIds: string[];
 };
 export type CityState = {
@@ -23,7 +24,7 @@ export type CityGovernanceListener = (config: CityConfig | null, state: CityStat
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
-const pendingRequestIds = new Map<string, string>();
+const pendingRequestIds = new Map<string, { requestId: string; configVersion: string }>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -132,18 +133,26 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
     throw new Error('请先登录');
   }
   const operationKey = `${path}:${JSON.stringify(body)}`;
-  const requestId = explicitRequestId ?? pendingRequestIds.get(operationKey) ?? makeRequestId();
-  if (!explicitRequestId) pendingRequestIds.set(operationKey, requestId);
+  // An uncertain response may already have committed. Retry the entire original
+  // receipt, including its catalog version, even after a live config refresh.
+  const operation = explicitRequestId ? { requestId: explicitRequestId, configVersion: config.version }
+    : pendingRequestIds.get(operationKey) ?? { requestId: makeRequestId(), configVersion: config.version };
+  const { requestId, configVersion } = operation;
+  if (!explicitRequestId) pendingRequestIds.set(operationKey, operation);
   let response: Response;
   let payload: { state?: CityState; error?: string };
   try {
-    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
+    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
     payload = await response.json() as typeof payload;
   } catch {
     // Keep the request ID: a lost response does not mean the server rolled back.
     throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
   }
-  if (!explicitRequestId && pendingRequestIds.get(operationKey) === requestId) pendingRequestIds.delete(operationKey);
+  // Authentication/rate failures happen before the receipt lookup and cannot
+  // establish whether an earlier attempt committed. Keep those receipts too.
+  const confirmed = (response.ok && validState(payload.state))
+    || ([400, 404, 409].includes(response.status) && typeof payload.error === 'string');
+  if (confirmed && !explicitRequestId && pendingRequestIds.get(operationKey) === operation) pendingRequestIds.delete(operationKey);
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   if (response.status === 409) {
     await loadCityGovernance();
@@ -155,6 +164,11 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
 
 function cityOperationError(error?: string): string {
   const messages: Record<string, string> = {
+    'Unknown construction area': '建设区域不存在，请刷新后重试。',
+    'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
+    'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
+    'Quantity requires an area': '请先选择批量建设区域。',
+    'Invalid decoration total': '建设总价无效，请重新选择数量。',
     'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
     'Plot already occupied': '这块地已被建设，请选择其他空地。',
     'Project already built': '该项目已建成，请选择其他建设项目。',
@@ -169,3 +183,4 @@ function cityOperationError(error?: string): string {
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
 export function donateCity(projectId: string, amount: number, requestId?: string) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
 export function decorateCity(plotId: string, decorationId: string, requestId?: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }
+export function decorateCityArea(areaId: string, decorationId: string, quantity: number, requestId?: string) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }, requestId); }

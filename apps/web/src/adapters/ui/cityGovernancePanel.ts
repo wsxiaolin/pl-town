@@ -1,4 +1,5 @@
-import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
+import { clearCityAreaDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -6,7 +7,7 @@ let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 const donationDrafts = new Map<string, string>();
-const decorationDrafts = new Map<string, string>();
+
 
 const money = (value: number) => `${value.toLocaleString()} 金币`;
 
@@ -114,40 +115,10 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
 }
 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
-  for (const plot of config.personalPlots) {
-    const item = card(plot.name, '选择一项装饰，建设完成后全城居民都能看到。');
-    const occupied = state.decorations.find((entry) => entry.plotId === plot.id);
-    if (occupied) {
-      const owner = document.createElement('p');
-      owner.textContent = `已由 ${occupied.ownerNickname} 建设：${config.decorations.find((entry) => entry.id === occupied.decorationId)?.name ?? occupied.decorationId}`;
-      item.append(owner);
-    } else {
-      const select = document.createElement('select');
-      select.setAttribute('aria-label', `${plot.name}装饰类型`);
-      for (const id of plot.options) {
-        const option = document.createElement('option');
-        const decoration = config.decorations.find((entry) => entry.id === id);
-        option.value = id; option.textContent = decoration ? `${decoration.name} · ${money(decoration.cost)}` : id;
-        select.append(option);
-      }
-      const draft = decorationDrafts.get(plot.id);
-      if (draft && plot.options.includes(draft)) select.value = draft;
-      select.addEventListener('change', () => decorationDrafts.set(plot.id, select.value));
-      item.append(select, button('建设', async () => {
-        const action = item.querySelector('button');
-        if (!(action instanceof HTMLButtonElement)) return;
-        action.disabled = true;
-        operationError = '';
-        root?.querySelector('[data-city-feedback]')?.remove();
-        try { await decorateCity(plot.id, select.value); render(); }
-        catch (error) {
-          operationError = error instanceof Error ? error.message : '建设失败，请重试';
-          render();
-        }
-      }));
-    }
-    list.append(item);
-  }
+  renderCityPersonalAreas(list, config, state, render, (message) => {
+    operationError = message;
+    if (!message) root?.querySelector('[data-city-feedback]')?.remove();
+  });
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
@@ -179,5 +150,5 @@ export function disposeCityGovernancePanel(): void {
   activeTab = 'collective';
   operationError = '';
   donationDrafts.clear();
-  decorationDrafts.clear();
+  clearCityAreaDrafts();
 }

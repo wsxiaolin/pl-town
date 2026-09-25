@@ -1,3 +1,4 @@
+import { AREA_PLOTS, AREA_PROJECTS, PERSONAL_AREAS } from './cityConstructionAreas.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 
 export type DecorationKind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
@@ -11,6 +12,7 @@ export type CityProject = {
 export type CityConstructionConfig = {
   schemaVersion: 1; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
+  personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
   decorations: Array<{ id: string; name: string; kind: DecorationKind; cost: number }>;
   initialBuiltBuildingIds: string[];
 };
@@ -32,7 +34,7 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  version: '2026-09-19.1',
+  version: '2026-09-25.areas.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     { id: 'greenbelt-path', name: '北侧绿道', description: '公共步行绿道', cost: 800, kind: 'road', road: { x: 22, z: -40, width: 8, depth: 1 } },
@@ -55,7 +57,9 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'corner-lights-ne', name: '东北角路灯', description: '东北角夜间照明', cost: 450, kind: 'lights', placements: [{ kind: 'lamp', x: 38, z: -36 }, { kind: 'lamp', x: 36, z: -38 }] },
     { id: 'corner-lights-sw', name: '西南角路灯', description: '西南角夜间照明', cost: 450, kind: 'lights', placements: [{ kind: 'lamp', x: -38, z: 36 }, { kind: 'lamp', x: -36, z: 38 }] },
     { id: 'east-rim-benches', name: '东门外座椅', description: '东门外公共休憩点', cost: 300, kind: 'decoration', placements: [{ kind: 'bench', x: 41.5, z: 22 }] },
+    ...AREA_PROJECTS,
   ],
+  personalAreas: PERSONAL_AREAS,
   personalPlots: [
     { id: 'north-garden-1', name: '北侧花园一号', x: 30, z: -40, options: ['cherry', 'flowers', 'bench'] },
     { id: 'north-garden-2', name: '北侧花园二号', x: 34, z: -40, options: ['oak', 'pine', 'lamp'] },
@@ -70,6 +74,7 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'west-garden-3', name: '西侧花园三号', x: -40, z: -39, options: ['lamp', 'flowers', 'oak'] },
     { id: 'residence-yard-1', name: '南郊住宅庭院', x: 16, z: 38, options: ['cherry', 'flowers', 'bench'] },
     { id: 'residence-yard-2', name: '西郊住宅庭院', x: -16, z: -38, options: ['oak', 'lamp', 'flowers'] },
+    ...AREA_PLOTS,
   ],
   decorations: [
     { id: 'oak', name: '橡树', kind: 'oak', cost: 180 },
