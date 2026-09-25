@@ -82,8 +82,7 @@ export type PhysicsLabOAuthProfile = { id: string; nickname: string; email: stri
 
 /**
  * Exchange an OAuth2 authorization code for the Physics Lab account profile.
- * The code was issued by the Physics Lab service through its shared `community`
- * client; the town presents the same public client id/secret when exchanging.
+ * The code is exchanged with credentials supplied by the deployment environment.
  */
 export async function exchangePhysicsLabOAuthCode(code: string): Promise<PhysicsLabOAuthProfile> {
   const form = new URLSearchParams();

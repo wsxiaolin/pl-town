@@ -457,9 +457,12 @@ SESSION_TTL_DAYS=30
 MAX_CONNECTIONS=500
 MAX_CONNECTIONS_PER_IP=20
 
-# 可选：物实账号 OAuth2 登录。两项同时填写才启用。
+# 可选：物实账号 OAuth2 登录。以下四项同时填写才启用；client id 和
+# client secret 只能从部署环境变量或密钥管理器注入。
 # PHYSICS_LAB_OAUTH_AUTHORIZE_URL=https://<plweb2-host>/oauth/authorize
 # PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN=https://city.example.com
+# PHYSICS_LAB_OAUTH_CLIENT_ID=
+# PHYSICS_LAB_OAUTH_CLIENT_SECRET=
 
 AUTO_BACKUP_ENABLED=true
 BACKUP_ON_START=true
@@ -479,7 +482,7 @@ openssl rand -base64 36
 
 `TRUST_PROXY_HOPS=1` 让服务读取 Nginx 转发的 `X-Forwarded-For` 作为客户端真实 IP（用于每 IP 限流和注册上限）。`TRUSTED_PROXIES` 限定只有列表内的 TCP 对端（IP 或 CIDR 段）转发的头才被信任；默认只信任本机回环地址，与本方案的 Nginx 同机部署一致。如果端口被绕过 Nginx 直接访问，伪造的 `X-Forwarded-For` 会被直接忽略。
 
-物实账号登录是可选功能：同时配置 `PHYSICS_LAB_OAUTH_AUTHORIZE_URL`（物实网页版授权页）与 `PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN`（本城公开 Origin）后，登录弹层会出现「用物实账号登录」。它复用物实服务内置的公共 `community` OAuth 客户端，无需单独申请密钥；请确认该 Origin 已在物实服务的回调白名单内。OAuth 首次登录会以物实昵称创建无密码居民，若昵称已被小城密码账号占用则拒绝登录。
+物实账号登录是可选功能：同时配置四项 `PHYSICS_LAB_OAUTH_*` 环境变量后，登录弹层会出现「用物实账号登录」。请确认公开 Origin 已在物实服务的回调白名单内。OAuth 首次登录会以物实昵称创建无密码居民，若昵称已被小城密码账号占用则拒绝登录。
 
 检查文件权限和关键配置，但不要把整份文件输出到终端截图：
 

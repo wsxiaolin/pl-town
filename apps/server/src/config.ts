@@ -82,10 +82,8 @@ const allowedOrigins = origins(process.env.ALLOWED_ORIGINS);
 export const ALLOWED_ORIGINS = allowedOrigins.exact;
 export const ALLOWED_ORIGIN_WILDCARDS = allowedOrigins.wildcardHosts;
 export const ALLOW_ORIGINLESS_WEBSOCKET = boolean('ALLOW_ORIGINLESS_WEBSOCKET', !IS_PRODUCTION);
-// Physics Lab ("物实") OAuth account login. It reuses the shared public
-// `community` OAuth client that ships with the Physics Lab service, so the town
-// does not register a client of its own. The feature unlocks only when both the
-// authorize page and the public town origin are configured.
+// Physics Lab ("物实") OAuth account login. All OAuth settings come from the
+// deployment environment so credentials never live in source or examples.
 export const PHYSICS_LAB_OAUTH_AUTHORIZE_URL = (() => {
   const raw = process.env.PHYSICS_LAB_OAUTH_AUTHORIZE_URL?.trim() ?? '';
   return raw ? httpUrl('PHYSICS_LAB_OAUTH_AUTHORIZE_URL', raw) : '';
@@ -98,11 +96,12 @@ export const PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN = (() => {
   if (value.username || value.password || value.hash || value.search || value.pathname !== '/') throw new Error('PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN must be an origin without a path');
   return value.origin;
 })();
-export const PHYSICS_LAB_OAUTH_CLIENT_ID = process.env.PHYSICS_LAB_OAUTH_CLIENT_ID?.trim() || 'community';
-// The public community client secret is shared with every Physics Lab
-// installation; it is not a per-deployment credential.
-export const PHYSICS_LAB_OAUTH_CLIENT_SECRET = process.env.PHYSICS_LAB_OAUTH_CLIENT_SECRET?.trim() || 'a_secret_that_you_dont_know_dont_know_dont_know';
-export const PHYSICS_LAB_OAUTH_ENABLED = PHYSICS_LAB_OAUTH_AUTHORIZE_URL !== '' && PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN !== '';
+export const PHYSICS_LAB_OAUTH_CLIENT_ID = process.env.PHYSICS_LAB_OAUTH_CLIENT_ID?.trim() ?? '';
+export const PHYSICS_LAB_OAUTH_CLIENT_SECRET = process.env.PHYSICS_LAB_OAUTH_CLIENT_SECRET?.trim() ?? '';
+export const PHYSICS_LAB_OAUTH_ENABLED = PHYSICS_LAB_OAUTH_AUTHORIZE_URL !== ''
+  && PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN !== ''
+  && PHYSICS_LAB_OAUTH_CLIENT_ID !== ''
+  && PHYSICS_LAB_OAUTH_CLIENT_SECRET !== '';
 // The Physics Lab service appends this fixed suffix to the redirect base it is
 // given, so the callback lives under /town-api/ and already reaches the server.
 export const PHYSICS_LAB_OAUTH_CALLBACK_PATH = '/town-api/auth/oauth2_basic/callback';

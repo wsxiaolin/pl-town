@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -6,6 +7,8 @@ import { join } from 'node:path';
 import WebSocket from 'ws';
 
 const port = 8791;
+const oauthClientId = randomUUID();
+const oauthClientSecret = randomUUID();
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
 const productionConfigCheck = spawnSync(process.execPath, ['--input-type=module', '-e', "import('./dist/config.js')"], {
   cwd: new URL('..', import.meta.url),
@@ -159,7 +162,7 @@ const physicsLabServer = createServer(async (request, response) => {
   const reply = (status, payload) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload)); };
   if (request.url === '/Users/ExchangeToken') {
     const form = new URLSearchParams(raw);
-    if (form.get('client_id') !== 'community' || form.get('client_secret') !== 'a_secret_that_you_dont_know_dont_know_dont_know') {
+    if (form.get('client_id') !== oauthClientId || form.get('client_secret') !== oauthClientSecret) {
       return reply(401, { Status: 401, Message: 'OAuth.Invalid.Client' });
     }
     const code = form.get('code');
@@ -204,6 +207,8 @@ const server = spawn(process.execPath, ['dist/index.js'], {
     PHYSICS_LAB_API_BASE: `http://127.0.0.1:${physicsLabPort}`,
     PHYSICS_LAB_OAUTH_AUTHORIZE_URL: 'https://plweb.example/oauth/authorize',
     PHYSICS_LAB_OAUTH_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
+    PHYSICS_LAB_OAUTH_CLIENT_ID: oauthClientId,
+    PHYSICS_LAB_OAUTH_CLIENT_SECRET: oauthClientSecret,
     BIGMODEL_API_KEY: 'integration-api-key', BIGMODEL_MODERATION_URL: `http://127.0.0.1:${moderationPort}/moderations`,
   },
   stdio: ['ignore', 'pipe', 'inherit'],
