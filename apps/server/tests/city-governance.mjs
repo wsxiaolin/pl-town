@@ -108,7 +108,7 @@ try {
   assert.deepEqual(config.initialBuiltBuildingIds, ['commons']);
   const freshState = await (await fetch(`${base}/town-api/city/state`)).json();
   assert.ok(freshState.projects.every((entry) => !entry.built && entry.funded === 0));
-  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library']) assert.ok(config.projects.some((entry) => entry.buildingId === id));
+  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library', 'photostudio']) assert.ok(config.projects.some((entry) => entry.buildingId === id));
   for (const id of ['catcafe', 'school_north', 'teahouse', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop']) {
     assert.equal(config.initialBuiltBuildingIds.includes(id), false);
     assert.ok(config.projects.some((entry) => entry.buildingId === id));
@@ -269,6 +269,31 @@ try {
     db.prepare('UPDATE city_configs SET config_json = ? WHERE version = ?').run(stored, config.version);
     // Failed restore must roll back every table and close its source handle.
     const Database = (await import('better-sqlite3')).default;
+    // The first pending-building policy missed the client-only photo studio.
+    // A real old ledger has neither its project definition nor its progress row.
+    const photoPath = ${JSON.stringify(join(dataDir, 'city-before-photostudio.sqlite'))};
+    await backupDatabase(photoPath);
+    const photoDb = new Database(photoPath);
+    const photoOldConfig = { ...config, version: '2026-09-25.pending.1', projects: config.projects.filter((project) => project.buildingId !== 'photostudio') };
+    photoDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(photoOldConfig.version, JSON.stringify(photoOldConfig));
+    photoDb.prepare('UPDATE city_meta SET config_version = ?').run(photoOldConfig.version);
+    photoDb.prepare('DELETE FROM city_configs WHERE version = ?').run(config.version);
+    photoDb.prepare("DELETE FROM city_projects WHERE id = 'build-photostudio'").run();
+    const photoOldProjects = photoDb.prepare('SELECT * FROM city_projects ORDER BY id').all();
+    const photoOldReceipts = photoDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+    const photoOldBalances = photoDb.prepare('SELECT * FROM player_progress ORDER BY user_id').all();
+    photoDb.close();
+    restoreFromBackupFile(photoPath);
+    const photoBuilt = getCityState().projects.find((project) => project.id === 'build-photostudio');
+    assert.equal(photoBuilt.built, true);
+    assert.equal(photoBuilt.funded, config.projects.find((project) => project.id === photoBuilt.id).cost);
+    for (const oldProject of photoOldProjects) assert.deepEqual(db.prepare('SELECT * FROM city_projects WHERE id = ?').get(oldProject.id), oldProject);
+    assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), photoOldReceipts);
+    assert.deepEqual(db.prepare('SELECT * FROM player_progress ORDER BY user_id').all(), photoOldBalances);
+    const photoMigrated = getCityState();
+    db.transaction(() => initializeCityGovernance(db))();
+    assert.deepEqual(getCityState(), photoMigrated);
+    restoreFromBackupFile(path);
     // Reconstruct a real pre-area backup: its historical config, receipts and
     // purchased single plots must survive the explicit additive reconciliation.
     const preAreaPath = ${JSON.stringify(join(dataDir, 'city-pre-area.sqlite'))};
@@ -280,7 +305,7 @@ try {
     oldConfig.personalPlots = oldConfig.personalPlots.filter((plot) => !newPlotIds.has(plot.id));
     oldConfig.projects = oldConfig.projects.filter((project) => !['north-community-garden', 'south-community-grove'].includes(project.id)
       && (!project.buildingId || legacyBuildingIds.includes(project.buildingId)));
-    oldConfig.initialBuiltBuildingIds = ['commons', ...config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)];
+    oldConfig.initialBuiltBuildingIds = ['commons', ...config.projects.filter((project) => project.buildingId && project.buildingId !== 'photostudio' && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)];
     delete oldConfig.personalAreas;
     oldConfig.version = '2026-09-19.1';
     preArea.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
@@ -306,6 +331,7 @@ try {
     preArea.close();
     restoreFromBackupFile(preAreaPath);
     assert.equal(getCityState().configVersion, config.version);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
     assert.deepEqual(db.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all(), oldDecorations);
     assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldReceipts);
     const oldReplay = mutateCity(user, 'donate', { configVersion: oldConfig.version, requestId: 'first', projectId: 'build-catcafe', amount: 100 });
@@ -362,9 +388,9 @@ try {
     const oldPath = ${JSON.stringify(join(dataDir, 'city-old-policy.sqlite'))};
     await backupDatabase(oldPath);
     const oldDb = new Database(oldPath);
-    const oldPolicyConfig = { ...config, version: '2026-09-19.1',
+    const oldPolicyConfig = { ...config, version: '2026-09-25.areas.1',
       projects: config.projects.filter((project) => !project.buildingId || legacyBuildingIds.includes(project.buildingId)),
-      initialBuiltBuildingIds: ['commons', ...config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)],
+      initialBuiltBuildingIds: ['commons', ...config.projects.filter((project) => project.buildingId && project.buildingId !== 'photostudio' && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)],
     };
     oldDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldPolicyConfig.version, JSON.stringify(oldPolicyConfig));
     oldDb.prepare('UPDATE city_meta SET config_version = ?').run(oldPolicyConfig.version);
@@ -375,6 +401,7 @@ try {
     oldDb.close();
     restoreFromBackupFile(oldPath);
     assert.equal(getCityState().configVersion, config.version);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
     for (const id of oldPolicyConfig.initialBuiltBuildingIds.filter((id) => id !== 'commons')) assert.equal(getCityState().projects.find((project) => project.id === 'build-' + id).built, true);
     for (const paid of oldPaid) assert.deepEqual(db.prepare('SELECT * FROM city_projects WHERE id = ?').get(paid.id), paid);
     assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldOperations);
@@ -397,6 +424,7 @@ try {
     resetWorldConfig();
     assert.equal(getCityState().revision, 0);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-library').built, true);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-academy').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-beacon').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-shrine').built, false);

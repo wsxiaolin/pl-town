@@ -406,7 +406,13 @@ export function createMapController(options: MapControllerOptions) {
   function invalidateShot(): void {
     shotData = null;
     if (tipBuilding && options.isStoryLocked(tipBuilding)) closeTip();
-    if (open) { updateImage(); renderSearchResults(); }
+    if (open) {
+      // Refresh availability immediately; capture the background on the next
+      // open instead of allocating a WebGL context for every live city update.
+      renderIcons();
+      renderSearchResults();
+      updateMarker();
+    }
   }
 
   function destroy(): void {

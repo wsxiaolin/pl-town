@@ -97,6 +97,8 @@ const byId = new Map(defs.filter((entry) => typeof entry.id === 'string').map((e
 // Only buildings the server actually manages (BUILDING_PRICES) belong in the
 // catalog; accepted overrides must always have an effect.
 const managedIds = readStringArray(BUILDING_IDS_FILE, 'BUILDING_IDS');
+const unmanagedIds = [...byId.keys()].filter((id) => !managedIds.includes(id));
+if (unmanagedIds.length) throw new Error(`BUILDING_DEFS has buildings missing from BUILDING_IDS: ${unmanagedIds.join(', ')}`);
 const entries = managedIds.map((id) => {
   const def = byId.get(id);
   if (!def) throw new Error(`BUILDING_IDS lists "${id}" but BUILDING_DEFS has no matching entry`);

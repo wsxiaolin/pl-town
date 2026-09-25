@@ -176,7 +176,7 @@ try {
   const restoredLegacy = new Database(databasePath, { readonly: true });
   assert.equal(restoredLegacy.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(legacyUser.id).currency, 4321);
   assert.notEqual(restoredLegacy.prepare('SELECT token_hash FROM users WHERE id = ?').get(legacyUser.id).token_hash, legacyUser.token_hash);
-  for (const id of ['build-library', 'build-academy']) {
+  for (const id of ['build-library', 'build-academy', 'build-photostudio']) {
     const project = restoredLegacy.prepare('SELECT funded, built, definition_json FROM city_projects WHERE id = ?').get(id);
     assert.equal(project.built, 1);
     assert.equal(project.funded, JSON.parse(project.definition_json).cost);

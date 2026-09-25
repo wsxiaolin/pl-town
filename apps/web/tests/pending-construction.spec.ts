@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { BUILDING_DEFS } from '../src/city/data/buildings';
+import { CITY_CONSTRUCTION_CONFIG } from '../../server/src/data/cityConstructionConfig';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
@@ -7,19 +7,17 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     await page.setViewportSize(viewport);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const projects = BUILDING_DEFS.filter((entry) => !entry.disabled && entry.id !== 'commons').map((building) => ({
-      id: `build-${building.id}`, buildingId: building.id, name: building.label ?? building.id,
-      description: `共同筹建${building.label}`, kind: 'building', cost: 3000,
-    }));
-    const config = { schemaVersion: 1, version: 'pending-test', projects, initialBuiltBuildingIds: ['commons'], personalPlots: [], decorations: [] };
+    const config = CITY_CONSTRUCTION_CONFIG;
+    const libraryProject = config.projects.find((project) => project.buildingId === 'library')!;
+    expect(config.projects.some((project) => project.buildingId === 'photostudio')).toBe(true);
     let state = { epoch: 'pending-test', revision: 0, configVersion: config.version,
-      projects: projects.map((project) => ({ id: project.id, funded: 0, built: false })), decorations: [] };
+      projects: config.projects.map((project) => ({ id: project.id, funded: 0, built: false })), decorations: [] };
     stubCityWebSocket(page, { user: 'pending-tester', unlockedBuildings: ['commons', 'library'] });
     await page.route('**/town-api/telemetry/event', (route) => route.fulfill({ status: 204, body: '' }));
     await page.route('**/town-api/city/**', async (route) => {
       const endpoint = new URL(route.request().url()).pathname.split('/').at(-1);
       if (endpoint === 'donate') {
-        state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === 'build-library' ? { ...project, funded: 3000, built: true } : project) };
+        state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === libraryProject.id ? { ...project, funded: libraryProject.cost, built: true } : project) };
       }
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify(endpoint === 'config' ? config : endpoint === 'donate' ? { state } : state) });
     });
@@ -40,6 +38,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     await page.screenshot({ path: testInfo.outputPath('pending-far.png') });
     expect(await page.evaluate(() => (window as any)._mini.interactBuilding('library'))).toBe(false);
     expect(await page.evaluate(() => (window as any)._mini.openBuildingDialog('library'))).toBe(false);
+    expect(await page.evaluate(() => (window as any)._mini.interactBuilding('photostudio'))).toBe(false);
     await page.locator('#mapToggle').click({ force: true });
     await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
     await expect(page.locator('.map-icon')).toHaveCount(1);

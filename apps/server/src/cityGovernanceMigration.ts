@@ -11,8 +11,10 @@ const LEGACY_INITIAL_BUILDINGS = [
   'community', 'research', 'commons', 'lab', 'culturehall',
   'mall_south', 'school_east', 'mall_west', 'kingice', 'knowledgebaseD',
   'community_outer', 'commons_outer', 'lab_outer', 'writingclub_outer', 'archive',
-  'records', 'guesthouse', 'film_city', 'academy_library',
+  'records', 'guesthouse', 'film_city', 'academy_library', 'photostudio',
 ];
+// These released ledgers omitted the already-visible photo studio entirely.
+const PHOTO_STUDIO_UNGOVERNED_VERSIONS = new Set(['2026-09-19.1', '2026-09-25.areas.1', '2026-09-25.pending.1']);
 
 export function reconcileInitialBuildings(db: Database.Database, config: CityConstructionConfig): ReadonlySet<string> {
   const meta = db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get() as { config_version: string } | undefined;
@@ -28,6 +30,10 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
     previousInitial = LEGACY_INITIAL_BUILDINGS;
   }
   const preserved = new Set(previousInitial.filter((id) => !config.initialBuiltBuildingIds.includes(id)));
+  if (meta && PHOTO_STUDIO_UNGOVERNED_VERSIONS.has(meta.config_version)
+    && !db.prepare("SELECT 1 FROM city_projects WHERE id = 'build-photostudio'").get()) {
+    preserved.add('photostudio');
+  }
   // Previously global-open buildings without a construction ledger row were
   // standing before this policy. Existing pending projects still need funding.
   // Offline restores can read schema 5 backups from before world_config existed.
