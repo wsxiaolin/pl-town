@@ -15,6 +15,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     stubCityWebSocket(page, { user: 'pending-tester', unlockedBuildings: ['commons', 'library'] });
     await page.route('**/town-api/telemetry/event', (route) => route.fulfill({ status: 204, body: '' }));
     await page.route('**/town-api/city/**', async (route) => {
+      if (new URL(route.request().url()).pathname.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
       const endpoint = new URL(route.request().url()).pathname.split('/').at(-1);
       if (endpoint === 'donate') {
         state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === libraryProject.id ? { ...project, funded: libraryProject.cost, built: true } : project) };

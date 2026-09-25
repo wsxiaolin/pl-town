@@ -1,21 +1,24 @@
-.city-governance-panel { position: fixed; inset: 0 0 0 auto; z-index: 230; width: min(560px, 100vw); height: 100dvh; display: flex; flex-direction: column; background: #17211f; color: #f1eadc; box-shadow: -18px 0 48px #0007; transform: translateX(102%); visibility: hidden; transition: transform .25s ease, visibility .25s; }
-.city-governance-panel.open { transform: none; visibility: visible; }
-.city-governance-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.3rem 1.5rem; border-bottom: 1px solid #ffffff24; }
+.city-governance-panel { position: fixed; inset: 0; z-index: 230; box-sizing: border-box; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; display: none; flex-direction: column; background: #f7f5ed; color: #233f34; color-scheme: light; overflow: hidden; }
+.city-governance-panel.open { display: flex; }
+.city-governance-panel::backdrop { background: #f7f5ed; }
+.city-governance-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: max(1.3rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) 1.3rem max(1.5rem, env(safe-area-inset-left)); border-bottom: 1px solid #cdd8ca; background: #fffdf7; }
 .city-governance-head h2 { margin: 0; font: 500 clamp(1.3rem, 4vw, 1.8rem)/1.2 Georgia, serif; }
-.city-governance-head button, .city-governance-tabs button, .city-governance-card button, .city-governance-body > button { border: 1px solid #b9d0b055; border-radius: .45rem; padding: .55rem .8rem; background: #ffffff0b; color: inherit; cursor: pointer; }
-.city-governance-head button:focus-visible, .city-governance-tabs button:focus-visible, .city-governance-card button:focus-visible, .city-governance-body > button:focus-visible, .city-governance-card select:focus-visible { outline: 2px solid #e8c477; outline-offset: 2px; }
-.city-governance-tabs { display: flex; gap: .5rem; padding: .8rem 1.5rem 0; }
-.city-governance-tabs button.active { background: #d2a75b; color: #17211f; }
-.city-governance-panel [data-city-status] { margin: .7rem 1.5rem 0; color: #c8d6c8; font-size: .78rem; }
-.city-governance-panel [data-city-feedback] { flex-shrink: 0; margin: .75rem 1.5rem 0; padding: .75rem 1rem; border: 1px solid #e7ac8d; border-radius: .5rem; background: #fff0e7; color: #8b2916; line-height: 1.5; }
-.city-governance-body { flex: 1; overflow: auto; padding: 1rem 1.5rem 2rem; }
-.city-governance-list { display: grid; gap: .75rem; }
-.city-governance-card { padding: 1rem; border: 1px solid #ffffff1c; border-radius: .7rem; background: #ffffff08; }
-.city-governance-card.active { border-color: #d2a75b; box-shadow: inset 3px 0 #d2a75b; }
-.city-governance-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
-.city-governance-card p { margin: .35rem 0; color: #ccd8cd; font-size: .85rem; line-height: 1.5; }
-.city-governance-card button { margin-top: .5rem; background: #335c4b; }
-.city-governance-card button:disabled { opacity: .55; cursor: wait; }
-.city-governance-card select { max-width: 100%; margin-top: .5rem; padding: .55rem; border: 1px solid #b9d0b055; border-radius: .45rem; background: #202d29; color: inherit; }
-.city-governance-card input { width: min(12rem, 100%); margin-top: .5rem; padding: .55rem; border: 1px solid #b9d0b055; border-radius: .45rem; background: #202d29; color: inherit; }
-@media (max-width: 600px) { .city-governance-panel { width: 100vw; } .city-governance-head, .city-governance-tabs, .city-governance-body { padding-left: 1rem; padding-right: 1rem; } }
+.city-governance-panel button { min-height: 44px; border: 1px solid #899f88; border-radius: .5rem; padding: .6rem 1rem; background: #fffef9; color: inherit; cursor: pointer; font: inherit; }
+.city-governance-panel :is(button, input, select):focus-visible { outline: 3px solid #55783d; outline-offset: 3px; }
+.city-governance-tabs { display: flex; flex-wrap: wrap; gap: .5rem; padding: .9rem 1.5rem 0; }
+.city-governance-tabs button.active { background: #315e45; border-color: #315e45; color: #fff; }
+.city-governance-panel [data-city-status] { margin: .7rem 1.5rem 0; color: #5b705d; font-size: .78rem; }
+.city-governance-panel [role="alert"] { margin: .7rem 1.5rem 0; padding: .7rem 1rem; border: 1px solid #c48976; border-radius: .5rem; background: #fff0e8; color: #873c27; }
+.city-governance-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 1rem 1.5rem max(2rem, env(safe-area-inset-bottom)); }
+.city-governance-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); align-items: start; gap: 1rem; max-width: 1400px; margin: 0 auto; }
+.city-governance-intro { grid-column: 1 / -1; margin: 0 0 .25rem; color: #526750; line-height: 1.6; }
+.city-governance-card { min-width: 0; padding: 1.2rem; border: 1px solid #d4dccc; border-radius: .8rem; background: #fffef9; box-shadow: 0 3px 12px #30453308; overflow-wrap: anywhere; }
+.city-governance-card.active { border-color: #7f9b65; box-shadow: inset 3px 0 #7f9b65; }
+.city-governance-card h3 { margin: 0 0 .45rem; font-size: 1.05rem; }
+.city-governance-card p { margin: .45rem 0; color: #52634f; font-size: .9rem; line-height: 1.6; }
+.city-governance-card [data-city-vote-count] { color: #315e45; font-weight: 600; }
+.city-governance-card button { margin: .65rem .5rem 0 0; background: #e9efdf; }
+.city-governance-panel button:disabled { opacity: .65; cursor: default; }
+.city-governance-card :is(select, input) { box-sizing: border-box; min-height: 44px; max-width: 100%; margin: .65rem .5rem 0 0; padding: .55rem; border: 1px solid #9fab92; border-radius: .45rem; background: #fff; color: inherit; font: inherit; }
+.city-governance-card input { width: min(11rem, 100%); }
+@media (max-width: 600px) { .city-governance-head, .city-governance-tabs, .city-governance-body { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); } .city-governance-head { padding-top: max(.8rem, env(safe-area-inset-top)); padding-bottom: .8rem; } .city-governance-list { grid-template-columns: minmax(0, 1fr); } .city-governance-card { padding: 1rem; } }

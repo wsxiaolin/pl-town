@@ -6,10 +6,11 @@ import { HttpBodyError, readJson } from './httpBody.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { pathOf } from './requestSecurity.js';
 import { logger } from './logger.js';
+import { getCityVotes, voteCity } from './cityVoting.js';
 
 const mutationRate = new FixedWindowRateLimiter(20, 60_000);
 
-export async function handleCityRequest(request: IncomingMessage, response: ServerResponse, headers: Record<string, string>, committed: (userId: string, result: ReturnType<typeof mutateCity>) => void): Promise<boolean> {
+export async function handleCityRequest(request: IncomingMessage, response: ServerResponse, headers: Record<string, string>, committed: (userId: string, result: ReturnType<typeof mutateCity> | ReturnType<typeof voteCity>) => void): Promise<boolean> {
   const path = pathOf(request);
   if (!path.startsWith('/town-api/city/')) return false;
   const reply = (status: number, body: unknown) => { response.writeHead(status, headers); response.end(JSON.stringify(body)); };
@@ -21,7 +22,13 @@ export async function handleCityRequest(request: IncomingMessage, response: Serv
       response.end(unchanged ? undefined : cityConfigJson);
     } else if (request.method === 'GET' && path === '/town-api/city/state') {
       reply(200, getCityState());
-    } else if (request.method === 'POST' && ['/town-api/city/donate', '/town-api/city/decorate'].includes(path)) {
+    } else if (request.method === 'GET' && path === '/town-api/city/votes') {
+      const token = request.headers.authorization?.match(/^Bearer ([^\s]{1,128})$/)?.[1];
+      const user = token ? getUserByToken(tokenHash(token)) : null;
+      if (!user) throw new HttpBodyError('Please sign in', 401);
+      response.setHeader('cache-control', 'no-store');
+      reply(200, getCityVotes(user.id));
+    } else if (request.method === 'POST' && ['/town-api/city/donate', '/town-api/city/decorate', '/town-api/city/vote'].includes(path)) {
       const body = await readJson(request, 2048);
       if (typeof body.token !== 'string' || !body.token || body.token.length > 128) throw new HttpBodyError('Please sign in', 401);
       const user = getUserByToken(tokenHash(body.token));
@@ -31,7 +38,7 @@ export async function handleCityRequest(request: IncomingMessage, response: Serv
         response.setHeader('retry-after', String(rate.retryAfterSeconds));
         throw new HttpBodyError('Too many city mutations', 429);
       }
-      const result = mutateCity(user, path.endsWith('/donate') ? 'donate' : 'decorate', body);
+      const result = path.endsWith('/vote') ? voteCity(user, body) : mutateCity(user, path.endsWith('/donate') ? 'donate' : 'decorate', body);
       try { committed(user.id, result); }
       catch (error) { logger.warn('City committed; notification failed', { requestId: result.requestId, error: String(error) }); }
       reply(200, result);

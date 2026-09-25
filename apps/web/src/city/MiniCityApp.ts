@@ -562,6 +562,7 @@ function init() {
   movementInputController = createMovementInputController({
     document, window, signal: lifecycle.signal,
     onManualStart: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
+    isUiModalOpen: () => Boolean(document.querySelector('dialog[open][aria-modal="true"]')),
   });
   cameraPanController = createCameraPanController({
     canvas: document.getElementById('c') as HTMLElement, document, window, signal: lifecycle.signal,

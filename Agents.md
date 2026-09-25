@@ -102,7 +102,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 - 先阅读目标模块及其 README，再进行最小范围修改；避免顺手重构无关代码。
 - 优先使用现有 TypeScript 类型、辅助函数和模块边界，不重复实现认证、网络或渲染基础设施。
-- 新增用户可见行为时补充 Playwright 烟雾测试；新增服务端协议或持久化行为时补充 `apps/server/tests/integration.mjs` 覆盖。
+- 新增用户可见行为时补充 Playwright 烟雾测试；新增服务端协议或持久化行为时补充对应集成测试（城市治理覆盖位于 `apps/server/tests/city-governance.mjs` 与 `apps/server/tests/restore.mjs`，其他协议覆盖位于 `apps/server/tests/integration.mjs`）。
 - 修改资源、渲染参数或响应式布局时，至少检查桌面和移动视口，并确认无控制台错误、横向溢出和空白 WebGL 画布。
 - 提交前查看 `git status`，不要提交生成目录、数据库、日志或本地环境文件。
 
@@ -110,7 +110,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 `.github/workflows/deploy-frontend.yml` 在 `main` 分支 push 或手动触发时构建并部署前端到 GitHub Pages。该工作流使用 Node.js 20、重新安装 npm 依赖，并以 `BASE_PATH=/pl-town/` 构建 `apps/web/dist`。服务端不在此工作流中部署。
 
-城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 保存请求幂等记录，防止历史请求重放后重复扣款，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
+城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 和 `city_vote_operations` 保存建设及投票请求的幂等记录，防止历史请求重放后重复扣款或重复计票，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
 
 ## AI 自动化工作流
 

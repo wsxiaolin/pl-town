@@ -28,6 +28,7 @@ for (const [action, failure] of scenarios) {
     stubCityWebSocket(page, { user: 'error-tester', unlockedBuildings: ['commons'] });
     await page.route('**/town-api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
       if (path.endsWith('/city/config')) return route.fulfill({ json: config });
       if (path.endsWith('/city/state')) {
         stateReads += 1;

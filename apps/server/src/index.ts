@@ -433,8 +433,10 @@ const http = createServer(async (request, response) => {
   if (await handleCityRequest(request, response, headers, (userId, result) => {
     if (!result.replayed) broadcast({ type: 'city.updated', state: result.state });
     const client = clients.get(userId);
-    if (client) sendProgress(client.socket, userId, { type: 'city.committed', requestId: result.requestId, acceptedAmount: result.acceptedAmount, operationRevision: result.operationRevision, replayed: result.replayed });
-    if (!result.replayed) broadcastWorldCatalog();
+    if (result.kind === 'payment') {
+      if (client) sendProgress(client.socket, userId, { type: 'city.committed', requestId: result.requestId, acceptedAmount: result.acceptedAmount, operationRevision: result.operationRevision, replayed: result.replayed });
+      if (!result.replayed) broadcastWorldCatalog();
+    }
   })) return;
   if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });

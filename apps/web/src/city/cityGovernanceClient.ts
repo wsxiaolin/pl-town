@@ -14,7 +14,7 @@ export type CityConfig = {
 };
 export type CityState = {
   epoch: string; revision: number; configVersion: string;
-  projects: Array<{ id: string; funded: number; built: boolean }>;
+  projects: Array<{ id: string; funded: number; built: boolean; votes: number }>;
   decorations: Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>;
 };
 import { townApiUrl } from '../core/townApi';

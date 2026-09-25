@@ -122,6 +122,7 @@ async function main(): Promise<void> {
     try {
       staged.transaction(() => {
         initializeCityGovernance(staged);
+        staged.pragma(`user_version = ${MINICITY_SCHEMA_VERSION}`);
         staged.prepare('UPDATE city_meta SET epoch = ? WHERE id = 1').run(randomUUID());
       })();
       const timestamp = new Date().toISOString();

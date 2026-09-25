@@ -43,6 +43,10 @@ test('city governance retries donations idempotently and renders both tabs', asy
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state) });
       return;
     }
+    if (url.pathname.endsWith('/city/votes')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ epoch: state.epoch, projectIds: [] }) });
+      return;
+    }
     if (!url.pathname.endsWith('/city/donate')) {
       await route.continue();
       return;

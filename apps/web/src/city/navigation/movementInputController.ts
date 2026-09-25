@@ -5,6 +5,7 @@ export type MovementInputControllerOptions = {
   window: Window;
   signal: AbortSignal;
   onManualStart: () => void;
+  isUiModalOpen: () => boolean;
 };
 
 const JOYSTICK_RADIUS = 42;
@@ -163,7 +164,12 @@ export function createMovementInputController(options: MovementInputControllerOp
   }, { once: true });
 
   function getMovement(): MovementVector {
-    if (locked) { movement.x = 0; movement.z = 0; return movement; }
+    if (locked || options.isUiModalOpen()) {
+      keys.clear();
+      finishPointer();
+      movement.x = 0; movement.z = 0;
+      return movement;
+    }
     let screenX = 0;
     let screenY = 0;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) screenX -= 1;

@@ -1,25 +1,47 @@
 import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
 import { card, money } from './cityGovernanceDom';
+import { loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
-let root: HTMLElement | null = null;
+let root: HTMLDialogElement | null = null;
 let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 const donationDrafts = new Map<string, string>();
+const tabScrollTop = new Map<string, number>();
+let returnFocus: HTMLElement | null = null;
+let myVotes: CityVotes | null = null;
+let votesOwner: string | null = null;
+let votesLoading: AbortController | null = null;
+let voteError = '';
+const voting = new Set<string>();
+let votesLoadSequence = 0;
+
+function handleLoginRequired(): void {
+  if (!root?.open) return;
+  voteError = '登录状态已失效，请登录后重试投票。';
+  render();
+}
 
 function button(label: string, action: () => void, disabled = false): HTMLButtonElement {
   const element = document.createElement('button');
   element.type = 'button';
   element.textContent = label;
   element.disabled = disabled;
+  element.dataset.cityFocus = label;
   element.addEventListener('click', action);
   return element;
 }
 
 function render(): void {
   if (!root) return;
+  const focused = root.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+  const focusKey = focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
+  const focusProject = focused?.closest<HTMLElement>('[data-city-project]')?.dataset.cityProject;
+  const previousBody = root.querySelector<HTMLElement>('.city-governance-body');
+  if (previousBody?.dataset.cityTab) tabScrollTop.set(previousBody.dataset.cityTab, previousBody.scrollTop);
+  const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-city-input],select[aria-label]')].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
   const config = getCityConfig();
   const state = getCityState();
   root.replaceChildren();
@@ -27,7 +49,8 @@ function render(): void {
   header.className = 'city-governance-head';
   const title = document.createElement('h2');
   const activeProject = config?.projects.find((project) => project.buildingId === activeBuilding);
-  title.textContent = activeProject ? `城市治理 · ${activeProject.name}` : '城市治理';
+  title.id = 'city-governance-title';
+  title.textContent = activeProject ? `众议院 · ${activeProject.name}` : '众议院';
   header.append(title, button('关闭', closeCityGovernancePanel));
   root.append(header);
   const tabs = document.createElement('nav');
@@ -35,6 +58,7 @@ function render(): void {
   for (const [tab, label] of [['collective', '城市集体建设'], ['personal', '个人建设']] as const) {
     const tabButton = button(label, () => { activeTab = tab; render(); });
     tabButton.classList.toggle('active', activeTab === tab);
+    tabButton.setAttribute('aria-pressed', String(activeTab === tab));
     tabs.append(tabButton);
   }
   root.append(tabs);
@@ -49,6 +73,13 @@ function render(): void {
     feedback.textContent = operationError;
     root.append(feedback);
   }
+  if (voteError) {
+    const feedback = document.createElement('p');
+    feedback.setAttribute('role', 'alert');
+    feedback.dataset.cityVoteFeedback = 'true';
+    feedback.textContent = voteError;
+    root.append(feedback);
+  }
   const body = document.createElement('main');
   body.className = 'city-governance-body';
   if (!config || !state) {
@@ -59,6 +90,7 @@ function render(): void {
       void loadCityGovernance().finally(render);
     }));
     root.append(body);
+    if (focused) restorePanelFocus(focusKey, focusProject);
     return;
   }
   const list = document.createElement('div');
@@ -66,27 +98,74 @@ function render(): void {
   if (activeTab === 'collective') renderCollective(list, config.projects, state.projects);
   else renderPersonal(list, config, state);
   body.append(list);
+  body.dataset.cityTab = activeTab;
   root.append(body);
+  body.scrollTop = tabScrollTop.get(activeTab) ?? 0;
+  for (const input of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-city-input],select[aria-label]')) {
+    const previous = values.get(input.dataset.cityInput ?? input.getAttribute('aria-label'));
+    if (previous !== undefined) input.value = previous;
+  }
+  if (focused) restorePanelFocus(focusKey, focusProject);
 }
 
-function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean }>): void {
+function restorePanelFocus(focusKey: string | null | undefined, projectId?: string): void {
+  if (!root) return;
+  const replacement = focusKey ? [...root.querySelectorAll<HTMLElement>('[data-city-focus],[aria-label]')]
+    .find((element) => (element.dataset.cityFocus ?? element.getAttribute('aria-label')) === focusKey) : undefined;
+  if (replacement && !replacement.hasAttribute('disabled')) replacement.focus({ preventScroll: true });
+  else {
+    const project = projectId ? [...root.querySelectorAll<HTMLElement>('[data-city-project]')]
+      .find((element) => element.dataset.cityProject === projectId) : undefined;
+    const nextAction = project?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
+    (nextAction ?? root.querySelector<HTMLButtonElement>('.city-governance-head button'))?.focus({ preventScroll: true });
+  }
+}
+
+function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean; votes?: number }>): void {
+  const explanation = document.createElement('p');
+  explanation.className = 'city-governance-intro';
+  explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。为期待的建筑投票，每位居民每项一票；投票不消耗金币，捐款满额后即可建成。';
+  list.append(explanation);
   for (const project of projects) {
     const saved = progress.find((entry) => entry.id === project.id);
     const item = card(project.name, project.description);
+    item.dataset.cityProject = project.id;
     item.dataset.buildingId = project.buildingId ?? '';
     item.classList.toggle('active', project.buildingId === activeBuilding);
     const detail = document.createElement('p');
     detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
     item.append(detail);
+    if (project.kind === 'building') {
+      const total = document.createElement('p');
+      total.dataset.cityVoteCount = project.id;
+      total.setAttribute('aria-live', 'polite');
+      total.textContent = `${saved?.votes ?? 0} 位居民支持建设`;
+      item.append(total);
+      if (!saved?.built) {
+        const voted = votesOwner === localStorage.getItem('minicityServerToken') && myVotes?.epoch === getCityState()?.epoch && myVotes?.projectIds.includes(project.id);
+        const action = button(voted ? '已投票' : voting.has(project.id) ? '正在投票…' : '投票建设', async () => {
+          voteError = '';
+          votesLoading?.abort();
+          votesLoading = null;
+          voting.add(project.id);
+          render();
+          try { myVotes = await voteCity(project.id); votesOwner = localStorage.getItem('minicityServerToken'); }
+          catch (error) { voteError = error instanceof Error ? error.message : '投票失败，请重试'; }
+          finally { voting.delete(project.id); render(); }
+        }, Boolean(voted) || voting.has(project.id));
+        action.dataset.cityFocus = `vote:${project.id}`;
+        item.append(action);
+      }
+    }
     if (!saved?.built) {
       const amount = document.createElement('input');
       amount.type = 'number'; amount.min = '1'; amount.step = '1';
       amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
+      amount.dataset.cityInput = project.id;
+      amount.dataset.cityFocus = `donate-input:${project.id}`;
       amount.addEventListener('input', () => donationDrafts.set(project.id, amount.value));
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
-      item.append(amount, button('捐款', async () => {
-        const action = item.querySelector('button');
-        if (!(action instanceof HTMLButtonElement)) return;
+      const action = button('捐款', async () => {
         action.disabled = true;
         operationError = '';
         root?.querySelector('[data-city-feedback]')?.remove();
@@ -95,7 +174,9 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
           operationError = error instanceof Error ? error.message : '捐款失败，请重试';
           render();
         }
-      }));
+      });
+      action.dataset.cityFocus = `donate:${project.id}`;
+      item.append(amount, action);
     }
     list.append(item);
   }
@@ -108,27 +189,92 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
   });
 }
 
+function containTabFocus(event: KeyboardEvent): void {
+  if (event.key !== 'Tab' || !root) return;
+  const focusable = [...root.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]')]
+    .filter((element) => element.tabIndex >= 0 && !element.matches(':disabled')
+      && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden');
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  // Native modal dialogs make the page inert, but allow Tab to reach browser
+  // chrome. Keep the keyboard loop in the panel as well.
+  if (!first || !last) { event.preventDefault(); return; }
+  const active = document.activeElement;
+  if (event.shiftKey && (active === first || !focusable.includes(active as HTMLElement))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (active === last || !focusable.includes(active as HTMLElement))) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 export function openCityGovernancePanel(buildingId = ''): void {
   activeBuilding = buildingId;
   if (!root) {
-    root = document.createElement('section');
+    root = document.createElement('dialog');
     root.className = 'city-governance-panel';
-    root.setAttribute('aria-label', '城市治理');
+    root.setAttribute('aria-labelledby', 'city-governance-title');
+    root.setAttribute('aria-modal', 'true');
     document.body.append(root);
-    root.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCityGovernancePanel(); });
-    unsubscribe = subscribeCityGovernance(() => { if (root?.classList.contains('open')) render(); });
+    root.addEventListener('cancel', (event) => { event.preventDefault(); closeCityGovernancePanel(); });
+    root.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      containTabFocus(event);
+      if (event.key === 'Escape') { event.preventDefault(); closeCityGovernancePanel(); }
+    });
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'click', 'wheel']) root.addEventListener(type, (event) => event.stopPropagation());
+    window.addEventListener('minicity:login-required', handleLoginRequired, true);
+    unsubscribe = subscribeCityGovernance(() => {
+      if (!root?.open) return;
+      if (myVotes && myVotes.epoch !== getCityState()?.epoch) { myVotes = null; void refreshVotes(); }
+      render();
+    });
   }
+  if (!root.open) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  activeTab = 'collective';
+  voteError = '';
   root.classList.add('open');
+  if (!root.open) root.showModal();
   render();
   root.querySelector<HTMLButtonElement>('.city-governance-head button')?.focus();
+  void refreshVotes();
+}
+
+async function refreshVotes(): Promise<void> {
+  const sequence = ++votesLoadSequence;
+  votesLoading?.abort();
+  const owner = localStorage.getItem('minicityServerToken');
+  myVotes = null;
+  votesOwner = owner;
+  if (!owner) { render(); return; }
+  const controller = new AbortController();
+  votesLoading = controller;
+  try {
+    const result = await loadCityVotes(controller.signal);
+    if (controller.signal.aborted || sequence !== votesLoadSequence || owner !== localStorage.getItem('minicityServerToken')) return;
+    myVotes = result;
+  } catch (error) {
+    if (!controller.signal.aborted && sequence === votesLoadSequence) voteError = error instanceof Error ? error.message : '读取投票记录失败';
+  } finally {
+    if (votesLoading === controller) { votesLoading = null; if (root?.open) render(); }
+  }
 }
 
 export function closeCityGovernancePanel(): void {
-  root?.classList.remove('open');
+  if (!root?.open) return;
+  root.classList.remove('open');
+  root.close();
+  votesLoading?.abort();
+  votesLoading = null;
+  if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  returnFocus = null;
   operationError = '';
 }
 
 export function disposeCityGovernancePanel(): void {
+  closeCityGovernancePanel();
+  window.removeEventListener('minicity:login-required', handleLoginRequired, true);
   unsubscribe?.();
   unsubscribe = null;
   root?.remove();
@@ -137,5 +283,10 @@ export function disposeCityGovernancePanel(): void {
   activeTab = 'collective';
   operationError = '';
   donationDrafts.clear();
+  tabScrollTop.clear();
   clearCityConstructionDrafts();
+  myVotes = null;
+  votesOwner = null;
+  voteError = '';
+  voting.clear();
 }

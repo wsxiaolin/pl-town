@@ -16,6 +16,23 @@
 Keep transport concerns in `index.ts`; persistence and authentication should
 remain independently testable modules.
 
+## Construction voting
+
+The House of Commons accepts one free support vote per resident and pending
+building project. Voting expresses demand; funding still completes construction
+without a vote threshold. `POST /town-api/city/vote` uses the existing resident
+token, config version, and request ID contract. `GET /town-api/city/votes` accepts
+the resident token in an `Authorization: Bearer` header, returns only that user's
+project IDs, and is not cacheable. Public city state and `city.updated` contain
+aggregate vote counts only.
+
+Schema 7 adds `city_votes` and `city_vote_operations`. Startup and backup restores
+initialize these tables; backups from schemas 5 and 6 start with empty votes and
+retain existing construction funding and payment receipts. Offline restore also
+writes schema 7 metadata before the server restarts. Existing project definitions and
+configuration IDs are unchanged. Vote request receipts are retained just like
+payment receipts, including duplicate votes submitted with another request ID.
+
 ## Story progress protocol
 
 Story content, display text, and branching rules live in the web client. The
