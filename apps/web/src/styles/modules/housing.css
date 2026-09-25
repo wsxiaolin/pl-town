@@ -1,14 +1,12 @@
 /* ===== HOUSING ===== */
 .house-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.house-help, .house-empty, .house-select-hint { color: var(--text-mid); font-size: 10.5px; line-height: 1.5; }
-.house-help { margin: 10px 2px 0; flex-shrink: 0; }
+.house-select-hint { color: var(--text-mid); font-size: 10.5px; line-height: 1.5; }
 .house-requests { display: grid; gap: 7px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(0,0,0,.08); }
 .house-requests-title { color: var(--text-dark); font-size: 11px; }
 .house-request { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border: 1px solid rgba(59,111,224,.18); border-radius: 9px; background: rgba(59,111,224,.05); }
 .house-request-text { flex: 1; min-width: 0; color: var(--text-dark); font-size: 10px; line-height: 1.35; }
 .house-request .hc-btn { flex-shrink: 0; padding: 4px 8px; font-size: 9px; }
 .house-request-pending { flex-shrink: 0; color: var(--text-light); font-size: 9px; }
-.house-empty { padding: 14px 4px; text-align: center; }
 .house-select-hint { padding: 4px 2px 0; }
 
 /* 当前选中的住宅（焦点卡片） */
@@ -108,19 +106,6 @@
 .hc-btn.danger:hover { background: #C45A4A; border-color: #C45A4A; color: #fff; }
 .hc-btn.active { border-color: var(--blue); color: var(--blue); background: rgba(59,111,224,0.08); }
 .hc-btn:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
-.house-claim {
-  border: 0;
-  border-radius: 999px;
-  background: var(--blue);
-  color: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  padding: 9px 14px;
-}
-.house-claim:hover { filter: brightness(1.08); }
 
 /* 卡片内联操作面板（改名 / 邀请 / 成员 / 确认） */
 .hc-panel {

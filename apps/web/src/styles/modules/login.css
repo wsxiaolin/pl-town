@@ -191,3 +191,5 @@
 }
 .login-btn:hover { opacity: 0.85; transform: translateY(-1px); }
 .login-btn:active { transform: none; }
+
+body.night .login-box { background: #E8E7E4; }

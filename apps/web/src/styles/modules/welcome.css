@@ -157,7 +157,6 @@
     flex-shrink: 0;
   }
   .settings-toggle { width: 28px; height: 28px; }
-  .render-settings { top: 43px; right: 10px; width: 190px; }
 .fs-toggle { display: none; }
 @media (max-width: 680px) {
   .fs-toggle { display: inline-block; }
