@@ -72,7 +72,7 @@ function render(): void {
     feedback.textContent = operationError;
     root.append(feedback);
   }
-  if (voteError) {
+  if (voteError && activeTab === 'collective') {
     const feedback = document.createElement('p');
     feedback.setAttribute('role', 'alert');
     feedback.dataset.cityVoteFeedback = 'true';
