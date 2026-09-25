@@ -233,6 +233,19 @@ try {
     const { db, getUser, purchaseBuilding, recordBuildingVisit, purchaseItem, backupDatabase, restoreFromBackupFile, closeDatabase } = await import('./dist/db.js');
     const { mutateCity, getCityState } = await import('./dist/cityGovernance.js');
     const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
+    const { BUILDING_CATALOG } = await import('./dist/data/buildingCatalog.js');
+    const { LEGACY_INITIAL_BUILDINGS } = await import('./dist/cityGovernanceMigration.js');
+    const legacyPendingBuildings = [
+      'catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop',
+      'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
+      'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall',
+      'wushi_restaurant', 'tavern',
+    ];
+    const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
+    const legacyPolicyIds = new Set([...LEGACY_INITIAL_BUILDINGS, ...legacyPendingBuildings]);
+    assert.equal(legacyPolicyIds.size, BUILDING_CATALOG.length, 'legacy construction policy must cover every catalog building');
+    assert.deepEqual([...legacyPolicyIds].filter((id) => !catalogBuildingIds.has(id)), [], 'legacy policy must not contain removed buildings');
+    assert.deepEqual([...catalogBuildingIds].filter((id) => !legacyPolicyIds.has(id)), [], 'new catalog buildings require an explicit legacy policy decision');
     const user = getUser('11111111-1111-4111-8111-111111111111');
     db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run('RenamedResident', user.id);
     assert.equal(getCityState().decorations.find((entry) => entry.ownerId === user.id).ownerNickname, 'RenamedResident');
@@ -424,9 +437,8 @@ try {
     legacy.pragma('foreign_keys = OFF');
     for (const table of ['city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs']) legacy.exec('DROP TABLE ' + table);
     legacy.prepare('INSERT OR IGNORE INTO player_building_unlocks VALUES (?, ?, ?)').run(user.id, 'academy', new Date().toISOString());
-    // `beacon` was a standing pre-ledger building; `catcafe` was a pending
-    // project in that era and must not be gifted merely because an old admin
-    // override happens to mention it.
+    // Beacon is governed by the current ledger. A legacy admin override must
+    // not gift it merely because the pre-ledger database mentions it.
     legacy.prepare("INSERT INTO world_config (key, value_json, updated_at) VALUES ('buildings', ?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify({ beacon: 'open', catcafe: 'open' }), new Date().toISOString());
     legacy.pragma('user_version = 5');
     legacy.close();
@@ -436,7 +448,7 @@ try {
     assert.equal(getCityState().projects.find((project) => project.id === 'build-library').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-academy').built, true);
-    assert.equal(getCityState().projects.find((project) => project.id === 'build-beacon').built, true);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-beacon').built, false);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-catcafe').built, false);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-shrine').built, false);
     assert.equal(getCityState().projects.find((project) => project.id === 'greenbelt-trees').funded, 0);
