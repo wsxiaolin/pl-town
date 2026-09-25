@@ -1,4 +1,4 @@
-import { decorateCity, discardPendingCityRequest, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
+import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -22,10 +22,17 @@ function button(label: string, action: () => void, disabled = false): HTMLButton
 function focusAction(dataKey: 'projectId' | 'plotId', id: string): void {
   for (const item of root?.querySelectorAll<HTMLElement>('.city-governance-card') ?? []) {
     if (item.dataset[dataKey] === id) {
-      item.querySelector<HTMLButtonElement>('button')?.focus();
-      return;
+      const action = item.querySelector<HTMLButtonElement>('button');
+      if (action) {
+        action.focus();
+        return;
+      }
+      break;
     }
   }
+  const fallback = root?.querySelector<HTMLButtonElement>('.city-governance-tabs button.active')
+    ?? root?.querySelector<HTMLButtonElement>('.city-governance-tabs button');
+  fallback?.focus();
 }
 
 function render(): void {
@@ -104,7 +111,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
       const amount = document.createElement('input');
       amount.type = 'number'; amount.min = '1'; amount.step = '1';
       amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
-      amount.addEventListener('input', () => { discardPendingCityRequest(); donationDrafts.set(project.id, amount.value); });
+      amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
       item.append(amount, button('捐款', async () => {
         const action = item.querySelector('button');
@@ -144,7 +151,7 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
       }
       const draft = decorationDrafts.get(plot.id);
       if (draft && plot.options.includes(draft)) select.value = draft;
-      select.addEventListener('change', () => { discardPendingCityRequest(); decorationDrafts.set(plot.id, select.value); });
+      select.addEventListener('change', () => { decorationDrafts.set(plot.id, select.value); });
       item.append(select, button('建设', async () => {
         const action = item.querySelector('button');
         if (!(action instanceof HTMLButtonElement)) return;
@@ -174,7 +181,6 @@ export function openCityGovernancePanel(buildingId = ''): void {
     root.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCityGovernancePanel(); });
     unsubscribe = subscribeCityGovernance(() => {
       if (!root?.classList.contains('open')) return;
-      operationError = '';
       render();
     });
   }
