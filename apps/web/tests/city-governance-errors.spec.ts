@@ -3,7 +3,8 @@ import { stubCityWebSocket, waitForCityReady } from './helpers';
 
 const scenarios = [
   ['donate', 'insufficient coins'], ['donate', 'lost response'],
-  ['decorate', 'insufficient coins'], ['decorate', 'lost response'],
+  ['donate', 'invalid response'], ['decorate', 'insufficient coins'], ['decorate', 'lost response'],
+  ['decorate', 'invalid response'],
 ] as const;
 for (const [action, failure] of scenarios) {
   test(`${action} preserves the draft across ${failure} and tab changes before retry`, async ({ page }) => {
@@ -61,8 +62,11 @@ for (const [action, failure] of scenarios) {
               : state.decorations,
           };
         }
-        // The server committed, but the browser never received its response.
-        if (attempts === 1 && !replayed) return route.abort('connectionreset');
+        // The server committed, but the browser received either no response or an unusable payload.
+        if (attempts === 1 && !replayed) {
+          if (failure === 'lost response') return route.abort('connectionreset');
+          if (failure === 'invalid response') return route.fulfill({ json: { state: { revision: state.revision } } });
+        }
         return route.fulfill({ json: { state } });
       }
       return route.fulfill({ status: 204, body: '' });
@@ -77,13 +81,13 @@ for (const [action, failure] of scenarios) {
     else await input.selectOption('pine');
     const actionButton = targetCard.getByRole('button', { name: action === 'donate' ? '捐款' : '建设', exact: true });
     await actionButton.click();
-    const message = failure === 'insufficient coins' ? '金币不足' : '网络连接异常';
+    const message = failure === 'insufficient coins' ? '金币不足' : failure === 'invalid response' ? '建设请求失败' : '网络连接异常';
     await expect(panel.getByRole('alert')).toContainText(message);
     await expect(actionButton).toBeEnabled();
     await expect(actionButton).toBeFocused();
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
     if (failure === 'insufficient coins') expect(stateReads).toBeGreaterThanOrEqual(2);
-    if (failure === 'lost response') {
+    if (failure === 'lost response' || failure === 'invalid response') {
       if (action === 'donate') {
         await input.fill('600');
         await input.fill('500');
@@ -107,7 +111,7 @@ for (const [action, failure] of scenarios) {
     const { requestId: firstId, ...first } = requests[0]!;
     const { requestId: retryId, ...retry } = requests[1]!;
     expect(retry).toEqual(first);
-    if (failure === 'lost response') expect(retryId).toBe(firstId);
+    if (failure === 'lost response' || failure === 'invalid response') expect(retryId).toBe(firstId);
     expect(pageErrors).toEqual([]);
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
