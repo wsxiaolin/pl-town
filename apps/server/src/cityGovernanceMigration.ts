@@ -41,10 +41,15 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
   const overrides = hasWorldConfig
     ? db.prepare("SELECT value_json FROM world_config WHERE key = 'buildings'").get() as { value_json: string } | undefined
     : undefined;
-  if (overrides) {
+  // A pre-ledger world override describes the old standing city. Once a
+  // versioned city config exists, an override may refer to a building added
+  // later and must never turn that future project into a gifted building.
+  const preLedgerTown = !meta && previousInitial.length > 0;
+  if (overrides && preLedgerTown) {
     const states = JSON.parse(overrides.value_json) as Record<string, unknown>;
     for (const project of config.projects) {
       if (project.buildingId && states[project.buildingId] === 'open'
+        && previousInitial.includes(project.buildingId)
         && !db.prepare('SELECT 1 FROM city_projects WHERE id = ?').get(project.id)) preserved.add(project.buildingId);
     }
   }

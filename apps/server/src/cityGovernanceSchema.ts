@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { CITY_CONSTRUCTION_CONFIG as config } from './data/cityConstructionConfig.js';
+import { CITY_CONSTRUCTION_CONFIG as config, COLLECTIVE_STORY_BUILDING_IDS } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
 import { reconcileInitialBuildings } from './cityGovernanceMigration.js';
@@ -30,6 +30,10 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (config.decorations.some((entry) => !Number.isSafeInteger(entry.cost) || entry.cost <= 0)) throw new Error('Invalid decoration cost');
   const buildingIds = new Set(BUILDING_CATALOG.map((entry) => entry.id));
   if (config.initialBuiltBuildingIds.some((id) => !buildingIds.has(id))) throw new Error('Unknown initial building');
+  if (COLLECTIVE_STORY_BUILDING_IDS.some((id) => config.initialBuiltBuildingIds.includes(id)
+    || !config.projects.some((project) => project.kind === 'building' && project.buildingId === id))) {
+    throw new Error('Story buildings must remain reachable through collective construction');
+  }
   for (const id of buildingIds) {
     if (!config.initialBuiltBuildingIds.includes(id) && !config.projects.some((project) => project.buildingId === id)) throw new Error(`Missing city building policy: ${id}`);
   }

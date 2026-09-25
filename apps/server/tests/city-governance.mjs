@@ -109,6 +109,13 @@ try {
   const freshState = await (await fetch(`${base}/town-api/city/state`)).json();
   assert.ok(freshState.projects.every((entry) => !entry.built && entry.funded === 0));
   for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library', 'photostudio']) assert.ok(config.projects.some((entry) => entry.buildingId === id));
+  // Story venues are intentionally gated by the Commons vote. This guard
+  // keeps a future "only Commons starts built" change from orphaning their
+  // entrypoints when a project is accidentally removed.
+  for (const id of ['archive', 'newsstand', 'guesthouse', 'mall_south', 'mall_west', 'research']) {
+    assert.equal(config.initialBuiltBuildingIds.includes(id), false);
+    assert.ok(config.projects.some((entry) => entry.kind === 'building' && entry.buildingId === id));
+  }
   for (const id of ['catcafe', 'school_north', 'teahouse', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop']) {
     assert.equal(config.initialBuiltBuildingIds.includes(id), false);
     assert.ok(config.projects.some((entry) => entry.buildingId === id));
@@ -417,7 +424,10 @@ try {
     legacy.pragma('foreign_keys = OFF');
     for (const table of ['city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs']) legacy.exec('DROP TABLE ' + table);
     legacy.prepare('INSERT OR IGNORE INTO player_building_unlocks VALUES (?, ?, ?)').run(user.id, 'academy', new Date().toISOString());
-    legacy.prepare("INSERT INTO world_config (key, value_json, updated_at) VALUES ('buildings', ?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify({ beacon: 'open' }), new Date().toISOString());
+    // `beacon` was a standing pre-ledger building; `catcafe` was a pending
+    // project in that era and must not be gifted merely because an old admin
+    // override happens to mention it.
+    legacy.prepare("INSERT INTO world_config (key, value_json, updated_at) VALUES ('buildings', ?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify({ beacon: 'open', catcafe: 'open' }), new Date().toISOString());
     legacy.pragma('user_version = 5');
     legacy.close();
     restoreFromBackupFile(legacyPath);
@@ -427,6 +437,7 @@ try {
     assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-academy').built, true);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-beacon').built, true);
+    assert.equal(getCityState().projects.find((project) => project.id === 'build-catcafe').built, false);
     assert.equal(getCityState().projects.find((project) => project.id === 'build-shrine').built, false);
     assert.equal(getCityState().projects.find((project) => project.id === 'greenbelt-trees').funded, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM city_operations').get().n, 0);

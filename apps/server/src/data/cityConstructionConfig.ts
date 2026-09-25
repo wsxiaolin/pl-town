@@ -23,6 +23,14 @@ function buildingProject(buildingId: string, cost = 3000): CityProject {
   return { id: `build-${buildingId}`, buildingId, name: building.label, description: `共同筹建${building.label}`, kind: 'building', cost };
 }
 
+// Story venues intentionally remain pending in a fresh city. Their story
+// entrypoints become available after the community completes the matching
+// project through the House of Commons; they are not silently gifted as part
+// of a future change to the initial-building policy.
+export const COLLECTIVE_STORY_BUILDING_IDS = [
+  'archive', 'newsstand', 'guesthouse', 'mall_south', 'mall_west', 'research',
+] as const;
+
 // Keep existing project definitions and IDs immutable. Newly governed buildings
 // are appended below; a fresh city starts with only the House of Commons.
 const constructionIds = [
