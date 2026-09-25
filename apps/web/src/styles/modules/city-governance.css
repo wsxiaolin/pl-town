@@ -1,5 +1,5 @@
 .city-governance-panel { position: fixed; inset: 0; z-index: 230; box-sizing: border-box; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; display: none; flex-direction: column; background: #f7f5ed; color: #233f34; color-scheme: light; overflow: hidden; }
-.city-governance-panel.open { display: flex; }
+.city-governance-panel[open] { display: flex; }
 .city-governance-panel::backdrop { background: #f7f5ed; }
 .city-governance-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: max(1.3rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) 1.3rem max(1.5rem, env(safe-area-inset-left)); border-bottom: 1px solid #cdd8ca; background: #fffdf7; }
 .city-governance-head h2 { margin: 0; font: 500 clamp(1.3rem, 4vw, 1.8rem)/1.2 Georgia, serif; }

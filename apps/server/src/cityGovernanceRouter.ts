@@ -26,7 +26,6 @@ export async function handleCityRequest(request: IncomingMessage, response: Serv
       const token = request.headers.authorization?.match(/^Bearer ([^\s]{1,128})$/)?.[1];
       const user = token ? getUserByToken(tokenHash(token)) : null;
       if (!user) throw new HttpBodyError('Please sign in', 401);
-      response.setHeader('cache-control', 'no-store');
       reply(200, getCityVotes(user.id));
     } else if (request.method === 'POST' && ['/town-api/city/donate', '/town-api/city/decorate', '/town-api/city/vote'].includes(path)) {
       const body = await readJson(request, 2048);
