@@ -23,7 +23,8 @@ export type CityGovernanceListener = (config: CityConfig | null, state: CityStat
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
-const pendingRequestIds = new Map<string, string>();
+type PendingRequest = { operationKey: string; requestId: string };
+let pendingRequest: PendingRequest | null = null;
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -120,11 +121,11 @@ export function disposeCityGovernance(): void {
   activeSignal = undefined;
   config = null;
   state = null;
-  pendingRequestIds.clear();
+  pendingRequest = null;
   listeners.clear();
 }
 
-async function mutate(path: string, body: Record<string, unknown>, explicitRequestId?: string): Promise<CityState> {
+async function mutate(path: string, body: Record<string, unknown>): Promise<CityState> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
   const token = localStorage.getItem('minicityServerToken');
   if (!token) {
@@ -132,18 +133,23 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
     throw new Error('请先登录');
   }
   const operationKey = `${path}:${JSON.stringify(body)}`;
-  const requestId = explicitRequestId ?? pendingRequestIds.get(operationKey) ?? makeRequestId();
-  if (!explicitRequestId) pendingRequestIds.set(operationKey, requestId);
+  const requestId = pendingRequest?.operationKey === operationKey ? pendingRequest.requestId : makeRequestId();
+  pendingRequest = { operationKey, requestId };
   let response: Response;
   let payload: { state?: CityState; error?: string };
   try {
     response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
-    payload = await response.json() as typeof payload;
   } catch {
     // Keep the request ID: a lost response does not mean the server rolled back.
     throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
   }
-  if (!explicitRequestId && pendingRequestIds.get(operationKey) === requestId) pendingRequestIds.delete(operationKey);
+  try {
+    payload = await response.json() as typeof payload;
+  } catch {
+    // A malformed response may still follow a committed operation, so retain the ID.
+    throw new Error('服务器响应格式异常，请重试；重复请求不会重复扣费。');
+  }
+  if (pendingRequest?.operationKey === operationKey && pendingRequest.requestId === requestId) pendingRequest = null;
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   if (response.status === 409) {
     await loadCityGovernance();
@@ -155,6 +161,14 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
 
 function cityOperationError(error?: string): string {
   const messages: Record<string, string> = {
+    'Invalid requestId': '建设请求无效，请刷新页面后重试。',
+    'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
+    'Invalid target': '建设目标无效，请重新选择项目或地块。',
+    'Invalid decorationId': '装饰类型无效，请重新选择后重试。',
+    'requestId already used with different parameters': '这次建设请求参数已变化，请重新提交当前内容。',
+    'Decoration is not allowed on this plot': '这块地不支持当前装饰，请选择其他装饰。',
+    'Unknown project': '建设项目不存在，请刷新页面后重试。',
+    'Unknown plot or decoration': '地块或装饰不存在，请刷新页面后重试。',
     'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
     'Plot already occupied': '这块地已被建设，请选择其他空地。',
     'Project already built': '该项目已建成，请选择其他建设项目。',
@@ -162,10 +176,12 @@ function cityOperationError(error?: string): string {
     'Amount must be a positive safe integer': '请输入大于 0 的整数捐款金额。',
     'Too many city mutations': '操作太频繁，请稍后重试。',
     'Please sign in': '请先登录后再参与城市建设。',
+    'Unknown city endpoint': '城市建设服务暂时不可用，请稍后重试。',
   };
   return error && messages[error] ? messages[error] : '建设请求失败，请稍后重试。';
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
-export function donateCity(projectId: string, amount: number, requestId?: string) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
-export function decorateCity(plotId: string, decorationId: string, requestId?: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }
+export function discardPendingCityRequest(): void { pendingRequest = null; }
+export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
+export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }

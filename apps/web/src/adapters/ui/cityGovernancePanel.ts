@@ -1,4 +1,4 @@
-import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
+import { decorateCity, discardPendingCityRequest, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -17,6 +17,15 @@ function button(label: string, action: () => void, disabled = false): HTMLButton
   element.disabled = disabled;
   element.addEventListener('click', action);
   return element;
+}
+
+function focusAction(dataKey: 'projectId' | 'plotId', id: string): void {
+  for (const item of root?.querySelectorAll<HTMLElement>('.city-governance-card') ?? []) {
+    if (item.dataset[dataKey] === id) {
+      item.querySelector<HTMLButtonElement>('button')?.focus();
+      return;
+    }
+  }
 }
 
 function render(): void {
@@ -85,6 +94,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
   for (const project of projects) {
     const saved = progress.find((entry) => entry.id === project.id);
     const item = card(project.name, project.description);
+    item.dataset.projectId = project.id;
     item.dataset.buildingId = project.buildingId ?? '';
     item.classList.toggle('active', project.buildingId === activeBuilding);
     const detail = document.createElement('p');
@@ -94,7 +104,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
       const amount = document.createElement('input');
       amount.type = 'number'; amount.min = '1'; amount.step = '1';
       amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
-      amount.addEventListener('input', () => donationDrafts.set(project.id, amount.value));
+      amount.addEventListener('input', () => { discardPendingCityRequest(); donationDrafts.set(project.id, amount.value); });
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
       item.append(amount, button('捐款', async () => {
         const action = item.querySelector('button');
@@ -106,6 +116,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
         catch (error) {
           operationError = error instanceof Error ? error.message : '捐款失败，请重试';
           render();
+          focusAction('projectId', project.id);
         }
       }));
     }
@@ -116,6 +127,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
   for (const plot of config.personalPlots) {
     const item = card(plot.name, '选择一项装饰，建设完成后全城居民都能看到。');
+    item.dataset.plotId = plot.id;
     const occupied = state.decorations.find((entry) => entry.plotId === plot.id);
     if (occupied) {
       const owner = document.createElement('p');
@@ -132,7 +144,7 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
       }
       const draft = decorationDrafts.get(plot.id);
       if (draft && plot.options.includes(draft)) select.value = draft;
-      select.addEventListener('change', () => decorationDrafts.set(plot.id, select.value));
+      select.addEventListener('change', () => { discardPendingCityRequest(); decorationDrafts.set(plot.id, select.value); });
       item.append(select, button('建设', async () => {
         const action = item.querySelector('button');
         if (!(action instanceof HTMLButtonElement)) return;
@@ -143,6 +155,7 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
         catch (error) {
           operationError = error instanceof Error ? error.message : '建设失败，请重试';
           render();
+          focusAction('plotId', plot.id);
         }
       }));
     }
@@ -151,6 +164,7 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
+  if (activeBuilding !== buildingId) operationError = '';
   activeBuilding = buildingId;
   if (!root) {
     root = document.createElement('section');
@@ -158,7 +172,11 @@ export function openCityGovernancePanel(buildingId = ''): void {
     root.setAttribute('aria-label', '城市治理');
     document.body.append(root);
     root.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCityGovernancePanel(); });
-    unsubscribe = subscribeCityGovernance(() => { if (root?.classList.contains('open')) render(); });
+    unsubscribe = subscribeCityGovernance(() => {
+      if (!root?.classList.contains('open')) return;
+      operationError = '';
+      render();
+    });
   }
   root.classList.add('open');
   render();
