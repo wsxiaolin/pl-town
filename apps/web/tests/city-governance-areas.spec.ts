@@ -23,6 +23,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/city/config')) return route.fulfill({ status: 200, json: config });
       if (path.endsWith('/city/state')) return route.fulfill({ status: 200, json: state });
+      if (path.endsWith('/city/votes')) return route.fulfill({ status: 200, json: { epoch: state.epoch, projectIds: [] } });
       if (path.endsWith('/city/decorate')) {
         const body = route.request().postDataJSON();
         requests.push(body);
