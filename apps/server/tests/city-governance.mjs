@@ -274,17 +274,20 @@ try {
     const preAreaPath = ${JSON.stringify(join(dataDir, 'city-pre-area.sqlite'))};
     await backupDatabase(preAreaPath);
     const preArea = new Database(preAreaPath);
+    const legacyBuildingIds = ['catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop', 'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse', 'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall', 'wushi_restaurant', 'tavern'];
     const oldConfig = structuredClone(config);
     const newPlotIds = new Set(oldConfig.personalAreas.flatMap((area) => area.plotIds));
     oldConfig.personalPlots = oldConfig.personalPlots.filter((plot) => !newPlotIds.has(plot.id));
-    oldConfig.projects = oldConfig.projects.filter((project) => !['north-community-garden', 'south-community-grove'].includes(project.id));
+    oldConfig.projects = oldConfig.projects.filter((project) => !['north-community-garden', 'south-community-grove'].includes(project.id)
+      && (!project.buildingId || legacyBuildingIds.includes(project.buildingId)));
+    oldConfig.initialBuiltBuildingIds = ['commons', ...config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)];
     delete oldConfig.personalAreas;
     oldConfig.version = '2026-09-19.1';
     preArea.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
     preArea.prepare('UPDATE city_meta SET config_version = ? WHERE id = 1').run(oldConfig.version);
     preArea.prepare('DELETE FROM city_configs WHERE version = ?').run(config.version);
     for (const id of newPlotIds) preArea.prepare('DELETE FROM city_decorations WHERE plot_id = ?').run(id);
-    for (const id of ['north-community-garden', 'south-community-grove']) preArea.prepare('DELETE FROM city_projects WHERE id = ?').run(id);
+    for (const project of config.projects.filter((project) => !oldConfig.projects.some((old) => old.id === project.id))) preArea.prepare('DELETE FROM city_projects WHERE id = ?').run(project.id);
     preArea.prepare("DELETE FROM city_operations WHERE request_id LIKE 'area-%'").run();
     for (const operation of preArea.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
       const fingerprint = JSON.parse(operation.fingerprint);
@@ -359,13 +362,12 @@ try {
     const oldPath = ${JSON.stringify(join(dataDir, 'city-old-policy.sqlite'))};
     await backupDatabase(oldPath);
     const oldDb = new Database(oldPath);
-    const legacyBuildingIds = ['catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop', 'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse', 'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall', 'wushi_restaurant', 'tavern'];
-    const oldConfig = { ...config, version: '2026-09-19.1',
+    const oldPolicyConfig = { ...config, version: '2026-09-19.1',
       projects: config.projects.filter((project) => !project.buildingId || legacyBuildingIds.includes(project.buildingId)),
       initialBuiltBuildingIds: ['commons', ...config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)],
     };
-    oldDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
-    oldDb.prepare('UPDATE city_meta SET config_version = ?').run(oldConfig.version);
+    oldDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldPolicyConfig.version, JSON.stringify(oldPolicyConfig));
+    oldDb.prepare('UPDATE city_meta SET config_version = ?').run(oldPolicyConfig.version);
     for (const project of config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId))) oldDb.prepare('DELETE FROM city_projects WHERE id = ?').run(project.id);
     const oldOperations = oldDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
     const oldMoney = oldDb.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all();
@@ -373,7 +375,7 @@ try {
     oldDb.close();
     restoreFromBackupFile(oldPath);
     assert.equal(getCityState().configVersion, config.version);
-    for (const id of oldConfig.initialBuiltBuildingIds.filter((id) => id !== 'commons')) assert.equal(getCityState().projects.find((project) => project.id === 'build-' + id).built, true);
+    for (const id of oldPolicyConfig.initialBuiltBuildingIds.filter((id) => id !== 'commons')) assert.equal(getCityState().projects.find((project) => project.id === 'build-' + id).built, true);
     for (const paid of oldPaid) assert.deepEqual(db.prepare('SELECT * FROM city_projects WHERE id = ?').get(paid.id), paid);
     assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldOperations);
     assert.deepEqual(db.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all(), oldMoney);
