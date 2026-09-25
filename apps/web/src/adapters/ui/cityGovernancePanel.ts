@@ -5,6 +5,8 @@ let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
+const donationDrafts = new Map<string, string>();
+const decorationDrafts = new Map<string, string>();
 
 const money = (value: number) => `${value.toLocaleString()} 金币`;
 
@@ -90,7 +92,9 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
     item.append(detail);
     if (!saved?.built) {
       const amount = document.createElement('input');
-      amount.type = 'number'; amount.min = '1'; amount.step = '1'; amount.value = String(Math.min(project.cost - (saved?.funded ?? 0), 100));
+      amount.type = 'number'; amount.min = '1'; amount.step = '1';
+      amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
+      amount.addEventListener('input', () => donationDrafts.set(project.id, amount.value));
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
       item.append(amount, button('捐款', async () => {
         const action = item.querySelector('button');
@@ -126,6 +130,9 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
         option.value = id; option.textContent = decoration ? `${decoration.name} · ${money(decoration.cost)}` : id;
         select.append(option);
       }
+      const draft = decorationDrafts.get(plot.id);
+      if (draft && plot.options.includes(draft)) select.value = draft;
+      select.addEventListener('change', () => decorationDrafts.set(plot.id, select.value));
       item.append(select, button('建设', async () => {
         const action = item.querySelector('button');
         if (!(action instanceof HTMLButtonElement)) return;
@@ -171,4 +178,6 @@ export function disposeCityGovernancePanel(): void {
   activeBuilding = '';
   activeTab = 'collective';
   operationError = '';
+  donationDrafts.clear();
+  decorationDrafts.clear();
 }
