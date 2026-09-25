@@ -1,5 +1,5 @@
 import { townApiUrl } from '../core/townApi';
-import { applyCityState, getCityConfig, loadCityGovernance, type CityState } from './cityGovernanceClient';
+import { applyCityState, getCityConfig, loadCityGovernance, makeRequestId, type CityState } from './cityGovernanceClient';
 
 export type CityVotes = { epoch: string; projectIds: string[] };
 const pending = new Map<string, string>();
@@ -33,7 +33,10 @@ export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotes> {
     cache: 'no-store', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
     headers: { accept: 'application/json', authorization: `Bearer ${currentToken}` },
   });
-  if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('minicity:login-required'));
+    throw new Error('登录状态已失效，请登录后重试投票');
+  }
   const result = await readJson(response);
   if (currentToken !== localStorage.getItem('minicityServerToken')) throw new Error('登录状态已变更，请重新打开众议院');
   if (!response.ok || !votes(result)) throw new Error('暂时无法读取已投票记录，请重试');
@@ -45,7 +48,7 @@ export async function voteCity(projectId: string): Promise<CityVotes> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试');
   const currentToken = token();
   const key = JSON.stringify([currentToken, projectId, config.version]);
-  const requestId = pending.get(key) ?? `vote-${crypto.randomUUID()}`;
+  const requestId = pending.get(key) ?? makeRequestId();
   pending.set(key, requestId);
   const response = await request('/town-api/city/vote', {
     method: 'POST', signal: AbortSignal.timeout(8_000),
@@ -72,3 +75,5 @@ export async function voteCity(projectId: string): Promise<CityVotes> {
   applyCityState(payload.state);
   return payload.votes;
 }
+
+export function disposeCityVoting(): void { pending.clear(); }

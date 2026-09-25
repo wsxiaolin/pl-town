@@ -201,3 +201,13 @@ test('an HTML gateway error shows a readable vote failure and retries the same r
   expect(api.requests[1].requestId).toBe(api.requests[0].requestId);
   await expect(panel.getByRole('alert')).toHaveCount(0);
 });
+
+test('an expired session closes the top-layer panel before showing login', async ({ page }) => {
+  await fixture(page);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  await page.evaluate(() => localStorage.removeItem('minicityServerToken'));
+  await panel.locator('[data-building-id="catcafe"]').getByRole('button', { name: '投票建设' }).click();
+  await expect(panel).not.toBeVisible();
+  await expect(page.locator('#loginOverlay')).toBeVisible();
+  await expect(page.locator('#loginInput')).toBeFocused();
+});

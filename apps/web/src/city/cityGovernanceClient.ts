@@ -185,7 +185,10 @@ function cityOperationError(error?: string): string {
   return error && messages[error] ? messages[error] : '建设请求失败，请稍后重试。';
 }
 
-function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+export function makeRequestId() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return `city-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
+}
 export function donateCity(projectId: string, amount: number, requestId?: string) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
 export function decorateCity(plotId: string, decorationId: string, requestId?: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }
 export function decorateCityArea(areaId: string, decorationId: string, quantity: number, requestId?: string) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }, requestId); }

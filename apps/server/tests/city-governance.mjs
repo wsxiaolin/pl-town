@@ -257,8 +257,10 @@ try {
   const beforeRestart = await (await fetch(`${base}/town-api/city/state`)).json();
   await stop();
   await start();
-  assert.deepEqual(await (await fetch(`${base}/town-api/city/state`)).json(), beforeRestart);
-  assert.equal((await post('donate', donation)).replayed, true);
+  const afterRestart = await (await fetch(`${base}/town-api/city/state`)).json();
+  assert.deepEqual(afterRestart, beforeRestart);
+  const restartReplay = await post('donate', donation);
+  assert.equal(restartReplay.replayed, true);
   for (let i = 0; i < 19; i++) await post('donate', donation);
   await post('donate', donation, 429);
   await stop();

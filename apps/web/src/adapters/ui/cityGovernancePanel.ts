@@ -20,8 +20,7 @@ let votesLoadSequence = 0;
 
 function handleLoginRequired(): void {
   if (!root?.open) return;
-  voteError = '登录状态已失效，请登录后重试投票。';
-  render();
+  closeCityGovernancePanel();
 }
 
 function button(label: string, action: () => void, disabled = false): HTMLButtonElement {
