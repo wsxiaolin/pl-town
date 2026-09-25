@@ -8,6 +8,7 @@ import { RENDER_ORDER, SURFACE_Y } from './layers';
 type Kind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
 type Item = { key: string; kind: Kind | 'road'; x: number; z: number; width?: number; depth?: number };
 type Visual = { signature: string; root: THREE.Group; glow?: THREE.MeshStandardMaterial; light?: THREE.PointLight };
+const MAX_CONSTRUCTION_POINT_LIGHTS = 8;
 
 export function createCityConstructionScene(options: {
   scene: THREE.Scene;
@@ -110,9 +111,16 @@ export function createCityConstructionScene(options: {
 
   function updateLighting() {
     night = options.getIsNight();
+    let activeLights = 0;
     for (const visual of visuals.values()) {
       if (visual.glow) visual.glow.emissiveIntensity = night ? 0.9 : 0.03;
-      if (visual.light) visual.light.intensity = night ? 1.4 : 0;
+      if (visual.light) {
+        // Three's WebGLLights counts zero-intensity lights too, and its standard
+        // shader unrolls NUM_POINT_LIGHTS. WebGLRenderer skips invisible lights,
+        // so bound the shader cost while preserving every lamp's emissive globe.
+        visual.light.visible = night && activeLights++ < MAX_CONSTRUCTION_POINT_LIGHTS;
+        visual.light.intensity = visual.light.visible ? 1.4 : 0;
+      }
     }
   }
 
