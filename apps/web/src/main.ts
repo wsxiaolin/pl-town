@@ -3,6 +3,7 @@ import { destroyMiniCity, startMiniCity } from './city/MiniCityApp';
 import { initTelemetry } from './core/telemetryClient';
 import { subscribeTextureResourceProgress } from './city/textureResourcePreloader';
 import { finishTextureLoadUi, updateTextureLoadUi } from './adapters/ui/textureLoadUi';
+import { notifyCityReady, stopMomentPresentation, whenBootRevealAllowed } from './city/momentSplash';
 
 void initTelemetry();
 subscribeTextureResourceProgress(updateTextureLoadUi);
@@ -26,10 +27,19 @@ startMiniCity();
 
 window.addEventListener('minicity:city-ready', () => {
   finishTextureLoadUi();
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => document.getElementById('bootScreen')?.classList.add('is-ready'));
-  });
+  notifyCityReady();
 }, { once: true });
+
+// The boot screen fades only when the city is ready AND the moment splash has
+// had its breath (or the visitor clicked through it).
+void whenBootRevealAllowed().then(() => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.getElementById('bootScreen')?.classList.add('is-ready');
+      window.setTimeout(stopMomentPresentation, 1200);
+    });
+  });
+});
 
 window.addEventListener('pagehide', destroyMiniCity, { once: true });
 

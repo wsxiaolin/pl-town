@@ -773,10 +773,33 @@ function disposeSession() {
   stories?.dispose();
 }
 
+/**
+ * Heavy-boot precompile: links every shader program in the scene and renders
+ * a few warm-up frames so the mirror water, sky and lighting programs are all
+ * resident before the visitor sees the city. Never blocks entry on failure.
+ */
+async function prepareFirstFrame(onProgress?: (fraction: number) => void): Promise<void> {
+  if (!renderer || !scene || !camera) return;
+  try {
+    onProgress?.(0.15);
+    await renderer.compileAsync(scene, camera);
+    onProgress?.(0.7);
+    for (let i = 0; i < 3; i += 1) {
+      renderer.render(scene, camera);
+      onProgress?.(0.7 + (i + 1) * 0.1);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    onProgress?.(1);
+  } catch (error) {
+    console.error('First-frame precompile failed', error);
+  }
+}
+
 const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
+  prepareFirstFrame,
   startTutorial: () => onboardingTutorial?.start(),
   proceedToCity,
   showLogin: () => loginController?.showLogin(),

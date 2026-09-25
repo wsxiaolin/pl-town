@@ -92,18 +92,20 @@ export function subscribeTextureResourceProgress(listener: TextureProgressListen
   return () => listeners.delete(listener);
 }
 
-export function preloadTextureResources(enabled = true, signal?: AbortSignal): Promise<void> {
+export function preloadTextureResources(enabled = true, signal?: AbortSignal, force = false): Promise<void> {
   if (started) return inFlight ?? Promise.resolve();
   started = true;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  if (!enabled || connection?.saveData || connection?.effectiveType === 'slow-2g') {
+  // Heavy boot passes force=true: the precache must land in full regardless
+  // of the visitor's texture setting or data-saver mode.
+  if (!force && (!enabled || connection?.saveData || connection?.effectiveType === 'slow-2g')) {
     ready = true;
     inFlight = Promise.resolve();
     return inFlight;
   }
   publish();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), force ? 240_000 : 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
   inFlight = runWithConcurrency(Object.values(textureModules), 6, controller.signal).then(() => {
