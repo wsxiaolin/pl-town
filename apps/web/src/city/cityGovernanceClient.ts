@@ -24,7 +24,8 @@ export type CityGovernanceListener = (config: CityConfig | null, state: CityStat
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
-const pendingRequestIds = new Map<string, { requestId: string; configVersion: string }>();
+type PendingOperation = { requestId: string; configVersion: string; body: Record<string, unknown> };
+const pendingRequestIds = new Map<string, PendingOperation>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -132,17 +133,19 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
     throw new Error('请先登录');
   }
-  const operationKey = `${path}:${JSON.stringify(body)}`;
+  const operationKey = `${path}:${body.areaId !== undefined
+    ? JSON.stringify({ areaId: body.areaId, decorationId: body.decorationId })
+    : JSON.stringify(body)}`;
   // An uncertain response may already have committed. Retry the entire original
   // receipt, including its catalog version, even after a live config refresh.
-  const operation = explicitRequestId ? { requestId: explicitRequestId, configVersion: config.version }
-    : pendingRequestIds.get(operationKey) ?? { requestId: makeRequestId(), configVersion: config.version };
+  const operation = explicitRequestId ? { requestId: explicitRequestId, configVersion: config.version, body }
+    : pendingRequestIds.get(operationKey) ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
   const { requestId, configVersion } = operation;
   if (!explicitRequestId) pendingRequestIds.set(operationKey, operation);
   let response: Response;
   let payload: { state?: CityState; error?: string };
   try {
-    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
+    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...operation.body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
     payload = await response.json() as typeof payload;
   } catch {
     // Keep the request ID: a lost response does not mean the server rolled back.
@@ -165,6 +168,8 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
 function cityOperationError(error?: string): string {
   const messages: Record<string, string> = {
     'Unknown construction area': '建设区域不存在，请刷新后重试。',
+    'Unknown plot or decoration': '建设地块或装饰不存在，请刷新后重试。',
+    'No available plots in this area': '该区域已全部建设，请选择其他区域。',
     'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
     'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
     'Quantity requires an area': '请先选择批量建设区域。',
@@ -184,3 +189,11 @@ function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(3
 export function donateCity(projectId: string, amount: number, requestId?: string) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
 export function decorateCity(plotId: string, decorationId: string, requestId?: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }
 export function decorateCityArea(areaId: string, decorationId: string, quantity: number, requestId?: string) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }, requestId); }
+export function getPendingCityAreaOperation(areaId: string): { decorationId: string; quantity: number } | null {
+  for (const operation of pendingRequestIds.values()) {
+    if (operation.body.areaId === areaId && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
+      return { decorationId: operation.body.decorationId, quantity: operation.body.quantity };
+    }
+  }
+  return null;
+}

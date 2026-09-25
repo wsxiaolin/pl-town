@@ -62,6 +62,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
       const client = await import(/* @vite-ignore */ modulePath);
       await client.loadCityGovernance();
     });
+    await expect(quantity).toHaveValue('6');
+    await expect(quantity).toBeDisabled();
     await action.click();
     await expect(action).toBeEnabled();
     await expect(panel.getByRole('alert')).toBeVisible();

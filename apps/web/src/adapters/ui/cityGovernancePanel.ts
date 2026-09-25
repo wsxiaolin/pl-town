@@ -1,5 +1,6 @@
 import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
-import { clearCityAreaDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
+import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
+import { card, money } from './cityGovernanceDom';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -7,9 +8,6 @@ let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 const donationDrafts = new Map<string, string>();
-
-
-const money = (value: number) => `${value.toLocaleString()} 金币`;
 
 function button(label: string, action: () => void, disabled = false): HTMLButtonElement {
   const element = document.createElement('button');
@@ -69,17 +67,6 @@ function render(): void {
   else renderPersonal(list, config, state);
   body.append(list);
   root.append(body);
-}
-
-function card(title: string, description: string): HTMLElement {
-  const item = document.createElement('article');
-  item.className = 'city-governance-card';
-  const heading = document.createElement('h3');
-  heading.textContent = title;
-  const copy = document.createElement('p');
-  copy.textContent = description;
-  item.append(heading, copy);
-  return item;
 }
 
 function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean }>): void {
@@ -150,5 +137,5 @@ export function disposeCityGovernancePanel(): void {
   activeTab = 'collective';
   operationError = '';
   donationDrafts.clear();
-  clearCityAreaDrafts();
+  clearCityConstructionDrafts();
 }

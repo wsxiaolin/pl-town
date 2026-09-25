@@ -288,6 +288,12 @@ try {
       fingerprint[3] = oldConfig.version;
       preArea.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
     }
+    // Keep one area receipt from the historical catalog so restoring the
+    // backup proves a decorate-area retry can replay across config versions.
+    const legacyAreaRequest = 'legacy-area-replay';
+    const legacyAreaFingerprint = JSON.stringify(['decorate-area', 'north-meadow', 'flowers', 1, oldConfig.version]);
+    preArea.prepare('INSERT INTO city_operations (user_id, request_id, fingerprint, accepted_amount, revision) VALUES (?, ?, ?, ?, ?)')
+      .run(user.id, legacyAreaRequest, legacyAreaFingerprint, 80, before.revision);
     const oldDecorations = preArea.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all();
     const oldReceipts = preArea.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
     const oldBalance = preArea.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency;
@@ -299,6 +305,13 @@ try {
     const oldReplay = mutateCity(user, 'donate', { configVersion: oldConfig.version, requestId: 'first', projectId: 'build-catcafe', amount: 100 });
     assert.equal(oldReplay.replayed, true);
     assert.equal(oldReplay.progress.currency, oldBalance);
+    const legacyAreaReplay = mutateCity(user, 'decorate', {
+      configVersion: oldConfig.version, requestId: legacyAreaRequest,
+      areaId: 'north-meadow', decorationId: 'flowers', quantity: 1,
+    });
+    assert.equal(legacyAreaReplay.replayed, true);
+    assert.equal(legacyAreaReplay.acceptedAmount, 80);
+    assert.equal(legacyAreaReplay.progress.currency, oldBalance);
     assert.ok(getCityState().projects.filter((project) => ['north-community-garden', 'south-community-grove'].includes(project.id)).every((project) => project.funded === 0 && !project.built));
     restoreFromBackupFile(path);
     const damagedPath = ${JSON.stringify(join(dataDir, 'city-damaged.sqlite'))};
@@ -321,6 +334,22 @@ try {
     assert.throws(() => db.transaction(() => initializeCityGovernance(db))(), /explicit reconciliation/);
     config.personalPlots[0].x = originalPlotX;
     config.version = originalVersion;
+    const { reconcileAreaCatalog } = await import('./dist/cityAreaMigration.js');
+    const renamedArea = structuredClone(config);
+    renamedArea.personalAreas[0].name += '（新名称）';
+    renamedArea.decorations[0].cost += 1;
+    assert.doesNotThrow(() => reconcileAreaCatalog(config, renamedArea));
+    const unlistedAreaPrevious = structuredClone(config);
+    unlistedAreaPrevious.personalAreas = [{ id: 'future-area', name: '未来区域', plotIds: [] }];
+    const unlistedAreaNext = structuredClone(unlistedAreaPrevious);
+    unlistedAreaNext.personalPlots[0].x += 0.1;
+    assert.throws(() => reconcileAreaCatalog(unlistedAreaPrevious, unlistedAreaNext), /personal plot ledger changed/);
+    const noAreaPrevious = structuredClone(config);
+    const noAreaNext = structuredClone(config);
+    delete noAreaPrevious.personalAreas;
+    delete noAreaNext.personalAreas;
+    noAreaNext.personalPlots[0].x += 0.1;
+    assert.throws(() => reconcileAreaCatalog(noAreaPrevious, noAreaNext), /personal plot ledger changed/);
     // A pre-city backup seeds clean construction state and operations.
     const legacyPath = ${JSON.stringify(join(dataDir, 'city-legacy.sqlite'))};
     await backupDatabase(legacyPath);

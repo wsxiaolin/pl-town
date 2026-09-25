@@ -1,21 +1,10 @@
-import { decorateCity, decorateCityArea, type CityConfig, type CityState } from '../../city/cityGovernanceClient';
+import { decorateCity, decorateCityArea, getPendingCityAreaOperation, type CityConfig, type CityState } from '../../city/cityGovernanceClient';
+import { actionButton, card, money } from './cityGovernanceDom';
 
-type Draft = { decorationId: string; quantity: number; pending: boolean; error: string };
+type Draft = { decorationId: string; quantity: number; pending: boolean };
 const drafts = new Map<string, Draft>();
-const money = (value: number) => `${value.toLocaleString()} 金币`;
 
-export function clearCityAreaDrafts(): void { drafts.clear(); }
-
-function card(name: string, description: string): HTMLElement {
-  const item = document.createElement('article');
-  item.className = 'city-governance-card';
-  const heading = document.createElement('h3');
-  heading.textContent = name;
-  const copy = document.createElement('p');
-  copy.textContent = description;
-  item.append(heading, copy);
-  return item;
-}
+export function clearCityConstructionDrafts(): void { drafts.clear(); }
 
 function decorationSelect(name: string, config: CityConfig, ids: string[]): HTMLSelectElement {
   const select = document.createElement('select');
@@ -31,13 +20,6 @@ function decorationSelect(name: string, config: CityConfig, ids: string[]): HTML
   return select;
 }
 
-function actionButton(label: string): HTMLButtonElement {
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.textContent = label;
-  return action;
-}
-
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '建设失败，请重试'; }
 
 export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, state: CityState, rerender: () => void, reportError: (message: string) => void): void {
@@ -48,8 +30,15 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
     const item = card(area.name, `在同一区域连续建设，已建 ${plots.filter((plot) => occupied.has(plot.id)).length} / ${plots.length} 处。`);
     item.dataset.cityArea = area.id;
     const ids = config.decorations.filter((decoration) => plots.some((plot) => plot.options.includes(decoration.id))).map((decoration) => decoration.id);
-    const draft = drafts.get(area.id) ?? { decorationId: ids[0] ?? '', quantity: Math.min(20, plots.length), pending: false, error: '' };
+    const draft = drafts.get(area.id) ?? { decorationId: ids[0] ?? '', quantity: Math.min(20, plots.length), pending: false };
     drafts.set(area.id, draft);
+    const pendingReceipt = getPendingCityAreaOperation(area.id);
+    if (pendingReceipt) {
+      // A lost response may already have charged the original request. Keep
+      // the visible draft aligned with that immutable receipt before retry.
+      draft.decorationId = pendingReceipt.decorationId;
+      draft.quantity = pendingReceipt.quantity;
+    }
     if (!ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
     const select = decorationSelect(area.name, config, ids);
     select.value = draft.decorationId;
@@ -75,7 +64,7 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
       total.textContent = valid ? `将建设 ${draft.quantity} 处 · 总价 ${money(cost * draft.quantity)} · 可用 ${available.length} 处`
         : available.length ? `请输入 1–${available.length} 之间的整数` : '该区域已无可用地块';
       action.disabled = draft.pending || !valid;
-      select.disabled = quantity.disabled = draft.pending;
+      select.disabled = quantity.disabled = draft.pending || Boolean(pendingReceipt);
       preview.replaceChildren();
       for (const plot of plots) {
         const cell = document.createElement('span');
@@ -88,13 +77,13 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
         preview.append(cell);
       }
     };
-    select.addEventListener('change', () => { draft.decorationId = select.value; update(); });
-    quantity.addEventListener('input', () => { draft.quantity = Number(quantity.value); update(); });
+    select.addEventListener('change', () => { draft.decorationId = select.value; reportError(''); update(); });
+    quantity.addEventListener('input', () => { draft.quantity = Number(quantity.value); reportError(''); update(); });
     action.addEventListener('click', async () => {
       if (action.disabled) return;
-      draft.pending = true; draft.error = ''; reportError(''); update();
+      draft.pending = true; reportError(''); update();
       try { await decorateCityArea(area.id, draft.decorationId, draft.quantity); }
-      catch (error) { draft.error = errorMessage(error); reportError(draft.error); }
+      catch (error) { reportError(errorMessage(error)); }
       finally { draft.pending = false; rerender(); }
     });
     update();
@@ -112,15 +101,15 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
     } else {
       const select = decorationSelect(plot.name, config, plot.options);
       const action = actionButton('建设');
-      const draft = drafts.get(plot.id) ?? { decorationId: select.value, quantity: 1, pending: false, error: '' };
+      const draft = drafts.get(plot.id) ?? { decorationId: select.value, quantity: 1, pending: false };
       drafts.set(plot.id, draft);
       select.value = draft.decorationId;
       select.disabled = action.disabled = draft.pending;
-      select.addEventListener('change', () => { draft.decorationId = select.value; });
+      select.addEventListener('change', () => { draft.decorationId = select.value; reportError(''); });
       action.addEventListener('click', async () => {
-        draft.pending = true; draft.error = ''; reportError(''); action.disabled = true; select.disabled = true;
+        draft.pending = true; reportError(''); action.disabled = true; select.disabled = true;
         try { await decorateCity(plot.id, select.value); }
-        catch (error) { draft.error = errorMessage(error); reportError(draft.error); }
+        catch (error) { reportError(errorMessage(error)); }
         finally { draft.pending = false; rerender(); }
       });
       item.append(select, action);

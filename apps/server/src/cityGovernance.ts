@@ -65,25 +65,27 @@ export function mutateCity(user: User, kind: 'donate' | 'decorate', body: Record
     } else {
       const decoration = CITY_CONSTRUCTION_CONFIG.decorations.find((entry) => entry.id === body.decorationId);
       if (!decoration) throw new HttpBodyError('Unknown plot or decoration', 404);
+      const occupiedPlot = db.prepare('SELECT 1 FROM city_decorations WHERE plot_id = ?');
+      const insertDecoration = db.prepare('INSERT INTO city_decorations (plot_id, decoration_id, owner_id, owner_nickname) VALUES (?, ?, ?, ?)');
       let plotIds: string[];
       if (areaRequest) {
         const area = CITY_CONSTRUCTION_CONFIG.personalAreas?.find((entry) => entry.id === target);
         if (!area) throw new HttpBodyError('Unknown construction area', 404);
         const available = area.plotIds.filter((id) => CITY_CONSTRUCTION_CONFIG.personalPlots.find((plot) => plot.id === id)?.options.includes(decoration.id)
-          && !db.prepare('SELECT 1 FROM city_decorations WHERE plot_id = ?').get(id));
+          && !occupiedPlot.get(id));
+        if (!available.length) throw new HttpBodyError('No available plots in this area', 409);
         if ((body.quantity as number) > available.length) throw new HttpBodyError('Not enough available plots in this area', 409);
         plotIds = available.slice(0, body.quantity as number);
       } else {
         const plot = CITY_CONSTRUCTION_CONFIG.personalPlots.find((entry) => entry.id === target);
         if (!plot) throw new HttpBodyError('Unknown plot or decoration', 404);
         if (!plot.options.includes(decoration.id)) throw new HttpBodyError('Decoration is not allowed on this plot', 400);
-        if (db.prepare('SELECT 1 FROM city_decorations WHERE plot_id = ?').get(target)) throw new HttpBodyError('Plot already occupied', 409);
+        if (occupiedPlot.get(target)) throw new HttpBodyError('Plot already occupied', 409);
         plotIds = [plot.id];
       }
       acceptedAmount = decoration.cost * plotIds.length;
       if (!Number.isSafeInteger(acceptedAmount)) throw new HttpBodyError('Invalid decoration total', 400);
-      const insert = db.prepare('INSERT INTO city_decorations (plot_id, decoration_id, owner_id, owner_nickname) VALUES (?, ?, ?, ?)');
-      for (const id of plotIds) insert.run(id, decoration.id, user.id, user.nickname);
+      for (const id of plotIds) insertDecoration.run(id, decoration.id, user.id, user.nickname);
     }
     getPlayerProgress(user.id);
     const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(acceptedAmount, new Date().toISOString(), user.id, acceptedAmount);

@@ -3,5 +3,4 @@
 .city-area-cell.selected { background: #36734c; color: #fff; opacity: 1; }
 .city-area-cell.occupied { background: #776242; color: #fff; opacity: 1; }
 .city-governance-card [data-city-area-total] { font-weight: 600; }
-.city-governance-card [role="alert"]:empty { display: none; }
 .city-governance-card[data-city-area] select, .city-governance-card[data-city-area] input { display: block; box-sizing: border-box; max-width: 100%; }

@@ -82,14 +82,6 @@ export function initializeCityGovernance(db: Database.Database): void {
     if (!previous) throw new Error('Missing persisted city config');
     const old = JSON.parse(previous.config_json) as typeof config;
     reconcileAreaCatalog(old, config);
-    if (old.decorations.some((entry) => {
-      const next = config.decorations.find((decoration) => decoration.id === entry.id);
-      return !next || next.kind !== entry.kind;
-    })) throw new Error('City decorations migration requires explicit reconciliation');
-    if (old.personalPlots.some((entry) => {
-      const next = config.personalPlots.find((plot) => plot.id === entry.id);
-      return !next || next.x !== entry.x || next.z !== entry.z || entry.options.some((id) => !next.options.includes(id));
-    })) throw new Error('City personalPlots migration requires explicit reconciliation');
     const previouslyBuilt = new Set(old.initialBuiltBuildingIds);
     if (config.initialBuiltBuildingIds.some((id) => !previouslyBuilt.has(id))) {
       throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
