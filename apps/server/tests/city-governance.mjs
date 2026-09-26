@@ -271,6 +271,8 @@ try {
   await start();
   const afterRestart = await (await fetch(`${base}/town-api/city/state`)).json();
   assert.deepEqual(afterRestart, beforeRestart);
+  // Restart isolates this process-local rate budget. The GET above is free;
+  // this replay and the following 19 mutations fill its 20-request window.
   const restartReplay = await post('donate', donation);
   assert.equal(restartReplay.replayed, true);
   for (let i = 0; i < 19; i++) await post('donate', donation);

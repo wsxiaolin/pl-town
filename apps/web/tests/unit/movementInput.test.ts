@@ -33,7 +33,6 @@ function createFakePointerEnv(touchCapable: boolean) {
   const document = {
     modalOpen: false,
     body: { classList: bodyClasses },
-    querySelector() { return this.modalOpen ? {} : null; },
     getElementById(id: string) {
       if (id === 'movementControl') return zone;
       if (id === 'movementControlBase') return base;

@@ -54,7 +54,8 @@ function updateFeedback(): void {
     ['[data-city-feedback]', operationError],
     ['[data-city-notice]', operationNotice],
     ['[data-city-vote-feedback]', activeTab === 'collective' ? voteError : ''],
-    ['[data-city-vote-notice]', activeTab === 'collective' ? voteNotice : ''],
+    // Tab changes are not new results; retain success without reannouncing it.
+    ['[data-city-vote-notice]', voteNotice],
   ] as const) {
     const region = root?.querySelector<HTMLElement>(selector);
     if (!region) continue;
@@ -393,6 +394,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
     const feedback = document.createElement('p');
     feedback.dataset.cityFeedback = 'true';
     feedback.setAttribute('role', 'alert');
+    feedback.setAttribute('aria-label', '建设错误');
     feedback.setAttribute('aria-atomic', 'true');
     feedback.hidden = true;
     const notice = document.createElement('p');
@@ -403,6 +405,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
     const voteFeedback = document.createElement('p');
     voteFeedback.dataset.cityVoteFeedback = 'true';
     voteFeedback.setAttribute('role', 'alert');
+    voteFeedback.setAttribute('aria-label', '投票错误');
     voteFeedback.setAttribute('aria-atomic', 'true');
     voteFeedback.hidden = true;
     const voteStatus = document.createElement('p');
