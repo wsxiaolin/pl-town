@@ -42,7 +42,7 @@ DEPLOY_SNAPSHOT_TOKEN=<至少 32 字符的随机令牌>
 
 不要设置 `DATA_DIR` 到所谓长期路径。Render 默认文件系统是临时的，SQLite 只在当前实例存活期间有效。居民、住房和剧情数据靠 OSS 快照跨部署保留：
 
-1. GitHub Actions `snapshot-offsite.yml` 在推送到 `main`（服务端相关路径）或手动触发时，向线上 `POST /internal/deploy/snapshot`，把当前库上传到 OSS。
+1. GitHub Actions `snapshot-offsite.yml` 在任意推送到 `main`、每日定时（18:00 UTC）或手动触发时，向线上 `POST /internal/deploy/snapshot`，把当前库上传到 OSS。
 2. 新实例启动时，若本地 `users` 表为空，则下载 OSS 上最新一份已校验备份并恢复后再监听端口。
 3. 旧实例收到 SIGTERM 时再创建并上传一份关机快照，作为 Actions 与健康检查超时之间的兜底。
 
