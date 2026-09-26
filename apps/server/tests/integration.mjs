@@ -756,6 +756,53 @@ try {
   const clearTelemetry = await fetch(`${adminBase}/telemetry/clear`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf } });
   if (!clearTelemetry.ok) throw new Error('Admin telemetry clear must require CSRF and succeed');
 
+  // Shop catalog: admin edits must persist, broadcast, and price purchases live.
+  const shopClient = await connect('Alice');
+  const shopWorldState = await fetch(`${adminBase}/world`, { headers: { cookie } });
+  const shopWorldStatePayload = await shopWorldState.json();
+  if (!shopWorldState.ok || shopWorldStatePayload.shop?.length !== 4 || shopWorldStatePayload.shop.find((product) => product.itemId === 'beef')?.unitPrice !== 45) throw new Error('Admin world GET must return the default shop catalog');
+  const shopUpdate = await fetch(`${adminBase}/world/shop`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ products: [
+      { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30, enabled: true },
+      { itemId: 'beef', name: '牛肉', unitPrice: 99, enabled: true },
+      { itemId: 'radish', name: '萝卜', unitPrice: 20, enabled: false },
+      { itemId: 'music_box', name: '音乐盒', unitPrice: 120, enabled: true },
+      { itemId: 'shop_probe_item', name: '月光饼', unitPrice: 77, enabled: true },
+    ] }),
+  });
+  const shopUpdatePayload = await shopUpdate.json();
+  if (!shopUpdate.ok || shopUpdatePayload.products?.length !== 5) throw new Error('Admin shop POST must persist the configured catalog');
+  await waitFor(shopClient, 'world.catalog', (message) => message.catalog?.products?.beef?.unitPrice === 99 && message.catalog?.products?.shop_probe_item?.unitPrice === 77 && !message.catalog?.products?.radish);
+  const invalidShop = await fetch(`${adminBase}/world/shop`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ products: [{ itemId: 'Bad-Id', name: '坏 ID', unitPrice: 10 }] }),
+  });
+  if (invalidShop.status !== 400) throw new Error('Admin shop POST must reject malformed product catalogs');
+  const missingShopCsrf = await fetch(`${adminBase}/world/shop`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json' } });
+  if (missingShopCsrf.status !== 403) throw new Error('Admin shop POST must require CSRF');
+  send(shopClient, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 1 });
+  const teaPurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === 1);
+  send(shopClient, { type: 'progress.shop.buy', productId: 'shop_probe_item', quantity: 1 });
+  const badgePurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'shop_probe_item');
+  if (badgePurchase.progress.inventory.shop_probe_item !== 1 || badgePurchase.progress.currency !== teaPurchase.progress.currency - 77) throw new Error('Newly configured products must be purchasable at the configured price');
+  send(shopClient, { type: 'progress.shop.buy', productId: 'radish', quantity: 1 });
+  const radishRejection = await waitFor(shopClient, 'error', (message) => message.message === 'Product is not available');
+  if (!radishRejection) throw new Error('Disabled products must not be purchasable');
+  const shopRestore = await fetch(`${adminBase}/world/shop`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ products: [
+      { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30, enabled: true },
+      { itemId: 'beef', name: '牛肉', unitPrice: 45, enabled: true },
+      { itemId: 'radish', name: '萝卜', unitPrice: 20, enabled: true },
+      { itemId: 'music_box', name: '音乐盒', unitPrice: 120, enabled: true },
+    ] }),
+  });
+  if (!shopRestore.ok) throw new Error('Integration setup must restore the default shop catalog');
+
   // NPC change requests: player submits a ticket, admin reviews the queue.
   const publicNpcCatalog = await fetch(`${adminOrigin}/town-api/npc-edit-catalog`);
   const publicNpcCatalogPayload = await publicNpcCatalog.json();

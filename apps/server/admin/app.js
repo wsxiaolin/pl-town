@@ -4,6 +4,7 @@ const state = {
   offsiteEnabled: false, localBackups: [],
   worldWeather: '', worldWeatherAuto: false, worldWeatherDraft: '', worldWeatherAutoDraft: false,
   worldBuildings: [], worldOverrides: {}, worldDraft: {}, worldSelectedId: '',
+  worldShop: [], worldShopDraft: [],
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -508,8 +509,11 @@ async function loadWorld() {
   state.worldBuildings.forEach((building) => { if (building.override) state.worldOverrides[building.id] = building.override; });
   state.worldDraft = { ...state.worldOverrides };
   if (!state.worldBuildings.some((building) => building.id === state.worldSelectedId)) state.worldSelectedId = state.worldBuildings[0]?.id || '';
+  state.worldShop = Array.isArray(world.shop) ? world.shop : [];
+  state.worldShopDraft = state.worldShop.map((product) => ({ ...product }));
   renderWorldWeatherOptions();
   renderWorldWeather();
+  renderWorldShop();
   renderWorldBuildingOptions();
   renderWorldMap();
   renderWorldSelected();
@@ -714,6 +718,82 @@ async function applyWorldWeather() {
   } catch (error) { showNotice(error.message); } finally { button.disabled = false; }
 }
 
+function renderWorldShop() {
+  const container = $('#worldShopRows');
+  const rows = state.worldShopDraft.map((product, index) => {
+    const row = node('div', undefined, 'shop-row');
+    const idCell = node('span', product.itemId, 'shop-item-id');
+    idCell.title = product.itemId;
+    const nameInput = node('input'); nameInput.type = 'text'; nameInput.value = product.name;
+    nameInput.maxLength = 40; nameInput.placeholder = '商品名称'; nameInput.setAttribute('aria-label', `商品 ${product.itemId} 名称`);
+    nameInput.addEventListener('input', () => { state.worldShopDraft[index].name = nameInput.value; renderWorldShopDirty(); });
+    const priceInput = node('input'); priceInput.type = 'number'; priceInput.value = product.unitPrice;
+    priceInput.min = '1'; priceInput.max = '1000000'; priceInput.step = '1'; priceInput.placeholder = '单价';
+    priceInput.setAttribute('aria-label', `商品 ${product.itemId} 单价`);
+    priceInput.addEventListener('input', () => { state.worldShopDraft[index].unitPrice = Number(priceInput.value) || 0; renderWorldShopDirty(); });
+    const enabledLabel = node('label', undefined, 'shop-enabled');
+    const enabledInput = node('input'); enabledInput.type = 'checkbox'; enabledInput.checked = product.enabled !== false;
+    enabledInput.setAttribute('aria-label', `商品 ${product.itemId} 上架开关`);
+    enabledInput.addEventListener('change', () => { state.worldShopDraft[index].enabled = enabledInput.checked; renderWorldShopDirty(); });
+    enabledLabel.append(enabledInput, node('span', '在售'));
+    const remove = node('button', '移除', 'shop-remove'); remove.type = 'button';
+    remove.addEventListener('click', () => { state.worldShopDraft.splice(index, 1); renderWorldShop(); });
+    row.append(idCell, nameInput, priceInput, enabledLabel, remove);
+    return row;
+  });
+  container.replaceChildren(...(rows.length ? rows : [node('p', '商店当前没有商品，点击「添加商品」创建。', 'empty shop-empty')]));
+  renderWorldShopDirty();
+}
+function worldShopSnapshot(draft) {
+  return JSON.stringify(draft.map((product) => [product.itemId, product.name.trim(), product.unitPrice, product.enabled !== false]));
+}
+function renderWorldShopDirty() {
+  const count = state.worldShopDraft.length;
+  const active = state.worldShopDraft.filter((product) => product.enabled !== false).length;
+  $('#worldShopState').textContent = count ? `${active}/${count} 在售` : '空';
+  const dirty = worldShopSnapshot(state.worldShopDraft) !== worldShopSnapshot(state.worldShop);
+  $('#worldShopDirty').textContent = dirty ? '有未保存的更改' : '';
+}
+function addWorldShopRow() {
+  if (state.worldShopDraft.length >= 50) { showNotice('商品数量已达上限（50）'); return; }
+  const existing = new Set(state.worldShopDraft.map((product) => product.itemId));
+  let index = 1;
+  while (existing.has(`new_item_${index}`)) index += 1;
+  state.worldShopDraft.push({ itemId: `new_item_${index}`, name: '', unitPrice: 10, enabled: true });
+  renderWorldShop();
+  const rows = $('#worldShopRows').querySelectorAll('input[type="text"]');
+  rows[rows.length - 1]?.focus();
+}
+function validateWorldShopDraft() {
+  const seen = new Set();
+  for (const product of state.worldShopDraft) {
+    if (!/^[a-z0-9_]{2,64}$/.test(product.itemId)) return `商品 ID「${product.itemId || '空'}」无效：仅限小写字母、数字、下划线，长度 2-64`;
+    if (seen.has(product.itemId)) return `商品 ID「${product.itemId}」重复`;
+    seen.add(product.itemId);
+    if (!product.name.trim()) return `商品「${product.itemId}」缺少名称`;
+    if (product.name.trim().length > 40) return `商品「${product.itemId}」名称过长（上限 40 字）`;
+    if (!Number.isInteger(product.unitPrice) || product.unitPrice < 1 || product.unitPrice > 1000000) return `商品「${product.itemId}」单价无效：需为 1-1000000 的整数`;
+  }
+  return '';
+}
+async function saveWorldShop() {
+  const invalid = validateWorldShopDraft();
+  if (invalid) { showNotice(invalid); return; }
+  const button = $('#worldShopSave'); button.disabled = true;
+  try {
+    const products = state.worldShopDraft.map((product) => ({ itemId: product.itemId, name: product.name.trim(), unitPrice: product.unitPrice, enabled: product.enabled !== false }));
+    const data = await api('/world/shop', { method: 'POST', body: JSON.stringify({ products }) });
+    state.worldShop = Array.isArray(data.products) ? data.products : [];
+    state.worldShopDraft = state.worldShop.map((product) => ({ ...product }));
+    renderWorldShop();
+    showNotice('商品配置已保存并推送给全服', true);
+  } catch (error) { showNotice(error.message); } finally { button.disabled = false; }
+}
+function resetWorldShop() {
+  state.worldShopDraft = state.worldShop.map((product) => ({ ...product }));
+  renderWorldShop();
+}
+
 const loaders = { overview: loadOverview, users: loadUsers, houses: loadHouses, world: loadWorld, npc: loadNpcs, backups: loadBackups, audit: loadAudit, chat: loadChat, story: loadStoryProgress, telemetry: loadTelemetry };
 const titles = { overview: '运行概览', users: '居民管理', houses: '住房数据', world: '世界配置', npc: 'NPC 管理', backups: '数据库备份', audit: '审计日志', chat: '聊天审核', story: '剧情与任务', telemetry: '运行监控' };
 async function switchView(view) {
@@ -765,5 +845,16 @@ $('#worldBuildingSelect').addEventListener('change', (event) => selectWorldBuild
 $('#worldWeatherApply').addEventListener('click', () => void applyWorldWeather());
 $('#worldBuildingsSave').addEventListener('click', () => void saveWorldBuildings());
 $('#worldBuildingsReset').addEventListener('click', resetWorldBuildings);
+$('#worldShopAdd').addEventListener('click', addWorldShopRow);
+$('#worldShopSave').addEventListener('click', () => void saveWorldShop());
+$('#worldShopReset').addEventListener('click', resetWorldShop);
+
+const SIDEBAR_COLLAPSED_KEY = 'admin.sidebar.collapsed';
+const appShell = $('.app-shell');
+if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1') appShell.classList.add('is-sidebar-collapsed');
+$('#sidebarToggle').addEventListener('click', () => {
+  const collapsed = appShell.classList.toggle('is-sidebar-collapsed');
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+});
 
 try { const session = await api('/session'); session.authenticated ? showApp(session) : showLogin(); } catch { showLogin(); }

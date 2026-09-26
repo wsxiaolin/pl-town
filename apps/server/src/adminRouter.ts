@@ -17,8 +17,8 @@ import { logger } from './logger.js';
 import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './requestSecurity.js';
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
-import { resolveBuildingUnlockStates } from './progression.js';
-import { sanitizeOverrides, setBuildingOverrides, type WeatherConfig } from './worldConfig.js';
+import { applyShopCatalog, resolveBuildingUnlockStates } from './progression.js';
+import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, type WeatherConfig } from './worldConfig.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 import type { Weather } from './types.js';
 
@@ -160,7 +160,19 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     respond(response, 200, {
       weather: context.getWeatherConfig(),
       states: resolveBuildingUnlockStates(),
+      shop: getShopProducts(),
     });
+    return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/world/shop') {
+    const body = await readJson(request, 64 * 1_024);
+    const products = sanitizeShopProducts(body);
+    if (!products) { error(response, 400, 'INVALID_SHOP', '商品配置无效'); return true; }
+    const saved = setShopProducts(products);
+    applyShopCatalog(saved);
+    db.recordAdminAudit(principal.actor, 'world.shop.update', undefined, { products: saved });
+    context.broadcastWorldCatalog();
+    respond(response, 200, { ok: true, products: saved });
     return true;
   }
   if (request.method === 'POST' && path === '/admin/api/world/weather') {
