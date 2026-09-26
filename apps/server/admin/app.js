@@ -722,8 +722,17 @@ function renderWorldShop() {
   const container = $('#worldShopRows');
   const rows = state.worldShopDraft.map((product, index) => {
     const row = node('div', undefined, 'shop-row');
-    const idCell = node('span', product.itemId, 'shop-item-id');
-    idCell.title = product.itemId;
+    let idCell;
+    if (product.isNew) {
+      const idInput = node('input'); idInput.type = 'text'; idInput.value = product.itemId;
+      idInput.className = 'shop-item-id'; idInput.maxLength = 64; idInput.placeholder = '商品 ID';
+      idInput.setAttribute('aria-label', '商品 ID（小写字母、数字、下划线）');
+      idInput.addEventListener('input', () => { state.worldShopDraft[index].itemId = idInput.value.trim(); renderWorldShopDirty(); });
+      idCell = idInput;
+    } else {
+      idCell = node('span', product.itemId, 'shop-item-id');
+      idCell.title = product.itemId;
+    }
     const nameInput = node('input'); nameInput.type = 'text'; nameInput.value = product.name;
     nameInput.maxLength = 40; nameInput.placeholder = '商品名称'; nameInput.setAttribute('aria-label', `商品 ${product.itemId} 名称`);
     nameInput.addEventListener('input', () => { state.worldShopDraft[index].name = nameInput.value; renderWorldShopDirty(); });
@@ -759,7 +768,7 @@ function addWorldShopRow() {
   const existing = new Set(state.worldShopDraft.map((product) => product.itemId));
   let index = 1;
   while (existing.has(`new_item_${index}`)) index += 1;
-  state.worldShopDraft.push({ itemId: `new_item_${index}`, name: '', unitPrice: 10, enabled: true });
+  state.worldShopDraft.push({ itemId: `new_item_${index}`, name: '', unitPrice: 10, enabled: true, isNew: true });
   renderWorldShop();
   const rows = $('#worldShopRows').querySelectorAll('input[type="text"]');
   rows[rows.length - 1]?.focus();
@@ -779,6 +788,13 @@ function validateWorldShopDraft() {
 async function saveWorldShop() {
   const invalid = validateWorldShopDraft();
   if (invalid) { showNotice(invalid); return; }
+  if (!state.worldShopDraft.length && state.worldShop.length) {
+    confirmAction('清空商品目录', '将下架全部商品，居民商店将没有在售商品（已购道具保留）。', () => void persistWorldShop());
+    return;
+  }
+  await persistWorldShop();
+}
+async function persistWorldShop() {
   const button = $('#worldShopSave'); button.disabled = true;
   try {
     const products = state.worldShopDraft.map((product) => ({ itemId: product.itemId, name: product.name.trim(), unitPrice: product.unitPrice, enabled: product.enabled !== false }));
@@ -851,10 +867,16 @@ $('#worldShopReset').addEventListener('click', resetWorldShop);
 
 const SIDEBAR_COLLAPSED_KEY = 'admin.sidebar.collapsed';
 const appShell = $('.app-shell');
-if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1') appShell.classList.add('is-sidebar-collapsed');
-$('#sidebarToggle').addEventListener('click', () => {
+const sidebarToggle = $('#sidebarToggle');
+const readSidebarCollapsed = () => { try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { return false; } };
+const writeSidebarCollapsed = (collapsed) => { try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* storage unavailable */ } };
+const applySidebarExpanded = () => sidebarToggle.setAttribute('aria-expanded', appShell.classList.contains('is-sidebar-collapsed') ? 'false' : 'true');
+if (readSidebarCollapsed()) appShell.classList.add('is-sidebar-collapsed');
+applySidebarExpanded();
+sidebarToggle.addEventListener('click', () => {
   const collapsed = appShell.classList.toggle('is-sidebar-collapsed');
-  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+  writeSidebarCollapsed(collapsed);
+  applySidebarExpanded();
 });
 
 try { const session = await api('/session'); session.authenticated ? showApp(session) : showLogin(); } catch { showLogin(); }

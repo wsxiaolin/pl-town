@@ -135,6 +135,33 @@ try {
   await page.locator('#worldSelected .world-chooser button', { hasText: '全局解锁' }).click();
   await page.locator('#worldBuildingsSave').click();
   await page.locator('#notice').filter({ hasText: '建筑解锁配置已保存' }).waitFor();
+
+  // Shop catalog editor: default products render with editable price/availability.
+  await page.locator('#worldShopRows .shop-row').first().waitFor();
+  const shopRowCount = await page.locator('#worldShopRows .shop-row').count();
+  if (shopRowCount !== 4) throw new Error(`Shop catalog must render the four default products (got ${shopRowCount})`);
+  if (!await page.locator('#worldShopRows .shop-row input[type="number"]').count()) throw new Error('Shop rows must expose a price input');
+  if (await page.locator('#worldShopRows .shop-row input.shop-item-id').count()) throw new Error('Existing product ids must stay read-only');
+  await page.locator('#worldShopState').filter({ hasText: /4\/4 在售/ }).waitFor();
+
+  // Sidebar collapse: toggle hides the sidebar, persists, and restores on reload.
+  await page.locator('#sidebarToggle').click();
+  await page.locator('.app-shell.is-sidebar-collapsed').waitFor();
+  if (await page.locator('.sidebar').isVisible()) throw new Error('Sidebar must hide while collapsed');
+  if (await page.locator('#sidebarToggle').getAttribute('aria-expanded') !== 'false') throw new Error('Sidebar toggle must report aria-expanded=false while collapsed');
+  const collapsedOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  if (collapsedOverflow) throw new Error('Collapsed sidebar must not introduce horizontal overflow');
+  await page.locator('#sidebarToggle').click();
+  await page.locator('.app-shell.is-sidebar-collapsed').waitFor({ state: 'detached' });
+  if (!await page.locator('.sidebar').isVisible()) throw new Error('Sidebar must reappear when expanded');
+  await page.locator('#sidebarToggle').click();
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('#appView').waitFor({ state: 'visible' });
+  if (!await page.locator('.app-shell.is-sidebar-collapsed').count()) throw new Error('Collapsed sidebar must persist across reloads');
+  await page.locator('#sidebarToggle').click();
+  await page.locator('.app-shell.is-sidebar-collapsed').waitFor({ state: 'detached' });
+  if (await page.locator('#sidebarToggle').getAttribute('aria-expanded') !== 'true') throw new Error('Sidebar toggle must report aria-expanded=true while expanded');
+
   await page.screenshot({ path: resolve(screenshotDir, 'admin-world.png'), fullPage: true });
   await page.locator('[data-view="chat"]').click();
   await page.locator('#chatCount').filter({ hasText: /共 .+ 条/ }).waitFor();

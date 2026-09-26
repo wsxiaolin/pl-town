@@ -400,7 +400,7 @@ const http = createServer(async (request, response) => {
     setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
     getWeatherConfig: () => getWeatherConfig(),
     setWeatherConfig: (config) => { const next = setWeatherConfig(config); serverWeather = next.value; broadcastWeather(); return next; },
-    resetWorldConfig: () => { resetWorldConfig(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
+    resetWorldConfig: () => { resetWorldConfig(); initShopCatalog(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
     broadcastWorldCatalog,
   })) return;
   if (await handleDeploySnapshot(request, response)) return;

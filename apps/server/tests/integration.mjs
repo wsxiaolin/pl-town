@@ -791,6 +791,23 @@ try {
   send(shopClient, { type: 'progress.shop.buy', productId: 'radish', quantity: 1 });
   const radishRejection = await waitFor(shopClient, 'error', (message) => message.message === 'Product is not available');
   if (!radishRejection) throw new Error('Disabled products must not be purchasable');
+  // Delisted products must stay consumable: story branches hand out and consume known items.
+  const delistAll = await fetch(`${adminBase}/world/shop`, {
+    method: 'POST',
+    headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
+    body: JSON.stringify({ products: [
+      { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30, enabled: false },
+      { itemId: 'beef', name: '牛肉', unitPrice: 45, enabled: false },
+      { itemId: 'radish', name: '萝卜', unitPrice: 20, enabled: false },
+      { itemId: 'music_box', name: '音乐盒', unitPrice: 120, enabled: false },
+      { itemId: 'shop_probe_item', name: '月光饼', unitPrice: 77, enabled: true },
+    ] }),
+  });
+  if (!delistAll.ok) throw new Error('Admin shop POST must accept a catalog with every default product delisted');
+  await waitFor(shopClient, 'world.catalog', (message) => Object.keys(message.catalog?.products ?? {}).length === 1 && message.catalog.products.shop_probe_item);
+  send(shopClient, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
+  const delistedConsumed = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'item.consumed' && message.event.itemId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === undefined);
+  if (!delistedConsumed) throw new Error('Delisted products must remain consumable for owned items');
   const shopRestore = await fetch(`${adminBase}/world/shop`, {
     method: 'POST',
     headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },

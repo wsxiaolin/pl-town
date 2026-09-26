@@ -1,7 +1,8 @@
 import type { PlayerProgress } from './types.js';
 import { isCityBuildingBuilt, isCityProjectBuilt } from './cityGovernance.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
-import { getBuildingOverrides, getShopProducts, DEFAULT_SHOP_CATALOG, type BuildingUnlockState, type ShopProduct } from './worldConfig.js';
+import { DEFAULT_SHOP_CATALOG, type ShopProduct } from './shopCatalog.js';
+import { getBuildingOverrides, getShopProducts, type BuildingUnlockState } from './worldConfig.js';
 
 export const INITIAL_CURRENCY = 1200;
 export const FILM_CITY_EXPERIENCE_PRICE = 400;
@@ -114,7 +115,14 @@ function buildShopCatalog(products: readonly ShopProduct[]): { catalog: Readonly
   }
   return {
     catalog: Object.freeze(active),
-    consumable: new Set([...Object.values(active).map((entry) => entry.itemId), REPEATABLE_REWARDS.ice_accept.itemId]),
+    // Consumables are decoupled from availability: story branches hand out
+    // and consume known items (tea/beef/radish/music_box), so a delisted
+    // product must stay consumable for residents who already own it.
+    consumable: new Set([
+      ...DEFAULT_SHOP_CATALOG.map((product) => product.itemId),
+      ...Object.values(active).map((entry) => entry.itemId),
+      REPEATABLE_REWARDS.ice_accept.itemId,
+    ]),
   };
 }
 
