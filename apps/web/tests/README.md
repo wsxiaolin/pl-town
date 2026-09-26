@@ -22,6 +22,10 @@
   records, close/fallback scroll restoration, and repeated-open focus. Vote and
   payment success share one persistent status region, present before its text is
   set as required by [WAI ARIA22](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22).
+- `city-voting-compatibility.spec.ts`: independently deployed older servers keep
+  donation and area construction usable when the votes read endpoint returns
+  404/405. Reopening or explicitly checking voting retries capability detection;
+  transport/server failures and malformed mutation receipts remain errors.
 
 Server integration tests live alongside the server in `server/tests/` because
 they require the server's runtime and dependencies.

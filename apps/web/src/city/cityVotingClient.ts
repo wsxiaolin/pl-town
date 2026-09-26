@@ -4,6 +4,7 @@ import { applyCityState, getCityConfig, loadCityGovernance, makeRequestId, valid
 
 type VoteRecords = { epoch: string; projectIds: string[] };
 export type CityVotes = VoteRecords & { sessionId: number };
+export type CityVotesRead = { available: true; votes: CityVotes } | { available: false; sessionId: number };
 const pending = new Map<string, string>();
 let sessionToken: string | null = null;
 let sessionId = 0;
@@ -55,7 +56,7 @@ const voteOperationMessages: Record<string, string> = {
 };
 
 // Null denotes a cancelled read or a result belonging to an earlier resident.
-export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotes | null> {
+export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotesRead | null> {
   const owner = session();
   const isCurrent = () => !signal?.aborted && owner.id === getCityVotingSessionId();
   try {
@@ -70,10 +71,13 @@ export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotes | n
       window.dispatchEvent(new CustomEvent('minicity:login-required'));
       throw new Error('登录状态已失效，请登录后重试投票');
     }
+    // The frontend can reach an older independently deployed server. Only this
+    // read endpoint establishes capability; a missing POST project is an error.
+    if (response.status === 404 || response.status === 405) return { available: false, sessionId: owner.id };
     const result = await readJson(response);
     if (!isCurrent()) return null;
     if (!response.ok || !votes(result)) throw new Error('暂时无法读取已投票记录，请重试');
-    return { ...result, sessionId: owner.id };
+    return { available: true, votes: { ...result, sessionId: owner.id } };
   } catch (error) {
     if (!isCurrent()) return null;
     throw error;

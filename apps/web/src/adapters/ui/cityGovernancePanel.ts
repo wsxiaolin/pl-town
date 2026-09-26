@@ -16,6 +16,7 @@ const donationDrafts = new Map<string, string>();
 const tabScrollTop = new Map<string, number>();
 let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
+let votesUnavailableSession: number | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
 let voteFeedbackRevision = 0;
@@ -68,6 +69,7 @@ function saveTabScroll(): void {
 }
 
 function acceptVotes(result: CityVotes): void {
+  votesUnavailableSession = null;
   // Votes cannot be removed within one resident's epoch. An older GET or a
   // second project's receipt must not erase an already confirmed choice.
   myVotes = myVotes?.sessionId === result.sessionId && myVotes.epoch === result.epoch
@@ -209,11 +211,21 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
 
 function renderCollective(list: HTMLElement, projects: CityProject[], state: CityState): void {
   const sessionId = getCityVotingSessionId();
+  const votesUnavailable = sessionId !== null && votesUnavailableSession === sessionId;
   const currentVotes = myVotes?.sessionId === sessionId && myVotes?.epoch === state.epoch ? myVotes : null;
   const explanation = document.createElement('p');
   explanation.className = 'city-governance-intro';
-  explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。为期待的建筑投票，每位居民每项一票；投票不消耗金币，捐款满额后即可建成。';
+  explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。'
+    + (votesUnavailable ? '捐款满额后即可建成。' : '为期待的建筑投票，每位居民每项一票；投票不消耗金币，捐款满额后即可建成。');
   list.append(explanation);
+  if (votesUnavailable) {
+    const notice = document.createElement('p');
+    notice.className = 'city-governance-intro';
+    notice.dataset.cityVotesUnavailable = 'true';
+    notice.append('当前服务端暂不支持投票，仍可参与捐款和个人建设。',
+      button('重新检测投票', () => { void refreshVotes(); render(); }, Boolean(votesLoading), 'votes-reload'));
+    list.append(notice);
+  }
   const groups = [
     { id: 'buildings', title: '公共建筑', description: '选择希望共同筹建的公共建筑，查看进度并参与捐款。', projects: projects.filter((project) => project.kind === 'building') },
     { id: 'landscape', title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
@@ -250,7 +262,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
       const detail = document.createElement('p');
       detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
       item.append(detail);
-      if (project.kind === 'building') {
+      if (project.kind === 'building' && !votesUnavailable) {
         const total = document.createElement('p');
         total.dataset.cityVoteCount = project.id;
         total.textContent = `${saved?.votes ?? 0} 位居民支持建设`;
@@ -410,6 +422,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         unavailableFocus = null;
         voting.clear();
         myVotes = null;
+        votesUnavailableSession = null;
         votesLoading?.abort();
         votesLoading = null;
         // Old input nodes must not restore the previous resident's drafts.
@@ -450,13 +463,17 @@ async function refreshVotes(): Promise<void> {
   try {
     const result = await loadCityVotes(controller.signal);
     if (result && isCurrent()) {
-      acceptVotes(result);
+      if (result.available) acceptVotes(result.votes);
+      else votesUnavailableSession = result.sessionId;
       // A read can finish after a newer vote has failed. Only clear feedback
       // that was already present when this read began.
       if (feedbackRevision === voteFeedbackRevision) voteError = '';
     }
   } catch (error) {
-    if (isCurrent()) voteError = error instanceof Error ? error.message : '读取投票记录失败';
+    if (isCurrent()) {
+      votesUnavailableSession = null;
+      voteError = error instanceof Error ? error.message : '读取投票记录失败';
+    }
   } finally {
     if (votesLoading === controller) { votesLoading = null; if (isCurrent() && root?.open) render(); }
   }
@@ -500,6 +517,7 @@ export function disposeCityGovernancePanel(): void {
   tabScrollTop.clear();
   clearCityConstructionDrafts();
   myVotes = null;
+  votesUnavailableSession = null;
   voteError = '';
   voteFeedbackRevision = 0;
   votesEpoch = null;
