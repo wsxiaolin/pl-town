@@ -9,6 +9,14 @@
 - `unit/`: pure TypeScript domain tests (quest engine, navigation, stats).
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
+- `pending-construction.spec.ts`: pending buildings, plots, labels, and attached
+  interactions stay hidden until construction completes, on desktop and mobile.
+- `city-map-construction-updates.spec.ts`: an open city map updates its entries
+  when construction progress changes.
+- `pending-label.spec.ts`: global story unlocks cannot reveal pending labels;
+  construction completion still respects a subsequent story re-lock.
+- `pending-damage.spec.ts`: saved damage survives pending construction and
+  unrelated saves; explicit repair keeps hidden buildings repaired when built.
 - `pending-task-guidance.spec.ts`: pending story destinations and NPC quest
   offers explain collective construction, then resume normal navigation and
   quest progress when built, at desktop and mobile landscape sizes.

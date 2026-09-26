@@ -19,13 +19,16 @@ export type BuildingDamageControllerOptions = {
 
 export function createBuildingDamageController(options: BuildingDamageControllerOptions) {
   const storage = options.storage ?? window.localStorage;
+  // Construction can temporarily remove damage presentation without repairing
+  // the building. Keep its saved state independent of the loaded scene meshes.
+  const destroyedIds = new Set(readDestroyedIds(storage));
 
   function allBuildings(): DamageableBuilding[] {
     return [...options.getBuildings(), ...options.getResidences()];
   }
 
   function persist(): void {
-    writeDestroyedIds(allBuildings().filter(isBuildingDestroyed).map(item => item.id), storage);
+    writeDestroyedIds([...destroyedIds], storage);
   }
 
   function updateResidenceVisual(building: DamageableBuilding, visible: boolean): void {
@@ -37,6 +40,7 @@ export function createBuildingDamageController(options: BuildingDamageController
     if (!building || isBuildingDestroyed(building)) return false;
     const destroyed = applyBuildingDestroyedPresentation(building);
     if (destroyed) {
+      destroyedIds.add(id);
       updateResidenceVisual(building, false);
       persist();
       options.invalidateMap();
@@ -46,8 +50,12 @@ export function createBuildingDamageController(options: BuildingDamageController
 
   function restoreFrom(items: DamageableBuilding[], id: string): boolean {
     const building = items.find(item => item.id === id);
-    if (!building || !restoreBuildingPresentation(building)) return false;
-    updateResidenceVisual(building, true);
+    if (!building) return false;
+    const pending = Boolean(building.group.userData.constructionPending);
+    const restored = !pending && restoreBuildingPresentation(building);
+    const wasDestroyed = destroyedIds.delete(id);
+    if (!restored && !wasDestroyed) return false;
+    if (!pending) updateResidenceVisual(building, true);
     persist();
     options.invalidateMap();
     return true;
@@ -66,7 +74,6 @@ export function createBuildingDamageController(options: BuildingDamageController
   }
 
   function applyPersisted(): void {
-    const destroyedIds = new Set(readDestroyedIds(storage));
     allBuildings().forEach(item => {
       if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
     });
