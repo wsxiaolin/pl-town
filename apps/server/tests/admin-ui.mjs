@@ -143,6 +143,20 @@ try {
   if (!await page.locator('#worldShopRows .shop-row input[type="number"]').count()) throw new Error('Shop rows must expose a price input');
   if (await page.locator('#worldShopRows .shop-row input.shop-item-id').count()) throw new Error('Existing product ids must stay read-only');
   await page.locator('#worldShopState').filter({ hasText: /4\/4 在售/ }).waitFor();
+  // The availability checkbox takes its accessible name from the wrapping
+  // label's visible text, so the name matches what the operator reads.
+  const enabledCheckbox = page.locator('#worldShopRows .shop-row input[type="checkbox"]').first();
+  if (await enabledCheckbox.getAttribute('aria-label')) throw new Error('Availability checkbox must inherit its accessible name from the visible 在售 label');
+  if (await enabledCheckbox.evaluate((input) => input.closest('label')?.textContent?.trim() !== '在售')) throw new Error('Availability checkbox must be wrapped in a label carrying the visible 在售 text');
+  // Adding a row focuses the (empty) id input so the operator types the id
+  // first, instead of shipping a product literally called "new_item_1".
+  await page.locator('#worldShopAdd').click();
+  const newRowId = page.locator('#worldShopRows .shop-row:last-child input.shop-item-id');
+  await newRowId.waitFor();
+  if (await newRowId.inputValue()) throw new Error('New shop rows must start with an empty item id');
+  if (await page.evaluate(() => document.activeElement?.className !== 'shop-item-id')) throw new Error('Adding a shop row must focus its item id input');
+  await page.locator('#worldShopRows .shop-row:last-child .shop-remove').click();
+  if (await page.locator('#worldShopRows .shop-row').count() !== 4) throw new Error('Removing a drafted shop row must drop it from the editor');
 
   // Sidebar collapse: toggle hides the sidebar, persists, and restores on reload.
   await page.locator('#sidebarToggle').click();
@@ -162,6 +176,10 @@ try {
   await page.locator('.app-shell.is-sidebar-collapsed').waitFor({ state: 'detached' });
   if (await page.locator('#sidebarToggle').getAttribute('aria-expanded') !== 'true') throw new Error('Sidebar toggle must report aria-expanded=true while expanded');
 
+  // The reload above resets state.view to the overview page, so re-enter the
+  // world view before capturing the artifact that documents the shop panel.
+  await page.locator('[data-view="world"]').click();
+  await page.locator('#worldShopRows .shop-row').first().waitFor();
   await page.screenshot({ path: resolve(screenshotDir, 'admin-world.png'), fullPage: true });
   await page.locator('[data-view="chat"]').click();
   await page.locator('#chatCount').filter({ hasText: /共 .+ 条/ }).waitFor();
@@ -207,6 +225,17 @@ try {
   });
   if (mobileBounds.left < 0 || mobileBounds.right > 390) throw new Error('Admin mobile navigation is outside the viewport');
   await page.screenshot({ path: resolve(screenshotDir, 'admin-mobile.png'), fullPage: true });
+  // Sidebar collapse must behave on the phone breakpoint too: the top bar
+  // replaces the side rail, so hiding it must not overflow or strand the view.
+  await page.locator('#sidebarToggle').click();
+  await page.locator('.app-shell.is-sidebar-collapsed').waitFor();
+  if (await page.locator('.sidebar').isVisible()) throw new Error('Mobile sidebar must hide while collapsed');
+  if (await page.locator('#sidebarToggle').getAttribute('aria-expanded') !== 'false') throw new Error('Mobile sidebar toggle must report aria-expanded=false while collapsed');
+  const mobileCollapsedOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  if (mobileCollapsedOverflow) throw new Error('Collapsed mobile sidebar must not introduce horizontal overflow');
+  await page.locator('#sidebarToggle').click();
+  await page.locator('.app-shell.is-sidebar-collapsed').waitFor({ state: 'detached' });
+  if (!await page.locator('.sidebar').isVisible()) throw new Error('Mobile sidebar must reappear when expanded');
 
   if (browserErrors.length) throw new Error(`Admin browser errors:\n${browserErrors.join('\n')}`);
   console.log(`Admin UI passed on desktop and mobile; screenshots: ${screenshotDir}`);

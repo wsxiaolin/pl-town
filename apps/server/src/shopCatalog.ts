@@ -23,6 +23,27 @@ export const SHOP_PRODUCT_MAX = 50;
 export const SHOP_PRICE_MAX = 1_000_000;
 
 /**
+ * Item ids the client story lines depend on: the well scene needs the
+ * dragonwell tea, and 林澈's last wish needs beef, radish and the music box.
+ * The console may drop or rename them — residents who already own the item
+ * keep using it — but new residents could then never obtain it and the story
+ * branch would be permanently unsatisfiable, so the API surfaces a warning.
+ */
+export const STORY_REFERENCED_ITEM_IDS: ReadonlySet<string> = new Set([
+  'dragonwell_tea', 'beef', 'radish', 'music_box',
+]);
+
+/** Story-referenced ids present before the change but missing after it. */
+export function missingStoryReferencedItems(before: readonly ShopProduct[], after: readonly ShopProduct[]): string[] {
+  const kept = new Set(after.map((product) => product.itemId));
+  return [...new Set(
+    before
+      .filter((product) => STORY_REFERENCED_ITEM_IDS.has(product.itemId) && !kept.has(product.itemId))
+      .map((product) => product.itemId),
+  )];
+}
+
+/**
  * Validate one raw product entry; returns null when the shape is wrong.
  * `enabled` defaults to true; when present it must be a real boolean.
  */

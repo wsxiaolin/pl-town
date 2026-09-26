@@ -129,11 +129,15 @@ export function getShopProducts(): ShopProduct[] {
   return shopCache.map((product) => ({ ...product }));
 }
 
+/**
+ * Persist an already-sanitized catalog (`sanitizeShopProducts` output). The
+ * validated array is stored as-is so the write path stays lossless; only the
+ * persisted row goes through the lenient parser on the next read.
+ */
 export function setShopProducts(products: ShopProduct[]): ShopProduct[] {
-  const next = parseShopProducts({ products });
-  writeRow('shop', { products: next });
-  shopCache = next;
-  return next.map((product) => ({ ...product }));
+  writeRow('shop', { products });
+  shopCache = products;
+  return products.map((product) => ({ ...product }));
 }
 
 export function setBuildingOverrides(overrides: BuildingOverrides): BuildingOverrides {

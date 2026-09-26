@@ -100,9 +100,11 @@ select:focus { border-color: #176b4a; box-shadow: 0 0 0 3px rgba(23, 107, 74, .1
 .table-wrap { overflow-x: auto; background: #fff; border: 1px solid #dce2df; border-radius: 7px; }
 .nowrap { white-space: nowrap; }
 /* Backup tables: keep timestamps, sizes and status badges on one line; only
-   the long file-name column may wrap. Prevents ragged mid-word CJK breaks. */
+   the long file-name column may wrap. Prevents ragged mid-word CJK breaks.
+   The floor lives on the th as well: min-width on a td is a no-op in an
+   auto-layout table. */
 .backup-table td { white-space: nowrap; }
-.backup-table td:first-child { min-width: 230px; white-space: normal; overflow-wrap: anywhere; }
+.backup-table th:first-child, .backup-table td:first-child { min-width: 230px; white-space: normal; overflow-wrap: anywhere; }
 table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 12px; }
 th, td { padding: 13px 15px; text-align: left; border-bottom: 1px solid #e8ecea; vertical-align: middle; }
 th { color: #68736d; background: #f9faf9; font-size: 11px; font-weight: 700; }
