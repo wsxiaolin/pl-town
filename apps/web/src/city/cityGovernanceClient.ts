@@ -22,15 +22,20 @@ import { townApiUrl } from '../core/townApi';
 // adaptation. Pure gameplay rules do not depend on this HTTP/storage boundary.
 
 export type CityGovernanceListener = (config: CityConfig | null, state: CityState | null) => void;
-export type CityMutationResult = { state: CityState; replayed: boolean };
+// A response from a superseded login session has no effect on its successor.
+export type CityMutationResult = { state: CityState; replayed: boolean } | null;
 
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
 type PendingOperation = { requestId: string; configVersion: string; body: Record<string, unknown> };
 // Do not expire uncertain receipts: the server may already have charged them.
-// Only a confirmed outcome or disposal of this client session releases an ID.
-const pendingRequestIds = new Map<string, PendingOperation>();
+// Receipts are retained only in this running page, grouped by the existing
+// session token. Reload/disposal ends this retry guarantee; no credentials or
+// payment receipts are persisted by this facade.
+const pendingRequestsByToken = new Map<string, Map<string, PendingOperation>>();
+type MutationSession = { generation: symbol; token: string | null; requests: Map<string, PendingOperation> };
+let mutationSession: MutationSession | null = null;
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -45,6 +50,25 @@ function cachedConfig(): CityConfig | null {
 }
 
 function notify() { listeners.forEach((listener) => listener(config, state)); }
+
+// The multiplayer adapter calls this after authentication changes. Reading the
+// token here also detects changes made in another tab before a mutation/reply.
+export function refreshCityGovernanceSession(): symbol {
+  const token = localStorage.getItem('minicityServerToken');
+  if (!mutationSession || mutationSession.token !== token) {
+    const requests = (token && pendingRequestsByToken.get(token)) || new Map<string, PendingOperation>();
+    if (token) pendingRequestsByToken.set(token, requests);
+    mutationSession = { generation: Symbol('city-session'), token, requests };
+    notify();
+  }
+  return mutationSession.generation;
+}
+
+function isCurrentSession(session: MutationSession): boolean {
+  // Disposal must not resurrect a session just to discard its late response.
+  if (mutationSession !== session) return false;
+  return refreshCityGovernanceSession() === session.generation;
+}
 
 function validState(value: unknown): value is CityState {
   const item = value as Partial<CityState> | null;
@@ -137,13 +161,16 @@ export function disposeCityGovernance(): void {
   activeSignal = undefined;
   config = null;
   state = null;
-  pendingRequestIds.clear();
+  mutationSession = null;
+  pendingRequestsByToken.clear();
   listeners.clear();
 }
 
 async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
-  const token = localStorage.getItem('minicityServerToken');
+  refreshCityGovernanceSession();
+  const session = mutationSession!;
+  const { token, requests: pendingRequestIds } = session;
   if (!token) {
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
     throw new Error('请先登录');
@@ -160,18 +187,21 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   try {
     response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...operation.body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
   } catch (error) {
+    if (!isCurrentSession(session)) return null;
     // Keep the request ID: a lost response does not mean the server rolled back.
     console.debug('[city-governance] request transport failed', error instanceof Error ? error.name : 'UnknownError');
-    throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
+    throw new Error('网络连接异常，请在当前页面重试；同一登录会话内重试不会重复扣费。');
   }
   try {
     const parsed: unknown = await response.json();
     payload = parsed && typeof parsed === 'object' ? parsed as typeof payload : {};
   } catch (error) {
+    if (!isCurrentSession(session)) return null;
     // A malformed response may still follow a committed operation, so retain the ID.
     console.debug('[city-governance] response JSON could not be parsed', error instanceof Error ? error.name : 'UnknownError');
-    throw new Error('服务器响应格式异常，请重试；重复请求不会重复扣费。');
+    throw new Error('服务器响应格式异常，请在当前页面重试；同一登录会话内重试不会重复扣费。');
   }
+  if (!isCurrentSession(session)) return null;
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   // Report the rejected operation immediately; a slow refresh must not hide it.
   if (response.status === 409) void loadCityGovernance();
