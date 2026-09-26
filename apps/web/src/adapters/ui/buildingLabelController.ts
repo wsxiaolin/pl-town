@@ -2,7 +2,7 @@ import type { BuildingEntity } from '../../city/buildingEntity';
 
 export function createBuildingLabelController(options: {
   getBuildings: () => readonly BuildingEntity[];
-  isStoryLocked: (building: BuildingEntity) => boolean;
+  isUnavailable: (building: BuildingEntity) => boolean;
   interact: (building: BuildingEntity) => void;
 }) {
   function addLabel(building: BuildingEntity): void {
@@ -21,7 +21,7 @@ export function createBuildingLabelController(options: {
 
   function addLabels(): void {
     options.getBuildings().forEach((building) => {
-      if (options.isStoryLocked(building)) removeLabel(building);
+      if (options.isUnavailable(building)) removeLabel(building);
       else addLabel(building);
     });
   }

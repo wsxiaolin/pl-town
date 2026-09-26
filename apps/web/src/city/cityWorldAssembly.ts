@@ -158,7 +158,7 @@ export function assembleCityWorld(options: {
     });
   const buildingLabelController = createBuildingLabelController({
     getBuildings: () => options.buildings,
-    isStoryLocked: options.isBuildingUnavailable,
+    isUnavailable: options.isBuildingUnavailable,
     interact: options.interactOrWalk,
   });
   buildingLabelController.addLabels();

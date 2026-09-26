@@ -16,7 +16,8 @@ export type EventBindingsOptions = {
   getConfig: () => { cameraZoomMin: number; cameraZoomMax: number };
   onYouClick: () => void;
   closeRenderSettings: () => void;
-  getStatsPanelController: () => { close: () => void; setMode: (mode: 'clean' | 'raw') => void } | null;
+  getStatsPanelController: () => { open: () => void; close: () => void; setMode: (mode: 'clean' | 'raw') => void } | null;
+  openMemorial: () => void;
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getMapController: () => { isOpen: () => boolean; updateImage: () => void } | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
@@ -101,7 +102,9 @@ export function createEventBindings(options: EventBindingsOptions) {
     const communityPanels = options.getCommunityPanels();
     bindCityUiEvents({
       signal, closeRenderSettings, onYouClick: options.onYouClick,
+      openStats: () => options.getStatsPanelController()?.open(),
       closeStats: () => options.getStatsPanelController()?.close(),
+      openMemorial: options.openMemorial,
       setStatsMode: (mode) => options.getStatsPanelController()?.setMode(mode),
       closeWorks: () => communityPanels?.closeWorksPanel(),
       closeWriterCatalog: () => options.getWriterCatalogController()?.close(),

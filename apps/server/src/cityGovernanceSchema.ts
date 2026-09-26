@@ -18,7 +18,7 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (!(db.prepare('PRAGMA table_info(city_meta)').all() as Array<{ name: string }>).some((column) => column.name === 'epoch')) {
     db.exec("ALTER TABLE city_meta ADD COLUMN epoch TEXT NOT NULL DEFAULT ''");
   }
-  const preservedBuildings = reconcileInitialBuildings(db, config);
+  const { preserved: preservedBuildings, previousConfig } = reconcileInitialBuildings(db, config);
   const json = JSON.stringify(config);
   const unique = (values: string[]) => new Set(values).size === values.length;
   const validId = (value: string) => /^[A-Za-z0-9._:-]{1,100}$/.test(value);
@@ -83,17 +83,13 @@ export function initializeCityGovernance(db: Database.Database): void {
     || areaPlots.some((id) => !config.personalPlots.some((plot) => plot.id === id))) throw new Error('Invalid city construction areas');
   const decorations = db.prepare('SELECT plot_id, decoration_id FROM city_decorations').all() as Array<{ plot_id: string; decoration_id: string }>;
   if (decorations.some((entry) => !config.personalPlots.find((plot) => plot.id === entry.plot_id)?.options.includes(entry.decoration_id))) throw new Error('Persisted city decoration does not match config');
-  const meta = db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get() as { config_version: string } | undefined;
-  if (meta && meta.config_version !== config.version) {
-    const previous = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(meta.config_version) as { config_json: string } | undefined;
-    if (!previous) throw new Error('Missing persisted city config');
-    const old = JSON.parse(previous.config_json) as typeof config;
-    reconcileAreaCatalog(old, config);
-    const previouslyBuilt = new Set(old.initialBuiltBuildingIds);
+  if (previousConfig) {
+    reconcileAreaCatalog(previousConfig, config);
+    const previouslyBuilt = new Set(previousConfig.initialBuiltBuildingIds);
     if (config.initialBuiltBuildingIds.some((id) => !previouslyBuilt.has(id))) {
       throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
     }
-    for (const id of old.initialBuiltBuildingIds) {
+    for (const id of previousConfig.initialBuiltBuildingIds) {
       if (!config.initialBuiltBuildingIds.includes(id) && !config.projects.some((project) => project.buildingId === id)) {
         throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
       }

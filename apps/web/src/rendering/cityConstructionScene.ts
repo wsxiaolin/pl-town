@@ -143,7 +143,8 @@ export function createCityConstructionScene(options: {
       const pending = isConstructionPending(building.id);
       building.group.userData.constructionPending = pending;
       // Plot planes live directly in the scene, outside the building group.
-      // Detach them so both rendering and plot raycasts lose the empty lot.
+      // Detach the empty lot from rendering and scene collision traversal.
+      // Explicit plot raycast targets still require isBuildingUnavailable.
       for (const plot of plotsByBuilding.get(building.id) ?? []) {
         if (pending && plot.parent) {
           detachedPlots.set(plot, plot.parent);

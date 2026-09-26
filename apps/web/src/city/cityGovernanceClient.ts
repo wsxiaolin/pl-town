@@ -20,6 +20,9 @@ export type CityState = {
 import { townApiUrl } from '../core/townApi';
 import { getResidentToken } from '../core/residentToken';
 
+// This module is the existing browser transport facade, including safe error
+// adaptation. Pure gameplay rules do not depend on this HTTP/storage boundary.
+
 export type CityGovernanceListener = (config: CityConfig | null, state: CityState | null) => void;
 export type CityMutationResult = { state: CityState; replayed: boolean };
 
@@ -68,6 +71,12 @@ export function validState(value: unknown): value is CityState {
     && Array.isArray(item.decorations));
 }
 
+function isOlderCityState(next: CityState): boolean {
+  // A new configuration/epoch establishes a new sequence, even at revision zero.
+  return Boolean(state && next.configVersion === state.configVersion
+    && next.epoch === state.epoch && next.revision < state.revision);
+}
+
 async function fetchJson(path: string, signal?: AbortSignal, init?: RequestInit): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(8_000);
   const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
@@ -83,6 +92,7 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
   const sequence = ++loadSequence;
   activeSignal = signal;
   activeLoad = (async () => {
+    let stateBeforeFetch = state;
     try {
       let etag = '';
       try { etag = sessionStorage.getItem(ETAG_CACHE_KEY) ?? ''; } catch { /* storage is optional */ }
@@ -96,16 +106,18 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       if (!nextConfig?.version) throw new Error('City configuration unavailable');
       if (sequence !== loadSequence) return;
       config = nextConfig;
+      stateBeforeFetch = state;
       const stateResponse = await fetchJson('/town-api/city/state', signal, { cache: 'no-store' });
-      if (stateResponse.ok) {
-        const nextState = await stateResponse.json() as unknown;
-        if (sequence !== loadSequence) return;
-        state = validState(nextState) && nextState.configVersion === config.version ? nextState : null;
-      } else if (sequence === loadSequence) state = null;
+      const nextState: unknown = stateResponse.ok ? await stateResponse.json() : null;
+      if (sequence !== loadSequence) return;
+      if (validState(nextState) && nextState.configVersion === config.version) {
+        // A WS update can arrive while this HTTP snapshot is in flight.
+        if (!isOlderCityState(nextState)) state = nextState;
+      } else if (state === stateBeforeFetch) state = null;
     } catch (error) {
       if (sequence === loadSequence && (error as Error).name !== 'AbortError') {
         config = config ?? cachedConfig();
-        state = null;
+        if (state === stateBeforeFetch) state = null;
       }
     } finally {
       if (sequence === loadSequence) { activeLoad = null; activeSignal = undefined; notify(); }
@@ -123,7 +135,7 @@ export function subscribeCityGovernance(listener: CityGovernanceListener): () =>
 export function applyCityState(next: unknown): boolean {
   if (!validState(next)) return false;
   if (!config || next.configVersion !== config.version) { state = null; void loadCityGovernance(); notify(); return false; }
-  if (state && next.epoch === state.epoch && next.revision < state.revision) return false;
+  if (isOlderCityState(next)) return false;
   state = next;
   notify();
   return true;
@@ -167,17 +179,17 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   let payload: { state?: CityState; error?: string; replayed?: boolean };
   try {
     response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...operation.body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
-  } catch {
+  } catch (error) {
     // Keep the request ID: a lost response does not mean the server rolled back.
-    console.debug('[city-governance] request transport failed');
+    console.debug('[city-governance] request transport failed', error instanceof Error ? error.name : 'UnknownError');
     throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
   }
   try {
     const parsed: unknown = await response.json();
     payload = parsed && typeof parsed === 'object' ? parsed as typeof payload : {};
-  } catch {
+  } catch (error) {
     // A malformed response may still follow a committed operation, so retain the ID.
-    console.debug('[city-governance] response JSON could not be parsed');
+    console.debug('[city-governance] response JSON could not be parsed', error instanceof Error ? error.name : 'UnknownError');
     throw new Error('服务器响应格式异常，请重试；重复请求不会重复扣费。');
   }
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
@@ -197,28 +209,28 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
 // These keys are the city HttpBodyError contract. Keep them aligned with
 // cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
 const cityOperationMessages: Record<string, string> = {
-    'Unknown construction area': '建设区域不存在，请刷新后重试。',
-    'No available plots in this area': '该区域已全部建设，请选择其他区域。',
-    'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
-    'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
-    'Quantity requires an area': '请先选择批量建设区域。',
-    'Invalid decoration total': '建设总价无效，请重新选择数量。',
-    'Invalid requestId': '建设请求无效，请刷新页面后重试。',
-    'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
-    'Invalid target': '建设目标无效，请重新选择项目或地块。',
-    'Invalid decorationId': '装饰类型无效，请重新选择后重试。',
-    'requestId already used with different parameters': '这次建设请求参数已变化，请重新提交当前内容。',
-    'Decoration is not allowed on this plot': '这块地不支持当前装饰，请选择其他装饰。',
-    'Unknown project': '建设项目不存在，请刷新页面后重试。',
-    'Unknown plot or decoration': '地块或装饰不存在，请刷新页面后重试。',
-    'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
-    'Plot already occupied': '这块地已被建设，请选择其他空地。',
-    'Project already built': '该项目已建成，请选择其他建设项目。',
-    'City config changed; reload config': '建设配置已更新，请确认最新信息后重试。',
-    'Amount must be a positive safe integer': '请输入大于 0 的整数捐款金额。',
-    'Too many city mutations': '操作太频繁，请稍后重试。',
-    'Please sign in': '请先登录后再参与城市建设。',
-    'Unknown city endpoint': '城市建设服务暂时不可用，请稍后重试。',
+  'Unknown construction area': '建设区域不存在，请刷新后重试。',
+  'No available plots in this area': '该区域已全部建设，请选择其他区域。',
+  'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
+  'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
+  'Quantity requires an area': '请先选择批量建设区域。',
+  'Invalid decoration total': '建设总价无效，请重新选择数量。',
+  'Invalid requestId': '建设请求无效，请刷新页面后重试。',
+  'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
+  'Invalid target': '建设目标无效，请重新选择项目或地块。',
+  'Invalid decorationId': '装饰类型无效，请重新选择后重试。',
+  'requestId already used with different parameters': '这次建设请求参数已变化，请重新提交当前内容。',
+  'Decoration is not allowed on this plot': '这块地不支持当前装饰，请选择其他装饰。',
+  'Unknown project': '建设项目不存在，请刷新页面后重试。',
+  'Unknown plot or decoration': '地块或装饰不存在，请刷新页面后重试。',
+  'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
+  'Plot already occupied': '这块地已被建设，请选择其他空地。',
+  'Project already built': '该项目已建成，请选择其他建设项目。',
+  'City config changed; reload config': '建设配置已更新，请确认最新信息后重试。',
+  'Amount must be a positive safe integer': '请输入大于 0 的整数捐款金额。',
+  'Too many city mutations': '操作太频繁，请稍后重试。',
+  'Please sign in': '请先登录后再参与城市建设。',
+  'Unknown city endpoint': '城市建设服务暂时不可用，请稍后重试。',
 };
 
 function isDefinitiveRejection(response: Response, error?: string): boolean {

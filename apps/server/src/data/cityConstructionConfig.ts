@@ -17,8 +17,10 @@ export type CityConstructionConfig = {
   initialBuiltBuildingIds: string[];
 };
 
+const buildingsById = new Map(BUILDING_CATALOG.map((building) => [building.id, building]));
+
 function buildingProject(buildingId: string, cost = 3000): CityProject {
-  const building = BUILDING_CATALOG.find((entry) => entry.id === buildingId);
+  const building = buildingsById.get(buildingId);
   if (!building) throw new Error(`Unknown construction building: ${buildingId}`);
   return { id: `build-${buildingId}`, buildingId, name: building.label, description: `共同筹建${building.label}`, kind: 'building', cost };
 }

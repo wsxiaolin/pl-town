@@ -6,6 +6,8 @@ import { getBuildingOverrides, type BuildingUnlockState } from './worldConfig.js
 export const INITIAL_CURRENCY = 1200;
 export const FILM_CITY_EXPERIENCE_PRICE = 400;
 
+// Personal access defaults do not complete city projects. Construction must
+// finish before this legacy unlock can permit a visit in a fresh town.
 export const DEFAULT_UNLOCKED_BUILDING_IDS = ['writingclub_outer'] as const;
 
 const BUILDING_IDS = [

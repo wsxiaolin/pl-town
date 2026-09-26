@@ -23,9 +23,14 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   'wushi_restaurant', 'tavern',
 ]);
 
-export function reconcileInitialBuildings(db: Database.Database, config: CityConstructionConfig): ReadonlySet<string> {
+// Read-only reconciliation runs inside initializeCityGovernance's caller-owned
+// transaction, so this snapshot and the subsequent migration writes are atomic.
+export function reconcileInitialBuildings(db: Database.Database, config: CityConstructionConfig): {
+  preserved: ReadonlySet<string>;
+  previousConfig: CityConstructionConfig | undefined;
+} {
   const meta = db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get() as { config_version: string } | undefined;
-  if (meta?.config_version === config.version) return new Set();
+  if (meta?.config_version === config.version) return { preserved: new Set(), previousConfig: undefined };
   let previousInitial: readonly string[] = [];
   let previousConfig: CityConstructionConfig | undefined;
   if (meta) {
@@ -39,9 +44,9 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
     previousInitial = LEGACY_INITIAL_BUILDINGS;
   }
   const preserved = new Set(previousInitial.filter((id) => !config.initialBuiltBuildingIds.includes(id)));
-  // Some released ledgers predate the photo studio project even though the
-  // client already rendered it. Derive that compatibility case from the
-  // persisted config so future config versions cannot be forgotten here.
+  // This one-time exception is fixed to photostudio, which the client rendered
+  // before the server catalog included it. Eligibility comes from the stored
+  // config and absent project row, not a version allowlist or future catalog IDs.
   const hadPhotoStudioProject = previousConfig?.projects.some((project) => project.buildingId === 'photostudio') === true;
   const photoStudioProject = config.projects.find((project) => project.buildingId === 'photostudio');
   if (previousConfig && !hadPhotoStudioProject && photoStudioProject
@@ -51,8 +56,9 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
   // Admin access overrides are not construction receipts. They never widen
   // preservation, and schema 5 backups need no world_config table here.
   if (!meta && previousInitial.length > 0) {
+    const hasUnlock = db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1');
     for (const id of LEGACY_UNLOCK_PRESERVATION_BUILDINGS) {
-      if (db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(id)) preserved.add(id);
+      if (hasUnlock.get(id)) preserved.add(id);
     }
   }
   for (const id of preserved) {
@@ -60,5 +66,5 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
       throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
     }
   }
-  return preserved;
+  return { preserved, previousConfig };
 }

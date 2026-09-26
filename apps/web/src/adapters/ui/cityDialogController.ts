@@ -106,6 +106,7 @@ export interface CityDialogController {
   openBuilding(building: BuildingLike): void;
   closeBuilding(): void;
   closeLyrics(): void;
+  openMemorial(): void;
   closeMemorial(): void;
   openNpc(npc: NpcEntityLike, playerPosition?: { x: number; z: number }): void;
   openStory(story: StoryDialogModel): void;
@@ -305,6 +306,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const MEMORIAL_NAMES_PER_PAGE = 30;
   let memorialIndex = 0;
   let memorialPageCount = 1;
+  let memorialReturnFocus: HTMLElement | null = null;
 
   const renderMemorialPage = (roster: MemorialRosterLike): void => {
     const body = getElement<HTMLDivElement>(document, 'memorialBody');
@@ -326,6 +328,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const openMemorial = (): void => {
     const roster = options.memorialRoster;
     if (!roster) return;
+    memorialReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     memorialPageCount = Math.max(1, Math.ceil(roster.names.length / MEMORIAL_NAMES_PER_PAGE));
     memorialIndex = 0;
     setIdentityField(document, 'memorialTitle', roster.title);
@@ -339,6 +342,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     );
     renderMemorialPage(roster);
     getElement<HTMLDivElement>(document, 'memorialOverlay').classList.add('open');
+    getElement<HTMLButtonElement>(document, 'memorialClose').focus();
   };
 
   const controller: CityDialogController = {
@@ -354,6 +358,11 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         if (event.target === getElement<HTMLDivElement>(document, 'memorialOverlay')) controller.closeMemorial();
       }, { signal: options.signal });
       getElement<HTMLButtonElement>(document, 'memorialClose').addEventListener('click', controller.closeMemorial, { signal: options.signal });
+      getElement<HTMLDivElement>(document, 'memorialOverlay').addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        controller.closeMemorial();
+      }, { signal: options.signal });
       getElement<HTMLButtonElement>(document, 'memorialPrev').addEventListener('click', () => {
         const roster = options.memorialRoster;
         if (!roster || memorialIndex <= 0) return;
@@ -419,8 +428,11 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     closeLyrics() {
       getElement<HTMLDivElement>(document, 'lyricsOverlay').classList.remove('open');
     },
+    openMemorial,
     closeMemorial() {
       getElement<HTMLDivElement>(document, 'memorialOverlay').classList.remove('open');
+      if (memorialReturnFocus?.isConnected) memorialReturnFocus.focus();
+      memorialReturnFocus = null;
     },
     openNpc(npc, playerPosition) {
       openDialogue(npc, true, playerPosition);

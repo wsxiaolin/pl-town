@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
+import { BUILDING_CATALOG } from '../dist/buildingCatalog.js';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-city-'));
 const env = { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir, LOG_DIR: join(dataDir, 'logs'), BACKUP_DIR: join(dataDir, 'backups'), HOST: '127.0.0.1', PORT: '8787', ALLOW_ORIGINLESS_WEBSOCKET: 'true', AUTO_BACKUP_ENABLED: 'false', BACKUP_ON_START: 'false', BIGMODEL_API_KEY: '', OSS_ENABLED: 'false', ALLOWED_ORIGINS: 'https://city.example.test', ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_ACCOUNTS_JSON: '' };
@@ -110,7 +111,13 @@ try {
   assert.deepEqual(config.initialBuiltBuildingIds, ['commons']);
   const freshState = await (await fetch(`${base}/town-api/city/state`)).json();
   assert.ok(freshState.projects.every((entry) => !entry.built && entry.funded === 0));
-  for (const id of ['techhalf', 'blackhole', 'library', 'lab', 'commons_outer', 'school_east', 'archive', 'guesthouse', 'writingclub_outer', 'community', 'academy_library', 'photostudio']) assert.ok(config.projects.some((entry) => entry.buildingId === id));
+  // Typecheck verifies this generated catalog mirrors every client building,
+  // including special interaction entrypoints. Every entry needs a city policy.
+  for (const { id } of BUILDING_CATALOG) {
+    assert.ok(config.initialBuiltBuildingIds.includes(id)
+      || config.projects.some((entry) => entry.kind === 'building' && entry.buildingId === id),
+    `Missing city construction policy for ${id}`);
+  }
   // Story venues are intentionally gated by the Commons vote. This guard
   // keeps a future "only Commons starts built" change from orphaning their
   // entrypoints when a project is accidentally removed.
@@ -343,12 +350,14 @@ try {
     const futureConfig = { ...config, version: 'future-policy', projects: [...config.projects,
       { id: 'future-project', buildingId: 'future-default-building', kind: 'building', name: 'Future', description: 'Future', cost: 3000 }] };
     const preservedLegacy = reconcileInitialBuildings(policyDb, futureConfig);
-    assert.equal(preservedLegacy.has('academy'), true);
-    assert.equal(preservedLegacy.has('future-default-building'), false);
+    assert.equal(preservedLegacy.preserved.has('academy'), true);
+    assert.equal(preservedLegacy.preserved.has('future-default-building'), false);
+    assert.equal(preservedLegacy.previousConfig, undefined);
     policyDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(config.version, JSON.stringify(config));
     policyDb.prepare('INSERT INTO city_meta VALUES (1, ?)').run(config.version);
     const preservedUpgrade = reconcileInitialBuildings(policyDb, futureConfig);
-    for (const id of ['academy', 'writingclub_outer', 'future-default-building']) assert.equal(preservedUpgrade.has(id), false);
+    for (const id of ['academy', 'writingclub_outer', 'future-default-building']) assert.equal(preservedUpgrade.preserved.has(id), false);
+    assert.deepEqual(preservedUpgrade.previousConfig, config);
     policyDb.close();
     // The first pending-building policy missed the client-only photo studio.
     // A real old ledger has neither its project definition nor its progress row.

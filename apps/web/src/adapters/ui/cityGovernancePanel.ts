@@ -154,55 +154,73 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
   explanation.className = 'city-governance-intro';
   explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。为期待的建筑投票，每位居民每项一票；投票不消耗金币，捐款满额后即可建成。';
   list.append(explanation);
-  for (const project of projects) {
-    const saved = state.projects.find((entry) => entry.id === project.id);
-    const item = card(project.name, project.description);
-    item.dataset.cityProject = project.id;
-    item.dataset.buildingId = project.buildingId ?? '';
-    item.classList.toggle('active', project.buildingId === activeBuilding);
-    const detail = document.createElement('p');
-    detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
-    item.append(detail);
-    if (project.kind === 'building') {
-      const total = document.createElement('p');
-      total.dataset.cityVoteCount = project.id;
-      total.textContent = `${saved?.votes ?? 0} 位居民支持建设`;
-      item.append(total);
-      if (!saved?.built) {
-        const voted = currentVotes?.projectIds.includes(project.id);
-        const action = button(voted ? '已投票' : voting.has(project.id) ? '正在投票…' : '投票建设', async () => {
-          voteError = '';
-          votesLoading?.abort();
-          votesLoading = null;
-          voting.add(project.id);
-          render();
-          let retryFocus: string | undefined;
-          try { myVotes = await voteCity(project.id); }
-          catch (error) {
-            voteError = error instanceof Error ? error.message : '投票失败，请重试';
-            const currentFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-            if (focusedCardKey(currentFocus) === project.id) retryFocus = `vote:${project.id}`;
-          }
-          finally { voting.delete(project.id); render(retryFocus); }
-        }, Boolean(voted) || voting.has(project.id), `vote:${project.id}`);
-        item.append(action);
+  const groups = [
+    { title: '公共建筑', description: '待建建筑及其地皮暂不显示；共同筹建完成后开放。', projects: projects.filter((project) => project.kind === 'building') },
+    { title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
+  ];
+  for (const group of groups) {
+    if (!group.projects.length) continue;
+    const heading = document.createElement('div');
+    heading.className = 'city-governance-group-note';
+    const title = document.createElement('h3');
+    title.textContent = group.title;
+    const description = document.createElement('p');
+    description.textContent = group.description;
+    heading.append(title, description);
+    list.append(heading);
+    for (const project of group.projects) {
+      const saved = state.projects.find((entry) => entry.id === project.id);
+      const item = card(project.name, project.description);
+      item.dataset.cityProject = project.id;
+      item.dataset.buildingId = project.buildingId ?? '';
+      item.classList.toggle('active', project.buildingId === activeBuilding);
+      const detail = document.createElement('p');
+      detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
+      item.append(detail);
+      if (project.kind === 'building') {
+        const total = document.createElement('p');
+        total.dataset.cityVoteCount = project.id;
+        total.textContent = `${saved?.votes ?? 0} 位居民支持建设`;
+        item.append(total);
+        if (!saved?.built) {
+          const voted = currentVotes?.projectIds.includes(project.id);
+          const action = button(voted ? '已投票' : voting.has(project.id) ? '正在投票…' : '投票建设', async () => {
+            voteError = '';
+            votesLoading?.abort();
+            votesLoading = null;
+            voting.add(project.id);
+            render();
+            let retryFocus: string | undefined;
+            try { myVotes = await voteCity(project.id); }
+            catch (error) {
+              voteError = error instanceof Error ? error.message : '投票失败，请重试';
+              const currentFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+              if (focusedCardKey(currentFocus) === project.id) retryFocus = `vote:${project.id}`;
+            }
+            finally { voting.delete(project.id); render(retryFocus); }
+          }, Boolean(voted) || voting.has(project.id), `vote:${project.id}`);
+          item.append(action);
+        }
       }
+      if (!saved?.built) {
+        const amount = document.createElement('input');
+        amount.type = 'number'; amount.min = '1'; amount.step = '1';
+        amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
+        amount.dataset.cityInput = project.id;
+        amount.dataset.cityFocus = `donate-input:${project.id}`;
+        amount.addEventListener('input', () => donationDrafts.set(project.id, amount.value));
+        amount.setAttribute('aria-label', `${project.name}捐款金额`);
+        const action = button('捐款', () => {
+          // Focus restoration can replace the freshly rendered input.
+          const liveInput = item.querySelector<HTMLInputElement>('input');
+          if (!liveInput) return;
+          const value = Number(liveInput.value);
+          void submitDonation(project.id, () => donateCity(project.id, value));
+        }, pendingActions.has(project.id), `donate:${project.id}`);
+        item.append(amount, action);
+      }
+      list.append(item);
     }
-    if (!saved?.built) {
-      const amount = document.createElement('input');
-      amount.type = 'number'; amount.min = '1'; amount.step = '1';
-      amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
-      amount.dataset.cityInput = project.id;
-      amount.dataset.cityFocus = `donate-input:${project.id}`;
-      amount.addEventListener('input', () => donationDrafts.set(project.id, amount.value));
-      amount.setAttribute('aria-label', `${project.name}捐款金额`);
-      const action = button('捐款', () => {
-        const value = Number(donationDrafts.get(project.id) ?? amount.value);
-        void submitDonation(project.id, () => donateCity(project.id, value));
-      }, pendingActions.has(project.id), `donate:${project.id}`);
-      item.append(amount, action);
-    }
-    list.append(item);
   }
 }
 
