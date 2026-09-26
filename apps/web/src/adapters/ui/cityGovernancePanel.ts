@@ -1,4 +1,6 @@
-import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
+import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
+import { actionButton as button, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -7,26 +9,14 @@ let activeBuilding = '';
 let operationError = '';
 let errorActionKey = '';
 let operationNotice = '';
+let rendering = false;
 const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
-const decorationDrafts = new Map<string, string>();
 
-const money = (value: number) => `${value.toLocaleString()} 金币`;
-
-function button(label: string, action: () => void, disabled = false, focusKey = ''): HTMLButtonElement {
-  const element = document.createElement('button');
-  element.type = 'button';
-  element.textContent = label;
-  element.disabled = disabled;
-  if (focusKey) element.dataset.focusKey = focusKey;
-  element.addEventListener('click', action);
-  return element;
-}
-
-function focusAction(dataKey: 'projectId' | 'plotId', id: string): void {
+function focusAction(dataKey: 'projectId' | 'plotId' | 'cityArea', id: string): void {
   for (const item of root?.querySelectorAll<HTMLElement>('.city-governance-card') ?? []) {
     if (item.dataset[dataKey] === id) {
-      const focusKey = `${dataKey === 'projectId' ? 'donate' : 'decorate'}:${id}`;
+      const focusKey = `${dataKey === 'projectId' ? 'donate' : dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`;
       const action = Array.from(item.querySelectorAll<HTMLButtonElement>('button[data-focus-key]'))
         .find((control) => control.dataset.focusKey === focusKey);
       if (action) {
@@ -61,17 +51,28 @@ function restoreFocus(previous: HTMLElement | null): void {
   }
   // Number inputs do not expose selectionStart. Reuse the focused draft input
   // itself so a city broadcast preserves the caret and partially typed values.
-  // Keep even an unedited focused value: changing it while typing is surprising.
-  if (previous instanceof HTMLInputElement && replacement instanceof HTMLInputElement) {
-    if (previous.dataset.focusKey.startsWith('amount:')) {
-      donationDrafts.set(previous.dataset.focusKey.slice('amount:'.length), previous.value);
-    }
+  // Only the donation handler is independent of the rendered card controls.
+  // Area quantity handlers update their own preview, total and action nodes.
+  if (previous.dataset.focusKey.startsWith('amount:') && previous instanceof HTMLInputElement && replacement instanceof HTMLInputElement) {
+    donationDrafts.set(previous.dataset.focusKey.slice('amount:'.length), previous.value);
     replacement.replaceWith(previous);
     previous.focus({ preventScroll: true });
   } else replacement.focus({ preventScroll: true });
 }
 
 function render(): void {
+  if (!root || rendering) return;
+  rendering = true;
+  try {
+    // Cross-tab authentication changes notify subscribers synchronously. Refresh
+    // before reading drafts, and let that notification clear them without a
+    // nested render appending a second list to the same panel body.
+    refreshCityGovernanceSession();
+    renderContents();
+  } finally { rendering = false; }
+}
+
+function renderContents(): void {
   if (!root) return;
   const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
     ? document.activeElement : null;
@@ -114,33 +115,23 @@ function render(): void {
   restoreFocus(focused);
 }
 
-async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
+async function submitDonation(id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
   const session = refreshCityGovernanceSession();
   const submittedPanel = root;
-  const actionKey = `${dataKey}:${id}`;
+  const actionKey = `projectId:${id}`;
   if (pendingActions.has(actionKey)) return;
   const config = getCityConfig();
-  const targetName = dataKey === 'projectId'
-    ? config?.projects.find((project) => project.id === id)?.name ?? '该项目'
-    : config?.personalPlots.find((plot) => plot.id === id)?.name ?? '这块地';
+  const targetName = config?.projects.find((project) => project.id === id)?.name ?? '该项目';
   // Capture the submitted target before a refresh can replace its catalog entry.
   const targetPrefix = `「${targetName}」`;
   const action = Symbol(actionKey);
   pendingActions.set(actionKey, action);
-  const focused = document.activeElement as HTMLElement | null;
-  let returnFocus = focused?.dataset.focusKey === `${dataKey === 'projectId' ? 'donate' : 'decorate'}:${id}`;
+  const focus = trackPendingActionFocus(`donate:${id}`);
   let failed = false;
   // Retrying this target replaces its error; another card's request does not.
   if (errorActionKey === actionKey) { operationError = ''; errorActionKey = ''; }
   operationNotice = '';
   render();
-  // Rebuilding a disabled button loses focus. Restore it only if
-  // the user has not since focused, clicked or typed elsewhere in the page.
-  const focusController = new AbortController();
-  const movedOn = () => { returnFocus = false; };
-  for (const event of ['focusin', 'pointerdown', 'keydown']) {
-    document.addEventListener(event, movedOn, { capture: true, signal: focusController.signal });
-  }
   try {
     const result = await mutation();
     if (!result || root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
@@ -152,25 +143,14 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
     operationError = message.startsWith(targetPrefix) ? message : `${targetPrefix}${message}`;
     errorActionKey = actionKey;
   } finally {
-    focusController.abort();
+    focus.dispose();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
     if (root === submittedPanel && root?.classList.contains('open') && refreshCityGovernanceSession() === session) {
-      const restoreActionFocus = returnFocus && (failed || document.activeElement === document.body);
+      const restoreActionFocus = focus.shouldRestore(failed);
       render();
-      if (restoreActionFocus) focusAction(dataKey, id);
+      if (restoreActionFocus) focusAction('projectId', id);
     }
   }
-}
-
-function card(title: string, description: string): HTMLElement {
-  const item = document.createElement('article');
-  item.className = 'city-governance-card';
-  const heading = document.createElement('h3');
-  heading.textContent = title;
-  const copy = document.createElement('p');
-  copy.textContent = description;
-  item.append(heading, copy);
-  return item;
 }
 
 function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean }>): void {
@@ -196,7 +176,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
         const liveInput = item.querySelector<HTMLInputElement>('input');
         if (!liveInput) return;
         const value = Number(liveInput.value);
-        void submit('projectId', project.id, () => donateCity(project.id, value));
+        void submitDonation(project.id, () => donateCity(project.id, value));
       }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
     }
     list.append(item);
@@ -204,36 +184,19 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
 }
 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
-  for (const plot of config.personalPlots) {
-    const item = card(plot.name, '选择一项装饰，建设完成后全城居民都能看到。');
-    item.dataset.plotId = plot.id;
-    const occupied = state.decorations.find((entry) => entry.plotId === plot.id);
-    if (occupied) {
-      const owner = document.createElement('p');
-      owner.textContent = `已由 ${occupied.ownerNickname} 建设：${config.decorations.find((entry) => entry.id === occupied.decorationId)?.name ?? occupied.decorationId}`;
-      item.append(owner);
-    } else {
-      const select = document.createElement('select');
-      select.dataset.focusKey = `decoration:${plot.id}`;
-      select.setAttribute('aria-label', `${plot.name}装饰类型`);
-      for (const id of plot.options) {
-        const option = document.createElement('option');
-        const decoration = config.decorations.find((entry) => entry.id === id);
-        option.value = id; option.textContent = decoration ? `${decoration.name} · ${money(decoration.cost)}` : id;
-        select.append(option);
+  renderCityPersonalAreas(list, config, state, {
+    rerender: () => { if (root?.classList.contains('open')) render(); },
+    reportError: (message, actionKey) => {
+      if (message || errorActionKey === actionKey) {
+        operationError = message;
+        errorActionKey = message ? actionKey : '';
       }
-      const draft = decorationDrafts.get(plot.id);
-      if (draft && plot.options.includes(draft)) select.value = draft;
-      select.addEventListener('change', () => { decorationDrafts.set(plot.id, select.value); });
-      item.append(select, button('建设', () => {
-        const liveSelect = item.querySelector<HTMLSelectElement>('select');
-        if (!liveSelect) return;
-        const decorationId = liveSelect.value;
-        void submit('plotId', plot.id, () => decorateCity(plot.id, decorationId));
-      }, pendingActions.has(`plotId:${plot.id}`), `decorate:${plot.id}`));
-    }
-    list.append(item);
-  }
+      operationNotice = '';
+      updateFeedback();
+    },
+    reportNotice: (message) => { operationNotice = message; updateFeedback(); },
+    focusAction: (dataKey, id) => { if (root?.classList.contains('open')) focusAction(dataKey, id); },
+  });
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
@@ -271,7 +234,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         session = nextSession;
         pendingActions.clear();
         donationDrafts.clear();
-        decorationDrafts.clear();
+        clearCityConstructionDrafts();
         operationError = '';
         errorActionKey = '';
         operationNotice = '';
@@ -305,5 +268,5 @@ export function disposeCityGovernancePanel(): void {
   operationNotice = '';
   pendingActions.clear();
   donationDrafts.clear();
-  decorationDrafts.clear();
+  clearCityConstructionDrafts();
 }

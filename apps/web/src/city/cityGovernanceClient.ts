@@ -9,6 +9,7 @@ export type CityProject = {
 export type CityConfig = {
   schemaVersion: number; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
+  personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
   decorations: CityDecoration[]; initialBuiltBuildingIds: string[];
 };
 export type CityState = {
@@ -190,6 +191,12 @@ export function disposeCityGovernance(): void {
   listeners.clear();
 }
 
+function cityOperationKey(path: string, body: Record<string, unknown>): string {
+  const target = body.areaId !== undefined ? ['areaId', body.areaId]
+    : body.projectId !== undefined ? ['projectId', body.projectId] : ['plotId', body.plotId];
+  return `${path}:${JSON.stringify(target)}`;
+}
+
 async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
   refreshCityGovernanceSession();
@@ -199,13 +206,16 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
     throw new Error('请先登录');
   }
-  const operationKey = `${path}:${String(body.projectId ?? body.plotId)}`;
+  const operationKey = cityOperationKey(path, body);
   // The server fingerprint includes configVersion. Preserve the complete receipt
   // after an uncertain outcome, even if the current catalog changes before retry.
   const retained = pendingRequestIds.get(operationKey);
   if (retained && JSON.stringify(retained.body) !== JSON.stringify(body)) {
     // A changed amount/decoration is a new payment, not a retry. Resolve the
     // target's uncertain operation before accepting another set of parameters.
+    if (retained.body.areaId !== undefined) {
+      throw new Error('该区域上一笔建设结果仍待确认，请先按原装饰和数量重试。');
+    }
     if (retained.body.projectId !== undefined) {
       const project = config.projects.find((entry) => entry.id === retained.body.projectId);
       throw new Error(`${project ? `「${project.name}」` : '该项目'}上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
@@ -255,6 +265,12 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
 // These keys are the city HttpBodyError contract. Keep them aligned with
 // cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
 const cityOperationMessages: Record<string, string> = {
+  'Unknown construction area': '建设区域不存在，请刷新后重试。',
+  'No available plots in this area': '该区域已全部建设，请选择其他区域。',
+  'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
+  'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
+  'Quantity requires an area': '请先选择批量建设区域。',
+  'Invalid decoration total': '建设总价无效，请重新选择数量。',
   'Invalid requestId': '建设请求无效，请刷新页面后重试。',
   'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
   'Invalid target': '建设目标无效，请重新选择项目或地块。',
@@ -299,3 +315,12 @@ function cityOperationError(error?: string): string {
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
 export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
 export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }
+export function decorateCityArea(areaId: string, decorationId: string, quantity: number) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }); }
+export function getPendingCityAreaOperation(areaId: string): { decorationId: string; quantity: number } | null {
+  refreshCityGovernanceSession();
+  const operation = mutationSession?.requests.get(cityOperationKey('/town-api/city/decorate', { areaId }));
+  if (operation && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
+    return { decorationId: operation.body.decorationId, quantity: operation.body.quantity };
+  }
+  return null;
+}

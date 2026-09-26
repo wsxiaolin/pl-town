@@ -4,16 +4,22 @@ import type { BuildingEntity } from '../city/buildingEntity';
 import { restoreBuildingPresentation } from '../city/buildingDamage';
 import { getCityConfig, getCityState, isConstructionPending, subscribeCityGovernance } from '../city/cityGovernanceClient';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
+import { ResourcePool } from '../core/ResourcePool';
+import { createConstructionDecorations } from './constructionDecorations';
+import type { MeshHelpers } from './meshFactory';
 
 type Kind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
 type Item = { key: string; kind: Kind | 'road'; x: number; z: number; width?: number; depth?: number };
-type Visual = { signature: string; root: THREE.Group; glow?: THREE.MeshStandardMaterial; light?: THREE.PointLight };
+type Visual = { signature: string; root: THREE.Group; glow?: THREE.MeshStandardMaterial };
+const MAX_CONSTRUCTION_POINT_LIGHTS = 8;
 
 export function createCityConstructionScene(options: {
   scene: THREE.Scene;
+  makeMaterial: MeshHelpers['stdMat'];
   buildings: BuildingEntity[];
   buildingAttachments?: ReadonlyMap<string, readonly THREE.Object3D[]>;
   getIsNight: () => boolean;
+  getLightingPosition?: () => THREE.Vector3;
   refreshCollisions: () => void;
   refreshLabels: () => void;
   onBuildingRestored: (building: BuildingEntity) => void;
@@ -22,22 +28,20 @@ export function createCityConstructionScene(options: {
   root.name = 'city-construction';
   options.scene.add(root);
   const hidden = new Map<BuildingEntity, { children: THREE.Object3D[]; labelY?: number; body?: THREE.Mesh }>();
+  // Governance snapshots add, remove and replace individual plots. The retained
+  // static batcher fixes instance capacity at creation and exposes only visibility
+  // toggles, so keep per-plot groups while sharing resources until scene disposal.
   const visuals = new Map<string, Visual>();
+  const resources = new ResourcePool();
+  const makeDecoration = createConstructionDecorations(resources, options.makeMaterial);
+  const lights: THREE.PointLight[] = [];
+  const lightingPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   const detachedAttachments = new Map<THREE.Object3D, THREE.Object3D[]>();
   let disposed = false;
   let night = options.getIsNight();
 
   function release(visual: Visual) {
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    visual.root.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      geometries.add(object.geometry);
-      for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material);
-    });
-    geometries.forEach((geometry) => geometry.dispose());
-    materials.forEach((material) => material.dispose());
-    visual.light?.dispose();
+    // Geometry/materials are shared across plots and live until scene disposal.
     visual.root.removeFromParent();
   }
 
@@ -46,9 +50,12 @@ export function createCityConstructionScene(options: {
     group.position.set(item.x, SURFACE_Y.landscape + 0.012, item.z);
     group.name = item.key;
     const visual: Visual = { signature: JSON.stringify(item), root: group };
-    const material = (color: number) => new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+    const material = (parameters: THREE.MeshStandardMaterialParameters) => {
+      const settings = { roughness: 0.85, depthWrite: true, polygonOffset: false, ...parameters };
+      return resources.material(settings, () => options.makeMaterial(settings));
+    };
     const part = (geometry: THREE.BufferGeometry, mat: THREE.MeshStandardMaterial, x: number, y: number, z: number) => {
-      const mesh = new THREE.Mesh(geometry, mat);
+      const mesh = new THREE.Mesh(resources.geometry(geometry), mat);
       mesh.position.set(x, y, z);
       mesh.castShadow = item.kind !== 'road';
       mesh.receiveShadow = true;
@@ -56,53 +63,18 @@ export function createCityConstructionScene(options: {
       return mesh;
     };
     if (item.kind === 'road') {
-      const mat = material(0xaeb8ad);
-      mat.depthWrite = false;
-      mat.polygonOffset = true;
-      mat.polygonOffsetFactor = -1;
-      mat.polygonOffsetUnits = -1;
+      const mat = material({ color: 0xaeb8ad, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
       const mesh = part(new THREE.PlaneGeometry(item.width!, item.depth!), mat, 0, 0, 0);
       mesh.rotation.x = -Math.PI / 2;
       mesh.renderOrder = RENDER_ORDER.roadMarking;
       group.position.y = SURFACE_Y.roadMarking + 0.012;
     } else if (item.kind === 'lamp') {
-      const metal = material(0x4e5a59);
-      part(new THREE.CylinderGeometry(0.08, 0.14, 0.14, 10), metal, 0, 0.07, 0);
-      part(new THREE.CylinderGeometry(0.045, 0.065, 1.65, 8), metal, 0, 0.9, 0);
-      visual.glow = material(0xffecc9);
-      visual.glow.emissive.setHex(0xffd9a1);
+      group.add(makeDecoration('lamp-post'));
+      // Keep the globe separate: only its shared material changes emission at dusk.
+      visual.glow = material({ color: 0xffecc9, emissive: 0xffd9a1 });
       part(new THREE.SphereGeometry(0.16, 12, 8), visual.glow, 0, 1.8, 0);
-      visual.light = new THREE.PointLight(0xffd9a1, 0, 4, 2);
-      visual.light.position.y = 1.8;
-      group.add(visual.light);
-    } else if (item.kind === 'bench') {
-      const wood = material(0xa97950);
-      const metal = material(0x515a59);
-      for (const x of [-0.48, 0.48]) part(new THREE.BoxGeometry(0.09, 0.45, 0.45), metal, x, 0.225, 0);
-      part(new THREE.BoxGeometry(1.3, 0.1, 0.5), wood, 0, 0.48, 0);
-      part(new THREE.BoxGeometry(1.3, 0.35, 0.08), wood, 0, 0.72, -0.22);
-    } else if (item.kind === 'flowers') {
-      part(new THREE.CylinderGeometry(0.52, 0.47, 0.18, 16), material(0x777c70), 0, 0.09, 0);
-      const leaves = material(0x54844c);
-      const petals = [material(0xedafc4), material(0xf5d176), material(0xbfa4dd)];
-      for (let i = 0; i < 9; i++) {
-        const angle = i * 2.39996;
-        const r = 0.12 + (i % 3) * 0.12;
-        const x = Math.cos(angle) * r, z = Math.sin(angle) * r;
-        part(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 5), leaves, x, 0.24, z);
-        part(new THREE.SphereGeometry(0.09, 7, 5), petals[i % 3]!, x, 0.36, z);
-      }
     } else {
-      const wood = material(0x795b43);
-      part(new THREE.CylinderGeometry(0.09, 0.16, 1.25, 9), wood, 0, 0.625, 0);
-      const foliage = material(item.kind === 'cherry' ? 0xe5a2bd : item.kind === 'pine' ? 0x376956 : 0x68944f);
-      if (item.kind === 'pine') {
-        for (let i = 0; i < 3; i++) part(new THREE.ConeGeometry(0.72 - i * 0.16, 0.95, 9), foliage, 0, 1.15 + i * 0.45, 0);
-      } else {
-        for (const [x, y, z, radius] of [[0, 1.7, 0, 0.66], [-0.42, 1.4, 0.1, 0.48], [0.4, 1.45, -0.1, 0.5]]) {
-          part(new THREE.SphereGeometry(radius, 10, 8), foliage, x!, y!, z!);
-        }
-      }
+      group.add(makeDecoration(item.kind));
     }
     root.add(group);
     return visual;
@@ -110,10 +82,33 @@ export function createCityConstructionScene(options: {
 
   function updateLighting() {
     night = options.getIsNight();
+    lightingPosition.copy(options.getLightingPosition?.() ?? root.position);
+    const lamps: Visual[] = [];
     for (const visual of visuals.values()) {
-      if (visual.glow) visual.glow.emissiveIntensity = night ? 0.9 : 0.03;
-      if (visual.light) visual.light.intensity = night ? 1.4 : 0;
+      if (visual.glow) {
+        visual.glow.emissiveIntensity = night ? 0.9 : 0.03;
+        lamps.push(visual);
+      }
     }
+    // Keep the shader light count constant across dusk/day transitions. Allocate
+    // the pool only once a lamp exists, then retarget it near the resident.
+    if (lamps.length && !lights.length) {
+      for (let index = 0; index < MAX_CONSTRUCTION_POINT_LIGHTS; index++) {
+        const light = new THREE.PointLight(0xffd9a1, 0, 4, 2);
+        lights.push(light);
+        root.add(light);
+      }
+    }
+    lamps.sort((a, b) => a.root.position.distanceToSquared(lightingPosition) - b.root.position.distanceToSquared(lightingPosition));
+    lights.forEach((light, index) => {
+      const lamp = lamps[index];
+      light.intensity = 0;
+      if (lamp) {
+        light.position.copy(lamp.root.position);
+        light.position.y += 1.8;
+        if (night) light.intensity = 1.4;
+      }
+    });
   }
 
   function sync() {
@@ -199,13 +194,18 @@ export function createCityConstructionScene(options: {
   const unsubscribe = subscribeCityGovernance(sync);
   sync();
   return {
-    update() { if (!disposed && night !== options.getIsNight()) updateLighting(); },
+    update() {
+      if (!disposed && (night !== options.getIsNight()
+        || lightingPosition.distanceToSquared(options.getLightingPosition?.() ?? root.position) >= 1)) updateLighting();
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
       unsubscribe();
       visuals.forEach(release);
       visuals.clear();
+      lights.forEach((light) => light.dispose());
+      resources.dispose();
       // Return pooled geometry to the scene before the session resource cleanup.
       hidden.forEach((saved, building) => {
         building.group.add(...saved.children);

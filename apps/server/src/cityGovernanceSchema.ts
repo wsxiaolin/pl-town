@@ -2,6 +2,9 @@ import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { CITY_CONSTRUCTION_CONFIG as config } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
+import { reconcileAreaCatalog } from './cityAreaMigration.js';
+import { reconcileLegacyAreaProjectLayout } from './cityAreaLayoutMigration.js';
+import { validateCityAreaPlacement } from './cityAreaPlacement.js';
 
 // Called inside both the schema migration and the in-process restore transaction.
 export function initializeCityGovernance(db: Database.Database): void {
@@ -16,6 +19,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     db.exec("ALTER TABLE city_meta ADD COLUMN epoch TEXT NOT NULL DEFAULT ''");
   }
   const json = JSON.stringify(config);
+  validateCityAreaPlacement(config);
   const unique = (values: string[]) => new Set(values).size === values.length;
   const validId = (value: string) => /^[A-Za-z0-9._:-]{1,100}$/.test(value);
   if (config.schemaVersion !== 1 || !config.version || !unique(config.personalPlots.map((entry) => entry.id))
@@ -37,6 +41,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     && BUILDING_CATALOG.every((building) => Math.abs(x - building.x) > halfWidth + 4 || Math.abs(z - building.z) > halfDepth + 4);
   const saved = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(config.version) as { config_json: string } | undefined;
   if (saved && saved.config_json !== json) throw new Error('City config changed without a version bump');
+  reconcileLegacyAreaProjectLayout(db, config);
   const ids = new Set<string>();
   for (const project of config.projects) {
     if (ids.has(project.id) || !Number.isSafeInteger(project.cost) || project.cost <= 0) throw new Error('Invalid city project');
@@ -68,6 +73,11 @@ export function initializeCityGovernance(db: Database.Database): void {
     if (!clearPoint(plot.x, plot.z)) throw new Error('City plot overlaps a building or main road');
     if (!plot.options.length || plot.options.some((id) => !config.decorations.some((decoration) => decoration.id === id))) throw new Error('Invalid city plot options');
   }
+  const areas = config.personalAreas ?? [];
+  const areaPlots = areas.flatMap((area) => area.plotIds);
+  if (!unique(areas.map((area) => area.id)) || !unique(areaPlots)
+    || areas.some((area) => !validId(area.id) || !area.plotIds.length || area.plotIds.length > 100)
+    || areaPlots.some((id) => !config.personalPlots.some((plot) => plot.id === id))) throw new Error('Invalid city construction areas');
   const decorations = db.prepare('SELECT plot_id, decoration_id FROM city_decorations').all() as Array<{ plot_id: string; decoration_id: string }>;
   if (decorations.some((entry) => !config.personalPlots.find((plot) => plot.id === entry.plot_id)?.options.includes(entry.decoration_id))) throw new Error('Persisted city decoration does not match config');
   const meta = db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get() as { config_version: string } | undefined;
@@ -75,14 +85,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     const previous = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(meta.config_version) as { config_json: string } | undefined;
     if (!previous) throw new Error('Missing persisted city config');
     const old = JSON.parse(previous.config_json) as typeof config;
-    if (old.decorations.some((entry) => {
-      const next = config.decorations.find((decoration) => decoration.id === entry.id);
-      return !next || next.kind !== entry.kind;
-    })) throw new Error('City decorations migration requires explicit reconciliation');
-    if (old.personalPlots.some((entry) => {
-      const next = config.personalPlots.find((plot) => plot.id === entry.id);
-      return !next || next.x !== entry.x || next.z !== entry.z || entry.options.some((id) => !next.options.includes(id));
-    })) throw new Error('City personalPlots migration requires explicit reconciliation');
+    reconcileAreaCatalog(old, config);
     const previouslyBuilt = new Set(old.initialBuiltBuildingIds);
     if (config.initialBuiltBuildingIds.some((id) => !previouslyBuilt.has(id))) {
       throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');

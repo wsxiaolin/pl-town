@@ -1,0 +1,6 @@
+.city-area-preview { display: grid; gap: .2rem; margin: .75rem 0; max-width: 24rem; }
+.city-area-cell { min-width: 0; padding: .3rem .15rem; border: 1px solid currentColor; border-radius: .2rem; text-align: center; font-size: .7rem; opacity: .65; }
+.city-area-cell.selected { background: #36734c; color: #fff; opacity: 1; }
+.city-area-cell.occupied { background: #776242; color: #fff; opacity: 1; }
+.city-governance-card [data-city-area-total] { font-weight: 600; }
+.city-governance-card[data-city-area] select, .city-governance-card[data-city-area] input { display: block; box-sizing: border-box; max-width: 100%; }

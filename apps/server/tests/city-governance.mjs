@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
+import './city-area-layout.mjs';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-city-'));
 const env = { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir, LOG_DIR: join(dataDir, 'logs'), BACKUP_DIR: join(dataDir, 'backups'), HOST: '127.0.0.1', PORT: '8787', ALLOW_ORIGINLESS_WEBSOCKET: 'true', AUTO_BACKUP_ENABLED: 'false', BACKUP_ON_START: 'false', BIGMODEL_API_KEY: '', OSS_ENABLED: 'false', ALLOWED_ORIGINS: 'https://city.example.test', ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_ACCOUNTS_JSON: '' };
@@ -42,7 +43,7 @@ async function start() {
   server = spawn(process.execPath, ['dist/index.js'], { cwd, env: { ...env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', (chunk) => { logs += chunk; });
   server.stderr.on('data', (chunk) => { logs += chunk; });
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     try { if ((await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(500) })).ok) return; } catch { /* wait for listener */ }
     if (server.exitCode !== null) throw new Error(logs);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -116,6 +117,11 @@ try {
   assert.ok(config.projects.some((entry) => entry.id === 'corner-trees-ne' && entry.kind === 'trees'));
   assert.ok(config.personalPlots.some((entry) => entry.id === 'residence-yard-1'));
   assert.ok(config.personalPlots.some((entry) => entry.id === 'residence-yard-2'));
+  assert.equal(config.personalAreas.length, 4);
+  assert.ok(config.personalAreas.every((area) => area.plotIds.length >= 20));
+  assert.equal(new Set(config.personalAreas.flatMap((area) => area.plotIds)).size, 88);
+  assert.equal(config.projects.find((entry) => entry.id === 'greenbelt-trees').placements.length, 2);
+  for (const id of ['north-community-garden', 'south-community-grove']) assert.ok(config.projects.find((entry) => entry.id === id).placements.length >= 8);
   const project = config.projects.find((entry) => entry.buildingId === 'catcafe');
   const a = await resident('city-token-a');
   const b = await resident('city-token-b');
@@ -181,6 +187,32 @@ try {
   const competitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'plot-race', plotId: config.personalPlots[2].id, decorationId: 'flowers' })));
   assert.deepEqual(competitors.map((entry) => entry.status).sort(), [200, 409]);
   assert.equal(competitors.find((entry) => entry.status === 200).body.acceptedAmount, 80);
+  await stop();
+  await start();
+  const areaBody = { token: 'city-token-a', requestId: 'area-build', areaId: 'north-meadow', decorationId: 'flowers', quantity: 5 };
+  for (const quantity of [0, -1, 1.5, '2', null, 101, Number.MAX_SAFE_INTEGER + 1]) await post('decorate', { ...areaBody, quantity }, 400);
+  await post('decorate', { ...areaBody, areaId: 'missing' }, 404);
+  await post('decorate', { ...areaBody, plotId: plot.id }, 400);
+  await post('decorate', { ...areaBody, quantity: 21 }, 409);
+  const areaBuilt = await post('decorate', areaBody);
+  assert.equal(areaBuilt.acceptedAmount, 400);
+  assert.equal(areaBuilt.state.decorations.filter((entry) => entry.plotId.startsWith('north-meadow-')).length, 5);
+  const areaReplay = await post('decorate', areaBody);
+  assert.equal(areaReplay.replayed, true);
+  assert.equal(areaReplay.state.revision, areaBuilt.state.revision);
+  assert.equal(areaReplay.progress.currency, areaBuilt.progress.currency);
+  await post('decorate', { ...areaBody, quantity: 4 }, 409);
+  const areaCompetitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'area-race', areaId: 'east-park', decorationId: 'flowers', quantity: 24 })));
+  assert.deepEqual(areaCompetitors.map((entry) => entry.status).sort(), [200, 409]);
+  const areaWinner = areaCompetitors.find((entry) => entry.status === 200).body;
+  assert.equal(areaWinner.acceptedAmount, 24 * 80);
+  assert.equal(areaWinner.state.decorations.filter((entry) => entry.plotId.startsWith('east-park-')).length, 24);
+  assert.equal(areaWinner.state.revision, areaBuilt.state.revision + 1);
+  const duplicateBatch = await Promise.all([1, 2].map(() => post('decorate', { ...areaBody, token: 'city-token-b', requestId: 'area-duplicate', areaId: 'south-meadow', quantity: 3 })));
+  assert.equal(duplicateBatch.filter((entry) => entry.replayed).length, 1);
+  assert.equal(duplicateBatch[0].progress.currency, duplicateBatch[1].progress.currency);
+  const publicArea = await post('donate', { token: 'city-token-b', requestId: 'area-public', projectId: 'north-community-garden', amount: 640 });
+  assert.equal(publicArea.state.projects.find((entry) => entry.id === 'north-community-garden').built, true);
   const beforeRestart = await (await fetch(`${base}/town-api/city/state`)).json();
   await stop();
   await start();
@@ -204,7 +236,10 @@ try {
     assert.deepEqual(getCityState(), before);
     assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-plot', plotId: config.personalPlots[1].id, decorationId: 'oak' }), /Insufficient/);
     assert.deepEqual(getCityState(), before);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM city_operations WHERE request_id IN ('poor', 'poor-plot')").get().n, 0);
+    assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-area', areaId: 'west-park', decorationId: 'flowers', quantity: 20 }), /Insufficient/);
+    assert.deepEqual(getCityState(), before);
+    assert.equal(db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM city_operations WHERE request_id IN ('poor', 'poor-plot', 'poor-area')").get().n, 0);
     assert.throws(() => purchaseBuilding(user.id, 'academy', 0), /not built/);
     assert.throws(() => recordBuildingVisit(user.id, 'academy'), /not built/);
     const { setBuildingOverrides, resetWorldConfig } = await import('./dist/worldConfig.js');
@@ -234,6 +269,130 @@ try {
     db.prepare('UPDATE city_configs SET config_json = ? WHERE version = ?').run(stored, config.version);
     // Failed restore must roll back every table and close its source handle.
     const Database = (await import('better-sqlite3')).default;
+    // Reconstruct a real pre-area backup: its historical config, receipts and
+    // purchased single plots must survive the explicit additive reconciliation.
+    const preAreaPath = ${JSON.stringify(join(dataDir, 'city-pre-area.sqlite'))};
+    await backupDatabase(preAreaPath);
+    const preArea = new Database(preAreaPath);
+    const oldConfig = structuredClone(config);
+    const newPlotIds = new Set(oldConfig.personalAreas.flatMap((area) => area.plotIds));
+    oldConfig.personalPlots = oldConfig.personalPlots.filter((plot) => !newPlotIds.has(plot.id));
+    oldConfig.projects = oldConfig.projects.filter((project) => !['north-community-garden', 'south-community-grove'].includes(project.id));
+    delete oldConfig.personalAreas;
+    oldConfig.version = '2026-09-19.1';
+    preArea.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
+    preArea.prepare('UPDATE city_meta SET config_version = ? WHERE id = 1').run(oldConfig.version);
+    preArea.prepare('DELETE FROM city_configs WHERE version = ?').run(config.version);
+    for (const id of newPlotIds) preArea.prepare('DELETE FROM city_decorations WHERE plot_id = ?').run(id);
+    for (const id of ['north-community-garden', 'south-community-grove']) preArea.prepare('DELETE FROM city_projects WHERE id = ?').run(id);
+    preArea.prepare("DELETE FROM city_operations WHERE request_id LIKE 'area-%'").run();
+    for (const operation of preArea.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
+      const fingerprint = JSON.parse(operation.fingerprint);
+      assert(Array.isArray(fingerprint) && fingerprint.length === 4
+        && ['donate', 'decorate'].includes(fingerprint[0]) && fingerprint[3] === config.version,
+      'Only legacy donate/decorate receipts can be rewritten into the pre-area fixture');
+      fingerprint[3] = oldConfig.version;
+      preArea.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
+    }
+    // Keep one area receipt from the historical catalog so restoring the
+    // backup proves a decorate-area retry can replay across config versions.
+    const legacyAreaRequest = 'legacy-area-replay';
+    const legacyAreaFingerprint = JSON.stringify(['decorate-area', 'north-meadow', 'flowers', 1, oldConfig.version]);
+    preArea.prepare('INSERT INTO city_operations (user_id, request_id, fingerprint, accepted_amount, revision) VALUES (?, ?, ?, ?, ?)')
+      .run(user.id, legacyAreaRequest, legacyAreaFingerprint, 80, before.revision);
+    const oldDecorations = preArea.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all();
+    const oldReceipts = preArea.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+    const oldBalance = preArea.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency;
+    preArea.close();
+    restoreFromBackupFile(preAreaPath);
+    assert.equal(getCityState().configVersion, config.version);
+    assert.deepEqual(db.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all(), oldDecorations);
+    assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldReceipts);
+    const oldReplay = mutateCity(user, 'donate', { configVersion: oldConfig.version, requestId: 'first', projectId: 'build-catcafe', amount: 100 });
+    assert.equal(oldReplay.replayed, true);
+    assert.equal(oldReplay.progress.currency, oldBalance);
+    const legacyAreaReplay = mutateCity(user, 'decorate', {
+      configVersion: oldConfig.version, requestId: legacyAreaRequest,
+      areaId: 'north-meadow', decorationId: 'flowers', quantity: 1,
+    });
+    assert.equal(legacyAreaReplay.replayed, true);
+    assert.equal(legacyAreaReplay.acceptedAmount, 80);
+    assert.equal(legacyAreaReplay.progress.currency, oldBalance);
+    assert.ok(getCityState().projects.filter((project) => ['north-community-garden', 'south-community-grove'].includes(project.id)).every((project) => project.funded === 0 && !project.built));
+    restoreFromBackupFile(path);
+    // Restore the original area layout with real purchased plots and receipts.
+    // Only the known geometry changes; ownership, balances and funding survive.
+    const { LEGACY_AREA_PLOTS, LEGACY_AREA_PROJECTS, LEGACY_PERSONAL_AREAS } = await import('./dist/data/legacyCityConstructionAreas.js');
+    const layoutPath = ${JSON.stringify(join(dataDir, 'city-old-area-layout.sqlite'))};
+    db.prepare('UPDATE player_progress SET currency = 10 WHERE user_id = ?').run(user.id);
+    mutateCity(user, 'donate', { configVersion: config.version, requestId: 'layout-donation', projectId: 'south-community-grove', amount: 10 });
+    await backupDatabase(layoutPath);
+    const oldLayoutDb = new Database(layoutPath);
+    const oldLayout = structuredClone(config);
+    oldLayout.version = '2026-09-25.areas.1';
+    oldLayout.personalAreas = structuredClone(LEGACY_PERSONAL_AREAS);
+    oldLayout.personalPlots = oldLayout.personalPlots.map((plot) => structuredClone(LEGACY_AREA_PLOTS.find((old) => old.id === plot.id) ?? plot));
+    oldLayout.projects = oldLayout.projects.map((project) => structuredClone(LEGACY_AREA_PROJECTS.find((old) => old.id === project.id) ?? project));
+    oldLayoutDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldLayout.version, JSON.stringify(oldLayout));
+    oldLayoutDb.prepare('UPDATE city_meta SET config_version = ?').run(oldLayout.version);
+    oldLayoutDb.prepare('DELETE FROM city_configs WHERE version = ?').run(config.version);
+    for (const project of LEGACY_AREA_PROJECTS) oldLayoutDb.prepare('UPDATE city_projects SET definition_json = ? WHERE id = ?').run(JSON.stringify(project), project.id);
+    for (const operation of oldLayoutDb.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
+      const fingerprint = JSON.parse(operation.fingerprint);
+      assert([4, 5].includes(fingerprint.length) && fingerprint.at(-1) === config.version);
+      fingerprint[fingerprint.length - 1] = oldLayout.version;
+      oldLayoutDb.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
+    }
+    const layoutDecorations = oldLayoutDb.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all();
+    assert(layoutDecorations.some((entry) => LEGACY_AREA_PLOTS.some((plot) => plot.id === entry.plot_id)));
+    const layoutReceipts = oldLayoutDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+    const layoutFunding = oldLayoutDb.prepare('SELECT id, funded, built FROM city_projects ORDER BY id').all();
+    const layoutBalance = oldLayoutDb.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all();
+    oldLayoutDb.close();
+    restoreFromBackupFile(layoutPath);
+    assert.equal(getCityState().configVersion, config.version);
+    assert.deepEqual(db.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all(), layoutDecorations);
+    assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), layoutReceipts);
+    assert.deepEqual(db.prepare('SELECT id, funded, built FROM city_projects ORDER BY id').all(), layoutFunding);
+    assert.deepEqual(db.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all(), layoutBalance);
+    for (const project of config.projects.filter((entry) => LEGACY_AREA_PROJECTS.some((old) => old.id === entry.id))) {
+      assert.deepEqual(JSON.parse(db.prepare('SELECT definition_json FROM city_projects WHERE id = ?').get(project.id).definition_json), project);
+    }
+    assert.equal(layoutFunding.find((entry) => entry.id === 'north-community-garden').built, 1);
+    assert.equal(layoutFunding.find((entry) => entry.id === 'south-community-grove').funded, 10);
+    assert.equal(mutateCity(user, 'donate', { configVersion: oldLayout.version, requestId: 'layout-donation', projectId: 'south-community-grove', amount: 10 }).replayed, true);
+    const purchasedAreaReceipt = layoutReceipts.find((entry) => JSON.parse(entry.fingerprint)[0] === 'decorate-area');
+    assert(purchasedAreaReceipt, 'The old-layout fixture must contain a real paid area operation');
+    const [, purchasedAreaId, purchasedDecorationId, purchasedQuantity, purchasedVersion] = JSON.parse(purchasedAreaReceipt.fingerprint);
+    assert.equal(mutateCity(getUser(purchasedAreaReceipt.user_id), 'decorate', {
+      configVersion: purchasedVersion, requestId: purchasedAreaReceipt.request_id,
+      areaId: purchasedAreaId, decorationId: purchasedDecorationId, quantity: purchasedQuantity,
+    }).replayed, true);
+    const beforeLayoutFailure = getCityState();
+    const constructionLedger = () => Object.fromEntries(['city_configs', 'city_meta', 'city_projects', 'city_decorations', 'city_operations', 'player_progress']
+      .map((table) => [table, db.prepare('SELECT * FROM ' + table + ' ORDER BY rowid').all()]));
+    const beforeLayoutLedger = constructionLedger();
+    db.transaction(() => initializeCityGovernance(db))();
+    assert.deepEqual(constructionLedger(), beforeLayoutLedger);
+    const tamperedLayoutDb = new Database(layoutPath);
+    const knownOldLayout = JSON.stringify(oldLayout);
+    oldLayout.personalPlots.find((plot) => plot.id === LEGACY_AREA_PLOTS[0].id).x += 0.1;
+    tamperedLayoutDb.prepare('UPDATE city_configs SET config_json = ? WHERE version = ?').run(JSON.stringify(oldLayout), oldLayout.version);
+    tamperedLayoutDb.close();
+    assert.throws(() => restoreFromBackupFile(layoutPath), /explicit reconciliation|City project changed/);
+    assert.deepEqual(getCityState(), beforeLayoutFailure);
+    assert.deepEqual(constructionLedger(), beforeLayoutLedger);
+    // Correct config with a corrupt project row is not silently repaired; even
+    // the preceding valid project's staged geometry update must roll back.
+    const corruptLayoutDb = new Database(layoutPath);
+    corruptLayoutDb.prepare('UPDATE city_configs SET config_json = ? WHERE version = ?').run(knownOldLayout, oldLayout.version);
+    const corruptProject = structuredClone(LEGACY_AREA_PROJECTS[1]);
+    corruptProject.placements[0].x += 0.1;
+    corruptLayoutDb.prepare('UPDATE city_projects SET definition_json = ? WHERE id = ?').run(JSON.stringify(corruptProject), corruptProject.id);
+    corruptLayoutDb.close();
+    assert.throws(() => restoreFromBackupFile(layoutPath), /City project changed/);
+    assert.deepEqual(constructionLedger(), beforeLayoutLedger);
+    restoreFromBackupFile(path);
     const damagedPath = ${JSON.stringify(join(dataDir, 'city-damaged.sqlite'))};
     await backupDatabase(damagedPath);
     const damaged = new Database(damagedPath);
@@ -254,6 +413,22 @@ try {
     assert.throws(() => db.transaction(() => initializeCityGovernance(db))(), /explicit reconciliation/);
     config.personalPlots[0].x = originalPlotX;
     config.version = originalVersion;
+    const { reconcileAreaCatalog } = await import('./dist/cityAreaMigration.js');
+    const renamedArea = structuredClone(config);
+    renamedArea.personalAreas[0].name += '（新名称）';
+    renamedArea.decorations[0].cost += 1;
+    assert.doesNotThrow(() => reconcileAreaCatalog(config, renamedArea));
+    const unlistedAreaPrevious = structuredClone(config);
+    unlistedAreaPrevious.personalAreas = [{ id: 'future-area', name: '未来区域', plotIds: [] }];
+    const unlistedAreaNext = structuredClone(unlistedAreaPrevious);
+    unlistedAreaNext.personalPlots[0].x += 0.1;
+    assert.throws(() => reconcileAreaCatalog(unlistedAreaPrevious, unlistedAreaNext), /personal plot ledger changed/);
+    const noAreaPrevious = structuredClone(config);
+    const noAreaNext = structuredClone(config);
+    delete noAreaPrevious.personalAreas;
+    delete noAreaNext.personalAreas;
+    noAreaNext.personalPlots[0].x += 0.1;
+    assert.throws(() => reconcileAreaCatalog(noAreaPrevious, noAreaNext), /personal plot ledger changed/);
     // A pre-city backup seeds clean construction state and operations.
     const legacyPath = ${JSON.stringify(join(dataDir, 'city-legacy.sqlite'))};
     await backupDatabase(legacyPath);
