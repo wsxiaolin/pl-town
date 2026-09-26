@@ -51,12 +51,16 @@ async function start() {
 }
 async function stop() {
   for (const socket of sockets.splice(0)) socket.terminate();
-  if (server && server.exitCode === null) {
-    const exited = once(server, 'exit');
-    server.kill('SIGTERM');
-    const timeout = setTimeout(() => server.kill('SIGKILL'), 5000);
-    await exited;
-    clearTimeout(timeout);
+  const child = server;
+  server = undefined;
+  // A signal-terminated child keeps exitCode=null. Repeated cleanup must not
+  // wait for an exit event that has already fired (including on Windows).
+  if (child && child.exitCode === null && child.signalCode === null) {
+    const exited = once(child, 'exit');
+    child.kill('SIGTERM');
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 5000);
+    try { await exited; }
+    finally { clearTimeout(timeout); }
   }
 }
 async function resident(token) {
