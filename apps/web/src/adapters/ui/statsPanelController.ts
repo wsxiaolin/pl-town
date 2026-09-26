@@ -17,12 +17,13 @@ export function createStatsPanelController(options: StatsPanelControllerOptions)
   function render(): void { mode === 'clean' ? renderClean() : renderRaw(); }
   function open(): void {
     const panel = document.getElementById('statsPanel');
-    if (!panel?.classList.contains('open')) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opening = !panel?.classList.contains('open');
+    if (opening) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     render();
     panel?.classList.add('open');
     document.getElementById('statsToggle')?.setAttribute('aria-expanded', 'true');
     document.getElementById('statsToggle')?.classList.add('active');
-    document.getElementById('spClose')?.focus();
+    if (opening) document.getElementById('spClose')?.focus();
   }
   function close(): void {
     const panel = document.getElementById('statsPanel');

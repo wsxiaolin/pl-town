@@ -62,6 +62,7 @@ export function stubCityWebSocket(
   const unlockedBuildings = options.unlockedBuildings ?? ['newsstand'];
   void page.addInitScript(({ u, w, unlocked }) => {
     const NativeWebSocket = window.WebSocket;
+    const sockets: StubGameWebSocket[] = [];
     class StubGameWebSocket extends EventTarget {
       readyState: number = NativeWebSocket.CONNECTING;
       progress = {
@@ -72,7 +73,7 @@ export function stubCityWebSocket(
         visitedBuildings: ['activity', 'library', ...unlocked],
       };
       catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
-      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      constructor() { super(); sockets.push(this); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
         const request = JSON.parse(raw);
         let response: Record<string, unknown> | null = null;
@@ -92,10 +93,20 @@ export function stubCityWebSocket(
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
+    (window as unknown as { __pushCityState: (state: unknown) => void }).__pushCityState = (state) => {
+      for (const socket of sockets) {
+        if (socket.readyState === NativeWebSocket.OPEN) socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'city.updated', state }) }));
+      }
+    };
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
       construct(Target, args) { return String(args[0]).includes(':8787') ? new StubGameWebSocket() : Reflect.construct(Target, args); },
     }) });
   }, { u: user, w: weather, unlocked: [...unlockedBuildings] });
+}
+
+/** Deliver a city update through the same WebSocket listener as server broadcasts. */
+export async function pushCityState(page: Page, state: unknown): Promise<void> {
+  await page.evaluate((next) => (window as unknown as { __pushCityState: (state: unknown) => void }).__pushCityState(next), state);
 }
 
 /**

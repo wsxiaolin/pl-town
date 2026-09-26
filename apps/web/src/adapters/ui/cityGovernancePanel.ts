@@ -119,15 +119,28 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
 
 function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean }>): void {
   const groups = [
-    { title: '公共建筑', description: '待建建筑及其地皮暂不显示；共同筹建完成后开放。', projects: projects.filter((project) => project.kind === 'building') },
-    { title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
+    { id: 'buildings', title: '公共建筑', description: '选择希望共同筹建的公共建筑，查看进度并参与捐款。', projects: projects.filter((project) => project.kind === 'building') },
+    { id: 'landscape', title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
   ];
+  const navigation = document.createElement('nav');
+  navigation.className = 'city-governance-group-links';
+  navigation.setAttribute('aria-label', '建设项目分类');
+  list.append(navigation);
   for (const group of groups) {
     if (!group.projects.length) continue;
     const heading = document.createElement('div');
     heading.className = 'city-governance-group-note';
-    const title = document.createElement('h3');
+    const title = document.createElement('h2');
+    title.id = `city-project-group-${group.id}`;
+    title.tabIndex = -1;
+    title.dataset.focusKey = `group:${group.id}`;
     title.textContent = group.title;
+    const jump = button(group.title, () => {
+      title.scrollIntoView({ block: 'start' });
+      title.focus({ preventScroll: true });
+    }, false, `group-jump:${group.id}`);
+    jump.setAttribute('aria-controls', title.id);
+    navigation.append(jump);
     const description = document.createElement('p');
     description.textContent = group.description;
     heading.append(title, description);
