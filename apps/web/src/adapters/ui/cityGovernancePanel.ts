@@ -17,7 +17,7 @@ function button(label: string, action: () => void, disabled = false, focusKey = 
   element.type = 'button';
   element.textContent = label;
   element.disabled = disabled;
-  element.dataset.focusKey = focusKey;
+  if (focusKey) element.dataset.focusKey = focusKey;
   element.addEventListener('click', action);
   return element;
 }
@@ -27,6 +27,7 @@ function focusAction(dataKey: 'projectId' | 'plotId', id: string): void {
     if (item.dataset[dataKey] === id) {
       const action = item.querySelector<HTMLButtonElement>('button');
       if (action) {
+        // Failed actions should scroll back into view so the user can retry.
         action.focus();
         return;
       }
@@ -57,6 +58,7 @@ function restoreFocus(previous: HTMLElement | null): void {
   }
   // Number inputs do not expose selectionStart. Reuse the focused draft input
   // itself so a city broadcast preserves the caret and partially typed values.
+  // Keep even an unedited focused value: changing it while typing is surprising.
   if (previous instanceof HTMLInputElement && replacement instanceof HTMLInputElement) {
     replacement.replaceWith(previous);
     previous.focus({ preventScroll: true });
@@ -154,7 +156,11 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
       amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
       item.append(amount, button('捐款', () => {
-        const value = Number(donationDrafts.get(project.id) ?? amount.value);
+        // Focus restoration can replace the freshly rendered amount node.
+        // Submit exactly the value in the current card, not a captured draft.
+        const liveInput = item.querySelector<HTMLInputElement>('input');
+        if (!liveInput) return;
+        const value = Number(liveInput.value);
         void submit('projectId', project.id, () => donateCity(project.id, value));
       }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
     }

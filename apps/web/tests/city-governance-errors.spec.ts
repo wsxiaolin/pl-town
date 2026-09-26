@@ -1,10 +1,28 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
+import type { CityState } from '../src/city/cityGovernanceClient';
+
+async function broadcastCityState(page: Page, state: CityState): Promise<void> {
+  await page.evaluate(async (next) => {
+    const modulePath = '/src/city/cityGovernanceClient.ts';
+    const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+    client.applyCityState(next);
+  }, state);
+}
+
+async function reloadCityState(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const modulePath = '/src/city/cityGovernanceClient.ts';
+    const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+    await client.loadCityGovernance();
+  });
+}
 
 const scenarios = [
   ['donate', 'insufficient coins'], ['donate', 'lost response'],
   ['donate', 'invalid response'], ['decorate', 'insufficient coins'], ['decorate', 'lost response'],
   ['decorate', 'invalid response'],
+  ['donate', 'sign in'], ['donate', 'unknown error'],
 ] as const;
 for (const [action, failure] of scenarios) {
   test(`${action} preserves the draft across ${failure} and tab changes before retry`, async ({ page }) => {
@@ -33,23 +51,33 @@ for (const [action, failure] of scenarios) {
     const committedRequests = new Map<string, string>();
     let releaseRefresh = () => {};
     const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    let releaseMutation = () => {};
+    const mutationGate = new Promise<void>((resolve) => { releaseMutation = resolve; });
     let funded = 0;
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     stubCityWebSocket(page, { user: 'error-tester', unlockedBuildings: ['commons'] });
+    if (failure === 'sign in') await page.addInitScript(() => {
+      const events = window as unknown as { cityLoginRequests: number };
+      events.cityLoginRequests = 0;
+      window.addEventListener('minicity:login-required', () => { events.cityLoginRequests += 1; });
+    });
     await page.route('**/town-api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/city/config')) return route.fulfill({ json: config });
       if (path.endsWith('/city/state')) {
         stateReads += 1;
+        const snapshot = structuredClone(state);
         if (attempts === 1 && failure === 'insufficient coins') await refreshGate;
-        return route.fulfill({ json: state });
+        return route.fulfill({ json: snapshot });
       }
       if (path.endsWith(`/city/${action}`)) {
         attempts += 1;
         const body = route.request().postDataJSON() as Record<string, unknown>;
         requests.push(body);
+        if (attempts === 1) await mutationGate;
         if (attempts === 1 && failure === 'insufficient coins') return route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+        if (attempts === 1 && failure === 'sign in') return route.fulfill({ status: 401, json: { error: 'Please sign in' } });
         const requestId = String(body.requestId);
         const fingerprint = JSON.stringify([body.projectId ?? body.plotId, body.amount ?? body.decorationId, body.configVersion]);
         const replayed = committedRequests.has(requestId);
@@ -77,6 +105,7 @@ for (const [action, failure] of scenarios) {
         if (attempts === 1 && !replayed) {
           if (failure === 'lost response') return route.abort('connectionreset');
           if (failure === 'invalid response') return route.fulfill({ json: { state: { revision: state.revision } } });
+          if (failure === 'unknown error') return route.fulfill({ status: 503, json: { error: 'unmapped internal server detail' } });
         }
         return route.fulfill({ json: { state, replayed } });
       }
@@ -94,8 +123,29 @@ for (const [action, failure] of scenarios) {
     else await input.selectOption('pine');
     const actionButton = targetCard.getByRole('button', { name: action === 'donate' ? '捐款' : '建设', exact: true });
     await actionButton.click();
-    const message = failure === 'insufficient coins' ? '金币不足' : failure === 'invalid response' ? '建设请求失败' : '网络连接异常';
+    await expect.poll(() => attempts).toBe(1);
+    await expect(actionButton).toBeDisabled();
+    state = { ...state, revision: state.revision + 1 };
+    await broadcastCityState(page, state);
+    await expect(actionButton).toBeDisabled();
+    await panel.getByRole('button', { name: '关闭', exact: true }).click();
+    await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
+    await expect(panel).toHaveClass(/open/);
+    await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
+    await expect(actionButton).toBeDisabled();
+    expect(attempts).toBe(1);
+    releaseMutation();
+    const message = failure === 'insufficient coins' ? '金币不足' : failure === 'sign in' ? '请先登录'
+      : failure === 'invalid response' || failure === 'unknown error' ? '建设请求失败' : '网络连接异常';
     await expect(panel.getByRole('alert')).toContainText(message);
+    if (failure === 'sign in') {
+      await expect.poll(() => page.evaluate(() => (window as unknown as { cityLoginRequests: number }).cityLoginRequests)).toBe(1);
+      await expect(page.locator('#loginOverlay')).toBeVisible();
+      await expect(input).toHaveValue('500');
+      expect(pageErrors).toEqual([]);
+      return;
+    }
+    if (failure === 'unknown error') await expect(panel.getByRole('alert')).not.toContainText('unmapped internal server detail');
     await expect(actionButton).toBeEnabled();
     await expect(actionButton).toBeFocused();
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
@@ -104,32 +154,38 @@ for (const [action, failure] of scenarios) {
       await expect.poll(() => stateReads).toBeGreaterThanOrEqual(2);
       await input.focus();
       state = { ...state, revision: state.revision + 1 };
-      releaseRefresh();
-      await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #1');
-      await expect(input).toBeFocused();
+      const latestRevision = state.revision;
       const focusedInput = await input.elementHandle();
-      state = { ...state, revision: state.revision + 1 };
-      await page.evaluate(async (next) => {
+      await broadcastCityState(page, state);
+      // Capture this exact in-flight load before releasing its stale response;
+      // starting another load afterwards could conceal a temporary rollback.
+      await page.evaluate(async () => {
         const modulePath = '/src/city/cityGovernanceClient.ts';
         const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
-        client.applyCityState(next);
-      }, state);
+        (window as unknown as { pendingCityRefresh: Promise<void> }).pendingCityRefresh = client.loadCityGovernance();
+      });
+      releaseRefresh();
+      await page.evaluate(async () => {
+        const loading = window as unknown as { pendingCityRefresh?: Promise<void> };
+        await loading.pendingCityRefresh;
+        delete loading.pendingCityRefresh;
+      });
+      await expect(panel.locator('[data-city-status]')).toHaveText(`云端进度 #${latestRevision}`);
+      await expect(input).toBeFocused();
+      state = { ...state, revision: state.revision + 1 };
+      await broadcastCityState(page, state);
       await expect(input).toBeFocused();
       await expect(panel.getByRole('alert')).toContainText(message);
       if (action === 'donate') expect(await focusedInput?.evaluate((node) => node === document.activeElement)).toBe(true);
     }
-    if (failure === 'lost response' || failure === 'invalid response') {
+    if (failure !== 'insufficient coins') {
       if (action === 'donate') {
         await input.fill('600');
         await input.fill('500');
         await panel.getByRole('spinbutton').nth(1).fill('250');
         config.version = 'error-fixture-v2';
         state = { ...state, configVersion: config.version };
-        await page.evaluate(async () => {
-          const modulePath = '/src/city/cityGovernanceClient.ts';
-          const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
-          await client.loadCityGovernance();
-        });
+        await reloadCityState(page);
       } else {
         await input.selectOption('flowers');
         await input.selectOption('pine');
@@ -150,7 +206,7 @@ for (const [action, failure] of scenarios) {
     const { requestId: firstId, ...first } = requests[0]!;
     const { requestId: retryId, ...retry } = requests[1]!;
     expect(retry).toEqual(first);
-    if (failure === 'lost response' || failure === 'invalid response') expect(retryId).toBe(firstId);
+    if (failure !== 'insufficient coins') expect(retryId).toBe(firstId);
     else expect(retryId).not.toBe(firstId);
     if (failure !== 'insufficient coins') await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
     if (action === 'donate') {
@@ -161,6 +217,20 @@ for (const [action, failure] of scenarios) {
       expect(requests[2]!.configVersion).toBe(config.version);
       expect(committedRequests.size).toBe(2);
       await expect(panel.getByRole('status')).toHaveCount(0);
+      if (failure === 'insufficient coins') {
+        // After focus restoration, the action's original input may be detached.
+        await input.fill('450');
+        state = { ...state, revision: state.revision + 1 };
+        await broadcastCityState(page, state);
+        await input.fill('475');
+        await actionButton.click();
+        await expect(targetCard).toContainText('1,475 金币 / 3,000 金币');
+        expect(requests[3]!.amount).toBe(475);
+        config.version = 'error-fixture-restored';
+        state = { ...state, configVersion: config.version, epoch: 'restored-epoch', revision: 0 };
+        await reloadCityState(page);
+        await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #0');
+      }
     }
     expect(pageErrors).toEqual([]);
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
