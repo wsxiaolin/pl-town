@@ -1,4 +1,4 @@
-import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
+import { decorateCity, donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -6,7 +6,7 @@ let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 let operationNotice = '';
-const pendingActions = new Set<string>();
+const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
 const decorationDrafts = new Map<string, string>();
 
@@ -60,6 +60,9 @@ function restoreFocus(previous: HTMLElement | null): void {
   // itself so a city broadcast preserves the caret and partially typed values.
   // Keep even an unedited focused value: changing it while typing is surprising.
   if (previous instanceof HTMLInputElement && replacement instanceof HTMLInputElement) {
+    if (previous.dataset.focusKey.startsWith('amount:')) {
+      donationDrafts.set(previous.dataset.focusKey.slice('amount:'.length), previous.value);
+    }
     replacement.replaceWith(previous);
     previous.focus({ preventScroll: true });
   } else replacement.focus({ preventScroll: true });
@@ -109,21 +112,41 @@ function render(): void {
 }
 
 async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
+  const session = refreshCityGovernanceSession();
+  const submittedPanel = root;
   const actionKey = `${dataKey}:${id}`;
   if (pendingActions.has(actionKey)) return;
-  pendingActions.add(actionKey);
+  const action = Symbol(actionKey);
+  pendingActions.set(actionKey, action);
+  const focused = document.activeElement as HTMLElement | null;
+  let returnFocus = focused?.dataset.focusKey === `${dataKey === 'projectId' ? 'donate' : 'decorate'}:${id}`;
+  let failed = false;
   operationError = '';
   operationNotice = '';
   render();
+  // Rebuilding a disabled button loses focus. Restore it on success only if
+  // the user has not since focused, clicked or typed elsewhere in the page.
+  const focusController = new AbortController();
+  const movedOn = () => { returnFocus = false; };
+  for (const event of ['focusin', 'pointerdown', 'keydown']) {
+    document.addEventListener(event, movedOn, { capture: true, signal: focusController.signal });
+  }
   try {
     const result = await mutation();
+    if (!result || root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     operationNotice = result.replayed ? '上一笔已成功，未重复扣费。' : '';
   } catch (error) {
+    if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
+    failed = true;
     operationError = error instanceof Error ? error.message : '建设失败，请重试';
   } finally {
-    pendingActions.delete(actionKey);
-    render();
-    if (operationError && root?.classList.contains('open')) focusAction(dataKey, id);
+    focusController.abort();
+    if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
+    if (root === submittedPanel && root?.classList.contains('open') && refreshCityGovernanceSession() === session) {
+      const restoreSuccessFocus = returnFocus && document.activeElement === document.body;
+      render();
+      if (failed || restoreSuccessFocus) focusAction(dataKey, id);
+    }
   }
 }
 
@@ -191,7 +214,9 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
       if (draft && plot.options.includes(draft)) select.value = draft;
       select.addEventListener('change', () => { decorationDrafts.set(plot.id, select.value); });
       item.append(select, button('建设', () => {
-        const decorationId = select.value;
+        const liveSelect = item.querySelector<HTMLSelectElement>('select');
+        if (!liveSelect) return;
+        const decorationId = liveSelect.value;
         void submit('plotId', plot.id, () => decorateCity(plot.id, decorationId));
       }, pendingActions.has(`plotId:${plot.id}`), `decorate:${plot.id}`));
     }
@@ -227,7 +252,17 @@ export function openCityGovernancePanel(buildingId = ''): void {
     root.append(header, tabs, status, feedback, notice, body);
     document.body.append(root);
     root.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCityGovernancePanel(); });
+    let session = refreshCityGovernanceSession();
     unsubscribe = subscribeCityGovernance(() => {
+      const nextSession = refreshCityGovernanceSession();
+      if (session !== nextSession) {
+        session = nextSession;
+        pendingActions.clear();
+        donationDrafts.clear();
+        decorationDrafts.clear();
+        operationError = '';
+        operationNotice = '';
+      }
       if (!root?.classList.contains('open')) return;
       render();
     });
