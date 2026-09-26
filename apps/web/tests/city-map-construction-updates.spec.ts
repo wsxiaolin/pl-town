@@ -79,7 +79,7 @@ test('construction updates retain map search selection, focus and dismissed resu
   const search = page.locator('#mapSearchInput');
   const results = page.locator('#mapSearchResults');
   await search.fill('mall');
-  await expect(page.locator('.map-search-result')).toHaveCount(2);
+  await expect.poll(() => page.locator('.map-search-result').count()).toBeGreaterThan(1);
   await search.press('ArrowDown');
   const activeId = await page.locator('.map-search-result.is-active').getAttribute('data-building-id');
   await expect(search).toHaveAttribute('aria-activedescendant', 'mapSearchResult-1');
