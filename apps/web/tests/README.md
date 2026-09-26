@@ -18,6 +18,10 @@
   the running page and original login token; reload, reauthentication with a new
   token, or disposal ends that retry guarantee. The client does not persist new
   credentials or payment receipts.
+- `city-commons.spec.ts`: full-screen voting, resident isolation, retained vote
+  records, close/fallback scroll restoration, and repeated-open focus. Vote and
+  payment success share one persistent status region, present before its text is
+  set as required by [WAI ARIA22](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22).
 
 Server integration tests live alongside the server in `server/tests/` because
 they require the server's runtime and dependencies.

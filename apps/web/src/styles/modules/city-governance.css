@@ -85,6 +85,16 @@
   color: #24543e;
   line-height: 1.5;
 }
+.city-governance-panel [data-city-notice]:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .city-governance-body {
   flex: 1;
   min-height: 0;

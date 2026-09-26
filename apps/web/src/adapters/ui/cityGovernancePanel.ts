@@ -18,6 +18,8 @@ let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
+let voteFeedbackRevision = 0;
+let votesEpoch: string | null = null;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
@@ -53,9 +55,23 @@ function updateFeedback(): void {
   ] as const) {
     const region = root?.querySelector<HTMLElement>(selector);
     if (!region) continue;
-    region.hidden = !message;
+    // Keep the status live region in the accessibility tree before success.
+    // Its empty state is visually collapsed by CSS, not display:none/hidden.
+    if (selector !== '[data-city-notice]') region.hidden = !message;
     if (region.textContent !== message) region.textContent = message;
   }
+}
+
+function saveTabScroll(): void {
+  const body = root?.querySelector<HTMLElement>('.city-governance-body');
+  if (root?.open && body?.dataset.cityTab) tabScrollTop.set(body.dataset.cityTab, body.scrollTop);
+}
+
+function acceptVotes(result: CityVotes): void {
+  // Votes cannot be removed within one resident's epoch. An older GET or a
+  // second project's receipt must not erase an already confirmed choice.
+  myVotes = myVotes?.sessionId === result.sessionId && myVotes.epoch === result.epoch
+    ? { ...result, projectIds: [...new Set([...myVotes.projectIds, ...result.projectIds])] } : result;
 }
 
 function render(preferredFocusKey?: string): void {
@@ -75,8 +91,7 @@ function renderContents(preferredFocusKey?: string): void {
   const resumedFocus = focused && unavailableFocus?.fallback === focused ? unavailableFocus : null;
   const focusKey = preferredFocusKey ?? resumedFocus?.key ?? focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
   const focusProject = resumedFocus?.projectId ?? focusedCardKey(focused);
-  const previousBody = root.querySelector<HTMLElement>('.city-governance-body');
-  if (previousBody?.dataset.cityTab) tabScrollTop.set(previousBody.dataset.cityTab, previousBody.scrollTop);
+  saveTabScroll();
   const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
   const config = getCityConfig();
   const state = getCityState();
@@ -100,6 +115,9 @@ function renderContents(preferredFocusKey?: string): void {
   const body = root.querySelector<HTMLElement>('.city-governance-body')!;
   body.replaceChildren();
   if (!config || !state) {
+    // A short fallback is not the tab's scrollable content. Repeated refreshes
+    // must not replace its last real scroll position with zero.
+    delete body.dataset.cityTab;
     body.append(document.createTextNode('城市建设数据暂时不可用，请稍后重试。'));
     body.append(button('重试', () => {
       const retry = body.querySelector('button');
@@ -247,6 +265,8 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
             const isCurrent = () => root === panel && root?.open && operation.sessionId === getCityVotingSessionId()
               && voting.get(project.id) === operation;
             voteError = '';
+            voteFeedbackRevision += 1;
+            operationNotice = '';
             votesLoading?.abort();
             votesLoading = null;
             voting.set(project.id, operation);
@@ -254,11 +274,15 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
             let retryFocus: string | undefined;
             try {
               const result = await voteCity(project.id);
-              if (result && isCurrent()) myVotes = result;
+              if (result && isCurrent()) {
+                acceptVotes(result);
+                operationNotice = `「${project.name}」投票成功，已计入建设支持。`;
+              }
             }
             catch (error) {
               if (!isCurrent()) return;
               voteError = error instanceof Error ? error.message : '投票失败，请重试';
+              voteFeedbackRevision += 1;
               const currentFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
               if (focusedCardKey(currentFocus) === project.id) retryFocus = `vote:${project.id}`;
             }
@@ -333,6 +357,7 @@ function containTabFocus(event: KeyboardEvent): void {
 export function openCityGovernancePanel(buildingId = ''): void {
   if (activeBuilding !== buildingId) { operationError = ''; errorActionKey = ''; operationNotice = ''; }
   activeBuilding = buildingId;
+  if (root?.open) { render(); return; }
   if (!root) {
     root = document.createElement('dialog');
     root.className = 'city-governance-panel';
@@ -353,7 +378,6 @@ export function openCityGovernancePanel(buildingId = ''): void {
     notice.dataset.cityNotice = 'true';
     notice.setAttribute('role', 'status');
     notice.setAttribute('aria-atomic', 'true');
-    notice.hidden = true;
     const voteFeedback = document.createElement('p');
     voteFeedback.dataset.cityVoteFeedback = 'true';
     voteFeedback.setAttribute('role', 'alert');
@@ -382,6 +406,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         errorActionKey = '';
         operationNotice = '';
         voteError = '';
+        votesEpoch = null;
         unavailableFocus = null;
         voting.clear();
         myVotes = null;
@@ -392,7 +417,8 @@ export function openCityGovernancePanel(buildingId = ''): void {
         if (root?.open) void refreshVotes();
       }
       if (!root?.open) return;
-      if (myVotes && myVotes.epoch !== getCityState()?.epoch) { myVotes = null; void refreshVotes(); }
+      const epoch = getCityState()?.epoch;
+      if (epoch && epoch !== votesEpoch) void refreshVotes();
       render();
     });
   }
@@ -410,9 +436,12 @@ export function openCityGovernancePanel(buildingId = ''): void {
 async function refreshVotes(): Promise<void> {
   const sequence = ++votesLoadSequence;
   votesLoading?.abort();
-  myVotes = null;
   const sessionId = getCityVotingSessionId();
+  const epoch = getCityState()?.epoch ?? null;
+  votesEpoch = epoch;
+  if (myVotes && (myVotes.sessionId !== sessionId || (epoch && myVotes.epoch !== epoch))) myVotes = null;
   if (sessionId === null) { render(); return; }
+  const feedbackRevision = voteFeedbackRevision;
   const controller = new AbortController();
   const panel = root;
   const isCurrent = () => !controller.signal.aborted && sequence === votesLoadSequence
@@ -420,7 +449,12 @@ async function refreshVotes(): Promise<void> {
   votesLoading = controller;
   try {
     const result = await loadCityVotes(controller.signal);
-    if (result && isCurrent()) myVotes = result;
+    if (result && isCurrent()) {
+      acceptVotes(result);
+      // A read can finish after a newer vote has failed. Only clear feedback
+      // that was already present when this read began.
+      if (feedbackRevision === voteFeedbackRevision) voteError = '';
+    }
   } catch (error) {
     if (isCurrent()) voteError = error instanceof Error ? error.message : '读取投票记录失败';
   } finally {
@@ -430,6 +464,9 @@ async function refreshVotes(): Promise<void> {
 
 export function closeCityGovernancePanel(): void {
   if (!root?.open) return;
+  saveTabScroll();
+  const body = root.querySelector<HTMLElement>('.city-governance-body');
+  if (body) delete body.dataset.cityTab;
   unavailableFocus = null;
   root.close();
   // Reopening starts on voting; selecting personal construction again restores
@@ -464,5 +501,7 @@ export function disposeCityGovernancePanel(): void {
   clearCityConstructionDrafts();
   myVotes = null;
   voteError = '';
+  voteFeedbackRevision = 0;
+  votesEpoch = null;
   voting.clear();
 }

@@ -436,7 +436,7 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   await pending[2]!.fulfill({ json: { state: { ...fixture.state, epoch: 'old-session', revision: 900 }, replayed: true } });
   await expect(button).toBeDisabled();
   await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #0');
-  await expect(panel.getByRole('status')).toHaveCount(0);
+  await expect(panel.getByRole('status')).toHaveText('');
 
   fixture.state = { ...fixture.state, revision: 1 };
   await pending[3]!.fulfill({ json: { state: fixture.state, replayed: true } });

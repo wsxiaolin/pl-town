@@ -234,7 +234,7 @@ for (const [action, failure] of scenarios) {
       expect(requests[2]!.requestId).not.toBe(retryId);
       expect(requests[2]!.configVersion).toBe(config.version);
       expect(committedRequests.size).toBe(2);
-      await expect(panel.getByRole('status')).toHaveCount(0);
+      await expect(panel.getByRole('status')).toHaveText('');
       if (failure === 'insufficient coins') {
         // After focus restoration, the action's original input may be detached.
         await input.fill('450');

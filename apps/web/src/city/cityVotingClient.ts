@@ -46,6 +46,14 @@ function votes(value: unknown): value is VoteRecords {
     && result.projectIds.every((id) => typeof id === 'string'));
 }
 
+// Voting has its own rejection/receipt contract; only share the familiar
+// presentation wording, not the construction-payment acknowledgement rules.
+const voteOperationMessages: Record<string, string> = {
+  'Project already built': '该建筑已建成，无需继续投票',
+  'Unknown project': '投票项目不存在，请刷新建设列表后重试',
+  'City config changed; reload config': '建设配置已更新，请确认最新信息后重试投票',
+};
+
 // Null denotes a cancelled read or a result belonging to an earlier resident.
 export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotes | null> {
   const owner = session();
@@ -98,9 +106,11 @@ export async function voteCity(projectId: string): Promise<CityVotes | null> {
     if (response.status === 409) await loadCityGovernance();
     if (!isCurrent()) return null;
     if (!response.ok) {
-      if (payload.error === 'Project already built') throw new Error('该建筑已建成，无需继续投票');
       if (response.status === 401) throw new Error('请先登录后投票');
       if (response.status === 429) throw new Error('操作太频繁，请稍后再投票');
+      if (typeof payload.error === 'string' && Object.hasOwn(voteOperationMessages, payload.error)) {
+        throw new Error(voteOperationMessages[payload.error]);
+      }
       throw new Error('投票未完成，请刷新后重试');
     }
     if (!votes(payload.votes) || !validState(payload.state)) throw new Error('投票结果暂时不可用，请重试');

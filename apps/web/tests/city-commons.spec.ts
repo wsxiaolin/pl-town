@@ -18,6 +18,7 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
   const requests: Array<{ projectId: string; requestId: string }> = [];
   let releasePersonalVotes: (() => void) | null = null;
   let personalRequested = false;
+  let personalReads = 0;
   let failNextVote: 'network' | 'html' | 'invalid-state' | null = null;
   let holdVote = false;
   let releaseVote: (() => void) | null = null;
@@ -27,6 +28,7 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
     if (path.endsWith('/city/config')) return route.fulfill({ json: cityConfig });
     if (path.endsWith('/city/state')) return route.fulfill({ json: state });
     if (path.endsWith('/city/votes')) {
+      personalReads += 1;
       expect(route.request().headers().authorization).toBe('Bearer stub-token');
       const snapshot = [...mine];
       personalRequested = true;
@@ -64,14 +66,16 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
   return {
     requests,
     personalRequested: () => personalRequested,
+    personalReads: () => personalReads,
+    holdNextRead: () => { delayPersonalVotes = true; personalRequested = false; },
     release: () => { delayPersonalVotes = false; releasePersonalVotes?.(); },
     failNext: () => { failNextVote = 'network'; },
     failNextHtml: () => { failNextVote = 'html'; },
     failNextInvalidState: () => { failNextVote = 'invalid-state'; },
     holdNextVote: () => { holdVote = true; },
     releaseVote: () => { holdVote = false; releaseVote?.(); },
-    pushVoteCount: async () => {
-      state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => ({ ...project, votes: project.votes + 1 })) };
+    pushVoteCount: async (epoch = state.epoch) => {
+      state = { ...state, epoch, revision: state.revision + 1, projects: state.projects.map((project) => ({ ...project, votes: project.votes + 1 })) };
       await page.evaluate(async (next) => {
         const modulePath = '/src/city/cityGovernanceClient.ts';
         (await import(modulePath)).applyCityState(next);
@@ -92,9 +96,16 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
     expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
     expect(await panel.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(247, 245, 237)');
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const notice = panel.getByRole('status');
+    await expect(notice).toHaveText('');
+    const noticeNode = await notice.elementHandle();
+    expect(await notice.evaluate((element) => !element.hasAttribute('hidden')
+      && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden')).toBe(true);
     const cafe = panel.locator('[data-building-id="catcafe"]');
     await cafe.getByRole('button', { name: '投票建设' }).click();
     await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+    await expect(panel.getByRole('status')).toHaveText('「猫猫咖啡厅」投票成功，已计入建设支持。');
+    expect(await noticeNode!.evaluate((element) => element === document.querySelector('[data-city-notice]'))).toBe(true);
     await expect(cafe).toContainText('1 位居民支持建设');
     await expect(cafe).toContainText('募捐进度 0 金币 / 3,000 金币');
     await expect(cafe.getByRole('button', { name: '捐款', exact: true })).toBeEnabled();
@@ -155,6 +166,103 @@ test('a delayed personal-votes read cannot erase a successful vote and failed vo
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
   expect(api.requests).toHaveLength(2);
   expect(api.requests[1]!.requestId).toBe(api.requests[0]!.requestId);
+});
+
+test('reopening preserves known votes while a read is pending and repeated opening keeps focus', async ({ page }) => {
+  const api = await fixture(page);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const cafe = panel.locator('[data-building-id="catcafe"]');
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+  api.holdNextRead();
+  await panel.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
+  await expect.poll(api.personalRequested).toBe(true);
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+  const reads = api.personalReads();
+  await cafe.getByRole('spinbutton').fill('321');
+  await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
+  await expect(cafe.getByRole('spinbutton')).toBeFocused();
+  await expect(cafe.getByRole('spinbutton')).toHaveValue('321');
+  expect(api.personalReads()).toBe(reads);
+  expect(api.requests).toHaveLength(1);
+  api.release();
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+});
+
+test('close and unavailable snapshots preserve the last real tab scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await fixture(page, false, 24);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const body = panel.locator('.city-governance-body');
+  await body.evaluate((element) => { element.scrollTop = 1200; });
+  const scrollTop = await body.evaluate((element) => element.scrollTop);
+  expect(scrollTop).toBeGreaterThan(100);
+  await panel.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
+  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeCloseTo(scrollTop, 0);
+  let unavailable = true;
+  await page.route('**/town-api/city/state', (route) => unavailable
+    ? route.fulfill({ status: 503, json: { error: 'Unavailable' } }) : route.fallback());
+  const reload = () => page.evaluate(async () => {
+    const path = '/src/city/cityGovernanceClient.ts';
+    await (await import(path)).loadCityGovernance();
+  });
+  await reload();
+  await expect(panel).toContainText('城市建设数据暂时不可用');
+  await reload();
+  unavailable = false;
+  await reload();
+  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeCloseTo(scrollTop, 0);
+});
+
+test('a successful vote read clears old read errors without erasing a newer vote failure', async ({ page }) => {
+  const api = await fixture(page);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  let failRead = true;
+  let pendingRead: Route | undefined;
+  let holdRead = false;
+  await page.route('**/town-api/city/votes', (route) => {
+    if (holdRead) { pendingRead = route; return; }
+    if (failRead) return route.fulfill({ status: 503, json: { error: 'Unavailable' } });
+    return route.fallback();
+  });
+  await api.pushVoteCount('read-failure');
+  await expect(panel.getByRole('alert')).toHaveText('暂时无法读取已投票记录，请重试');
+  failRead = false;
+  await api.pushVoteCount('read-recovery');
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  let pendingVote: Route | undefined;
+  await page.route('**/town-api/city/vote', (route) => { pendingVote = route; });
+  await panel.locator('[data-building-id="catcafe"]').getByRole('button', { name: '投票建设' }).click();
+  await expect.poll(() => Boolean(pendingVote)).toBe(true);
+  holdRead = true;
+  await api.pushVoteCount('new-vote-failure');
+  await expect.poll(() => Boolean(pendingRead)).toBe(true);
+  await pendingVote!.abort('connectionreset');
+  await expect(panel.getByRole('alert')).toHaveText('网络连接中断，请稍后重试');
+  await pendingRead!.fulfill({ json: { epoch: 'new-vote-failure', projectIds: [] } });
+  await settlePaint(page);
+  await expect(panel.getByRole('alert')).toHaveText('网络连接中断，请稍后重试');
+});
+
+test('vote rejections explain a changed catalog and a removed project', async ({ page }) => {
+  await fixture(page);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const vote = panel.locator('[data-building-id="catcafe"]').getByRole('button', { name: '投票建设' });
+  const failures = [
+    { status: 409, error: 'City config changed; reload config', message: '建设配置已更新，请确认最新信息后重试投票' },
+    { status: 404, error: 'Unknown project', message: '投票项目不存在，请刷新建设列表后重试' },
+  ];
+  let next = 0;
+  await page.route('**/town-api/city/vote', (route) => {
+    const failure = failures[next++]!;
+    return route.fulfill({ status: failure.status, json: { error: failure.error } });
+  });
+  for (const failure of failures) {
+    await vote.click();
+    await expect(panel.getByRole('alert')).toHaveText(failure.message);
+  }
 });
 
 test('failed city refresh keeps focus inside the commons dialog', async ({ page }) => {
@@ -315,6 +423,53 @@ test('a committed vote with malformed totals retries the same receipt', async ({
   await expect(cafe).toContainText('1 位居民支持建设');
   expect(api.requests).toHaveLength(2);
   expect(api.requests[1]!.requestId).toBe(api.requests[0]!.requestId);
+});
+
+test('out-of-order successful votes preserve both confirmed project choices', async ({ page }) => {
+  await fixture(page);
+  const pending = new Map<string, Route>();
+  await page.route('**/town-api/city/vote', (route) => { pending.set(route.request().postDataJSON().projectId, route); });
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const cafe = panel.locator('[data-building-id="catcafe"]');
+  const shrine = panel.locator('[data-building-id="shrine"]');
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await shrine.getByRole('button', { name: '投票建设' }).click();
+  await expect.poll(() => pending.size).toBe(2);
+  const response = (ids: string[]) => ({
+    state: { epoch: 'commons-epoch', revision: ids.length, configVersion: config.version,
+      projects: config.projects.map(({ id }) => ({ id, funded: 0, built: false, votes: ids.includes(id) ? 1 : 0 })), decorations: [] },
+    votes: { epoch: 'commons-epoch', projectIds: ids },
+  });
+  await pending.get('shrine')!.fulfill({ json: response(['catcafe', 'shrine']) });
+  await expect(shrine.getByRole('button', { name: '已投票' })).toBeDisabled();
+  await pending.get('catcafe')!.fulfill({ json: response(['catcafe']) });
+  await expect(panel.getByRole('status')).toHaveText('「猫猫咖啡厅」投票成功，已计入建设支持。');
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+  await expect(shrine.getByRole('button', { name: '已投票' })).toBeDisabled();
+  await expect(shrine).toContainText('1 位居民支持建设');
+});
+
+test('an older epoch-triggered read cannot erase a confirmed vote in that epoch', async ({ page }) => {
+  const api = await fixture(page);
+  let pendingVote: Route | undefined;
+  let pendingRead: Route | undefined;
+  await page.route('**/town-api/city/vote', (route) => { pendingVote = route; });
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const cafe = panel.locator('[data-building-id="catcafe"]');
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await expect.poll(() => Boolean(pendingVote)).toBe(true);
+  await page.route('**/town-api/city/votes', (route) => { pendingRead = route; });
+  await api.pushVoteCount('restored-epoch');
+  await expect.poll(() => Boolean(pendingRead)).toBe(true);
+  await pendingVote!.fulfill({ json: {
+    state: { epoch: 'restored-epoch', revision: 2, configVersion: config.version,
+      projects: config.projects.map(({ id }) => ({ id, funded: 0, built: false, votes: id === 'catcafe' ? 1 : 0 })), decorations: [] },
+    votes: { epoch: 'restored-epoch', projectIds: ['catcafe'] },
+  } });
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+  await pendingRead!.fulfill({ json: { epoch: 'restored-epoch', projectIds: [] } });
+  await settlePaint(page);
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
 });
 
 test('a vote response from a previous session does not mark the new resident as voted', async ({ page }) => {

@@ -110,7 +110,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 `.github/workflows/deploy-frontend.yml` 在 `main` 分支 push 或手动触发时构建并部署前端到 GitHub Pages。该工作流使用 Node.js 20、重新安装 npm 依赖，并以 `BASE_PATH=/pl-town/` 构建 `apps/web/dist`。服务端不在此工作流中部署。
 
-城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 和 `city_vote_operations` 保存建设及投票请求的幂等记录，防止历史请求重放后重复扣款或重复计票，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
+城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`personalAreas`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 和 `city_vote_operations` 保存建设及投票请求的幂等记录，防止历史请求重放后重复扣款或重复计票，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
 
 ## AI 自动化工作流
 
