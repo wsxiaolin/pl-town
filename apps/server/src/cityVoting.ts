@@ -5,6 +5,8 @@ import { HttpBodyError } from './httpBody.js';
 import type { User } from './types.js';
 
 export function getCityVotes(userId: string) {
+  // Both reads are synchronous on the single-process SQLite connection: no
+  // restore or vote can interleave between them within this event-loop turn.
   const { epoch } = db.prepare('SELECT epoch FROM city_meta WHERE id = 1').get() as { epoch: string };
   const rows = db.prepare('SELECT project_id FROM city_votes WHERE user_id = ? ORDER BY project_id').all(userId) as Array<{ project_id: string }>;
   return { epoch, projectIds: rows.map((row) => row.project_id) };

@@ -18,6 +18,7 @@ export type CityState = {
   decorations: Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>;
 };
 import { townApiUrl } from '../core/townApi';
+import { getResidentToken } from '../core/residentToken';
 
 export type CityGovernanceListener = (config: CityConfig | null, state: CityState | null) => void;
 export type CityMutationResult = { state: CityState; replayed: boolean };
@@ -148,7 +149,7 @@ export function disposeCityGovernance(): void {
 
 async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
-  const token = localStorage.getItem('minicityServerToken');
+  const token = getResidentToken();
   if (!token) {
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
     throw new Error('请先登录');

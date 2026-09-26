@@ -1,4 +1,5 @@
 import { townApiUrl } from '../core/townApi';
+import { getResidentToken } from '../core/residentToken';
 import { applyCityState, getCityConfig, loadCityGovernance, makeRequestId, validState, type CityState } from './cityGovernanceClient';
 
 type VoteRecords = { epoch: string; projectIds: string[] };
@@ -10,7 +11,7 @@ let sessionId = 0;
 // Session identity stays inside the client; UI snapshots and receipt keys use
 // only an opaque generation and never retain the authentication credential.
 export function getCityVotingSessionId(): number | null {
-  const current = localStorage.getItem('minicityServerToken');
+  const current = getResidentToken();
   if (current !== sessionToken) {
     sessionToken = current;
     sessionId += 1;
