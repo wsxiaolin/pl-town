@@ -5,6 +5,7 @@ let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
+let errorActionKey = '';
 let operationNotice = '';
 const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
@@ -25,7 +26,9 @@ function button(label: string, action: () => void, disabled = false, focusKey = 
 function focusAction(dataKey: 'projectId' | 'plotId', id: string): void {
   for (const item of root?.querySelectorAll<HTMLElement>('.city-governance-card') ?? []) {
     if (item.dataset[dataKey] === id) {
-      const action = item.querySelector<HTMLButtonElement>('button');
+      const focusKey = `${dataKey === 'projectId' ? 'donate' : 'decorate'}:${id}`;
+      const action = Array.from(item.querySelectorAll<HTMLButtonElement>('button[data-focus-key]'))
+        .find((control) => control.dataset.focusKey === focusKey);
       if (action) {
         // Failed actions should scroll back into view so the user can retry.
         action.focus();
@@ -121,7 +124,8 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
   const focused = document.activeElement as HTMLElement | null;
   let returnFocus = focused?.dataset.focusKey === `${dataKey === 'projectId' ? 'donate' : 'decorate'}:${id}`;
   let failed = false;
-  operationError = '';
+  // Retrying this target replaces its error; another card's request does not.
+  if (errorActionKey === actionKey) { operationError = ''; errorActionKey = ''; }
   operationNotice = '';
   render();
   // Rebuilding a disabled button loses focus. Restore it on success only if
@@ -139,6 +143,7 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
     if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     failed = true;
     operationError = error instanceof Error ? error.message : '建设失败，请重试';
+    errorActionKey = actionKey;
   } finally {
     focusController.abort();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
@@ -225,7 +230,7 @@ function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
-  if (activeBuilding !== buildingId) { operationError = ''; operationNotice = ''; }
+  if (activeBuilding !== buildingId) { operationError = ''; errorActionKey = ''; operationNotice = ''; }
   activeBuilding = buildingId;
   if (!root) {
     root = document.createElement('section');
@@ -261,6 +266,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         donationDrafts.clear();
         decorationDrafts.clear();
         operationError = '';
+        errorActionKey = '';
         operationNotice = '';
       }
       if (!root?.classList.contains('open')) return;
@@ -275,6 +281,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
 export function closeCityGovernancePanel(): void {
   root?.classList.remove('open');
   operationError = '';
+  errorActionKey = '';
   operationNotice = '';
   updateFeedback();
 }
@@ -286,6 +293,7 @@ export function disposeCityGovernancePanel(): void {
   root = null;
   activeBuilding = '';
   activeTab = 'collective';
+  errorActionKey = '';
   operationError = '';
   operationNotice = '';
   pendingActions.clear();
