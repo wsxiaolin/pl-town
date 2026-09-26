@@ -174,9 +174,16 @@ for (const action of ['donate', 'decorate'] as const) {
   test(`${action} requires confirming an uncertain target before changing its payment parameters`, async ({ page }) => {
     const requests: Array<Record<string, unknown>> = [];
     const committed = new Map<string, Record<string, unknown>>();
+    const outerFailures = [
+      { status: 429, error: 'Too many requests', message: '请求过于频繁' },
+      { status: 403, error: 'Request origin is not allowed', message: '当前访问来源无法提交建设' },
+      { status: 500, error: 'Internal server error', message: '城市建设服务暂时异常' },
+    ];
     const fixture = await openGovernance(page, async (route) => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       requests.push(body);
+      const failure = outerFailures[requests.length - 2];
+      if (failure) return route.fulfill({ status: failure.status, json: { error: failure.error } });
       const requestId = String(body.requestId);
       const replayed = committed.has(requestId);
       if (replayed) expect(body).toEqual(committed.get(requestId));
@@ -207,14 +214,20 @@ for (const action of ['donate', 'decorate'] as const) {
     await button.click();
     await expect(panel.getByRole('alert')).toContainText('结果尚未确认');
     await expect(panel.getByRole('alert')).toContainText(action === 'donate' ? '500' : '松树');
+    await expect(panel.getByRole('alert')).toContainText(action === 'donate' ? '猫猫咖啡厅' : '测试花园');
     await expect(input).toHaveValue(changed);
     expect(requests).toHaveLength(1);
     expect(committed.size).toBe(1);
     await setValue(original);
+    for (const failure of outerFailures) {
+      await button.click();
+      await expect(panel.getByRole('alert')).toContainText(failure.message);
+      await expect(panel.getByRole('alert')).not.toContainText(failure.error);
+    }
     await button.click();
     await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
-    expect(requests).toHaveLength(2);
-    expect(requests[1]).toEqual(requests[0]);
+    expect(requests).toHaveLength(5);
+    for (const retry of requests.slice(1)) expect(retry).toEqual(requests[0]);
     expect(committed.size).toBe(1);
     expect(fixture.errors).toEqual([]);
   });
