@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { CITY_CONSTRUCTION_CONFIG as config } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
+import { reconcileLegacyAreaProjectLayout } from './cityAreaLayoutMigration.js';
+import { validateCityAreaPlacement } from './cityAreaPlacement.js';
 
 // Called inside both the schema migration and the in-process restore transaction.
 export function initializeCityGovernance(db: Database.Database): void {
@@ -17,6 +19,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     db.exec("ALTER TABLE city_meta ADD COLUMN epoch TEXT NOT NULL DEFAULT ''");
   }
   const json = JSON.stringify(config);
+  validateCityAreaPlacement(config);
   const unique = (values: string[]) => new Set(values).size === values.length;
   const validId = (value: string) => /^[A-Za-z0-9._:-]{1,100}$/.test(value);
   if (config.schemaVersion !== 1 || !config.version || !unique(config.personalPlots.map((entry) => entry.id))
@@ -38,6 +41,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     && BUILDING_CATALOG.every((building) => Math.abs(x - building.x) > halfWidth + 4 || Math.abs(z - building.z) > halfDepth + 4);
   const saved = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(config.version) as { config_json: string } | undefined;
   if (saved && saved.config_json !== json) throw new Error('City config changed without a version bump');
+  reconcileLegacyAreaProjectLayout(db, config);
   const ids = new Set<string>();
   for (const project of config.projects) {
     if (ids.has(project.id) || !Number.isSafeInteger(project.cost) || project.cost <= 0) throw new Error('Invalid city project');

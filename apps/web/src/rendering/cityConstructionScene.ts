@@ -6,6 +6,7 @@ import { getCityConfig, getCityState, isConstructionPending, subscribeCityGovern
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ResourcePool } from '../core/ResourcePool';
 import { createConstructionDecorations } from './constructionDecorations';
+import type { MeshHelpers } from './meshFactory';
 
 type Kind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
 type Item = { key: string; kind: Kind | 'road'; x: number; z: number; width?: number; depth?: number };
@@ -14,6 +15,7 @@ const MAX_CONSTRUCTION_POINT_LIGHTS = 8;
 
 export function createCityConstructionScene(options: {
   scene: THREE.Scene;
+  makeMaterial: MeshHelpers['stdMat'];
   buildings: BuildingEntity[];
   buildingAttachments?: ReadonlyMap<string, readonly THREE.Object3D[]>;
   getIsNight: () => boolean;
@@ -28,7 +30,7 @@ export function createCityConstructionScene(options: {
   const hidden = new Map<BuildingEntity, { children: THREE.Object3D[]; labelY?: number; body?: THREE.Mesh }>();
   const visuals = new Map<string, Visual>();
   const resources = new ResourcePool();
-  const makeDecoration = createConstructionDecorations(resources);
+  const makeDecoration = createConstructionDecorations(resources, options.makeMaterial);
   const lights: THREE.PointLight[] = [];
   const lightingPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   const detachedAttachments = new Map<THREE.Object3D, THREE.Object3D[]>();
@@ -47,7 +49,7 @@ export function createCityConstructionScene(options: {
     const visual: Visual = { signature: JSON.stringify(item), root: group };
     const material = (parameters: THREE.MeshStandardMaterialParameters) => {
       const settings = { roughness: 0.85, depthWrite: true, polygonOffset: false, ...parameters };
-      return resources.material(settings, () => new THREE.MeshStandardMaterial(settings));
+      return resources.material(settings, () => options.makeMaterial(settings));
     };
     const part = (geometry: THREE.BufferGeometry, mat: THREE.MeshStandardMaterial, x: number, y: number, z: number) => {
       const mesh = new THREE.Mesh(resources.geometry(geometry), mat);

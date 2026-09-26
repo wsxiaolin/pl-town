@@ -34,7 +34,7 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  version: '2026-09-25.areas.1',
+  version: '2026-09-26.areas.2',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     { id: 'greenbelt-path', name: '北侧绿道', description: '公共步行绿道', cost: 800, kind: 'road', road: { x: 22, z: -40, width: 8, depth: 1 } },

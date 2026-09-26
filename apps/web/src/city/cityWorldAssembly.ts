@@ -173,6 +173,7 @@ export function assembleCityWorld(options: {
     .catch((error) => console.error('3D model loading failed', error));
   const constructionScene = createCityConstructionScene({
     scene,
+    makeMaterial: graphics.mesh.stdMat,
     buildings: options.buildings,
     getIsNight: options.getIsNight,
     getLightingPosition: () => options.actors.cursorChar?.position ?? scene.position,

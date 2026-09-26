@@ -1,5 +1,6 @@
 import type { CityConstructionConfig } from './data/cityConstructionConfig.js';
 import { AREA_PLOTS, PERSONAL_AREAS } from './data/cityConstructionAreas.js';
+import { isLegacyAreaPlotRelocation } from './cityAreaLayoutMigration.js';
 
 /** Explicit additive reconciliation for the area catalog, used on startup and restore.
  * Existing purchased decoration geometry and prices retain their identities.
@@ -17,8 +18,8 @@ export function reconcileAreaCatalog(previous: CityConstructionConfig, next: Cit
   const nextArea = (id: string) => next.personalAreas?.find((entry) => entry.id === id);
   const plotLedgerUnchanged = (entry: CityConstructionConfig['personalPlots'][number]) => {
     const candidate = nextPlot(entry.id);
-    return Boolean(candidate && candidate.x === entry.x && candidate.z === entry.z
-      && entry.options.every((id) => candidate.options.includes(id)));
+    return Boolean(candidate && ((candidate.x === entry.x && candidate.z === entry.z
+      && entry.options.every((id) => candidate.options.includes(id))) || isLegacyAreaPlotRelocation(entry, candidate)));
   };
   const decorationLedgerUnchanged = (entry: CityConstructionConfig['decorations'][number]) => {
     const candidate = nextDecoration(entry.id);

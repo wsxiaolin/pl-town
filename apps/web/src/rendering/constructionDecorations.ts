@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ResourcePool } from '../core/ResourcePool';
+import type { MeshHelpers } from './meshFactory';
 
 type StaticDecorationKind = 'oak' | 'pine' | 'cherry' | 'bench' | 'flowers' | 'lamp-post';
 
 /** Merge each kind once, on demand, while keeping one mesh per placed decoration. */
-export function createConstructionDecorations(resources: ResourcePool): (kind: StaticDecorationKind) => THREE.Mesh {
+export function createConstructionDecorations(resources: ResourcePool, makeMaterial: MeshHelpers['stdMat']): (kind: StaticDecorationKind) => THREE.Mesh {
   const geometries = new Map<StaticDecorationKind, THREE.BufferGeometry>();
   const materialParameters = { vertexColors: true, roughness: 0.85, depthWrite: true, polygonOffset: false };
   return (kind) => {
@@ -14,7 +15,7 @@ export function createConstructionDecorations(resources: ResourcePool): (kind: S
       geometry = resources.geometry(mergeDecoration(kind));
       geometries.set(kind, geometry);
     }
-    const material = resources.material(materialParameters, () => new THREE.MeshStandardMaterial(materialParameters));
+    const material = resources.material(materialParameters, () => makeMaterial(materialParameters));
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = mesh.receiveShadow = true;
     return mesh;
