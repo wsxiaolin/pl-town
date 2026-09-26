@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 
 const config = {
@@ -143,7 +143,7 @@ test('a delayed personal-votes read cannot erase a successful vote and failed vo
   await api.pushVoteCount();
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
   expect(api.requests).toHaveLength(2);
-  expect(api.requests[1].requestId).toBe(api.requests[0].requestId);
+  expect(api.requests[1]!.requestId).toBe(api.requests[0]!.requestId);
 });
 
 test('failed city refresh keeps focus inside the commons dialog', async ({ page }) => {
@@ -203,7 +203,7 @@ test('an HTML gateway error shows a readable vote failure and retries the same r
   await cafe.getByRole('button', { name: '投票建设' }).click();
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
   expect(api.requests).toHaveLength(2);
-  expect(api.requests[1].requestId).toBe(api.requests[0].requestId);
+  expect(api.requests[1]!.requestId).toBe(api.requests[0]!.requestId);
   await expect(panel.getByRole('alert')).toHaveCount(0);
 });
 
@@ -230,7 +230,7 @@ test('a committed vote with malformed totals retries the same receipt', async ({
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
   await expect(cafe).toContainText('1 位居民支持建设');
   expect(api.requests).toHaveLength(2);
-  expect(api.requests[1].requestId).toBe(api.requests[0].requestId);
+  expect(api.requests[1]!.requestId).toBe(api.requests[0]!.requestId);
 });
 
 test('a vote response from a previous session does not mark the new resident as voted', async ({ page }) => {
@@ -240,9 +240,125 @@ test('a vote response from a previous session does not mark the new resident as 
   api.holdNextVote();
   await cafe.getByRole('button', { name: '投票建设' }).click();
   await expect.poll(() => api.requests.length).toBe(1);
-  await page.evaluate(() => localStorage.setItem('minicityServerToken', 'another-test-session'));
+  await page.route('**/town-api/city/votes', (route) => route.fulfill({ json: { epoch: 'commons-epoch', projectIds: [] } }));
+  await switchResident(page);
+  const completed = page.waitForEvent('requestfinished', (request) => new URL(request.url()).pathname.endsWith('/city/vote'));
   api.releaseVote();
-  await expect(panel.getByRole('alert')).toHaveText('登录状态已变更，请重新打开众议院');
+  await completed;
+  await settlePaint(page);
+  await expect(panel.getByRole('alert')).toHaveCount(0);
   await expect(cafe.getByRole('button', { name: '投票建设' })).toBeEnabled();
   await expect(cafe).toContainText('0 位居民支持建设');
 });
+
+function gate() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => { release = resolve; });
+  return { promise, release };
+}
+
+async function switchResident(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const path = '/src/adapters/ui/cityGovernancePanel.ts';
+    const panel = await import(path);
+    panel.closeCityGovernancePanel();
+    localStorage.setItem('minicityServerToken', 'another-test-session');
+    panel.openCityGovernancePanel('commons');
+  });
+}
+
+async function settlePaint(page: Page): Promise<void> {
+  // Run after the request finishes so the async click handler and its render
+  // settle before checking that an obsolete completion had no visible effect.
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+}
+
+type LateFailure = '401' | 'network' | 'html';
+async function failResponse(route: Route, failure: LateFailure): Promise<void> {
+  if (failure === 'network') await route.abort('connectionreset');
+  else if (failure === 'html') await route.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad Gateway</html>' });
+  else await route.fulfill({ status: 401, json: { error: 'Please sign in' } });
+}
+
+for (const failure of ['401', 'network', 'html'] as const) {
+  test(`a previous resident's late ${failure} vote cannot affect a new pending vote`, async ({ page }) => {
+    await fixture(page);
+    const oldVote = gate(), newVote = gate();
+    const requests: Array<{ token: string; projectId: string; requestId: string }> = [];
+    await page.route('**/town-api/city/votes', (route) => route.fulfill({ json: { epoch: 'commons-epoch', projectIds: [] } }));
+    await page.route('**/town-api/city/vote', async (route) => {
+      const body = route.request().postDataJSON() as typeof requests[number];
+      requests.push(body);
+      if (body.token === 'stub-token') {
+        await oldVote.promise;
+        return failResponse(route, failure);
+      }
+      await newVote.promise;
+      return route.fulfill({ json: {
+        state: { epoch: 'commons-epoch', revision: 1, configVersion: config.version,
+          projects: config.projects.map(({ id }) => ({ id, funded: 0, built: false, votes: id === body.projectId ? 1 : 0 })), decorations: [] },
+        votes: { epoch: 'commons-epoch', projectIds: [body.projectId] },
+      } });
+    });
+    const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+    const cafe = panel.locator('[data-building-id="catcafe"]');
+    await cafe.getByRole('button', { name: '投票建设' }).click();
+    await expect.poll(() => requests.length).toBe(1);
+    await switchResident(page);
+    await cafe.getByRole('button', { name: '投票建设' }).click();
+    await expect.poll(() => requests.length).toBe(2);
+    await expect(cafe.getByRole('button', { name: '正在投票…' })).toBeDisabled();
+    await cafe.getByRole('spinbutton').focus();
+    const isOldVote = (request: Request) => new URL(request.url()).pathname.endsWith('/city/vote')
+      && request.postDataJSON().token === 'stub-token';
+    const completed = failure === 'network'
+      ? page.waitForEvent('requestfailed', isOldVote) : page.waitForEvent('requestfinished', isOldVote);
+    oldVote.release();
+    await completed;
+    await settlePaint(page);
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('#loginOverlay')).not.toBeVisible();
+    await expect(cafe.getByRole('button', { name: '正在投票…' })).toBeDisabled();
+    await expect(cafe.getByRole('spinbutton')).toBeFocused();
+    newVote.release();
+    await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+    expect(requests[1]!.requestId).not.toBe(requests[0]!.requestId);
+  });
+
+  test(`a previous resident's late ${failure} vote read is silently discarded`, async ({ page }) => {
+    await fixture(page);
+    const oldRead = gate();
+    let started = false;
+    await page.route('**/town-api/city/votes', async (route) => {
+      if (route.request().headers().authorization === 'Bearer stub-token') {
+        started = true;
+        await oldRead.promise;
+        return failResponse(route, failure);
+      }
+      return route.fulfill({ json: { epoch: 'commons-epoch', projectIds: ['shrine'] } });
+    });
+    await page.evaluate(async () => {
+      const path = '/src/city/cityVotingClient.ts';
+      const client = await import(path);
+      // Keep this read alive across opening the next resident's panel, as can
+      // happen for another caller without the panel's AbortController.
+      (window as any).oldVoteRead = undefined;
+      void client.loadCityVotes().then(
+        (result: unknown) => { (window as any).oldVoteRead = { result }; },
+        (error: Error) => { (window as any).oldVoteRead = { error: error.message }; },
+      );
+    });
+    await expect.poll(() => started).toBe(true);
+    await switchResident(page);
+    const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+    const shrine = panel.locator('[data-building-id="shrine"]');
+    await expect(shrine.getByRole('button', { name: '已投票' })).toBeDisabled();
+    oldRead.release();
+    await expect.poll(() => page.evaluate(() => (window as any).oldVoteRead)).toEqual({ result: null });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('#loginOverlay')).not.toBeVisible();
+    await expect(shrine.getByRole('button', { name: '已投票' })).toBeDisabled();
+  });
+}

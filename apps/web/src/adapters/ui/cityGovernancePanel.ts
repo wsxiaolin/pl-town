@@ -16,7 +16,7 @@ let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
-const voting = new Set<string>();
+const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
 const INPUT_SELECTOR = '[data-city-input],select[aria-label]';
 const FOCUS_SELECTOR = '[data-city-focus],[aria-label]';
@@ -149,7 +149,8 @@ async function submitDonation(projectId: string, mutation: () => Promise<CityMut
 }
 
 function renderCollective(list: HTMLElement, projects: CityProject[], state: CityState): void {
-  const currentVotes = myVotes?.sessionId === getCityVotingSessionId() && myVotes?.epoch === state.epoch ? myVotes : null;
+  const sessionId = getCityVotingSessionId();
+  const currentVotes = myVotes?.sessionId === sessionId && myVotes?.epoch === state.epoch ? myVotes : null;
   const explanation = document.createElement('p');
   explanation.className = 'city-governance-intro';
   explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。为期待的建筑投票，每位居民每项一票；投票不消耗金币，捐款满额后即可建成。';
@@ -184,21 +185,35 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
         item.append(total);
         if (!saved?.built) {
           const voted = currentVotes?.projectIds.includes(project.id);
-          const action = button(voted ? '已投票' : voting.has(project.id) ? '正在投票…' : '投票建设', async () => {
+          const pendingVote = voting.get(project.id)?.sessionId === sessionId;
+          const action = button(voted ? '已投票' : pendingVote ? '正在投票…' : '投票建设', async () => {
+            const operation = { sessionId: getCityVotingSessionId() };
+            if (voting.get(project.id)?.sessionId === operation.sessionId) return;
+            const panel = root;
+            const isCurrent = () => root === panel && operation.sessionId === getCityVotingSessionId()
+              && voting.get(project.id) === operation;
             voteError = '';
             votesLoading?.abort();
             votesLoading = null;
-            voting.add(project.id);
+            voting.set(project.id, operation);
             render();
             let retryFocus: string | undefined;
-            try { myVotes = await voteCity(project.id); }
+            try {
+              const result = await voteCity(project.id);
+              if (result && isCurrent()) myVotes = result;
+            }
             catch (error) {
+              if (!isCurrent()) return;
               voteError = error instanceof Error ? error.message : '投票失败，请重试';
               const currentFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
               if (focusedCardKey(currentFocus) === project.id) retryFocus = `vote:${project.id}`;
             }
-            finally { voting.delete(project.id); render(retryFocus); }
-          }, Boolean(voted) || voting.has(project.id), `vote:${project.id}`);
+            finally {
+              const current = isCurrent();
+              if (voting.get(project.id) === operation) voting.delete(project.id);
+              if (current) render(retryFocus);
+            }
+          }, Boolean(voted) || pendingVote, `vote:${project.id}`);
           item.append(action);
         }
       }
@@ -316,17 +331,20 @@ async function refreshVotes(): Promise<void> {
   const sequence = ++votesLoadSequence;
   votesLoading?.abort();
   myVotes = null;
-  if (getCityVotingSessionId() === null) { render(); return; }
+  const sessionId = getCityVotingSessionId();
+  if (sessionId === null) { render(); return; }
   const controller = new AbortController();
+  const panel = root;
+  const isCurrent = () => !controller.signal.aborted && sequence === votesLoadSequence
+    && root === panel && sessionId === getCityVotingSessionId();
   votesLoading = controller;
   try {
     const result = await loadCityVotes(controller.signal);
-    if (controller.signal.aborted || sequence !== votesLoadSequence) return;
-    myVotes = result;
+    if (result && isCurrent()) myVotes = result;
   } catch (error) {
-    if (!controller.signal.aborted && sequence === votesLoadSequence) voteError = error instanceof Error ? error.message : '读取投票记录失败';
+    if (isCurrent()) voteError = error instanceof Error ? error.message : '读取投票记录失败';
   } finally {
-    if (votesLoading === controller) { votesLoading = null; if (root?.open) render(); }
+    if (votesLoading === controller) { votesLoading = null; if (isCurrent() && root?.open) render(); }
   }
 }
 
