@@ -236,7 +236,7 @@ test('an updated initial building clears stale pending state while a matching sn
     await stateGate;
     if (failState) return new Response(null, { status: 503 });
     return Response.json({ epoch: 'test', revision: 1, configVersion: version,
-      projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: id === 'research', funded: id === 'research' ? 3000 : 0 })), decorations: [] });
+      projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: id === 'research', funded: id === 'research' ? 3000 : 0, votes: 0 })), decorations: [] });
   });
   await loadCityGovernance();
   assert.equal(isConstructionPending('library'), true);
@@ -270,7 +270,7 @@ test('an updated initial building clears stale pending state while a matching sn
   await loadCityGovernance();
   assertPendingPolicy();
   applyCityState({ epoch: 'restored-city', revision: 0, configVersion: version,
-    projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: false, funded: 0 })), decorations: [] });
+    projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: false, funded: 0, votes: 0 })), decorations: [] });
   assert.equal(isConstructionPending('library'), false);
   assert.equal(isConstructionPending('research'), true);
 });
