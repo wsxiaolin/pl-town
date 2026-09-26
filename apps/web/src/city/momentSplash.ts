@@ -48,7 +48,6 @@ export function momentForDate(date = new Date()): MomentDefinition {
 // ─── boot screen presentation ────────────────────────────────────────────────
 
 const MIN_SPLASH_MS = 2_600; // Even a cached visit gets a breath of the still.
-const SLIDESHOW_STEP_MS = 11_000; // Heavy boot: one moment per ~11s, day cycle.
 const SLIDESHOW_FADE_MS = 1_800;
 
 let cityReady = false;
@@ -95,19 +94,9 @@ function swapToMoment(moment: MomentDefinition, instant: boolean): void {
 
 function startSlideshow(): void {
   stopSlideshow();
-  const order: MomentDefinition[] = [...MOMENTS];
-  const current = momentForDate();
-  let index = order.findIndex((moment) => moment.name === current.name);
-  if (index < 0) index = 0;
-  let first = true;
-  const step = () => {
-    const moment = order[index % order.length]!;
-    swapToMoment(moment, first);
-    first = false;
-    index = (index + 1) % order.length;
-    slideshowTimer = window.setTimeout(step, SLIDESHOW_STEP_MS);
-  };
-  step();
+  // Heavy boot holds the CURRENT real-world moment: the still must match the
+  // clock outside, so no day-passing cycle — the progress bar carries time.
+  swapToMoment(momentForDate(), true);
 }
 
 function stopSlideshow(): void {
@@ -141,7 +130,7 @@ export function showMomentSplash(): void {
   bindSkip();
 }
 
-/** Heavy visit: all four moments cycle behind the download pipeline. */
+/** Heavy visit: the current real-world moment holds behind the pipeline. */
 export function showMomentSlideshow(): void {
   const screen = bootScreen();
   if (!screen) return;
