@@ -59,9 +59,9 @@ async function submitConstruction(
     focus.dispose();
     if (isCurrentDraft()) {
       draft.pending = false;
-      const restoreSuccessFocus = focus.shouldRestore();
+      const restoreActionFocus = focus.shouldRestore(failed);
       feedback.rerender();
-      if (failed || restoreSuccessFocus) feedback.focusAction(dataKey, id);
+      if (restoreActionFocus) feedback.focusAction(dataKey, id);
     }
   }
 }

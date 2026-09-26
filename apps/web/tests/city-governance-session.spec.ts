@@ -52,6 +52,96 @@ async function publishState(page: Page, state: CityState): Promise<void> {
   }, state);
 }
 
+test('conflicts during an older snapshot queue one fresh read after it completes', async ({ page }) => {
+  let mutations = 0;
+  const fixture = await openGovernance(page, (route) => {
+    mutations += 1;
+    return route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  });
+  const staleState = structuredClone(fixture.state);
+  let olderRead: Route | undefined;
+  let stateReads = 0;
+  await page.route('**/town-api/city/state', (route) => {
+    stateReads += 1;
+    if (stateReads === 1) olderRead = route;
+    else return route.fulfill({ json: fixture.state });
+  });
+  await page.evaluate(async () => {
+    const modulePath = '/src/city/cityGovernanceClient.ts';
+    const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+    void client.loadCityGovernance();
+  });
+  await expect.poll(() => stateReads).toBe(1);
+  fixture.state = { ...fixture.state, revision: 1, projects: [
+    { id: 'build-catcafe', funded: 250, built: false, votes: 0 },
+    { id: 'build-library', funded: 0, built: false, votes: 0 },
+  ] };
+  const panel = page.locator('.city-governance-panel');
+  await panel.locator('[data-city-project="build-catcafe"]').getByRole('button', { name: '捐款', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  const secondButton = panel.locator('[data-city-project="build-library"]').getByRole('button', { name: '捐款', exact: true });
+  await secondButton.click();
+  await expect.poll(() => mutations).toBe(2);
+  await expect(secondButton).toBeEnabled();
+  // Both conflicts arrived after the held GET captured its now-stale snapshot.
+  expect(stateReads).toBe(1);
+  await olderRead!.fulfill({ json: staleState });
+  await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #1');
+  await expect(panel.locator('[data-city-project="build-catcafe"]')).toContainText('250 金币 / 3,000 金币');
+  expect(stateReads).toBe(2);
+  expect(fixture.errors).toEqual([]);
+});
+
+test('a late failed donation leaves another card draft and focus in place', async ({ page }) => {
+  let pending: Route | undefined;
+  const fixture = await openGovernance(page, (route) => { pending = route; });
+  const panel = page.locator('.city-governance-panel');
+  const firstButton = panel.locator('[data-city-project="build-catcafe"]').getByRole('button', { name: '捐款', exact: true });
+  const secondInput = panel.locator('[data-city-project="build-library"]').getByRole('spinbutton');
+  await firstButton.click();
+  await expect.poll(() => Boolean(pending)).toBe(true);
+  await secondInput.fill('275');
+  const inputNode = await secondInput.elementHandle();
+  const scrollTop = await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop);
+  await pending!.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  await expect(firstButton).toBeEnabled();
+  await expect(secondInput).toBeFocused();
+  await expect(secondInput).toHaveValue('275');
+  expect(await inputNode!.evaluate((input) => input === document.activeElement)).toBe(true);
+  expect(await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop)).toBe(scrollTop);
+  expect(fixture.errors).toEqual([]);
+});
+
+for (const kind of ['area', 'plot'] as const) {
+  test(`a late failed ${kind} construction leaves the other construction draft and focus in place`, async ({ page }) => {
+    let pending: Route | undefined;
+    const fixture = await openGovernance(page, (route) => { pending = route; });
+    const panel = page.locator('.city-governance-panel');
+    await panel.getByRole('button', { name: '个人建设', exact: true }).click();
+    const area = panel.locator('[data-city-area="session-garden"]');
+    const plot = panel.locator('[data-city-plot="garden"]');
+    const action = kind === 'area'
+      ? area.getByRole('button', { name: '批量建设', exact: true })
+      : plot.getByRole('button', { name: '建设', exact: true });
+    const otherInput = kind === 'area' ? plot.getByRole('combobox') : area.getByRole('spinbutton');
+    await action.click();
+    await expect.poll(() => Boolean(pending)).toBe(true);
+    if (kind === 'area') {
+      await otherInput.focus();
+      await otherInput.selectOption('pine');
+    } else await otherInput.fill('2');
+    const scrollTop = await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop);
+    await pending!.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+    await expect(panel.getByRole('alert')).toContainText('金币不足');
+    await expect(action).toBeEnabled();
+    await expect(otherInput).toBeFocused();
+    await expect(otherInput).toHaveValue(kind === 'area' ? 'pine' : '2');
+    expect(await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop)).toBe(scrollTop);
+    expect(fixture.errors).toEqual([]);
+  });
+}
+
 test('concurrent submissions restore their own focus without interrupting another card', async ({ page }) => {
   const pending: Route[] = [];
   const fixture = await openGovernance(page, (route) => { pending.push(route); });
@@ -179,9 +269,16 @@ for (const action of ['donate', 'decorate'] as const) {
   test(`${action} requires confirming an uncertain target before changing its payment parameters`, async ({ page }) => {
     const requests: Array<Record<string, unknown>> = [];
     const committed = new Map<string, Record<string, unknown>>();
+    const outerFailures = [
+      { status: 429, error: 'Too many requests', message: '请求过于频繁' },
+      { status: 403, error: 'Request origin is not allowed', message: '当前访问来源无法提交建设' },
+      { status: 500, error: 'Internal server error', message: '城市建设服务暂时异常' },
+    ];
     const fixture = await openGovernance(page, async (route) => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       requests.push(body);
+      const failure = outerFailures[requests.length - 2];
+      if (failure) return route.fulfill({ status: failure.status, json: { error: failure.error } });
       const requestId = String(body.requestId);
       const replayed = committed.has(requestId);
       if (replayed) expect(body).toEqual(committed.get(requestId));
@@ -212,14 +309,20 @@ for (const action of ['donate', 'decorate'] as const) {
     await button.click();
     await expect(panel.getByRole('alert')).toContainText('结果尚未确认');
     await expect(panel.getByRole('alert')).toContainText(action === 'donate' ? '500' : '松树');
+    await expect(panel.getByRole('alert')).toContainText(action === 'donate' ? '猫猫咖啡厅' : '测试花园');
     await expect(input).toHaveValue(changed);
     expect(requests).toHaveLength(1);
     expect(committed.size).toBe(1);
     await setValue(original);
+    for (const failure of outerFailures) {
+      await button.click();
+      await expect(panel.getByRole('alert')).toContainText(failure.message);
+      await expect(panel.getByRole('alert')).not.toContainText(failure.error);
+    }
     await button.click();
     await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
-    expect(requests).toHaveLength(2);
-    expect(requests[1]).toEqual(requests[0]);
+    expect(requests).toHaveLength(5);
+    for (const retry of requests.slice(1)) expect(retry).toEqual(requests[0]);
     expect(committed.size).toBe(1);
     expect(fixture.errors).toEqual([]);
   });

@@ -1,6 +1,6 @@
 import { donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject, type CityState } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
-import { actionButton as button, card, money, trackPendingActionFocus } from './cityGovernanceDom';
+import { actionButton as button, card, money, trackPendingActionFocus, withPanelFocusRestoration } from './cityGovernanceDom';
 import { getCityVotingSessionId, loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
 let root: HTMLDialogElement | null = null;
@@ -65,7 +65,7 @@ function render(preferredFocusKey?: string): void {
     // Authentication notifications can synchronously request another render.
     // Clear the old resident's drafts before reading any DOM values or receipts.
     refreshCityGovernanceSession();
-    renderContents(preferredFocusKey);
+    withPanelFocusRestoration(() => renderContents(preferredFocusKey));
   } finally { rendering = false; }
 }
 
@@ -177,9 +177,9 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
     focus.dispose();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
     if (root === submittedPanel && root?.open && refreshCityGovernanceSession() === session) {
-      const restoreSuccessFocus = focus.shouldRestore();
+      const restoreActionFocus = focus.shouldRestore(failed);
       render();
-      if (failed || restoreSuccessFocus) focusAction('projectId', id);
+      if (restoreActionFocus) focusAction('projectId', id);
     }
   }
 }

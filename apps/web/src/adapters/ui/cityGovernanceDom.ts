@@ -1,17 +1,29 @@
 export const money = (value: number) => `${value.toLocaleString()} 金币`;
 
-// Rebuilding a disabled action loses focus. Restore it after success only if
+let restoringPanelFocus = false;
+
+// The modal restores a safe fallback while its controls are rebuilt. That
+// programmatic focus move is not a resident choosing to leave a pending action.
+export function withPanelFocusRestoration(render: () => void): void {
+  const wasRestoring = restoringPanelFocus;
+  restoringPanelFocus = true;
+  try { render(); } finally { restoringPanelFocus = wasRestoring; }
+}
+
+// Rebuilding a disabled action loses focus. Restore it after a response only if
 // the user has not since focused, clicked or typed elsewhere in the page.
 export function trackPendingActionFocus(focusKey: string) {
   let uninterrupted = document.activeElement instanceof HTMLElement
     && document.activeElement.dataset.cityFocus === focusKey;
   const controller = new AbortController();
-  const movedOn = () => { uninterrupted = false; };
+  const movedOn = (event: Event) => {
+    if (event.type !== 'focusin' || !restoringPanelFocus) uninterrupted = false;
+  };
   for (const event of ['focusin', 'pointerdown', 'keydown']) {
     document.addEventListener(event, movedOn, { capture: true, signal: controller.signal });
   }
   return {
-    shouldRestore: () => uninterrupted && document.activeElement === document.body,
+    shouldRestore: (failed = false) => uninterrupted && (failed || document.activeElement === document.body),
     dispose: () => controller.abort(),
   };
 }

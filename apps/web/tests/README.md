@@ -9,11 +9,12 @@
 - `unit/`: pure TypeScript domain tests (quest engine, navigation, stats).
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
-- `city-governance-session.spec.ts`: concurrent focus, draft continuity, HTTP
-  receipt retry policy, target parameter locking, and isolation between login sessions. Uncertain receipts
-  remain in memory for the running page and original login token; reload or
-  disposal ends that retry guarantee. The client does not persist new credentials
-  or payment receipts.
+- `city-governance-session.spec.ts`: concurrent focus, draft continuity,
+  queued conflict refreshes, HTTP receipt retry policy, target parameter locking,
+  and isolation between login sessions. Uncertain receipts remain in memory for
+  the running page and original login token; reload, reauthentication with a new
+  token, or disposal ends that retry guarantee. The client does not persist new
+  credentials or payment receipts.
 
 Server integration tests live alongside the server in `server/tests/` because
 they require the server's runtime and dependencies.

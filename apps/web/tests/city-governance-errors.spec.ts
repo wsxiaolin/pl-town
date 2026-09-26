@@ -159,7 +159,8 @@ for (const [action, failure] of scenarios) {
     await expect(panel.getByRole('alert')).toContainText(message);
     if (failure === 'unknown error') await expect(panel.getByRole('alert')).not.toContainText('unmapped internal server detail');
     await expect(actionButton).toBeEnabled();
-    await expect(actionButton).toBeFocused();
+    // Reopening the panel moved focus to Close; a late failure must not steal it.
+    await expect(panel.getByRole('button', { name: '关闭', exact: true })).toBeFocused();
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
     if (failure === 'insufficient coins') {
       // The alert must appear while the 409 refresh is still blocked.
