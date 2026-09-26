@@ -56,6 +56,8 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
   }
   // Admin access overrides are not construction receipts. They never widen
   // preservation, and schema 5 backups need no world_config table here.
+  // A missing ledger can also mean an empty town; only existing residents set
+  // previousInitial above and qualify for historical unlock preservation.
   if (!meta && previousInitial.length > 0) {
     const hasUnlock = db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1');
     for (const id of LEGACY_UNLOCK_PRESERVATION_BUILDINGS) {

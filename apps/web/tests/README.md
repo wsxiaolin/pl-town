@@ -10,7 +10,11 @@
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
 - `pending-construction.spec.ts`: pending buildings, plots, labels, and attached
-  interactions stay hidden until construction completes, on desktop and mobile.
+  interactions stay hidden until construction completes, with header controls
+  contained on desktop, mobile landscape, and narrow mobile portrait viewports;
+  portrait starts behind the rotation prompt, then rotates to exercise gameplay.
+- `pending-initial-policy.spec.ts`: a configuration's newly initial building
+  becomes visible even when the matching construction snapshot cannot load.
 - `city-map-construction-updates.spec.ts`: an open city map updates its entries
   when construction progress changes.
 - `city-map-theme.spec.ts`: an open map refreshes its image at dusk and dawn

@@ -209,3 +209,68 @@ test('new configured buildings stay hidden when state loading fails without chan
   assert.equal(isConstructionPending('photostudio'), true);
   assert.equal(isConstructionPending('commons'), false);
 });
+
+test('an updated initial building clears stale pending state while a matching snapshot is unavailable', async (context) => {
+  const apiGlobals = ['__TOWN_VITE_API_BASE__', '__TOWN_VITE_SERVER_URL__'];
+  const descriptors = apiGlobals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
+  apiGlobals.forEach((key) => Object.defineProperty(globalThis, key, { value: '', configurable: true }));
+  context.after(() => {
+    disposeCityGovernance();
+    apiGlobals.forEach((key, index) => {
+      const descriptor = descriptors[index];
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    });
+  });
+  disposeCityGovernance();
+  let version = 'pending-library';
+  let initial = ['commons'];
+  let projectBuildings = ['library', 'research', 'academy'];
+  let failState = false;
+  let stateGate: Promise<void> | undefined;
+  let stateRequested = () => {};
+  context.mock.method(globalThis, 'fetch', async (input: string) => {
+    if (input.endsWith('/config')) return Response.json({ version, initialBuiltBuildingIds: initial,
+      projects: projectBuildings.map((id) => ({ id: `build-${id}`, buildingId: id })) });
+    stateRequested();
+    await stateGate;
+    if (failState) return new Response(null, { status: 503 });
+    return Response.json({ epoch: 'test', revision: 1, configVersion: version,
+      projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: id === 'research', funded: id === 'research' ? 3000 : 0 })), decorations: [] });
+  });
+  await loadCityGovernance();
+  assert.equal(isConstructionPending('library'), true);
+  assert.equal(isConstructionPending('research'), false);
+  assert.equal(isConstructionPending('academy'), true);
+
+  version = 'initial-library';
+  initial = ['commons', 'library'];
+  projectBuildings = ['research', 'academy', 'photostudio'];
+  failState = true;
+  let releaseState!: () => void;
+  stateGate = new Promise((resolve) => { releaseState = resolve; });
+  const requested = new Promise<void>((resolve) => { stateRequested = resolve; });
+  const loading = loadCityGovernance();
+  await requested;
+  const assertPendingPolicy = () => {
+    assert.equal(isConstructionPending('commons'), false);
+    assert.equal(isConstructionPending('library'), false);
+    assert.equal(isConstructionPending('research'), false);
+    assert.equal(isConstructionPending('academy'), true);
+    assert.equal(isConstructionPending('photostudio'), true);
+  };
+  try {
+    assertPendingPolicy();
+  } finally {
+    releaseState();
+    await loading;
+  }
+  assertPendingPolicy();
+  failState = false;
+  await loadCityGovernance();
+  assertPendingPolicy();
+  applyCityState({ epoch: 'restored-city', revision: 0, configVersion: version,
+    projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: false, funded: 0 })), decorations: [] });
+  assert.equal(isConstructionPending('library'), false);
+  assert.equal(isConstructionPending('research'), true);
+});

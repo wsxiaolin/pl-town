@@ -3,8 +3,10 @@ import { BUILDING_DEFS } from '../src/city/data/buildings';
 import type { CityConfig } from '../src/city/cityGovernanceClient';
 import { pushCityState, stubCityWebSocket, waitForCityReady } from './helpers';
 
-for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
-  test(`pending buildings hide models, lots, labels and map entries at ${viewport.width}px`, async ({ page }, testInfo) => {
+for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
+  const startsPortrait = viewport.width < viewport.height;
+  const viewportLabel = startsPortrait ? '390px portrait to landscape' : `${viewport.width}px`;
+  test(`pending buildings hide models, lots, labels and map entries at ${viewportLabel}`, async ({ page }, testInfo) => {
     // This covers archive, memorial, map and construction with several WebGL
     // captures. Software rendering needs a larger overall flow budget.
     test.setTimeout(120_000);
@@ -43,6 +45,21 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify(endpoint === 'config' ? config : endpoint === 'donate' ? { state } : state) });
     });
     await waitForCityReady(page, 'pending-tester');
+    if (startsPortrait) {
+      // Portrait intentionally asks the resident to rotate. Check the narrow
+      // header layout without bypassing that gate, then follow the real flow.
+      await expect(page.locator('#landscapeRequired')).toBeVisible();
+      await expect(page.locator('#bootScreen')).toBeHidden();
+      await expect(page.locator('.ui-header')).toHaveCSS('opacity', '1');
+      const bounds = await page.locator('.ui-header button').evaluateAll((buttons) => buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { id: button.id, left: rect.left, right: rect.right, width: rect.width };
+      }));
+      expect(bounds.filter((rect) => rect.width !== 0 && (rect.left < 0 || rect.right > viewport.width))).toEqual([]);
+      await testInfo.attach('portrait-header-bounds', { body: JSON.stringify(bounds), contentType: 'application/json' });
+      await page.setViewportSize({ width: 844, height: 390 });
+      await expect(page.locator('#landscapeRequired')).toBeHidden();
+    }
     const renderedBuildingIds = () => page.evaluate(() => {
       const ids = new Set<string>();
       (window as any)._mini.scene.traverse((object: any) => {

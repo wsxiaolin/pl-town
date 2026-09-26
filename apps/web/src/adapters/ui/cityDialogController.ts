@@ -277,6 +277,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
           if (transition.changes.length > 0) {
             options.showToast(`${action.kind === 'offer' ? '任务已接受' : '任务已完成'} · ${action.quest.title}`);
           }
+          // Retain an offer's construction guidance after acceptance; completed
+          // quests intentionally have no pending first-stage guidance.
           renderLine(copy.confirmedText + questConstructionHint(action));
           renderOptions([
             { text: '继续交谈', onPick: () => activeNpc && renderNode(firstNode(activeNpc)) },
@@ -397,6 +399,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       const memorialOverlay = getElement<HTMLDivElement>(document, 'memorialOverlay');
       document.addEventListener('keydown', (event) => {
         if (!memorialOpen) return;
+        // Keep every key away from global city shortcuts. Memorial controls use
+        // native button defaults, not target keydown handlers; defaults still run.
         event.stopPropagation();
         if (event.key === 'Escape') {
           event.preventDefault();

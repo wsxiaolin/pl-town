@@ -147,7 +147,7 @@
     letter-spacing: 0.06em;
     white-space: nowrap;
   }
-  .ui-nav { gap: 8px; }
+  .ui-nav { gap: 4px; }
   .map-toggle {
     border-radius: 8px;
     padding: 5px 9px;
