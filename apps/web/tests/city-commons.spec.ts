@@ -18,7 +18,7 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
   const requests: Array<{ projectId: string; requestId: string }> = [];
   let releasePersonalVotes: (() => void) | null = null;
   let personalRequested = false;
-  let failNextVote: 'network' | 'html' | null = null;
+  let failNextVote: 'network' | 'html' | 'invalid-state' | null = null;
   let holdVote = false;
   let releaseVote: (() => void) | null = null;
   stubCityWebSocket(page, { user: 'commons-tester', unlockedBuildings: ['commons'] });
@@ -45,7 +45,10 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
         mine.push(body.projectId);
         state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === body.projectId ? { ...project, votes: project.votes + 1 } : project) };
       }
-      return route.fulfill({ json: { state, votes: { epoch: state.epoch, projectIds: [...mine] } } });
+      const responseState = failure === 'invalid-state'
+        ? { ...state, projects: state.projects.map(({ votes: _votes, ...project }) => project) }
+        : state;
+      return route.fulfill({ json: { state: responseState, votes: { epoch: state.epoch, projectIds: [...mine] } } });
     }
     return route.fulfill({ status: 204, body: '' });
   });
@@ -64,6 +67,7 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
     release: () => { delayPersonalVotes = false; releasePersonalVotes?.(); },
     failNext: () => { failNextVote = 'network'; },
     failNextHtml: () => { failNextVote = 'html'; },
+    failNextInvalidState: () => { failNextVote = 'invalid-state'; },
     holdNextVote: () => { holdVote = true; },
     releaseVote: () => { holdVote = false; releaseVote?.(); },
     pushVoteCount: async () => {
@@ -132,6 +136,7 @@ test('a delayed personal-votes read cannot erase a successful vote and failed vo
   api.failNext();
   await cafe.getByRole('button', { name: '投票建设' }).click();
   await expect(panel.getByRole('alert')).toHaveText('网络连接中断，请稍后重试');
+  await expect(cafe.getByRole('button', { name: '投票建设' })).toBeFocused();
   await cafe.getByRole('button', { name: '投票建设' }).click();
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
   api.release();
@@ -210,4 +215,34 @@ test('an expired session closes the top-layer panel before showing login', async
   await expect(panel).not.toBeVisible();
   await expect(page.locator('#loginOverlay')).toBeVisible();
   await expect(page.locator('#loginInput')).toBeFocused();
+});
+
+test('a committed vote with malformed totals retries the same receipt', async ({ page }) => {
+  const api = await fixture(page);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const cafe = panel.locator('[data-building-id="catcafe"]');
+  api.failNextInvalidState();
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await expect(panel.getByRole('alert')).toHaveText('投票结果暂时不可用，请重试');
+  await expect(cafe).toContainText('0 位居民支持建设');
+  await expect(cafe.getByRole('button', { name: '投票建设' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+  await expect(cafe).toContainText('1 位居民支持建设');
+  expect(api.requests).toHaveLength(2);
+  expect(api.requests[1].requestId).toBe(api.requests[0].requestId);
+});
+
+test('a vote response from a previous session does not mark the new resident as voted', async ({ page }) => {
+  const api = await fixture(page);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const cafe = panel.locator('[data-building-id="catcafe"]');
+  api.holdNextVote();
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await expect.poll(() => api.requests.length).toBe(1);
+  await page.evaluate(() => localStorage.setItem('minicityServerToken', 'another-test-session'));
+  api.releaseVote();
+  await expect(panel.getByRole('alert')).toHaveText('登录状态已变更，请重新打开众议院');
+  await expect(cafe.getByRole('button', { name: '投票建设' })).toBeEnabled();
+  await expect(cafe).toContainText('0 位居民支持建设');
 });

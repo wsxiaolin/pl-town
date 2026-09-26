@@ -41,10 +41,14 @@ function cachedConfig(): CityConfig | null {
 
 function notify() { listeners.forEach((listener) => listener(config, state)); }
 
-function validState(value: unknown): value is CityState {
+export function validState(value: unknown): value is CityState {
   const item = value as Partial<CityState> | null;
   return Boolean(item && typeof item.epoch === 'string' && Number.isSafeInteger(item.revision)
-    && typeof item.configVersion === 'string' && Array.isArray(item.projects) && Array.isArray(item.decorations));
+    && typeof item.configVersion === 'string' && Array.isArray(item.projects)
+    && item.projects.every((project) => project && typeof project.id === 'string'
+      && Number.isSafeInteger(project.funded) && project.funded >= 0 && typeof project.built === 'boolean'
+      && Number.isSafeInteger(project.votes) && project.votes >= 0)
+    && Array.isArray(item.decorations));
 }
 
 async function fetchJson(path: string, signal?: AbortSignal, init?: RequestInit): Promise<Response> {

@@ -17,7 +17,7 @@ for (const [action, failure] of scenarios) {
     };
     let state = {
       epoch: 'error-epoch', revision: 0, configVersion: config.version,
-      projects: [{ id: 'build-catcafe', funded: 0, built: false }],
+      projects: [{ id: 'build-catcafe', funded: 0, built: false, votes: 0 }],
       decorations: [] as Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>,
     };
     let attempts = 0;
@@ -41,7 +41,7 @@ for (const [action, failure] of scenarios) {
         if (attempts === 1 && failure === 'insufficient coins') return route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
         state = {
           ...state, revision: 1,
-          projects: [{ id: 'build-catcafe', funded: action === 'donate' ? Number(body.amount) : 0, built: false }],
+          projects: [{ id: 'build-catcafe', funded: action === 'donate' ? Number(body.amount) : 0, built: false, votes: 0 }],
           decorations: action === 'decorate'
             ? [{ plotId: 'garden', decorationId: String(body.decorationId), ownerId: 'stub-user', ownerNickname: 'error-tester' }]
             : [],

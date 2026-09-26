@@ -58,6 +58,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
     await expect(panel.getByRole('alert')).toBeVisible();
     config.version = 'area-test-v2';
     state = { ...state, configVersion: config.version };
+    await action.focus();
     await page.evaluate(async () => {
       const modulePath = '/src/city/cityGovernanceClient.ts';
       const client = await import(/* @vite-ignore */ modulePath);
@@ -65,6 +66,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
     });
     await expect(quantity).toHaveValue('6');
     await expect(quantity).toBeDisabled();
+    await expect(action).toBeFocused();
     await action.click();
     await expect(action).toBeEnabled();
     await expect(panel.getByRole('alert')).toBeVisible();

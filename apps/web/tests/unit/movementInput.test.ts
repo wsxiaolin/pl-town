@@ -122,11 +122,12 @@ test('mouse pointers never reveal the movement wheel', () => {
 
 test('a modal cancels an active joystick and closing it does not resume stale movement', () => {
   const env = createFakePointerEnv(true);
+  let starts = 0;
   const controller = createMovementInputController({
     document: env.document as unknown as Document,
     window: env.window as unknown as Window,
     signal: new AbortController().signal,
-    onManualStart() {},
+    onManualStart() { starts += 1; },
     isUiModalOpen: () => env.document.modalOpen,
   });
   env.dispatch('pointerdown', { pointerId: 1, pointerType: 'touch', clientX: 80, clientY: 620 });
@@ -135,6 +136,9 @@ test('a modal cancels an active joystick and closing it does not resume stale mo
   env.document.modalOpen = true;
   assert.deepEqual(controller.getMovement(), { x: 0, z: 0 });
   assert.equal(env.zoneClasses.contains('active'), false);
+  env.dispatch('pointerdown', { pointerId: 2, pointerType: 'touch', clientX: 80, clientY: 620 });
+  env.dispatch('pointermove', { pointerId: 2, pointerType: 'touch', clientX: 120, clientY: 620 });
+  assert.equal(starts, 1, 'touch gestures bubbling from a modal cannot start navigation');
   env.document.modalOpen = false;
   assert.deepEqual(controller.getMovement(), { x: 0, z: 0 });
 });

@@ -8,7 +8,7 @@ test('an open map updates construction access without creating more WebGL contex
     personalPlots: [], decorations: [],
   };
   const state = { epoch: 'map-test', revision: 0, configVersion: config.version,
-    projects: [{ id: 'build-library', funded: 0, built: false }], decorations: [] };
+    projects: [{ id: 'build-library', funded: 0, built: false, votes: 0 }], decorations: [] };
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
@@ -42,7 +42,7 @@ test('an open map updates construction access without creating more WebGL contex
     const modulePath = '/src/city/cityGovernanceClient.ts';
     const { applyCityState } = await import(modulePath);
     for (let revision = 1; revision <= 12; revision += 1) {
-      applyCityState({ ...initial, revision, projects: [{ id: 'build-library', funded: 3000, built: true }] });
+      applyCityState({ ...initial, revision, projects: [{ id: 'build-library', funded: 3000, built: true, votes: 0 }] });
     }
   }, state);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(1);

@@ -24,6 +24,7 @@ import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
+import { isCityGovernancePanelOpen } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
@@ -562,7 +563,7 @@ function init() {
   movementInputController = createMovementInputController({
     document, window, signal: lifecycle.signal,
     onManualStart: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
-    isUiModalOpen: () => Boolean(document.querySelector('dialog[open][aria-modal="true"]')),
+    isUiModalOpen: isCityGovernancePanelOpen,
   });
   cameraPanController = createCameraPanController({
     canvas: document.getElementById('c') as HTMLElement, document, window, signal: lifecycle.signal,

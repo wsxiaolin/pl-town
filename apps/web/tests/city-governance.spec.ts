@@ -21,7 +21,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
     epoch: 'test-epoch',
     revision: 0,
     configVersion: config.version,
-    projects: [{ id: 'build-catcafe', funded: 0, built: false }],
+    projects: [{ id: 'build-catcafe', funded: 0, built: false, votes: 0 }],
     decorations: [],
   };
   const requestIds: string[] = [];
@@ -61,7 +61,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
     state = {
       ...state,
       revision: 1,
-      projects: [{ id: 'build-catcafe', funded: body.amount, built: false }],
+      projects: [{ id: 'build-catcafe', funded: body.amount, built: false, votes: 0 }],
     };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ state }) });
   });

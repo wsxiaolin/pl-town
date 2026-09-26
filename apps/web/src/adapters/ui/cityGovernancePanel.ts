@@ -1,7 +1,7 @@
-import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject, type CityState } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
 import { card, money } from './cityGovernanceDom';
-import { loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
+import { getCityVotingSessionId, loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
 let root: HTMLDialogElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -12,11 +12,20 @@ const donationDrafts = new Map<string, string>();
 const tabScrollTop = new Map<string, number>();
 let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
-let votesOwner: string | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
 const voting = new Set<string>();
 let votesLoadSequence = 0;
+const INPUT_SELECTOR = '[data-city-input],select[aria-label]';
+const FOCUS_SELECTOR = '[data-city-focus],[aria-label]';
+const CARD_SELECTOR = '[data-city-project],[data-city-area],[data-city-plot]';
+
+export function isCityGovernancePanelOpen(): boolean { return root?.open ?? false; }
+
+function focusedCardKey(element: HTMLElement | null): string | undefined {
+  const card = element?.closest<HTMLElement>(CARD_SELECTOR);
+  return card?.dataset.cityProject ?? card?.dataset.cityArea ?? card?.dataset.cityPlot;
+}
 
 function handleLoginRequired(): void {
   if (!root?.open) return;
@@ -33,14 +42,14 @@ function button(label: string, action: () => void, disabled = false): HTMLButton
   return element;
 }
 
-function render(): void {
+function render(preferredFocusKey?: string): void {
   if (!root) return;
   const focused = root.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
-  const focusKey = focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
-  const focusProject = focused?.closest<HTMLElement>('[data-city-project]')?.dataset.cityProject;
+  const focusKey = preferredFocusKey ?? focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
+  const focusProject = focusedCardKey(focused);
   const previousBody = root.querySelector<HTMLElement>('.city-governance-body');
   if (previousBody?.dataset.cityTab) tabScrollTop.set(previousBody.dataset.cityTab, previousBody.scrollTop);
-  const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-city-input],select[aria-label]')].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
+  const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
   const config = getCityConfig();
   const state = getCityState();
   root.replaceChildren();
@@ -94,13 +103,13 @@ function render(): void {
   }
   const list = document.createElement('div');
   list.className = 'city-governance-list';
-  if (activeTab === 'collective') renderCollective(list, config.projects, state.projects);
+  if (activeTab === 'collective') renderCollective(list, config.projects, state);
   else renderPersonal(list, config, state);
   body.append(list);
   body.dataset.cityTab = activeTab;
   root.append(body);
   body.scrollTop = tabScrollTop.get(activeTab) ?? 0;
-  for (const input of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-city-input],select[aria-label]')) {
+  for (const input of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)) {
     const previous = values.get(input.dataset.cityInput ?? input.getAttribute('aria-label'));
     if (previous !== undefined) input.value = previous;
   }
@@ -109,24 +118,25 @@ function render(): void {
 
 function restorePanelFocus(focusKey: string | null | undefined, projectId?: string): void {
   if (!root) return;
-  const replacement = focusKey ? [...root.querySelectorAll<HTMLElement>('[data-city-focus],[aria-label]')]
+  const replacement = focusKey ? [...root.querySelectorAll<HTMLElement>(FOCUS_SELECTOR)]
     .find((element) => (element.dataset.cityFocus ?? element.getAttribute('aria-label')) === focusKey) : undefined;
   if (replacement && !replacement.hasAttribute('disabled')) replacement.focus({ preventScroll: true });
   else {
-    const project = projectId ? [...root.querySelectorAll<HTMLElement>('[data-city-project]')]
-      .find((element) => element.dataset.cityProject === projectId) : undefined;
+    const project = projectId ? [...root.querySelectorAll<HTMLElement>(CARD_SELECTOR)]
+      .find((element) => focusedCardKey(element) === projectId) : undefined;
     const nextAction = project?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
     (nextAction ?? root.querySelector<HTMLButtonElement>('.city-governance-head button'))?.focus({ preventScroll: true });
   }
 }
 
-function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean; votes?: number }>): void {
+function renderCollective(list: HTMLElement, projects: CityProject[], state: CityState): void {
+  const currentVotes = myVotes?.sessionId === getCityVotingSessionId() && myVotes?.epoch === state.epoch ? myVotes : null;
   const explanation = document.createElement('p');
   explanation.className = 'city-governance-intro';
   explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。为期待的建筑投票，每位居民每项一票；投票不消耗金币，捐款满额后即可建成。';
   list.append(explanation);
   for (const project of projects) {
-    const saved = progress.find((entry) => entry.id === project.id);
+    const saved = state.projects.find((entry) => entry.id === project.id);
     const item = card(project.name, project.description);
     item.dataset.cityProject = project.id;
     item.dataset.buildingId = project.buildingId ?? '';
@@ -137,20 +147,24 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
     if (project.kind === 'building') {
       const total = document.createElement('p');
       total.dataset.cityVoteCount = project.id;
-      total.setAttribute('aria-live', 'polite');
       total.textContent = `${saved?.votes ?? 0} 位居民支持建设`;
       item.append(total);
       if (!saved?.built) {
-        const voted = votesOwner === localStorage.getItem('minicityServerToken') && myVotes?.epoch === getCityState()?.epoch && myVotes?.projectIds.includes(project.id);
+        const voted = currentVotes?.projectIds.includes(project.id);
         const action = button(voted ? '已投票' : voting.has(project.id) ? '正在投票…' : '投票建设', async () => {
           voteError = '';
           votesLoading?.abort();
           votesLoading = null;
           voting.add(project.id);
           render();
-          try { myVotes = await voteCity(project.id); votesOwner = localStorage.getItem('minicityServerToken'); }
-          catch (error) { voteError = error instanceof Error ? error.message : '投票失败，请重试'; }
-          finally { voting.delete(project.id); render(); }
+          let retryFocus: string | undefined;
+          try { myVotes = await voteCity(project.id); }
+          catch (error) {
+            voteError = error instanceof Error ? error.message : '投票失败，请重试';
+            const currentFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            if (focusedCardKey(currentFocus) === project.id) retryFocus = `vote:${project.id}`;
+          }
+          finally { voting.delete(project.id); render(retryFocus); }
         }, Boolean(voted) || voting.has(project.id));
         action.dataset.cityFocus = `vote:${project.id}`;
         item.append(action);
@@ -222,7 +236,6 @@ export function openCityGovernancePanel(buildingId = ''): void {
       containTabFocus(event);
       if (event.key === 'Escape') { event.preventDefault(); closeCityGovernancePanel(); }
     });
-    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'click', 'wheel']) root.addEventListener(type, (event) => event.stopPropagation());
     window.addEventListener('minicity:login-required', handleLoginRequired, true);
     unsubscribe = subscribeCityGovernance(() => {
       if (!root?.open) return;
@@ -230,10 +243,11 @@ export function openCityGovernancePanel(buildingId = ''): void {
       render();
     });
   }
-  if (!root.open) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  activeTab = 'collective';
+  if (!root.open) {
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    activeTab = 'collective';
+  }
   voteError = '';
-  root.classList.add('open');
   if (!root.open) root.showModal();
   render();
   root.querySelector<HTMLButtonElement>('.city-governance-head button')?.focus();
@@ -243,15 +257,13 @@ export function openCityGovernancePanel(buildingId = ''): void {
 async function refreshVotes(): Promise<void> {
   const sequence = ++votesLoadSequence;
   votesLoading?.abort();
-  const owner = localStorage.getItem('minicityServerToken');
   myVotes = null;
-  votesOwner = owner;
-  if (!owner) { render(); return; }
+  if (getCityVotingSessionId() === null) { render(); return; }
   const controller = new AbortController();
   votesLoading = controller;
   try {
     const result = await loadCityVotes(controller.signal);
-    if (controller.signal.aborted || sequence !== votesLoadSequence || owner !== localStorage.getItem('minicityServerToken')) return;
+    if (controller.signal.aborted || sequence !== votesLoadSequence) return;
     myVotes = result;
   } catch (error) {
     if (!controller.signal.aborted && sequence === votesLoadSequence) voteError = error instanceof Error ? error.message : '读取投票记录失败';
@@ -262,8 +274,9 @@ async function refreshVotes(): Promise<void> {
 
 export function closeCityGovernancePanel(): void {
   if (!root?.open) return;
-  root.classList.remove('open');
   root.close();
+  // Keep per-tab scroll across reopening so residents can return to the same
+  // construction projects. Disposal starts a new city session and clears it.
   votesLoading?.abort();
   votesLoading = null;
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
@@ -285,7 +298,6 @@ export function disposeCityGovernancePanel(): void {
   tabScrollTop.clear();
   clearCityConstructionDrafts();
   myVotes = null;
-  votesOwner = null;
   voteError = '';
   voting.clear();
 }

@@ -107,6 +107,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   };
 
   options.window.addEventListener('keydown', (event) => {
+    if (locked || options.isUiModalOpen()) return;
     if (isEditable(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
     const key = event.code;
     if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(key)) return;
@@ -126,7 +127,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   }, { signal: options.signal });
 
   options.window.addEventListener('pointerdown', (event) => {
-    if (!isTouchPointer(event) || pointerId !== null || locked) return;
+    if (!isTouchPointer(event) || pointerId !== null || locked || options.isUiModalOpen()) return;
     if (!zoneContains(event.clientX, event.clientY)) return;
     pointerId = event.pointerId;
     startX = event.clientX;
@@ -136,6 +137,11 @@ export function createMovementInputController(options: MovementInputControllerOp
 
   options.window.addEventListener('pointermove', (event) => {
     if (event.pointerId !== pointerId) return;
+    if (locked || options.isUiModalOpen()) {
+      keys.clear();
+      finishPointer();
+      return;
+    }
     if (pending) {
       if (options.document.body.classList.contains('camera-pan-active')) {
         pointerId = null;
@@ -165,8 +171,10 @@ export function createMovementInputController(options: MovementInputControllerOp
 
   function getMovement(): MovementVector {
     if (locked || options.isUiModalOpen()) {
-      keys.clear();
-      finishPointer();
+      if (pointerId !== null || pending || active || keys.size) {
+        keys.clear();
+        finishPointer();
+      }
       movement.x = 0; movement.z = 0;
       return movement;
     }

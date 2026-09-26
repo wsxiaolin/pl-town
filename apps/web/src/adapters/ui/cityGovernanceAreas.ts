@@ -41,10 +41,12 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
     }
     if (!ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
     const select = decorationSelect(area.name, config, ids);
+    select.dataset.cityFocus = `area-decoration:${area.id}`;
     select.value = draft.decorationId;
     const quantity = document.createElement('input');
     quantity.type = 'number'; quantity.min = '1'; quantity.step = '1'; quantity.value = String(draft.quantity);
     quantity.setAttribute('aria-label', `${area.name}建设数量`);
+    quantity.dataset.cityFocus = `area-quantity:${area.id}`;
     const total = document.createElement('p');
     total.dataset.cityAreaTotal = 'true';
     total.setAttribute('aria-live', 'polite');
@@ -55,6 +57,7 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
     const rows = [...new Set(plots.map((plot) => plot.z))].sort((a, b) => a - b);
     preview.style.gridTemplateColumns = `repeat(${columns.length}, minmax(0, 1fr))`;
     const action = actionButton('批量建设');
+    action.dataset.cityFocus = `area-build:${area.id}`;
     const update = () => {
       const available = plots.filter((plot) => !occupied.has(plot.id) && plot.options.includes(draft.decorationId));
       quantity.max = String(available.length);
@@ -93,6 +96,7 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
   // The original individually purchased plots keep their IDs and remain usable.
   for (const plot of config.personalPlots.filter((entry) => !grouped.has(entry.id))) {
     const item = card(plot.name, '选择一项装饰，建设完成后全城居民都能看到。');
+    item.dataset.cityPlot = plot.id;
     const built = occupied.get(plot.id);
     if (built) {
       const owner = document.createElement('p');
@@ -100,7 +104,9 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
       item.append(owner);
     } else {
       const select = decorationSelect(plot.name, config, plot.options);
+      select.dataset.cityFocus = `plot-decoration:${plot.id}`;
       const action = actionButton('建设');
+      action.dataset.cityFocus = `plot-build:${plot.id}`;
       const draft = drafts.get(plot.id) ?? { decorationId: select.value, quantity: 1, pending: false };
       drafts.set(plot.id, draft);
       select.value = draft.decorationId;
