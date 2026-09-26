@@ -27,6 +27,7 @@ export type CityMutationResult = { state: CityState; replayed: boolean } | null;
 
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
+const uncertainPaymentGuidance = '请在当前页面重试；同一登录会话内重试不会重复扣费。刷新页面或重新登录后无法确认上一笔，请先核对余额和建设进度。';
 const listeners = new Set<CityGovernanceListener>();
 type PendingOperation = { requestId: string; configVersion: string; body: Record<string, unknown> };
 // Do not expire uncertain receipts: the server may already have charged them.
@@ -206,10 +207,12 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     // A changed amount/decoration is a new payment, not a retry. Resolve the
     // target's uncertain operation before accepting another set of parameters.
     if (retained.body.projectId !== undefined) {
-      throw new Error(`上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
+      const project = config.projects.find((entry) => entry.id === retained.body.projectId);
+      throw new Error(`${project ? `「${project.name}」` : '该项目'}上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
     }
+    const plot = config.personalPlots.find((entry) => entry.id === retained.body.plotId);
     const decoration = config.decorations.find((entry) => entry.id === retained.body.decorationId);
-    throw new Error(`这块地上一笔「${decoration?.name ?? retained.body.decorationId}」建设结果尚未确认，请恢复原装饰重试，确认结果后再修改。`);
+    throw new Error(`${plot ? `「${plot.name}」` : '这块地'}上一笔「${decoration?.name ?? retained.body.decorationId}」建设结果尚未确认，请恢复原装饰重试，确认结果后再修改。`);
   }
   const operation = retained
     ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
@@ -249,8 +252,6 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   return { state: payload.state, replayed: payload.replayed === true };
 }
 
-const uncertainPaymentGuidance = '请在当前页面重试；同一登录会话内重试不会重复扣费。刷新页面或重新登录后无法确认上一笔，请先核对余额和建设进度。';
-
 // These keys are the city HttpBodyError contract. Keep them aligned with
 // cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
 const cityOperationMessages: Record<string, string> = {
@@ -272,6 +273,14 @@ const cityOperationMessages: Record<string, string> = {
   'Unknown city endpoint': '城市建设服务暂时不可用，请稍后重试。',
 };
 
+// Responses outside the city router do not resolve an earlier uncertain payment.
+// Keep their presentation separate from the definitive rejection contract below.
+const cityRequestMessages: Record<string, string> = {
+  'Too many requests': '请求过于频繁，请稍后使用原金额或装饰重试。',
+  'Request origin is not allowed': '当前访问来源无法提交建设，请联系管理员检查访问配置。',
+  'Internal server error': '城市建设服务暂时异常，请稍后使用原金额或装饰重试。',
+};
+
 function isDefinitiveRejection(response: Response, error?: string): boolean {
   // Authentication and rate checks run before receipt lookup. A 401/429 says
   // nothing about whether an earlier attempt committed, so keep its receipt.
@@ -280,8 +289,11 @@ function isDefinitiveRejection(response: Response, error?: string): boolean {
 }
 
 function cityOperationError(error?: string): string {
-  return typeof error === 'string' && Object.hasOwn(cityOperationMessages, error)
-    ? cityOperationMessages[error]! : '建设请求失败，请稍后重试。';
+  if (typeof error === 'string') {
+    if (Object.hasOwn(cityOperationMessages, error)) return cityOperationMessages[error]!;
+    if (Object.hasOwn(cityRequestMessages, error)) return cityRequestMessages[error]!;
+  }
+  return '建设请求失败，请稍后重试。';
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
