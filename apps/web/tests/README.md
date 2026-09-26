@@ -9,6 +9,11 @@
 - `unit/`: pure TypeScript domain tests (quest engine, navigation, stats).
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
+- `pending-task-guidance.spec.ts`: pending story destinations and NPC quest
+  offers explain collective construction, then resume normal navigation and
+  quest progress when built, at desktop and mobile landscape sizes.
+- `city-governance-loading.spec.ts`: in-flight configuration/state reads show
+  loading before failure, preserve payment feedback, and retry uncertain receipts.
 - `city-governance-errors.spec.ts`: persistent target-labelled failure feedback,
   donation/decoration retries, draft preservation across tab changes and panel
   reopening, and mobile feedback layout.
