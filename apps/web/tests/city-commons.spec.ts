@@ -133,11 +133,16 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
         return {
           left: headStyle.paddingLeft, right: headStyle.paddingRight,
           feedback: [...element.querySelectorAll('[data-city-status], [role="alert"], [role="status"]')]
-            .map((region) => { const style = getComputedStyle(region); return { left: style.marginLeft, right: style.marginRight }; }),
+            .map((region) => { const style = getComputedStyle(region); return {
+              emptyStatus: region.matches('[role="status"]:empty'), left: style.marginLeft, right: style.marginRight,
+            }; }),
         };
       });
       expect(gutters.feedback).toHaveLength(5);
-      for (const region of gutters.feedback) expect(region).toEqual({ left: gutters.left, right: gutters.right });
+      for (const { emptyStatus, left, right } of gutters.feedback) {
+        expect({ left, right }).toEqual(emptyStatus ? { left: '0px', right: '0px' }
+          : { left: gutters.left, right: gutters.right });
+      }
       await page.screenshot({ path: testInfo.outputPath('commons-mobile-portrait.png') });
     }
     await page.keyboard.press('Escape');

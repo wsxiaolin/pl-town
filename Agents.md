@@ -155,6 +155,7 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 - `gameplay/`：严格 TypeScript 的任务、对话、条件、效果、存档适配和声明式内容，不依赖 DOM、Three.js、网络或 `localStorage`。
 - `adapters/ui/`：对话、社区面板、多人和住房等 DOM/API 适配器，内部状态不能回流到 `gameplay/`。
+- `city/cityGovernanceClient.ts`、`city/cityVotingClient.ts`：现有浏览器传输适配门面，封装 HTTP、认证会话、收据及状态订阅；不是纯领域模块，`gameplay/` 不得依赖它们。
 - `city/navigation/`、`city/npcSystem.ts`：道路寻路、碰撞、NPC 生成、日程和巡逻行为。
 - `city/progression/`：旧统计数据的兼容读写和迁移边界。
 - `rendering/`：程序纹理、建筑网格工厂、城市装饰和场景视觉资源。

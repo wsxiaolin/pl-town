@@ -15,15 +15,18 @@ export function withPanelFocusRestoration(render: () => void): void {
 export function trackPendingActionFocus(focusKey: string) {
   let uninterrupted = document.activeElement instanceof HTMLElement
     && document.activeElement.dataset.cityFocus === focusKey;
+  let renderedFallback: EventTarget | null = null;
   const controller = new AbortController();
   const movedOn = (event: Event) => {
-    if (event.type !== 'focusin' || !restoringPanelFocus) uninterrupted = false;
+    if (event.type === 'focusin' && restoringPanelFocus) renderedFallback = event.target;
+    else uninterrupted = false;
   };
   for (const event of ['focusin', 'pointerdown', 'keydown']) {
     document.addEventListener(event, movedOn, { capture: true, signal: controller.signal });
   }
   return {
-    shouldRestore: (failed = false) => uninterrupted && (failed || document.activeElement === document.body),
+    shouldRestore: (failed = false) => uninterrupted
+      && (failed || document.activeElement === document.body || document.activeElement === renderedFallback),
     dispose: () => controller.abort(),
   };
 }

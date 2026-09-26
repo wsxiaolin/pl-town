@@ -14,8 +14,11 @@ export type CityConfig = {
 };
 export type CityState = {
   epoch: string; revision: number; configVersion: string;
-  projects: Array<{ id: string; funded: number; built: boolean; votes: number }>;
+  projects: Array<{ id: string; funded: number; built: boolean; votes?: number }>;
   decorations: Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>;
+};
+type CityStateWithVotes = Omit<CityState, 'projects'> & {
+  projects: Array<CityState['projects'][number] & { votes: number }>;
 };
 import { townApiUrl } from '../core/townApi';
 import { getResidentToken } from '../core/residentToken';
@@ -97,28 +100,26 @@ function isCurrentSession(session: MutationSession): boolean {
   return refreshCityGovernanceSession() === session.generation;
 }
 
-export function validState(value: unknown): value is CityState {
+function validCityState(value: unknown, allowMissingVoteCounts: boolean): value is CityState {
   const item = value as Partial<CityState> | null;
   return Boolean(item && typeof item.epoch === 'string' && Number.isSafeInteger(item.revision)
     && typeof item.configVersion === 'string' && Array.isArray(item.projects)
     && item.projects.every((project) => project && typeof project.id === 'string'
       && Number.isSafeInteger(project.funded) && project.funded >= 0 && typeof project.built === 'boolean'
-      && Number.isSafeInteger(project.votes) && project.votes >= 0)
+      && ((allowMissingVoteCounts && !Object.hasOwn(project, 'votes'))
+        || (typeof project.votes === 'number' && Number.isSafeInteger(project.votes) && project.votes >= 0)))
     && Array.isArray(item.decorations));
 }
 
+export function validState(value: unknown): value is CityStateWithVotes {
+  return validCityState(value, false);
+}
+
 // The frontend and server deploy independently. Older snapshots have no vote
-// counts; accept only that missing additive field, never malformed counts.
+// counts; keep those unknown, and reject explicitly malformed counts.
 // Voting acknowledgements still use validState directly before releasing IDs.
 function readCityState(value: unknown): CityState | null {
-  if (validState(value)) return value;
-  if (!value || typeof value !== 'object') return null;
-  const item = value as Partial<CityState>;
-  if (!Array.isArray(item.projects)) return null;
-  const normalized = { ...item, projects: item.projects.map((project) =>
-    project && typeof project === 'object' && !Object.hasOwn(project, 'votes')
-      ? { ...project, votes: 0 } : project) };
-  return validState(normalized) ? normalized : null;
+  return validCityState(value, true) ? value : null;
 }
 
 function isOlderCityState(next: CityState): boolean {

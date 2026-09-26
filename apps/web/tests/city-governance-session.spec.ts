@@ -166,8 +166,8 @@ test('concurrent submissions restore their own focus without interrupting anothe
   await expect(secondButton).toBeFocused();
   await expect(panel.getByRole('alert')).toContainText('金币不足');
 
-  // The modal keeps focus on an available control in the same card while its
-  // donation button is disabled; success must preserve that fallback.
+  // The modal keeps focus on an available control while donation is pending;
+  // success restores its enabled action if the resident has not moved on.
   await firstButton.click();
   const firstFallback = first.getByRole('button', { name: '投票建设', exact: true });
   await expect(firstFallback).toBeFocused();
@@ -179,7 +179,7 @@ test('concurrent submissions restore their own focus without interrupting anothe
   ] };
   await pending[2]!.fulfill({ json: { state: fixture.state } });
   await expect(firstButton).toBeEnabled();
-  await expect(firstFallback).toBeFocused();
+  await expect(firstButton).toBeFocused();
   await expect(panel.getByRole('alert')).toContainText('金币不足');
 
   await firstButton.click();
@@ -233,8 +233,8 @@ test('construction and donation preserve errors from other targets and restore t
   ] };
   await pending[1]!.fulfill({ json: { state: fixture.state } });
   await expect(areaButton).toBeEnabled();
-  // The modal retains its active-tab fallback while the area controls disable.
-  await expect(panel.getByRole('button', { name: '个人建设', exact: true })).toBeFocused();
+  // Partial success leaves a reusable action, so leave the temporary tab fallback.
+  await expect(areaButton).toBeFocused();
   await expect(panel.getByRole('alert')).toContainText('金币不足');
 
   await areaButton.click();
@@ -261,9 +261,51 @@ test('construction and donation preserve errors from other targets and restore t
   ] };
   await pending[4]!.fulfill({ json: { state: fixture.state } });
   await expect(areaButton).toBeEnabled();
-  await expect(panel.getByRole('button', { name: '个人建设', exact: true })).toBeFocused();
+  await expect(areaButton).toBeFocused();
   expect(fixture.errors).toEqual([]);
 });
+
+for (const completion of ['full-area', 'built-project', 'resident-moved'] as const) {
+  test(`successful construction keeps safe focus after ${completion}`, async ({ page }) => {
+    let pending: Route | undefined;
+    const fixture = await openGovernance(page, (route) => { pending = route; });
+    const panel = page.locator('.city-governance-panel');
+    const personal = completion !== 'built-project';
+    const activeTab = panel.getByRole('button', { name: personal ? '个人建设' : '城市集体建设', exact: true });
+    if (personal) await activeTab.click();
+    const area = panel.locator('[data-city-area="session-garden"]');
+    const project = panel.locator('[data-city-project="build-catcafe"]');
+    const action = personal ? area.getByRole('button', { name: '批量建设', exact: true })
+      : project.getByRole('button', { name: '捐款', exact: true });
+    if (personal) await area.getByRole('spinbutton').fill(completion === 'full-area' ? '4' : '1');
+    else await project.getByRole('spinbutton').fill('3000');
+    await action.click();
+    await expect.poll(() => Boolean(pending)).toBe(true);
+    const otherInput = panel.locator('[data-city-plot="garden"]').getByRole('combobox');
+    if (completion === 'resident-moved') {
+      await otherInput.focus();
+      await otherInput.selectOption('pine');
+    }
+    fixture.state = { ...fixture.state, revision: 1,
+      projects: fixture.state.projects.map((entry) => !personal && entry.id === 'build-catcafe'
+        ? { ...entry, funded: 3000, built: true } : entry),
+      decorations: personal ? Array.from({ length: completion === 'full-area' ? 4 : 1 }, (_, index) => ({
+        plotId: `session-plot-${index}`, decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester',
+      })) : [],
+    };
+    await pending!.fulfill({ json: { state: fixture.state } });
+    if (completion === 'resident-moved') {
+      await expect(action).toBeEnabled();
+      await expect(otherInput).toBeFocused();
+      await expect(otherInput).toHaveValue('pine');
+    } else {
+      if (personal) await expect(action).toBeDisabled();
+      else await expect(action).toHaveCount(0);
+      await expect(activeTab).toBeFocused();
+    }
+    expect(fixture.errors).toEqual([]);
+  });
+}
 
 for (const action of ['donate', 'decorate'] as const) {
   test(`${action} requires confirming an uncertain target before changing its payment parameters`, async ({ page }) => {

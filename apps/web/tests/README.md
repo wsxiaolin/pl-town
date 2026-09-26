@@ -19,7 +19,9 @@
   reopening, and mobile feedback layout.
 - `city-governance-session.spec.ts`: concurrent focus, draft continuity,
   queued conflict refreshes, HTTP receipt retry policy, target parameter locking,
-  and isolation between login sessions. Uncertain receipts remain in memory for
+  and isolation between login sessions. Successful actions recover focus from
+  the modal's temporary fallback unless the resident moved elsewhere; completed
+  projects and full areas keep focus on an available control. Uncertain receipts remain in memory for
   the running page and original login token; reload, reauthentication with a new
   token, or disposal ends that retry guarantee. The client does not persist new
   credentials or payment receipts.
@@ -33,7 +35,8 @@
 - `city-voting-compatibility.spec.ts`: independently deployed older servers keep
   donation and area construction usable when the votes read endpoint returns
   404/405. Reopening or explicitly checking voting retries capability detection;
-  transport/server failures and malformed mutation receipts remain errors.
+  missing legacy counts stay unknown while explicit zero counts remain visible.
+  Transport/server failures and malformed mutation receipts remain errors.
 - `city-login-recovery.spec.ts`: a real client disconnect and automatic reconnect
   followed by a rejected hello closes the commons dialog before ordinary login
   or Physics Lab verification; server feedback, credentials, and focus remain usable.

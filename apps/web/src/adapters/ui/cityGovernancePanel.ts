@@ -270,10 +270,12 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
       detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
       item.append(detail);
       if (project.kind === 'building' && !votesUnavailable) {
-        const total = document.createElement('p');
-        total.dataset.cityVoteCount = project.id;
-        total.textContent = `${saved?.votes ?? 0} 位居民支持建设`;
-        item.append(total);
+        if (saved?.votes !== undefined) {
+          const total = document.createElement('p');
+          total.dataset.cityVoteCount = project.id;
+          total.textContent = `${saved.votes} 位居民支持建设`;
+          item.append(total);
+        }
         if (!saved?.built) {
           const voted = currentVotes?.projectIds.includes(project.id);
           const pendingVote = voting.get(project.id)?.sessionId === sessionId;

@@ -36,6 +36,7 @@ test('pre-voting server snapshots preserve construction while mutation receipts 
   const panel = page.locator('.city-governance-panel');
   const project = panel.locator('[data-city-project="library"]');
   await expect(project).toContainText('已建成');
+  await expect(project.locator('[data-city-vote-count]')).toHaveCount(0);
   const visibleLibrary = () => page.evaluate(() => {
     let found = false;
     (window as any)._mini.scene.traverse((object: any) => {
@@ -49,16 +50,21 @@ test('pre-voting server snapshots preserve construction while mutation receipts 
   await pushCityState(page, state);
   await expect(project.getByRole('button', { name: '捐款', exact: true })).toBeVisible();
   await expect.poll(visibleLibrary).toBe(false);
-  await pushCityState(page, { ...state, revision: 3, projects: [{ ...state.projects[0], votes: 'invalid' }] });
-  await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #2');
+  for (const votes of ['invalid', -1]) {
+    await pushCityState(page, { ...state, revision: 3, projects: [{ ...state.projects[0], votes }] });
+    await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #2');
+    await expect(project.locator('[data-city-vote-count]')).toHaveCount(0);
+  }
   await project.getByRole('button', { name: '捐款', exact: true }).click();
   await expect(project).toContainText('100 金币');
   await expect(panel.locator('[data-city-feedback]')).toBeHidden();
   // A missing count in a write response is still unconfirmed and retains its ID.
   await project.getByRole('button', { name: '投票建设', exact: true }).click();
   await expect(panel.locator('[data-city-vote-feedback]')).toContainText('投票结果暂时不可用');
+  await expect(project.locator('[data-city-vote-count]')).toHaveCount(0);
   await project.getByRole('button', { name: '投票建设', exact: true }).click();
   await expect(project.getByRole('button', { name: '已投票', exact: true })).toBeDisabled();
+  await expect(project.locator('[data-city-vote-count]')).toHaveText('1 位居民支持建设');
   expect(requests).toHaveLength(2);
   expect(requests[1]).toBe(requests[0]);
   expect(errors).toEqual([]);
@@ -144,7 +150,7 @@ for (const status of [404, 405] as const) {
     } else await unavailable.getByRole('button', { name: '重新检测投票', exact: true }).click();
     await expect.poll(() => api.reads).toBeGreaterThan(previousReads);
     await expect(unavailable).toHaveCount(0);
-    await expect(project.locator('[data-city-vote-count]')).toHaveText('0 位居民支持建设');
+    await expect(project.locator('[data-city-vote-count]')).toHaveCount(0);
     await project.getByRole('button', { name: '投票建设', exact: true }).click();
     await expect(project.getByRole('button', { name: '已投票', exact: true })).toBeDisabled();
     await expect(panel.getByRole('alert')).toHaveCount(0);
@@ -182,7 +188,7 @@ test('an unknown POST project remains an operation error without disabling votin
   await vote.click();
   await expect(panel.locator('[data-city-vote-feedback]')).toHaveText('投票项目不存在，请刷新建设列表后重试');
   await expect(vote).toBeEnabled();
-  await expect(panel.locator('[data-city-vote-count]')).toHaveCount(1);
+  await expect(panel.locator('[data-city-vote-count]')).toHaveCount(0);
   await expect(unavailable).toHaveCount(0);
   expect(api.errors).toEqual([]);
 });
@@ -210,10 +216,28 @@ test('unsupported capability and a late unsupported read do not carry into anoth
   });
   await expect(panel.locator('[data-city-votes-unavailable]')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: '已投票', exact: true })).toBeDisabled();
+  // Private vote records cannot establish an aggregate missing from public state.
+  await expect(panel.locator('[data-city-vote-count]')).toHaveCount(0);
   await previousRead!.fulfill({ status: 404, body: 'Not found' });
   await expect.poll(() => page.evaluate(() => (window as any).oldCapabilityRead)).toEqual({ result: null });
   await expect(panel.locator('[data-city-votes-unavailable]')).toHaveCount(0);
   await expect(panel.getByRole('alert')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: '已投票', exact: true })).toBeDisabled();
+  expect(api.errors).toEqual([]);
+});
+
+test('a missing legacy vote count stays unknown while an explicit zero is shown', async ({ page }) => {
+  const api = await compatibilityFixture(page, 404);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  await expect(panel.locator('[data-city-votes-unavailable]')).toBeVisible();
+  api.supported = true;
+  await panel.getByRole('button', { name: '重新检测投票', exact: true }).click();
+  const vote = panel.getByRole('button', { name: '投票建设', exact: true });
+  const count = panel.locator('[data-city-vote-count="library"]');
+  await expect(vote).toBeEnabled();
+  await expect(count).toHaveCount(0);
+  await pushCityState(page, { configVersion: 'capability-fixture', epoch: 'capability-epoch', revision: 1,
+    projects: [{ id: 'library', funded: 0, built: false, votes: 0 }], decorations: [] });
+  await expect(count).toHaveText('0 位居民支持建设');
   expect(api.errors).toEqual([]);
 });
