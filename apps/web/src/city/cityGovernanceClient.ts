@@ -70,6 +70,9 @@ function notify() {
     // While the new snapshot is unavailable, keep known construction outcomes
     // and hide new project buildings until the server confirms completion.
     const initialBuildings = new Set(config.initialBuiltBuildingIds);
+    // The current config may promote a formerly pending project to an initial
+    // building, which no longer needs a matching project progress row.
+    initialBuildings.forEach((id) => pendingBuildings.delete(id));
     for (const project of config.projects) {
       if (project.buildingId && !initialBuildings.has(project.buildingId) && !trustedBuiltBuildings.has(project.buildingId)) pendingBuildings.add(project.buildingId);
     }
