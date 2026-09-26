@@ -1,6 +1,6 @@
 export const money = (value: number) => `${value.toLocaleString()} 金币`;
 
-// Rebuilding a disabled action loses focus. Restore it after success only if
+// Rebuilding a disabled action loses focus. Restore it after a response only if
 // the user has not since focused, clicked or typed elsewhere in the page.
 export function trackPendingActionFocus(focusKey: string) {
   let uninterrupted = document.activeElement instanceof HTMLElement
@@ -11,7 +11,7 @@ export function trackPendingActionFocus(focusKey: string) {
     document.addEventListener(event, movedOn, { capture: true, signal: controller.signal });
   }
   return {
-    shouldRestore: () => uninterrupted && document.activeElement === document.body,
+    shouldRestore: (failed = false) => uninterrupted && (failed || document.activeElement === document.body),
     dispose: () => controller.abort(),
   };
 }
