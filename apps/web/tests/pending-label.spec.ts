@@ -17,7 +17,7 @@ for (const lockBeforeBuild of [false, true]) {
     };
     let state: CityState = {
       epoch: 'pending-label', revision: 0, configVersion: config.version,
-      projects: [{ id: 'build-litreview', funded: 0, built: false }], decorations: [],
+      projects: [{ id: 'build-litreview', funded: 0, built: false, votes: 0 }], decorations: [],
     };
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -45,7 +45,7 @@ for (const lockBeforeBuild of [false, true]) {
 
     // Re-locking while pending must still update the independent story policy.
     if (lockBeforeBuild) await updateCatalog(false);
-    state = { ...state, revision: 1, projects: [{ id: 'build-litreview', funded: 3000, built: true }] };
+    state = { ...state, revision: 1, projects: [{ id: 'build-litreview', funded: 3000, built: true, votes: 0 }] };
     await page.evaluate(async () => {
       const modulePath = '/src/city/cityGovernanceClient.ts';
       await (await import(modulePath)).loadCityGovernance();
