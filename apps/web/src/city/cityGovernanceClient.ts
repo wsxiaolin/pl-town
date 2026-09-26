@@ -167,6 +167,12 @@ export function disposeCityGovernance(): void {
   listeners.clear();
 }
 
+function cityOperationKey(path: string, body: Record<string, unknown>): string {
+  const target = body.areaId !== undefined ? ['areaId', body.areaId]
+    : body.projectId !== undefined ? ['projectId', body.projectId] : ['plotId', body.plotId];
+  return `${path}:${JSON.stringify(target)}`;
+}
+
 async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
   refreshCityGovernanceSession();
@@ -176,17 +182,23 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
     throw new Error('请先登录');
   }
-  const operationKey = `${path}:${body.areaId !== undefined
-    ? JSON.stringify({ areaId: body.areaId })
-    : JSON.stringify(body)}`;
-  const previousOperation = pendingRequestIds.get(operationKey);
-  if (body.areaId !== undefined && previousOperation
-    && (previousOperation.body.decorationId !== body.decorationId || previousOperation.body.quantity !== body.quantity)) {
-    throw new Error('该区域上一笔建设结果仍待确认，请先按原装饰和数量重试。');
-  }
+  const operationKey = cityOperationKey(path, body);
   // The server fingerprint includes configVersion. Preserve the complete receipt
   // after an uncertain outcome, even if the current catalog changes before retry.
-  const operation = previousOperation
+  const retained = pendingRequestIds.get(operationKey);
+  if (retained && JSON.stringify(retained.body) !== JSON.stringify(body)) {
+    // A changed amount/decoration is a new payment, not a retry. Resolve the
+    // target's uncertain operation before accepting another set of parameters.
+    if (retained.body.areaId !== undefined) {
+      throw new Error('该区域上一笔建设结果仍待确认，请先按原装饰和数量重试。');
+    }
+    if (retained.body.projectId !== undefined) {
+      throw new Error(`上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
+    }
+    const decoration = config.decorations.find((entry) => entry.id === retained.body.decorationId);
+    throw new Error(`这块地上一笔「${decoration?.name ?? retained.body.decorationId}」建设结果尚未确认，请恢复原装饰重试，确认结果后再修改。`);
+  }
+  const operation = retained
     ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
   const { requestId, configVersion } = operation;
   pendingRequestIds.set(operationKey, operation);
@@ -269,7 +281,7 @@ export function decorateCity(plotId: string, decorationId: string) { return muta
 export function decorateCityArea(areaId: string, decorationId: string, quantity: number) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }); }
 export function getPendingCityAreaOperation(areaId: string): { decorationId: string; quantity: number } | null {
   refreshCityGovernanceSession();
-  const operation = mutationSession?.requests.get(`/town-api/city/decorate:${JSON.stringify({ areaId })}`);
+  const operation = mutationSession?.requests.get(cityOperationKey('/town-api/city/decorate', { areaId }));
   if (operation && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
     return { decorationId: operation.body.decorationId, quantity: operation.body.quantity };
   }

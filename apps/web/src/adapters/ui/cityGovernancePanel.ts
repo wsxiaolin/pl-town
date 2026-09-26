@@ -7,6 +7,7 @@ let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
+let errorActionKey = '';
 let operationNotice = '';
 let rendering = false;
 const pendingActions = new Map<string, symbol>();
@@ -15,7 +16,9 @@ const donationDrafts = new Map<string, string>();
 function focusAction(dataKey: 'projectId' | 'plotId' | 'cityArea', id: string): void {
   for (const item of root?.querySelectorAll<HTMLElement>('.city-governance-card') ?? []) {
     if (item.dataset[dataKey] === id) {
-      const action = item.querySelector<HTMLButtonElement>('button');
+      const focusKey = `${dataKey === 'projectId' ? 'donate' : dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`;
+      const action = Array.from(item.querySelectorAll<HTMLButtonElement>('button[data-focus-key]'))
+        .find((control) => control.dataset.focusKey === focusKey);
       if (action) {
         // Failed actions should scroll back into view so the user can retry.
         action.focus();
@@ -121,7 +124,8 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
   pendingActions.set(actionKey, action);
   const focus = trackPendingActionFocus(`donate:${id}`);
   let failed = false;
-  operationError = '';
+  // Retrying this target replaces its error; another card's request does not.
+  if (errorActionKey === actionKey) { operationError = ''; errorActionKey = ''; }
   operationNotice = '';
   render();
   try {
@@ -132,6 +136,7 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
     if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     failed = true;
     operationError = error instanceof Error ? error.message : '建设失败，请重试';
+    errorActionKey = actionKey;
   } finally {
     focus.dispose();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
@@ -176,14 +181,21 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
   renderCityPersonalAreas(list, config, state, {
     rerender: () => { if (root?.classList.contains('open')) render(); },
-    reportError: (message) => { operationError = message; operationNotice = ''; updateFeedback(); },
+    reportError: (message, actionKey) => {
+      if (message || errorActionKey === actionKey) {
+        operationError = message;
+        errorActionKey = message ? actionKey : '';
+      }
+      operationNotice = '';
+      updateFeedback();
+    },
     reportNotice: (message) => { operationNotice = message; updateFeedback(); },
     focusAction: (dataKey, id) => { if (root?.classList.contains('open')) focusAction(dataKey, id); },
   });
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
-  if (activeBuilding !== buildingId) { operationError = ''; operationNotice = ''; }
+  if (activeBuilding !== buildingId) { operationError = ''; errorActionKey = ''; operationNotice = ''; }
   activeBuilding = buildingId;
   if (!root) {
     root = document.createElement('section');
@@ -219,6 +231,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         donationDrafts.clear();
         clearCityConstructionDrafts();
         operationError = '';
+        errorActionKey = '';
         operationNotice = '';
       }
       if (!root?.classList.contains('open')) return;
@@ -233,6 +246,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
 export function closeCityGovernancePanel(): void {
   root?.classList.remove('open');
   operationError = '';
+  errorActionKey = '';
   operationNotice = '';
   updateFeedback();
 }
@@ -244,6 +258,7 @@ export function disposeCityGovernancePanel(): void {
   root = null;
   activeBuilding = '';
   activeTab = 'collective';
+  errorActionKey = '';
   operationError = '';
   operationNotice = '';
   pendingActions.clear();

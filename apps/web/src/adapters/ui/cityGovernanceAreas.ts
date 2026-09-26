@@ -26,7 +26,7 @@ function errorMessage(error: unknown): string { return error instanceof Error ? 
 
 type ConstructionFeedback = {
   rerender: () => void;
-  reportError: (message: string) => void;
+  reportError: (message: string, actionKey: string) => void;
   reportNotice: (message: string) => void;
   focusAction: (dataKey: 'cityArea' | 'plotId', id: string) => void;
 };
@@ -42,7 +42,8 @@ async function submitConstruction(
   if (draft.pending) return;
   draft.pending = true;
   const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`);
-  feedback.reportError('');
+  const actionKey = `${dataKey}:${id}`;
+  feedback.reportError('', actionKey);
   feedback.rerender();
   let failed = false;
   try {
@@ -52,7 +53,7 @@ async function submitConstruction(
   } catch (error) {
     if (!isCurrentDraft()) return;
     failed = true;
-    feedback.reportError(errorMessage(error));
+    feedback.reportError(errorMessage(error), actionKey);
   }
   finally {
     focus.dispose();
