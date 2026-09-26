@@ -159,8 +159,10 @@ for (const [action, failure] of scenarios) {
     await expect(panel.getByRole('alert')).toContainText(message);
     if (failure === 'unknown error') await expect(panel.getByRole('alert')).not.toContainText('unmapped internal server detail');
     await expect(actionButton).toBeEnabled();
-    // Reopening the panel moved focus to Close; a late failure must not steal it.
-    await expect(panel.getByRole('button', { name: '关闭', exact: true })).toBeFocused();
+    // Reopening focuses Close; selecting personal construction moves to that
+    // tab. A late failure must preserve whichever control the resident chose.
+    const resumedFocus = action === 'decorate' ? '个人建设' : '关闭';
+    await expect(panel.getByRole('button', { name: resumedFocus, exact: true })).toBeFocused();
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
     if (failure === 'insufficient coins') {
       // The alert must appear while the 409 refresh is still blocked.
@@ -207,9 +209,12 @@ for (const [action, failure] of scenarios) {
     // Drafts must survive removal of their controls, not just an immediate refresh.
     const currentTab = action === 'donate' ? '城市集体建设' : '个人建设';
     const otherTab = action === 'donate' ? '个人建设' : '城市集体建设';
+    const targetName = action === 'donate' ? '猫猫咖啡厅' : '测试花园';
     await panel.getByRole('button', { name: otherTab, exact: true }).click();
     await expect(panel.getByRole('alert')).toContainText(message);
+    await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
     await panel.getByRole('button', { name: currentTab, exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
     expect(await feedback?.evaluate((node) => node === document.querySelector('[data-city-feedback]'))).toBe(true);
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
     await actionButton.click();
