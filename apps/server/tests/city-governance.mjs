@@ -13,7 +13,9 @@ const dataDir = mkdtempSync(join(tmpdir(), 'minicity-city-'));
 const env = { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir, LOG_DIR: join(dataDir, 'logs'), BACKUP_DIR: join(dataDir, 'backups'), HOST: '127.0.0.1', PORT: '8787', ALLOW_ORIGINLESS_WEBSOCKET: 'true', AUTO_BACKUP_ENABLED: 'false', BACKUP_ON_START: 'false', BIGMODEL_API_KEY: '', OSS_ENABLED: 'false', ALLOWED_ORIGINS: 'https://city.example.test', ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_ACCOUNTS_JSON: '' };
 const cwd = new URL('..', import.meta.url);
 function fixture(code) {
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd, env, encoding: 'utf8', timeout: 15000 });
+  // Keep large migration fixtures off the command line for Windows hosts.
+  const result = spawnSync(process.execPath, ['--input-type=module'], { cwd, env, input: code, encoding: 'utf8', timeout: 15000 });
+  assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 fixture(`
