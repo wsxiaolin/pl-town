@@ -1,8 +1,6 @@
-const assetModules = import.meta.glob('../assets/**/*.{png,jpg,jpeg,webp,avif,glb}', {
-  eager: true,
-  import: 'default',
-  query: '?url',
-}) as Record<string, string>;
+import { bundledAssetUrls } from '../core/bundledAssets';
+
+const assetUrls = bundledAssetUrls;
 
 let preloadScheduled = false;
 
@@ -26,7 +24,7 @@ export function preloadLikelyCGResources(): void {
   if (preloadScheduled) return;
   preloadScheduled = true;
 
-  const preload = () => Object.values(assetModules).forEach(appendPreload);
+  const preload = () => Object.values(assetUrls).forEach(appendPreload);
   if ('requestIdleCallback' in window) {
     window.requestIdleCallback(preload, { timeout: 1500 });
   } else {

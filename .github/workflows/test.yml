@@ -52,7 +52,10 @@ jobs:
     name: Web (Playwright) shard ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Headroom above the ~10 min a shard actually needs: the boot-gate shard
+    # includes a full heavy-pipeline run (45 MB download + precompile) and
+    # runner contention varies (review r3#11).
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

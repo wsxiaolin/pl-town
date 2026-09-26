@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2378a8ff'/%3E%3Cpath d='M8 24V13h5v11h6V8h5v16z' fill='white'/%3E%3C/svg%3E" />
   <title>物实小城 — MiniCity</title>
   <style id="bootCritical">
-    *,*::before,*::after{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#111722;font-family:-apple-system,'Inter','Helvetica Neue',Arial,sans-serif}.boot-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;overflow:hidden;color:#f8faff;background:#111722}.boot-grid{position:absolute;inset:-10%;opacity:.32;background-image:linear-gradient(rgba(152,181,226,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(152,181,226,.12) 1px,transparent 1px);background-size:54px 54px;transform:perspective(650px) rotateX(62deg) translateY(30%);transform-origin:center bottom;mask-image:linear-gradient(to top,#000 12%,transparent 78%)}.boot-orbit{position:absolute;width:min(72vw,720px);aspect-ratio:1;border:1px solid rgba(140,184,244,.12);border-radius:50%;transform:rotate(-18deg) scaleY(.28);box-shadow:0 0 80px rgba(78,126,221,.08)}.boot-orbit::after{content:'';position:absolute;top:-3px;left:22%;width:5px;height:5px;border-radius:50%;background:#78a8ff;box-shadow:0 0 14px 3px rgba(120,168,255,.42)}.boot-orbit-a{transform:rotate(-18deg) scaleY(.28) translateY(-36px)}.boot-orbit-b{width:min(48vw,470px);transform:rotate(22deg) scaleY(.3) translateY(20px);opacity:.65}.boot-orbit-b::after{left:68%;background:#f2a36f;box-shadow:0 0 14px 3px rgba(242,163,111,.32)}.boot-content{position:relative;width:min(420px,calc(100vw - 48px));padding:28px 0 24px}.boot-brand{display:flex;align-items:center;gap:10px;color:#afc8f1;font-size:10px;font-weight:700;letter-spacing:.24em}.boot-brand-mark{display:inline-flex;align-items:end;gap:3px;height:16px}.boot-brand-mark i{display:block;width:4px;border-radius:1px 1px 0 0;background:#78a8ff}.boot-brand-mark i:nth-child(1){height:8px;opacity:.65}.boot-brand-mark i:nth-child(2){height:13px}.boot-brand-mark i:nth-child(3){height:10px;background:#f2a36f}.boot-title-row{display:flex;align-items:center;gap:14px;margin-top:52px}.boot-title-row h1{margin:0;color:#f7f9fe;font-size:clamp(26px,4vw,40px);font-weight:500;letter-spacing:.02em;line-height:1.2}.boot-live{display:inline-flex;align-items:center;gap:6px;color:#9db7de;font-size:9px;font-weight:700;letter-spacing:.16em;white-space:nowrap}.boot-live i{width:6px;height:6px;border-radius:50%;background:#f2a36f;box-shadow:0 0 0 4px rgba(242,163,111,.12);animation:boot-pulse 1.6s ease-in-out infinite}.boot-subtitle{margin:13px 0 0;color:#879ab9;font-size:12px;letter-spacing:.06em}.boot-progress{position:relative;height:2px;margin-top:38px;overflow:hidden;background:rgba(155,182,226,.16)}.boot-progress span{position:absolute;inset:0 auto 0 -35%;width:35%;background:#78a8ff;box-shadow:0 0 16px rgba(120,168,255,.72);animation:boot-progress 1.55s ease-in-out infinite}.boot-meta{display:flex;justify-content:space-between;margin-top:12px;color:#61728e;font-size:9px;font-weight:700;letter-spacing:.16em}@keyframes boot-progress{to{transform:translateX(385%)}}@keyframes boot-pulse{0%,100%{opacity:.5;transform:scale(.88)}50%{opacity:1;transform:scale(1.1)}}@media(max-width:680px){.boot-content{padding-bottom:18px}.boot-title-row{display:block;margin-top:42px}.boot-live{margin-top:14px}.boot-subtitle{font-size:11px;line-height:1.7}}@media(prefers-reduced-motion:reduce){.boot-live i,.boot-progress span{animation:none}}
+    *,*::before,*::after{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0b1018;font-family:-apple-system,'Inter','Helvetica Neue',Arial,sans-serif}.boot-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;overflow:hidden;color:#f8faff;background:#0b1018;transition:opacity .72s cubic-bezier(.22,1,.36,1),visibility .72s}.boot-screen.is-ready{opacity:0;visibility:hidden;pointer-events:none}.boot-moment{position:absolute;inset:0}.boot-moment-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.06);transition:opacity 1.6s ease;animation:boot-moment-drift 26s ease-in-out infinite alternate;user-select:none}.boot-moment-img.is-front{opacity:1}.boot-moment-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(7,10,16,.66) 0%,rgba(7,10,16,.18) 32%,rgba(7,10,16,0) 55%),linear-gradient(to bottom,rgba(7,10,16,.34) 0%,rgba(7,10,16,0) 22%)}.boot-moment-caption{position:absolute;left:28px;bottom:26px;color:rgba(248,250,255,.92);font-size:13px;letter-spacing:.34em;text-shadow:0 1px 14px rgba(4,8,14,.7);opacity:0;transition:opacity 1.1s ease}.boot-moment-caption.is-visible{opacity:1}.boot-screen.is-heavy .boot-moment-caption{display:none}.boot-screen.is-splash{cursor:pointer}.boot-screen.is-splash::after{content:'点击进入';position:absolute;right:28px;bottom:26px;color:rgba(248,250,255,.55);font-size:11px;letter-spacing:.22em;animation:boot-hint-breathe 2.8s ease-in-out infinite}.boot-content{display:none;position:absolute;top:30px;left:30px;width:min(430px,calc(100vw - 60px));text-align:left}.boot-screen.is-heavy .boot-content{display:block}.boot-title-row{display:flex;align-items:center;gap:14px}.boot-title-row h1{margin:0;color:#f7f9fe;font-size:clamp(22px,3vw,32px);font-weight:500;letter-spacing:.04em;line-height:1.2;text-shadow:0 1px 16px rgba(4,8,14,.7)}.boot-live{display:inline-flex;align-items:center;gap:6px;color:#c9d8f2;font-size:9px;font-weight:700;letter-spacing:.16em;white-space:nowrap}.boot-live i{width:6px;height:6px;border-radius:50%;background:#f2a36f;box-shadow:0 0 0 4px rgba(242,163,111,.12);animation:boot-pulse 1.6s ease-in-out infinite}.boot-pipeline{position:absolute;left:0;right:0;bottom:0;padding:20px 30px 24px;opacity:0;transform:translateY(6px);transition:opacity .5s ease,transform .5s ease;pointer-events:none;display:none}.boot-screen.is-heavy .boot-pipeline{display:block}.boot-pipeline.is-active{opacity:1;transform:none}.boot-pipeline-head{display:flex;justify-content:space-between;gap:16px;color:#e4ecfc;font-size:11px;font-weight:700;letter-spacing:.18em}.boot-pipeline-head span:last-child{font-variant-numeric:tabular-nums;color:#9db7de}.boot-pipeline-bar{height:3px;margin-top:10px;overflow:hidden;border-radius:99px;background:rgba(155,182,226,.18)}.boot-pipeline-bar span{display:block;height:100%;background:linear-gradient(90deg,#78a8ff,#a8c6ff);box-shadow:0 0 14px rgba(120,168,255,.6);transform:scaleX(0);transform-origin:left center;transition:transform .4s ease}.boot-pipeline-detail{margin-top:9px;color:rgba(157,183,222,.85);font-size:10px;letter-spacing:.08em;font-variant-numeric:tabular-nums}.boot-gpu-line{margin-top:5px;color:rgba(122,142,174,.85);font-size:10px;letter-spacing:.06em;max-width:92vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@keyframes boot-moment-drift{from{transform:scale(1.06) translateX(-.6%)}to{transform:scale(1.12) translateX(.8%)}}@keyframes boot-hint-breathe{0%,100%{opacity:.35}50%{opacity:.8}}@keyframes boot-pulse{0%,100%{opacity:.5;transform:scale(.88)}50%{opacity:1;transform:scale(1.1)}}@media(max-width:680px){.boot-moment-caption{left:20px;bottom:20px;font-size:11px}.boot-screen.is-splash::after{right:20px;bottom:20px}.boot-screen.is-heavy .boot-content{top:22px;left:22px}.boot-pipeline{padding:16px 22px 18px}}@media(prefers-reduced-motion:reduce){.boot-screen{transition-duration:.2s}.boot-moment-img{animation:none}.boot-live i{animation:none}}
   </style>
 </head>
 <body class="day">
@@ -44,27 +44,29 @@
     </article>
   </div>
 
-  <!-- First-paint shell shown while the WebGL city is being prepared. -->
+  <!-- First-paint shell: a moment still greets every visit; the heavy boot
+       pipeline (full download + precompile) runs behind it when needed. -->
   <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
-    <div class="boot-grid" aria-hidden="true"></div>
-    <div class="boot-orbit boot-orbit-a" aria-hidden="true"></div>
-    <div class="boot-orbit boot-orbit-b" aria-hidden="true"></div>
+    <div class="boot-moment" aria-hidden="true">
+      <img class="boot-moment-img is-front" id="bootMomentImgA" alt="" draggable="false">
+      <img class="boot-moment-img" id="bootMomentImgB" alt="" draggable="false">
+      <div class="boot-moment-shade"></div>
+    </div>
     <div class="boot-content">
-      <div class="boot-brand">
-        <span class="boot-brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="boot-brand-name">MINI CITY</span>
-      </div>
       <div class="boot-title-row">
-        <h1>正在下载城市资源</h1>
+        <h1 id="bootTitle">正在准备小城</h1>
         <span class="boot-live"><i></i> LIVE</span>
       </div>
-       <p class="boot-subtitle">高清材质下载完成后才会进入小城，请保持页面打开。</p>
-       <div class="boot-progress" aria-hidden="true"><span></span></div>
-       <section class="texture-load-panel" id="textureLoadPanel" aria-live="polite">
-         <div class="texture-load-label"><span>正在下载，请稍候</span><span id="textureLoadDetail">准备资源清单</span></div>
-         <progress id="textureLoadProgress" max="1" value="0" aria-label="高清资源下载进度"></progress>
-       </section>
-       <div class="boot-meta"><span>INITIALIZING CITY</span><span>v1.0</span></div>
+    </div>
+    <div class="boot-moment-caption" id="bootMomentCaption"></div>
+    <div class="boot-pipeline" id="bootPipeline">
+      <div class="boot-pipeline-head">
+        <span id="bootPipelineStage">准备资源</span>
+        <span id="bootPipelinePercent">0%</span>
+      </div>
+      <div class="boot-pipeline-bar"><span id="bootPipelineFill"></span></div>
+      <div class="boot-pipeline-detail" id="bootPipelineDetail"></div>
+      <div class="boot-gpu-line" id="bootGpuLine" hidden></div>
     </div>
   </div>
 

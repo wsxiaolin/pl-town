@@ -64,6 +64,7 @@ import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
 import { createCityRuntimeLifecycle } from './cityRuntimeLifecycle';
+import { warmupFirstFrame } from '../rendering/firstFrameWarmup';
 
 const resources = new ResourcePool();
 const MOBILE = () => window.innerWidth <= 680;
@@ -726,6 +727,9 @@ function init() {
   themeSync.syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
+  // Rendering is withheld until the boot precompile finished (see
+  // prepareFirstFrame) so the first visible frame is never a freeze.
+  frameLoop.holdRender();
   loginController.checkLogin();
   multiplayerHousing.setupUI();
 }
@@ -773,10 +777,22 @@ function disposeSession() {
   stories?.dispose();
 }
 
+/**
+ * Compiles the scene's GPU programs and renders warm-up frames BEFORE the
+ * first visible frame. The heavy lifting lives in
+ * `rendering/firstFrameWarmup.ts` — this adapter only binds the live
+ * renderer/scene/camera handles (module lets assigned by init()), keeping
+ * MiniCityApp a composition root per Agents.md.
+ */
+function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
+  return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);
+}
+
 const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
+  prepareFirstFrame,
   startTutorial: () => onboardingTutorial?.start(),
   proceedToCity,
   showLogin: () => loginController?.showLogin(),
@@ -801,5 +817,15 @@ export function restoreResidence(residenceId: string): boolean {
 export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
-export function startMiniCity() { lifecycle.start(); }
+export function startMiniCity() {
+  lifecycle.start().catch((error: unknown) => {
+    // A rejected boot chain must never leave the visitor sealed behind the
+    // splash: release the render gate, surface the failure, and let the
+    // reveal proceed. Completion markers stay unset — the next visit retries.
+    console.error('City boot failed', error);
+    frameLoop.releaseRender();
+    document.getElementById('bootPipelineDetail')?.replaceChildren('小城启动遇到问题，请刷新重试');
+    document.getElementById('bootScreen')?.classList.add('is-ready');
+  });
+}
 export function destroyMiniCity() { lifecycle.destroy(); }
