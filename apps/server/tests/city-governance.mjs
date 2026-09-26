@@ -559,30 +559,43 @@ try {
     // A pre-city backup seeds clean construction state and operations.
     // Restore an actual previous ledger policy: standing core buildings become
     // completed projects, while paid progress and request replay records survive.
-    const oldPath = ${JSON.stringify(join(dataDir, 'city-old-policy.sqlite'))};
-    await backupDatabase(oldPath);
-    const oldDb = new Database(oldPath);
-    const oldPolicyConfig = { ...config, version: '2026-09-25.areas.1',
-      projects: config.projects.filter((project) => !project.buildingId || legacyBuildingIds.includes(project.buildingId)),
-      initialBuiltBuildingIds: ['commons', ...config.projects.filter((project) => project.buildingId && project.buildingId !== 'photostudio' && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)],
-    };
-    oldDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldPolicyConfig.version, JSON.stringify(oldPolicyConfig));
-    oldDb.prepare('UPDATE city_meta SET config_version = ?').run(oldPolicyConfig.version);
-    for (const project of config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId))) oldDb.prepare('DELETE FROM city_projects WHERE id = ?').run(project.id);
-    const oldOperations = oldDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
-    const oldMoney = oldDb.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all();
-    const oldPaid = oldDb.prepare('SELECT * FROM city_projects ORDER BY id').all();
-    oldDb.close();
-    restoreFromBackupFile(oldPath);
-    assert.equal(getCityState().configVersion, config.version);
-    assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
-    for (const id of oldPolicyConfig.initialBuiltBuildingIds.filter((id) => id !== 'commons')) assert.equal(getCityState().projects.find((project) => project.id === 'build-' + id).built, true);
-    for (const paid of oldPaid) assert.deepEqual(db.prepare('SELECT * FROM city_projects WHERE id = ?').get(paid.id), paid);
-    assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldOperations);
-    assert.deepEqual(db.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all(), oldMoney);
-    const migrated = getCityState();
-    db.transaction(() => initializeCityGovernance(db))();
-    assert.deepEqual(getCityState(), migrated);
+    for (const version of ['2026-09-25.areas.1', '2026-09-26.areas.2']) {
+      restoreFromBackupFile(path);
+      const oldPath = ${JSON.stringify(join(dataDir, 'city-old-policy-'))} + version + '.sqlite';
+      await backupDatabase(oldPath);
+      const oldDb = new Database(oldPath);
+      const oldPolicyConfig = { ...config, version,
+        projects: config.projects.filter((project) => !project.buildingId || legacyBuildingIds.includes(project.buildingId)),
+        initialBuiltBuildingIds: ['commons', ...config.projects.filter((project) => project.buildingId && project.buildingId !== 'photostudio' && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)],
+      };
+      // areas.1 combines original-layout and building-policy migration;
+      // areas.2 already has corrected geometry and migrates only building policy.
+      if (version === '2026-09-25.areas.1') {
+        oldPolicyConfig.personalPlots = oldPolicyConfig.personalPlots.map((plot) => structuredClone(LEGACY_AREA_PLOTS.find((old) => old.id === plot.id) ?? plot));
+        oldPolicyConfig.projects = oldPolicyConfig.projects.map((project) => structuredClone(LEGACY_AREA_PROJECTS.find((old) => old.id === project.id) ?? project));
+        for (const project of LEGACY_AREA_PROJECTS) oldDb.prepare('UPDATE city_projects SET definition_json = ? WHERE id = ?').run(JSON.stringify(project), project.id);
+      }
+      oldDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldPolicyConfig.version, JSON.stringify(oldPolicyConfig));
+      oldDb.prepare('UPDATE city_meta SET config_version = ?').run(oldPolicyConfig.version);
+      for (const project of config.projects.filter((project) => project.buildingId && !legacyBuildingIds.includes(project.buildingId))) oldDb.prepare('DELETE FROM city_projects WHERE id = ?').run(project.id);
+      const oldOperations = oldDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+      const oldMoney = oldDb.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all();
+      const oldPaid = oldDb.prepare('SELECT * FROM city_projects ORDER BY id').all();
+      oldDb.close();
+      restoreFromBackupFile(oldPath);
+      assert.equal(getCityState().configVersion, config.version);
+      assert.equal(getCityState().projects.find((project) => project.id === 'build-photostudio').built, true);
+      for (const id of oldPolicyConfig.initialBuiltBuildingIds.filter((id) => id !== 'commons')) assert.equal(getCityState().projects.find((project) => project.id === 'build-' + id).built, true);
+      for (const paid of oldPaid) {
+        const definition = config.projects.find((project) => project.id === paid.id);
+        assert.deepEqual(db.prepare('SELECT * FROM city_projects WHERE id = ?').get(paid.id), { ...paid, definition_json: JSON.stringify(definition) });
+      }
+      assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), oldOperations);
+      assert.deepEqual(db.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all(), oldMoney);
+      const migrated = getCityState();
+      db.transaction(() => initializeCityGovernance(db))();
+      assert.deepEqual(getCityState(), migrated);
+    }
     // A pre-city backup preserves historical defaults and explicit unlocks,
     // but cannot retain city operations that did not exist in that snapshot.
     // Backups from the construction-only schema migrate to empty votes without

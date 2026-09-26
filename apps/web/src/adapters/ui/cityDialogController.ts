@@ -306,7 +306,14 @@ export function createCityDialogController(options: CityDialogControllerOptions)
   const MEMORIAL_NAMES_PER_PAGE = 30;
   let memorialIndex = 0;
   let memorialPageCount = 1;
+  let memorialOpen = false;
   let memorialReturnFocus: HTMLElement | null = null;
+  const memorialBackground = new Map<HTMLElement, boolean>();
+
+  const restoreMemorialBackground = (): void => {
+    memorialBackground.forEach((inert, element) => { element.inert = inert; });
+    memorialBackground.clear();
+  };
 
   const renderMemorialPage = (roster: MemorialRosterLike): void => {
     const body = getElement<HTMLDivElement>(document, 'memorialBody');
@@ -327,7 +334,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
 
   const openMemorial = (beforeOpen?: () => void): void => {
     const roster = options.memorialRoster;
-    if (!roster) return;
+    if (!roster || memorialOpen) return;
     // Close the source panel only when this destination exists, before capturing
     // its restored focus so closing the memorial returns to the archive button.
     beforeOpen?.();
@@ -344,7 +351,17 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       }),
     );
     renderMemorialPage(roster);
-    getElement<HTMLDivElement>(document, 'memorialOverlay').classList.add('open');
+    const overlay = getElement<HTMLDivElement>(document, 'memorialOverlay');
+    // Keep the existing overlay, but make its modal semantics real for pointer,
+    // keyboard and assistive technology users. Preserve pre-existing inert state.
+    for (const sibling of overlay.parentElement?.children ?? []) {
+      if (!(sibling instanceof HTMLElement) || sibling === overlay) continue;
+      memorialBackground.set(sibling, sibling.inert);
+      sibling.inert = true;
+    }
+    memorialOpen = true;
+    overlay.inert = false;
+    overlay.classList.add('open');
     getElement<HTMLButtonElement>(document, 'memorialClose').focus();
   };
 
@@ -361,11 +378,38 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         if (event.target === getElement<HTMLDivElement>(document, 'memorialOverlay')) controller.closeMemorial();
       }, { signal: options.signal });
       getElement<HTMLButtonElement>(document, 'memorialClose').addEventListener('click', controller.closeMemorial, { signal: options.signal });
-      getElement<HTMLDivElement>(document, 'memorialOverlay').addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape') return;
+      const memorialOverlay = getElement<HTMLDivElement>(document, 'memorialOverlay');
+      document.addEventListener('keydown', (event) => {
+        if (!memorialOpen) return;
         event.stopPropagation();
-        controller.closeMemorial();
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          controller.closeMemorial();
+          return;
+        }
+        if (event.key !== 'Tab') return;
+        // Paging can disable the focused navigation button. Recompute the
+        // enabled controls so both boundary pages keep focus inside the dialog.
+        const controls = [...memorialOverlay.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex="0"]')];
+        const index = controls.indexOf(document.activeElement as HTMLElement);
+        const destination = event.shiftKey ? controls.at(-1) : controls[0];
+        if (destination && (index < 0 || (event.shiftKey ? index === 0 : index === controls.length - 1))) {
+          event.preventDefault();
+          destination.focus();
+        }
+      }, { signal: options.signal, capture: true });
+      document.addEventListener('focusin', (event) => {
+        if (memorialOpen && !memorialOverlay.contains(event.target as Node)) {
+          getElement<HTMLButtonElement>(document, 'memorialClose').focus();
+        }
       }, { signal: options.signal });
+      options.signal?.addEventListener('abort', () => {
+        memorialOpen = false;
+        memorialOverlay.classList.remove('open');
+        memorialOverlay.inert = true;
+        restoreMemorialBackground();
+        memorialReturnFocus = null;
+      }, { once: true });
       getElement<HTMLButtonElement>(document, 'memorialPrev').addEventListener('click', () => {
         const roster = options.memorialRoster;
         if (!roster || memorialIndex <= 0) return;
@@ -388,7 +432,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         if (!activeStoryAdvance && event.target === getElement<HTMLDivElement>(document, 'npcOverlay')) controller.closeNpc();
       }, { signal: options.signal });
     },
-    isOpen: () => npcOpen,
+    isOpen: () => npcOpen || memorialOpen,
     openBuilding(building) {
       if (building.id === 'musichall' && options.musicHallLyrics) {
         openLyrics();
@@ -433,7 +477,11 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     },
     openMemorial,
     closeMemorial() {
-      getElement<HTMLDivElement>(document, 'memorialOverlay').classList.remove('open');
+      memorialOpen = false;
+      const overlay = getElement<HTMLDivElement>(document, 'memorialOverlay');
+      overlay.classList.remove('open');
+      overlay.inert = true;
+      restoreMemorialBackground();
       if (memorialReturnFocus?.isConnected) memorialReturnFocus.focus();
       memorialReturnFocus = null;
     },
