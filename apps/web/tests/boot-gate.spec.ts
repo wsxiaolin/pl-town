@@ -28,7 +28,8 @@ test('light boot shows the current real-world moment still and enters', async ({
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
-  const src = await page.locator('#bootMomentImgA, #bootMomentImgB.is-front').first().getAttribute('src');
+  // Only the FRONT layer carries a src (the back one is the swap buffer).
+  const src = await page.locator('#bootMomentImgA.is-front, #bootMomentImgB.is-front').first().getAttribute('src');
   expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentLabel());
   await waitForCityBooted(page);
