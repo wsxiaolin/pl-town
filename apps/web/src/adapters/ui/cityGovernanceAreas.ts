@@ -26,7 +26,7 @@ function errorMessage(error: unknown): string { return error instanceof Error ? 
 
 type ConstructionFeedback = {
   rerender: () => void;
-  reportError: (message: string) => void;
+  reportError: (message: string, actionKey: string) => void;
   reportNotice: (message: string) => void;
   focusAction: (dataKey: 'cityArea' | 'plotId', id: string) => void;
 };
@@ -42,7 +42,8 @@ async function submitConstruction(
   if (draft.pending) return;
   draft.pending = true;
   const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`);
-  feedback.reportError('');
+  const actionKey = `${dataKey}:${id}`;
+  feedback.reportError('', actionKey);
   feedback.rerender();
   let failed = false;
   try {
@@ -52,7 +53,7 @@ async function submitConstruction(
   } catch (error) {
     if (!isCurrentDraft()) return;
     failed = true;
-    feedback.reportError(errorMessage(error));
+    feedback.reportError(errorMessage(error), actionKey);
   }
   finally {
     focus.dispose();
@@ -102,6 +103,7 @@ export function renderCityPersonalAreas(
     const columns = [...new Set(plots.map((plot) => plot.x))].sort((a, b) => a - b);
     const rows = [...new Set(plots.map((plot) => plot.z))].sort((a, b) => a - b);
     preview.style.gridTemplateColumns = `repeat(${columns.length}, minmax(0, 1fr))`;
+    preview.style.width = `min(100%, ${columns.length * 3}rem)`;
     const action = actionButton('批量建设', undefined, false, `area-build:${area.id}`);
     const update = () => {
       const count = Number(draft.quantityText);
@@ -109,10 +111,13 @@ export function renderCityPersonalAreas(
       quantity.max = String(Math.max(available.length, pendingReceipt?.quantity ?? 0));
       const valid = Number.isSafeInteger(count) && count >= 1 && count <= available.length;
       const selected = new Set(valid ? available.slice(0, count).map((plot) => plot.id) : []);
-      const cost = config.decorations.find((entry) => entry.id === draft.decorationId)?.cost ?? 0;
+      const decoration = config.decorations.find((entry) => entry.id === draft.decorationId);
+      const cost = decoration?.cost ?? 0;
       total.textContent = pendingReceipt ? `上次 ${count} 处建设结果待确认，在当前页面及登录会话内重试不会重复扣费。`
         : valid ? `将建设 ${count} 处 · 总价 ${money(cost * count)} · 可用 ${available.length} 处`
-        : available.length ? `请输入 1–${available.length} 之间的整数` : '该区域已无可用地块';
+        : available.length ? `请输入 1–${available.length} 之间的整数`
+        : plots.some((plot) => !occupied.has(plot.id)) ? `该区域没有适合${decoration?.name ?? '所选装饰'}的空地，请选择其他装饰。`
+        : '该区域已无可用地块';
       // A city broadcast can already show the committed plots as occupied.
       // Confirming its pending receipt remains safe even with no capacity left.
       action.disabled = draft.pending || (!pendingReceipt && !valid);
