@@ -1,7 +1,8 @@
 import type Database from 'better-sqlite3';
 import type { CityConstructionConfig } from './data/cityConstructionConfig.js';
 
-// The initial-building policy shipped before version 2026-09-25.pending.1.
+// Standing buildings from the 2026-09-19.1 / 2026-09-25.areas.1 policy,
+// including photostudio, which the old client rendered outside its server catalog.
 // This frozen list is only for backups that predate the city config ledger.
 // Do not derive it from today's catalog: future buildings must not be gifted.
 export const LEGACY_INITIAL_BUILDINGS = Object.freeze([

@@ -17,7 +17,7 @@ export type EventBindingsOptions = {
   onYouClick: () => void;
   closeRenderSettings: () => void;
   getStatsPanelController: () => { open: () => void; close: () => void; setMode: (mode: 'clean' | 'raw') => void } | null;
-  openMemorial: () => void;
+  openMemorial: (beforeOpen?: () => void) => void;
   getCommunityPanels: () => ReturnType<typeof import('../adapters/ui/communityPanelController').createCommunityPanelController> | null;
   getMapController: () => { isOpen: () => boolean; updateImage: () => void } | null;
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
