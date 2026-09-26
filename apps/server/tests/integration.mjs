@@ -669,9 +669,8 @@ try {
   if (!versionResponse.ok) throw new Error('/town-api/version must respond 200');
   if (versionResponse.headers.get('cache-control') !== 'no-store') throw new Error('/town-api/version must be no-store (the client boot gate probes it every visit)');
   const versionBody = await versionResponse.json();
-  if (typeof versionBody.version !== 'string' || !versionBody.version) throw new Error('/town-api/version must expose a version string');
-  if (typeof versionBody.commit !== 'string') throw new Error('/town-api/version must expose a commit string (may be empty without git metadata)');
-  if ('startedAt' in versionBody) throw new Error('/town-api/version must not disclose the server boot wall-clock');
+  if (typeof versionBody.fingerprint !== 'string' || versionBody.fingerprint.length !== 16) throw new Error('/town-api/version must expose a 16-char identity fingerprint');
+  if ('version' in versionBody || 'commit' in versionBody || 'startedAt' in versionBody) throw new Error('/town-api/version must not disclose exact version, commit, or the server boot wall-clock');
   send(bob, { type: 'housing.apply', buildingId });
   const application = await waitFor(alice, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'application' && request.requesterId === bob.hello.user.id));
   send(alice, { type: 'housing.accept', requestId: application.requests.find((request) => request.kind === 'application').id });

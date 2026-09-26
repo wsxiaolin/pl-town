@@ -49,10 +49,9 @@ async function probeServerVersion(signal: AbortSignal): Promise<string | null> {
   try {
     const response = await fetch(townApiUrl('/town-api/version'), { cache: 'no-store', signal });
     if (!response.ok) return null;
-    const data = (await response.json()) as { version?: unknown; commit?: unknown };
-    const version = typeof data.version === 'string' ? data.version : '';
-    const commit = typeof data.commit === 'string' ? data.commit : '';
-    return [version, commit].filter(Boolean).join('+') || null;
+    const payload = (await response.json()) as { fingerprint?: unknown };
+    if (typeof payload.fingerprint !== 'string' || !payload.fingerprint) return null;
+    return payload.fingerprint;
   } catch {
     return null; // Offline / static deploy: fall back to the local judgement.
   }
@@ -74,24 +73,26 @@ export async function resolveBootDecision(): Promise<BootDecision> {
   else if (knownBuild !== buildId) reason = 'build-changed';
 
   // The server probe only runs when the local state looks healthy — a first
-  // visit or a stale build already forces the heavy path without it.
+  // visit or a stale build already forces the heavy path without it. 4.5 s
+  // covers a cold-starting free-tier backend; AbortSignal.timeout keeps the
+  // fetch itself from ever hanging the decision.
   let serverVersion: string | null = null;
   if (reason === 'cached') {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2_000);
-    serverVersion = await probeServerVersion(controller.signal);
-    clearTimeout(timeout);
+    serverVersion = await probeServerVersion(AbortSignal.timeout(4_500));
+    if (serverVersion === null) console.warn('bootGate: /town-api/version probe failed — deciding locally');
     if (serverVersion !== null && knownServerVersion !== null && knownServerVersion !== serverVersion) reason = 'server-changed';
   }
 
-  // Persist what this decision established. The server version only lands
-  // when the boot it informed is a LIGHT one (nothing pending) — a heavy boot
-  // persists it via markBootComplete() once the precache actually landed, so
-  // closing the tab mid-download makes the next visit re-run the update.
-  try {
-    localStorage.setItem(BUILD_KEY, buildId);
-    if (serverVersion !== null && reason === 'cached') localStorage.setItem(SERVER_VERSION_KEY, serverVersion);
-  } catch { /* private mode etc. — heavy boot each visit is the safe fallback. */ }
+  // Persist ONLY the server version, and only for a light decision (nothing
+  // pending). The build id is deliberately NOT written here: markBootComplete
+  // owns it, so a heavy boot that dies mid-download leaves the old build id
+  // in place and the next visit re-runs the update instead of trusting a
+  // precache that never landed.
+  if (reason === 'cached' && serverVersion !== null) {
+    try {
+      localStorage.setItem(SERVER_VERSION_KEY, serverVersion);
+    } catch { /* private mode etc. — heavy boot each visit is the safe fallback. */ }
+  }
 
   return { mode: reason === 'cached' ? 'light' : 'heavy', reason, buildId, serverVersion };
 }

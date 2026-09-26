@@ -1,19 +1,11 @@
 // Heavy boot pipeline — first visit / version update / lost precache.
-// Downloads EVERY bundled asset (texture packs, CG stills, GLB models,
-// activity art, moment stills) with honest byte-level progress, so the city
-// afterwards boots instantly from the HTTP cache. The lifecycle orchestrates
-// stages (download → scene → precompile → ready); this module owns the
-// asset fetching and the bottom progress bar UI.
+// Fetches EVERY bundled asset (texture packs, CG stills, GLB models, activity
+// art, moment stills) so the city afterwards boots instantly from the HTTP
+// cache. Progress is file-level with byte counters (~0.1 MB emission steps);
+// the lifecycle orchestrates stages (download → scene → precompile → ready)
+// and this module owns the asset fetching and the bottom progress bar UI.
 
-type AssetModules = Record<string, string>;
-
-const assetUrls: string[] = Object.values(
-  import.meta.glob('../assets/**/*.{png,jpg,jpeg,webp,avif,glb}', {
-    eager: true,
-    import: 'default',
-    query: '?url',
-  }) as AssetModules,
-);
+import { bundledAssetUrls as assetUrls } from '../../core/bundledAssets';
 
 export type DownloadProgress = {
   loadedBytes: number;

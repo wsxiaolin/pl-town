@@ -17,8 +17,9 @@ export type GpuInfo = {
   sampledAt: number;
 };
 
+import { RENDER_SETTINGS_KEY } from './createRenderer';
+
 const GPU_INFO_KEY = 'minicityGpuInfo';
-const RENDER_SETTINGS_KEY = 'minicityRenderSettings';
 
 const DISCRETE_HINTS = [/nvidia/i, /geforce/i, /quadro/i, /radeon(?!\s+(?:hd|r[5-7]\d\d)\b)/i, /amd\s+radeon\s+(?:rx|pro|v)/i, /arc\s+[ab]\d/i, /dg1/i];
 const SOFTWARE_HINTS = [/swiftshader/i, /llvmpipe/i, /softpipe/i, /software/i, /basic render/i];
@@ -97,6 +98,14 @@ export function gpuSummaryLine(info: GpuInfo): string {
  * saved render settings of their own.
  */
 export function applyGpuSuggestedRenderSettings(info: GpuInfo): void {
+  // Called before the boot decision — storage may be unavailable (private
+  // mode); the default preset is only a convenience, never a crash.
+  try {
+    applyGpuSuggestedRenderSettingsInner(info);
+  } catch { /* ignore. */ }
+}
+
+function applyGpuSuggestedRenderSettingsInner(info: GpuInfo): void {
   if (localStorage.getItem(RENDER_SETTINGS_KEY)) return;
   const presets: Record<GpuTier, Partial<Record<'resolution' | 'antialias' | 'shadows' | 'textureRendering' | 'waterRendering', number | boolean>>> = {
     discrete: { resolution: 2, antialias: true, shadows: false, textureRendering: true, waterRendering: true },

@@ -6,8 +6,8 @@ import { preloadTextureResources } from './textureResourcePreloader';
 import { readRenderSettings } from '../rendering/createRenderer';
 import { applyGpuSuggestedRenderSettings, describeGpuForBoot, probeGpu } from '../rendering/gpuCapability';
 import { resolveBootDecision, markBootComplete, type BootDecision } from './bootGate';
-import { createBootPipelineUi, describeDownload, downloadAllAssets, type BootPipelineUi } from './bootPipeline';
-import { showMomentHeavy, showMomentSplash, stopMomentPresentation } from './momentSplash';
+import { createBootPipelineUi, describeDownload, downloadAllAssets, type BootPipelineUi } from '../adapters/ui/bootPipelineUi';
+import { showMomentHeavy, showMomentSplash, stopMomentPresentation } from '../adapters/ui/momentSplashView';
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
@@ -61,7 +61,16 @@ export function createCityRuntimeLifecycle(options: {
     if (decision.mode === 'light') {
       await texturePreload;
       if (!started || signal.aborted) return;
-      await bootCity(pipeline, false);
+      // The light path is the DEFAULT path — give it its own watchdog so a
+      // backgrounded tab (rAF frozen → warm-up frames stalled) cannot seal
+      // the visitor behind the splash forever either.
+      const lightAbort = new AbortController();
+      const lightWatchdog = window.setTimeout(() => lightAbort.abort(), 30_000);
+      try {
+        await bootCity(pipeline, false, undefined, lightAbort.signal);
+      } finally {
+        window.clearTimeout(lightWatchdog);
+      }
       return;
     }
 
@@ -75,7 +84,8 @@ export function createCityRuntimeLifecycle(options: {
    * A 240 s watchdog bounds the networked stages: a single stalled response
    * (or a backgrounded tab freezing the rAF-driven precompile) degrades to
    * the procedural-fallback boot instead of trapping the visitor on the
-   * splash forever.
+   * splash forever. A degraded boot does NOT write the completion markers —
+   * the next visit re-runs the heavy pipeline for the missing parts.
    */
   async function runHeavyBoot(decision: BootDecision, pipeline: BootPipelineUi, signal: AbortSignal, texturePreload: Promise<void>) {
     const bootAbort = new AbortController();
@@ -98,39 +108,53 @@ export function createCityRuntimeLifecycle(options: {
     pipeline.beginStage('download');
     pipeline.setDetail(bootReasonDetail(decision));
 
+    let downloadFailed = false;
     try {
       const download = await downloadAllAssets((progress) => {
         pipeline.setStageProgress('download', progress.loadedFiles / Math.max(1, progress.totalFiles));
         pipeline.setDetail(describeDownload(progress));
       }, bootAbort.signal);
-      pipeline.setStageProgress('download', 1);
-      pipeline.setDetail(describeDownload(download));
+      if (bootAbort.signal.aborted) {
+        // Keep the watchdog's honest hint; the bar stays where it stopped.
+      } else {
+        pipeline.setStageProgress('download', 1);
+        pipeline.setDetail(describeDownload(download));
+      }
+      downloadFailed = download.failedFiles > 0;
     } catch {
+      downloadFailed = true;
       pipeline.setDetail('部分资源下载失败，已回退程序化材质');
     }
     if (!started || signal.aborted) { finish(); return; }
 
-    // Texture preload re-runs with force: it re-warms the HTTP cache from
-    // scratch, ignoring the texture setting and data-saver modes so the
-    // precache lands in full.
-    pipeline.beginStage('scene');
-    pipeline.setDetail('校验高清材质包…');
-    await texturePreload;
-    await preloadTextureResources(true, bootAbort.signal, true).catch(() => {});
+    // Texture preload re-runs with force ONLY when the bulk download left
+    // gaps (failures or an aborted watchdog pass): stage 1 already streamed
+    // every asset through the HTTP cache, so re-running on a clean download
+    // would just sit at 68% re-reading the cache with no progress to show.
+    let sceneStageBegun = false;
+    if (bootAbort.signal.aborted || downloadFailed) {
+      sceneStageBegun = true;
+      pipeline.beginStage('scene');
+      pipeline.setDetail('校验高清材质包…');
+      await texturePreload;
+      await preloadTextureResources(true, bootAbort.signal, true).catch(() => {});
+    } else {
+      await texturePreload;
+    }
     if (!started || signal.aborted) { finish(); return; }
 
-    await bootCity(pipeline, true, decision.serverVersion, bootAbort.signal);
+    await bootCity(pipeline, true, decision.serverVersion, bootAbort.signal, sceneStageBegun);
     finish();
   }
 
-  async function bootCity(pipeline: BootPipelineUi, heavy: boolean, serverVersion?: string | null, precompileSignal?: AbortSignal) {
+  async function bootCity(pipeline: BootPipelineUi, heavy: boolean, serverVersion?: string | null, precompileSignal?: AbortSignal, sceneStageBegun = false) {
     if (!started) return;
     try {
       await loadCityGovernance(eventController.signal);
     } catch { /* governance is optional; the city opens without it. */ }
     if (!started) return;
 
-    if (heavy) {
+    if (heavy && !sceneStageBegun) {
       pipeline.beginStage('scene');
       pipeline.setDetail('装配建筑与居民…');
     }
@@ -161,13 +185,21 @@ export function createCityRuntimeLifecycle(options: {
     if (!started) return;
 
     if (heavy) {
-      pipeline.beginStage('ready');
-      pipeline.setStageProgress('ready', 1);
-      pipeline.setDetail('一切就绪');
-      // Precache landed — future visits skip the heavy pipeline entirely.
-      // The server version observed by THIS boot only becomes "consumed"
-      // here: a boot abandoned mid-download must re-run the update.
-      markBootComplete(serverVersion);
+      if (precompileSignal?.aborted) {
+        // Degraded boot (watchdog fired mid-pipeline): enter the city, but
+        // do NOT write the completion markers — the precache is incomplete,
+        // so the next visit must re-run the update instead of trusting a
+        // half-landed cache.
+        pipeline.setDetail('本次预缓存未完成，下次进入将重新同步');
+      } else {
+        pipeline.beginStage('ready');
+        pipeline.setStageProgress('ready', 1);
+        pipeline.setDetail('一切就绪');
+        // Precache landed — future visits skip the heavy pipeline entirely.
+        // The server version observed by THIS boot only becomes "consumed"
+        // here: a boot abandoned mid-download must re-run the update.
+        markBootComplete(serverVersion);
+      }
     }
 
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));

@@ -1,55 +1,37 @@
-// Moment splash — replaces the opening CG with a still of the city at the
-// visitor's current time of day. Four stills (dawn / noon / dusk / night)
-// share one composition; the local clock picks which one greets the visitor.
+// Moment splash view — the boot-screen presentation of the current day
+// moment (drifting still + caption + skip). The pure moment mapping lives in
+// core/momentClock.ts; this view only binds it to the boot DOM and the four
+// stills.
 //
-// Light visit: the boot screen shows the matching still with a slow drift and
-// a small caption, holds for a breath, then fades into the city or login.
-// Heavy visit: the SAME current-moment still holds behind the download
-// pipeline — the splash must match the clock outside, so there is no
-// day-passing cycle; the progress bar carries the sense of time.
+// Light visit: the still shows with a slow drift, holds for a breath, then
+// fades into the city or login. Heavy visit: the SAME current-moment still
+// holds behind the download pipeline — the splash must match the clock
+// outside, so there is no day-passing cycle; the progress bar carries time.
 
-import dawnUrl from '../assets/moments/dawn.webp';
-import noonUrl from '../assets/moments/noon.webp';
-import duskUrl from '../assets/moments/dusk.webp';
-import nightUrl from '../assets/moments/night.webp';
+import dawnUrl from '../../assets/moments/dawn.webp';
+import noonUrl from '../../assets/moments/noon.webp';
+import duskUrl from '../../assets/moments/dusk.webp';
+import nightUrl from '../../assets/moments/night.webp';
+import { momentForDate, momentForHour, type MomentName } from '../../core/momentClock';
 
-export type MomentName = 'dawn' | 'noon' | 'dusk' | 'night';
+export { momentForDate, momentForHour };
+export type { MomentName };
 
-type MomentDefinition = {
-  name: MomentName;
-  label: string;
-  caption: string;
-  url: string;
-  /** Inclusive start hour (local time); the last moment wraps past midnight. */
-  fromHour: number;
+type ViewMoment = { name: MomentName; caption: string; url: string };
+
+const IMAGE_BY_NAME: Record<MomentName, string> = {
+  dawn: dawnUrl,
+  noon: noonUrl,
+  dusk: duskUrl,
+  night: nightUrl,
 };
 
-// 5:00–10:59 dawn · 11:00–16:59 noon · 17:00–19:59 dusk · 20:00–4:59 night
-const MOMENTS: readonly MomentDefinition[] = [
-  { name: 'dawn', label: '清晨', caption: '清晨的物实小城', url: dawnUrl, fromHour: 5 },
-  { name: 'noon', label: '正午', caption: '正午的物实小城', url: noonUrl, fromHour: 11 },
-  { name: 'dusk', label: '黄昏', caption: '黄昏的物实小城', url: duskUrl, fromHour: 17 },
-  { name: 'night', label: '夜晚', caption: '夜幕下的物实小城', url: nightUrl, fromHour: 20 },
-];
-
-// Precomputed once — momentForHour must not clone+sort on every probe.
-const ORDERED_MOMENTS: readonly MomentDefinition[] = [...MOMENTS].sort((a, b) => a.fromHour - b.fromHour);
-
-export function momentForHour(hour: number): MomentDefinition {
-  // ORDERED_MOMENTS is a non-empty constant; the last entry (20:00) covers
-  // deep night.
-  let current: MomentDefinition = ORDERED_MOMENTS[ORDERED_MOMENTS.length - 1]!;
-  for (const moment of ORDERED_MOMENTS) {
-    if (hour >= moment.fromHour) current = moment;
-  }
-  return current;
+function viewMoment(hour: number): ViewMoment {
+  const moment = momentForHour(hour);
+  return { name: moment.name, caption: moment.caption, url: IMAGE_BY_NAME[moment.name] };
 }
 
-export function momentForDate(date = new Date()): MomentDefinition {
-  return momentForHour(date.getHours());
-}
-
-// ─── boot screen presentation ────────────────────────────────────────────────
+// ─── boot screen gate state ──────────────────────────────────────────────────
 
 const MIN_SPLASH_MS = 2_600; // Even a cached visit gets a breath of the still.
 const SLIDESHOW_FADE_MS = 1_800;
@@ -58,13 +40,12 @@ let cityReady = false;
 let minimumElapsed = false;
 let skipRequested = false;
 let revealListeners: (() => void) | null = null;
-let revealBound = false;
 
 function bootScreen(): HTMLElement | null {
   return document.getElementById('bootScreen');
 }
 
-function swapToMoment(moment: MomentDefinition, instant: boolean): void {
+function swapToMoment(moment: ViewMoment, instant: boolean): void {
   const screen = bootScreen();
   if (!screen) return;
   const imgA = document.getElementById('bootMomentImgA') as HTMLImageElement | null;
@@ -91,13 +72,17 @@ function swapToMoment(moment: MomentDefinition, instant: boolean): void {
 }
 
 function showCurrentMoment(): void {
-  swapToMoment(momentForDate(), true);
+  swapToMoment(viewMoment(new Date().getHours()), true);
 }
 
 function bindSkip(): void {
-  if (revealBound) return;
-  revealBound = true;
-  bootScreen()?.addEventListener('pointerdown', () => { skipRequested = true; notifyReveal(); }, { capture: true });
+  const screen = bootScreen();
+  if (!screen || screen.dataset.momentSkipBound) return;
+  // Element-scoped flag instead of a module boolean: Vite HMR re-evaluates
+  // this module but keeps the same DOM, so a module flag would stack
+  // duplicate listeners across hot updates.
+  screen.dataset.momentSkipBound = 'true';
+  screen.addEventListener('pointerdown', () => { skipRequested = true; notifyReveal(); }, { capture: true });
 }
 
 function notifyReveal(): void {
@@ -113,7 +98,7 @@ export function showMomentSplash(): void {
   const screen = bootScreen();
   if (!screen) return;
   screen.classList.add('is-moment', 'is-splash');
-  swapToMoment(momentForDate(), true);
+  swapToMoment(viewMoment(new Date().getHours()), true);
   scheduleMinimumElapsed();
   bindSkip();
 }
@@ -122,10 +107,12 @@ export function showMomentSplash(): void {
 export function showMomentHeavy(): void {
   const screen = bootScreen();
   if (!screen) return;
+  // start() already showed the splash and scheduled the minimum-elapsed
+  // timer before the mode was known; heavy only retargets the presentation —
+  // no second timer, no visible swap (the still is the same current moment).
   screen.classList.remove('is-splash');
   screen.classList.add('is-moment', 'is-heavy');
   showCurrentMoment();
-  scheduleMinimumElapsed();
   bindSkip();
 }
 

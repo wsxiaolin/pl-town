@@ -1,7 +1,7 @@
 import './styles/index.css';
 import { destroyMiniCity, startMiniCity } from './city/MiniCityApp';
 import { initTelemetry } from './core/telemetryClient';
-import { notifyCityReady, stopMomentPresentation, whenBootRevealAllowed } from './city/momentSplash';
+import { notifyCityReady, stopMomentPresentation, whenBootRevealAllowed } from './adapters/ui/momentSplashView';
 
 void initTelemetry();
 

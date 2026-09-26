@@ -64,6 +64,7 @@ import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
 import { createCityRuntimeLifecycle } from './cityRuntimeLifecycle';
+import { warmupFirstFrame } from '../rendering/firstFrameWarmup';
 
 const resources = new ResourcePool();
 const MOBILE = () => window.innerWidth <= 680;
@@ -777,48 +778,14 @@ function disposeSession() {
 }
 
 /**
- * Aborts (resolves) a pending promise when the boot watchdog fires. Used so a
- * stuck shader compile can never trap the visitor behind the splash forever —
- * the render gate releases and the boot degrades to a plain first frame.
- */
-function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return promise;
-  if (signal.aborted) return Promise.resolve(undefined as T);
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => resolve(undefined as T);
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
-      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
-    );
-  });
-}
-
-/**
  * Compiles the scene's GPU programs and renders warm-up frames BEFORE the
- * first visible frame, so visitors never watch a shader-compilation freeze.
- * `signal` is the boot watchdog: on abort the gate releases immediately and
- * the boot proceeds (worst case: one janky first frame — better than an
- * eternal splash). Any failure — releaseRender always runs.
+ * first visible frame. The heavy lifting lives in
+ * `rendering/firstFrameWarmup.ts` — this adapter only binds the live
+ * renderer/scene/camera handles (module lets assigned by init()), keeping
+ * MiniCityApp a composition root per Agents.md.
  */
-async function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
-  try {
-    if (!renderer || !scene || !camera) return;
-    onProgress?.(0.15);
-    await abortable(renderer.compileAsync(scene, camera), signal);
-    onProgress?.(0.7);
-    for (let i = 0; i < 3; i += 1) {
-      if (signal?.aborted) break;
-      renderer.render(scene, camera);
-      onProgress?.(0.7 + (i + 1) * 0.1);
-      await abortable(new Promise((resolve) => requestAnimationFrame(resolve)), signal);
-    }
-    onProgress?.(1);
-  } catch (error) {
-    console.error('First-frame precompile failed', error);
-  } finally {
-    frameLoop.releaseRender();
-  }
+function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
+  return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);
 }
 
 const lifecycle = createCityRuntimeLifecycle({
@@ -850,5 +817,15 @@ export function restoreResidence(residenceId: string): boolean {
 export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
-export function startMiniCity() { lifecycle.start(); }
+export function startMiniCity() {
+  lifecycle.start().catch((error: unknown) => {
+    // A rejected boot chain must never leave the visitor sealed behind the
+    // splash: release the render gate, surface the failure, and let the
+    // reveal proceed. Completion markers stay unset — the next visit retries.
+    console.error('City boot failed', error);
+    frameLoop.releaseRender();
+    document.getElementById('bootPipelineDetail')?.replaceChildren('小城启动遇到问题，请刷新重试');
+    document.getElementById('bootScreen')?.classList.add('is-ready');
+  });
+}
 export function destroyMiniCity() { lifecycle.destroy(); }

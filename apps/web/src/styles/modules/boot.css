@@ -93,8 +93,10 @@
   transform: translateY(6px);
   transition: opacity 0.5s ease, transform 0.5s ease;
   pointer-events: none;
+  /* display:none until heavy boot — kept in lockstep with index.html inline */
+  display: none;
 }
-.boot-pipeline.is-active { opacity: 1; transform: none; }
+.boot-pipeline.is-active { opacity: 1; transform: none; display: block; }
 .boot-pipeline-head {
   display: flex;
   justify-content: space-between;

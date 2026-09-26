@@ -4,6 +4,10 @@ import { seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCa
 // The boot gate is the front door of the city: these specs pin the two boot
 // paths end to end (light moment splash vs heavy pipeline) so refactors of
 // bootGate/bootPipeline/momentSplash cannot silently break entry.
+// Retries stay OFF for this file: the heavy pipeline takes minutes, and a
+// flaky retry must not eat the CI job's 15-minute budget (review Blocker 3).
+test.describe.configure({ retries: 0 });
+test.setTimeout(200_000);
 
 function expectedMomentLabel(): string {
   const hour = new Date().getHours();
@@ -14,35 +18,28 @@ function expectedMomentLabel(): string {
 }
 
 test('light boot shows the current real-world moment still and enters', async ({ page }) => {
-  test.setTimeout(180_000);
   stubCityWebSocket(page);
   stubNewsstandWebSocket(page);
   stubWorldCatalogWebSocket(page);
-  await page.goto('/');
-  await seedCityStorage(page); // seeds minicityForceBoot=light
+  // Seed BEFORE any navigation: addInitScript applies to the next document,
+  // so one goto boots the light path directly (no wasted first-visit load).
+  await seedCityStorage(page);
   await page.goto('/');
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
-  // The heavy pipeline must stay out of a light visit.
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
-  // The still matches the visitor's local clock.
+  const src = await page.locator('#bootMomentImgA, #bootMomentImgB.is-front').first().getAttribute('src');
+  expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentLabel());
-  const src = await page.locator('#bootMomentImgA, #bootMomentImgB').evaluateAll((imgs) =>
-    imgs.filter((img) => (img as HTMLImageElement).classList.contains('is-front')).map((img) => (img as HTMLImageElement).getAttribute('src')),
-  );
-  expect(src[0]).toMatch(/moments\/(dawn|noon|dusk|night)\.webp$/);
-
   await waitForCityBooted(page);
 });
 
 test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ page }) => {
-  test.setTimeout(240_000);
   stubCityWebSocket(page);
   stubNewsstandWebSocket(page);
   stubWorldCatalogWebSocket(page);
-  await page.goto('/');
   await seedCityStorage(page);
-  await page.goto('/?boot=heavy'); // force overrides the seeded light path
+  await page.goto('/?boot=heavy'); // query overrides the seeded light path
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-heavy/);
   await expect(page.locator('#bootPipeline')).toHaveClass(/is-active/);
@@ -50,7 +47,7 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentLabel());
 
   // Full pipeline: download → scene → precompile → ready → reveal.
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 200_000 });
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });
   expect(await page.evaluate(() => localStorage.getItem('minicityPrecacheDone'))).toBe('1');
   expect(await page.evaluate(() => localStorage.getItem('minicityBuildId'))).not.toBeNull();
   await waitForCityBooted(page);

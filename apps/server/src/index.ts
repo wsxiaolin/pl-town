@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { getCityState } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
@@ -385,6 +385,10 @@ const SERVER_VERSION = (() => {
   } catch { return '0.0.0'; }
 })();
 const SERVER_COMMIT = process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? '';
+// The client boot gate only compares server identities for equality, so the
+// public endpoint returns a short fingerprint instead of the exact version
+// and commit strings (less deployment detail on the wire).
+const SERVER_FINGERPRINT = createHash('sha256').update(`${SERVER_VERSION}:${SERVER_COMMIT}`).digest('hex').slice(0, 16);
 const http = createServer(async (request, response) => {
   const requestStartedAt = Date.now();
   const requestIp = clientIp(request);
@@ -453,9 +457,7 @@ const http = createServer(async (request, response) => {
   }
   if (request.method === 'GET' && request.url === '/town-api/version') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
-    // Only the fields the client boot gate reads — startedAt (server boot
-    // wall-clock) stays out of the public payload.
-    response.end(JSON.stringify({ version: SERVER_VERSION, commit: SERVER_COMMIT }));
+    response.end(JSON.stringify({ fingerprint: SERVER_FINGERPRINT }));
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
