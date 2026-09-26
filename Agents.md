@@ -102,7 +102,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 - 先阅读目标模块及其 README，再进行最小范围修改；避免顺手重构无关代码。
 - 优先使用现有 TypeScript 类型、辅助函数和模块边界，不重复实现认证、网络或渲染基础设施。
-- 新增用户可见行为时补充 Playwright 烟雾测试；新增服务端协议或持久化行为时补充 `apps/server/tests/integration.mjs` 覆盖。
+- 新增用户可见行为时补充 Playwright 烟雾测试；新增服务端协议或持久化行为时补充对应的集成套件：通用 HTTP/WebSocket 行为放在 `apps/server/tests/integration.mjs`，备份恢复放在 `restore.mjs`，城市治理协议与账本放在 `city-governance.mjs`（其中导入 `city-area-layout.mjs` 校验区域布局与迁移）。以上套件均由 `npm run test:server` 执行。
 - 修改资源、渲染参数或响应式布局时，至少检查桌面和移动视口，并确认无控制台错误、横向溢出和空白 WebGL 画布。
 - 提交前查看 `git status`，不要提交生成目录、数据库、日志或本地环境文件。
 

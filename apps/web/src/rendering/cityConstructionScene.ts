@@ -30,6 +30,9 @@ export function createCityConstructionScene(options: {
   root.name = 'city-construction';
   options.scene.add(root);
   const hidden = new Map<BuildingEntity, { children: THREE.Object3D[]; labelY?: number; body?: THREE.Mesh }>();
+  // Governance snapshots add, remove and replace individual plots. The retained
+  // static batcher fixes instance capacity at creation and exposes only visibility
+  // toggles, so keep per-plot groups while sharing resources until scene disposal.
   const visuals = new Map<string, Visual>();
   const detachedPlots = new Map<THREE.Object3D, THREE.Object3D>();
   const resources = new ResourcePool();
