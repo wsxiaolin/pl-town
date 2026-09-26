@@ -7,6 +7,12 @@ import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
 import { renderVerifiedName } from './verifiedBadge';
 
+const BUILDING_REJECTION_MESSAGES: Readonly<Record<string, string>> = {
+  'Building is not built': '这栋建筑尚未建成，请前往众议院参与建设。',
+  'Building is story-locked': '这栋建筑尚未通过剧情解锁。',
+  'Building is locked': '这栋建筑尚未解锁。',
+};
+
 interface RemotePlayer {
   mesh: THREE.Group;
   target: THREE.Vector3;
@@ -319,7 +325,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         progression.handleError();
         document.getElementById('residenceClaimSubmit')?.removeAttribute('disabled');
         document.getElementById('residenceApply')?.removeAttribute('disabled');
-        showUnlockToast(message);
+        const localizedMessage = Object.hasOwn(BUILDING_REJECTION_MESSAGES, message) ? BUILDING_REJECTION_MESSAGES[message] : undefined;
+        showUnlockToast(localizedMessage ?? message);
       },
     });
     multiplayer.connect(nickname, password, pl);

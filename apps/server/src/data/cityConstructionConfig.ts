@@ -17,14 +17,24 @@ export type CityConstructionConfig = {
   initialBuiltBuildingIds: string[];
 };
 
+const buildingsById = new Map(BUILDING_CATALOG.map((building) => [building.id, building]));
+
 function buildingProject(buildingId: string, cost = 3000): CityProject {
-  const building = BUILDING_CATALOG.find((entry) => entry.id === buildingId);
+  const building = buildingsById.get(buildingId);
   if (!building) throw new Error(`Unknown construction building: ${buildingId}`);
   return { id: `build-${buildingId}`, buildingId, name: building.label, description: `共同筹建${building.label}`, kind: 'building', cost };
 }
 
-// Named civic buildings that start as empty lots. Core labs, 众议院, community
-// apps, one school, and story venues stay standing.
+// Story venues intentionally remain pending in a fresh city. Their story
+// entrypoints become available after the community completes the matching
+// project through the House of Commons; they are not silently gifted as part
+// of a future change to the initial-building policy.
+export const COLLECTIVE_STORY_BUILDING_IDS = [
+  'archive', 'newsstand', 'guesthouse', 'mall_south', 'mall_west', 'research',
+] as const;
+
+// Keep existing project definitions and IDs immutable. Newly governed buildings
+// are appended below; a fresh city starts with only the House of Commons.
 const constructionIds = [
   'catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop',
   'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
@@ -34,9 +44,11 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  version: '2026-09-26.areas.2',
+  version: '2026-09-26.pending.3',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
+    ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))
+      .map((building) => buildingProject(building.id)),
     { id: 'greenbelt-path', name: '北侧绿道', description: '公共步行绿道', cost: 800, kind: 'road', road: { x: 22, z: -40, width: 8, depth: 1 } },
     { id: 'greenbelt-trees', name: '北侧植树', description: '公共绿化', cost: 600, kind: 'trees', placements: [{ kind: 'oak', x: 19, z: -38.5 }, { kind: 'pine', x: 25, z: -38.5 }] },
     { id: 'greenbelt-lights', name: '绿道路灯', description: '公共照明', cost: 400, kind: 'lights', placements: [{ kind: 'lamp', x: 22, z: -38.5 }] },
@@ -84,5 +96,5 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'bench', name: '长椅', kind: 'bench', cost: 100 },
     { id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 },
   ],
-  initialBuiltBuildingIds: BUILDING_CATALOG.filter((entry) => !constructionIds.includes(entry.id)).map((entry) => entry.id),
+  initialBuiltBuildingIds: ['commons'],
 };

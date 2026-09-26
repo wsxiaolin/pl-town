@@ -444,6 +444,14 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     x: 33,
     z: 3,
     storyLocked: false
+  },
+  {
+    id: "photostudio",
+    label: "照相馆",
+    num: "26A",
+    x: 21,
+    z: 15,
+    storyLocked: false
   }
 ]
 );

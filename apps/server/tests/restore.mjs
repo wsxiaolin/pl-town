@@ -1,6 +1,8 @@
+import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -143,7 +145,56 @@ try {
     throw new Error('Original and pre-restore backups must both include immutable checksum sidecars');
   }
 
-  console.log('Restore passed: live lock refusal, verified offline replacement, rollback snapshot, and session revocation');
+  // Schema 5 also predates world_config. Exercise the real offline CLI against
+  // that backup shape: importing db.ts first would create the missing table and
+  // hide migration failures before any replacement has taken place.
+  const legacyName = 'minicity-20260101T000000.000Z-1234abcd.sqlite';
+  const legacyPath = join(backupDirectory, legacyName);
+  copyFileSync(join(backupDirectory, backup.name), legacyPath);
+  const legacy = new Database(legacyPath);
+  legacy.pragma('foreign_keys = OFF');
+  for (const table of ['city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs', 'world_config']) {
+    legacy.exec(`DROP TABLE ${table}`);
+  }
+  const legacyUser = legacy.prepare('SELECT id, token_hash FROM users WHERE nickname = ?').get('RestoreAlice');
+  legacy.prepare('UPDATE player_progress SET currency = 4321 WHERE user_id = ?').run(legacyUser.id);
+  legacy.prepare('INSERT OR IGNORE INTO player_building_unlocks (user_id, building_id, unlocked_at) VALUES (?, ?, ?)')
+    .run(legacyUser.id, 'academy', new Date().toISOString());
+  legacy.pragma('user_version = 5');
+  const applicationId = legacy.pragma('application_id', { simple: true });
+  legacy.pragma('journal_mode = DELETE');
+  legacy.close();
+  const legacySha256 = createHash('sha256').update(readFileSync(legacyPath)).digest('hex');
+  writeFileSync(`${legacyPath}.manifest.json`, JSON.stringify({
+    version: 1, name: legacyName, sha256: legacySha256,
+    bytes: statSync(legacyPath).size, userVersion: 5, applicationId,
+  }));
+  const legacyRestore = spawnSync(process.execPath, ['dist/restoreBackup.js', legacyName, legacySha256, '--confirm'], {
+    cwd: serverDir, env: environment, encoding: 'utf8', timeout: 30_000,
+  });
+  assert.equal(legacyRestore.status, 0, `Schema 5 offline restore failed: ${legacyRestore.stderr || legacyRestore.stdout}`);
+  const restoredLegacy = new Database(databasePath, { readonly: true });
+  assert.equal(restoredLegacy.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(legacyUser.id).currency, 4321);
+  assert.notEqual(restoredLegacy.prepare('SELECT token_hash FROM users WHERE id = ?').get(legacyUser.id).token_hash, legacyUser.token_hash);
+  for (const id of ['build-library', 'build-academy', 'build-photostudio']) {
+    const project = restoredLegacy.prepare('SELECT funded, built, definition_json FROM city_projects WHERE id = ?').get(id);
+    assert.equal(project.built, 1);
+    assert.equal(project.funded, JSON.parse(project.definition_json).cost);
+  }
+  assert.equal(restoredLegacy.prepare("SELECT built FROM city_projects WHERE id = 'build-shrine'").get().built, 0);
+  assert.equal(restoredLegacy.prepare('SELECT COUNT(*) AS n FROM city_operations').get().n, 0);
+  assert.equal(restoredLegacy.pragma('foreign_key_check').length, 0);
+  restoredLegacy.close();
+  running = startServer();
+  await running.ready;
+  await stopServer(running.processHandle);
+  running = undefined;
+  const restarted = new Database(databasePath, { readonly: true });
+  assert.equal(restarted.prepare("SELECT built FROM city_projects WHERE id = 'build-shrine'").get().built, 0);
+  assert.equal(restarted.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(legacyUser.id).currency, 4321);
+  restarted.close();
+
+  console.log('Restore passed: live lock refusal, verified offline replacement, rollback snapshot, session revocation, and legacy schema 5 migration');
 } finally {
   resident?.socket.close();
   if (running) await stopServer(running.processHandle);

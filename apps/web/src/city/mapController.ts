@@ -19,7 +19,7 @@ export type MapControllerOptions = {
   getStats: () => { achievements?: readonly string[] };
   getCamera: () => THREE.Camera | null;
   getBuildingContent: (buildingId: string) => MapContent | undefined;
-  isStoryLocked: (building: BuildingEntity) => boolean;
+  isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getBuildingRoadEntry: (position: THREE.Vector3) => { x: number; z: number } | null;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
   movePlayerTo: (target: THREE.Vector3) => void;
@@ -42,10 +42,12 @@ const MAP_SHOT_CENTER_Z = 0;
 const MAX_SEARCH_RESULTS = 6;
 
 export function createMapController(options: MapControllerOptions) {
+  const view = options.document.defaultView ?? window;
   let open = false;
   let shotData: string | null = null;
   let shotRenderer: THREE.WebGLRenderer | null = null;
   let shotCamera: THREE.OrthographicCamera | null = null;
+  let shotRefreshFrame: number | null = null;
   let iconsBuilt = false;
   let tipBuilding: BuildingEntity | null = null;
   let markerLeft = Number.NaN;
@@ -62,6 +64,7 @@ export function createMapController(options: MapControllerOptions) {
       overlay?.classList.add('show');
       updateImage();
     } else {
+      cancelShotRefresh();
       overlay?.classList.remove('show');
       (options.document.getElementById('mapSearchInput') as HTMLInputElement | null)?.blur();
       closeTip();
@@ -150,7 +153,7 @@ export function createMapController(options: MapControllerOptions) {
     const buildingsById = new Map(options.getBuildings().map((building) => [building.id, building]));
     wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
       const building = buildingsById.get(icon.dataset.buildingId ?? '');
-      const available = Boolean(building && !options.isStoryLocked(building));
+      const available = Boolean(building && !options.isBuildingUnavailable(building));
       const selected = available && building?.id === confirmedBuildingId;
       icon.hidden = !available;
       icon.classList.toggle('is-confirmed', selected);
@@ -167,7 +170,7 @@ export function createMapController(options: MapControllerOptions) {
       return;
     }
 
-    const availableBuildings = buildings.filter((building) => !options.isStoryLocked(building));
+    const availableBuildings = buildings.filter((building) => !options.isBuildingUnavailable(building));
     const availableIds = new Set(availableBuildings.map((building) => building.id));
     const existingIcons = new Map<string, HTMLButtonElement>();
     wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
@@ -204,7 +207,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function openTip(building: BuildingEntity): void {
-    if (options.isStoryLocked(building)) return;
+    if (options.isBuildingUnavailable(building)) return;
     closeSearchResults();
     tipBuilding = building;
     confirmedBuildingId = building.id;
@@ -233,7 +236,7 @@ export function createMapController(options: MapControllerOptions) {
     const terms = query.trim().split(/\s+/).map(normalizeSearchText).filter(Boolean);
     if (terms.length === 0) return [];
     return options.getBuildings()
-      .filter((building) => !options.isStoryLocked(building))
+      .filter((building) => !options.isBuildingUnavailable(building))
       .map((building) => {
         const content = options.getBuildingContent(building.id);
         const name = content?.name ?? building.label ?? building.id;
@@ -253,13 +256,15 @@ export function createMapController(options: MapControllerOptions) {
       .slice(0, MAX_SEARCH_RESULTS);
   }
 
-  function renderSearchResults(): void {
+  function renderSearchResults(preserveSelection = false): void {
     const input = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
     const results = options.document.getElementById('mapSearchResults');
     if (!input || !results) return;
     const query = input.value.trim();
+    const activeBuildingId = preserveSelection ? searchResults[activeSearchIndex]?.building.id : undefined;
     searchResults = findSearchResults(query);
-    activeSearchIndex = searchResults.length > 0 ? 0 : -1;
+    const preservedIndex = searchResults.findIndex((result) => result.building.id === activeBuildingId);
+    activeSearchIndex = preservedIndex >= 0 ? preservedIndex : searchResults.length > 0 ? 0 : -1;
     results.replaceChildren();
     if (!query) {
       closeSearchResults();
@@ -352,7 +357,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function teleportToBuilding(buildingId: string): boolean {
-    const building = options.getBuildings().find((item) => item.id === buildingId && !options.isStoryLocked(item));
+    const building = options.getBuildings().find((item) => item.id === buildingId && !options.isBuildingUnavailable(item));
     if (!building) return false;
     teleport(building);
     return true;
@@ -366,7 +371,7 @@ export function createMapController(options: MapControllerOptions) {
     }, { signal });
     options.document.getElementById('mapTipClose')?.addEventListener('click', closeTip, { signal });
     const searchInput = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
-    searchInput?.addEventListener('input', renderSearchResults, { signal });
+    searchInput?.addEventListener('input', () => renderSearchResults(), { signal });
     searchInput?.addEventListener('focus', () => {
       if (searchInput.value.trim()) renderSearchResults();
     }, { signal });
@@ -403,12 +408,36 @@ export function createMapController(options: MapControllerOptions) {
     }, { signal });
   }
 
-  function invalidateShot(): void {
+  function cancelShotRefresh(): void {
+    if (shotRefreshFrame !== null) view.cancelAnimationFrame(shotRefreshFrame);
+    shotRefreshFrame = null;
+  }
+
+  function invalidateShot(reason: 'availability' | 'theme' | 'scene' = 'availability'): void {
     shotData = null;
-    if (open) updateImage();
+    if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
+    if (open) {
+      // Availability changes update live controls without taking a new snapshot
+      // for every city broadcast. Explicit scene/theme changes refresh the
+      // visible image once per frame, including multi-building damage batches.
+      renderIcons();
+      if (options.document.getElementById('mapSearchResults')?.hidden === false) {
+        // Rebuild only the options: retain input focus and the active building
+        // even when availability changes the result order.
+        renderSearchResults(true);
+      }
+      updateMarker();
+      if (reason !== 'availability' && shotRefreshFrame === null) {
+        shotRefreshFrame = view.requestAnimationFrame(() => {
+          shotRefreshFrame = null;
+          if (open) updateImage();
+        });
+      }
+    }
   }
 
   function destroy(): void {
+    cancelShotRefresh();
     shotRenderer?.dispose();
     shotRenderer?.forceContextLoss();
     shotRenderer = null;

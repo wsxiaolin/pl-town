@@ -40,6 +40,8 @@ type MutationSession = { generation: symbol; token: string | null; requests: Map
 let mutationSession: MutationSession | null = null;
 let config: CityConfig | null = null;
 let state: CityState | null = null;
+const pendingBuildings = new Set<string>();
+const trustedBuiltBuildings = new Set<string>();
 let loadSequence = 0;
 let activeLoad: Promise<void> | null = null;
 let activeSignal: AbortSignal | undefined;
@@ -52,7 +54,31 @@ function cachedConfig(): CityConfig | null {
   } catch { return null; }
 }
 
-function notify() { listeners.forEach((listener) => listener(config, state)); }
+function notify() {
+  if (config && state?.configVersion === config.version) {
+    const builtProjects = new Set(state.projects.filter((project) => project.built).map((project) => project.id));
+    const initialBuildings = new Set(config.initialBuiltBuildingIds);
+    pendingBuildings.clear();
+    trustedBuiltBuildings.clear();
+    initialBuildings.forEach((id) => trustedBuiltBuildings.add(id));
+    for (const project of config.projects) {
+      if (!project.buildingId) continue;
+      if (initialBuildings.has(project.buildingId) || builtProjects.has(project.id)) trustedBuiltBuildings.add(project.buildingId);
+      else pendingBuildings.add(project.buildingId);
+    }
+  } else if (config) {
+    // While the new snapshot is unavailable, keep known construction outcomes
+    // and hide new project buildings until the server confirms completion.
+    const initialBuildings = new Set(config.initialBuiltBuildingIds);
+    // The current config may promote a formerly pending project to an initial
+    // building, which no longer needs a matching project progress row.
+    initialBuildings.forEach((id) => pendingBuildings.delete(id));
+    for (const project of config.projects) {
+      if (project.buildingId && !initialBuildings.has(project.buildingId) && !trustedBuiltBuildings.has(project.buildingId)) pendingBuildings.add(project.buildingId);
+    }
+  }
+  listeners.forEach((listener) => listener(config, state));
+}
 
 // The multiplayer adapter calls this after authentication changes. Reading the
 // token here also detects changes made in another tab before a mutation/reply.
@@ -93,6 +119,7 @@ async function fetchJson(path: string, signal?: AbortSignal, init?: RequestInit)
 
 export function getCityConfig(): CityConfig | null { return config; }
 export function getCityState(): CityState | null { return state; }
+export function isCityGovernanceLoading(): boolean { return activeLoad !== null; }
 
 export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
   if (activeLoad && !activeSignal?.aborted) return activeLoad;
@@ -115,6 +142,8 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       if (!nextConfig?.version) throw new Error('City configuration unavailable');
       if (sequence !== loadSequence) return;
       config = nextConfig;
+      if (state?.configVersion !== config.version) state = null;
+      notify();
       stateBeforeFetch = state;
       const stateResponse = await fetchJson('/town-api/city/state', signal, { cache: 'no-store' });
       const nextState: unknown = stateResponse.ok ? await stateResponse.json() : null;
@@ -142,6 +171,9 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       }
     }
   })();
+  // Publish only after assigning the promise: subscribers may request the same
+  // load, and a trailing refresh must stay loading throughout its notification.
+  notify();
   return activeLoad;
 }
 
@@ -171,12 +203,10 @@ export function applyCityState(next: unknown): boolean {
 }
 
 export function isConstructionPending(buildingId: string): boolean {
-  // Keep the regular city usable while the optional governance service is unavailable.
-  if (!config || !state || state.configVersion !== config.version) return false;
-  if (config.initialBuiltBuildingIds.includes(buildingId)) return false;
-  const project = config.projects.find((item) => item.buildingId === buildingId);
-  if (!project) return false;
-  return !state.projects.some((item) => item.id === project.id && item.built);
+  // Before any configuration the optional service has no policy. Reloads keep
+  // trusted outcomes and hide newly configured projects until a matching state
+  // arrives, including when the state request fails.
+  return pendingBuildings.has(buildingId);
 }
 
 export function disposeCityGovernance(): void {
@@ -186,6 +216,8 @@ export function disposeCityGovernance(): void {
   refreshAfterLoad = false;
   config = null;
   state = null;
+  pendingBuildings.clear();
+  trustedBuiltBuildings.clear();
   mutationSession = null;
   pendingRequestsByToken.clear();
   listeners.clear();

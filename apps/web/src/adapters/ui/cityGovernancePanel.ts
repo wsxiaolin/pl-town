@@ -1,4 +1,4 @@
-import { donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, isCityGovernanceLoading, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
 import { actionButton as button, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
@@ -79,6 +79,7 @@ function renderContents(): void {
   const scrollTop = root.querySelector('.city-governance-body')?.scrollTop ?? 0;
   const config = getCityConfig();
   const state = getCityState();
+  const loading = isCityGovernanceLoading();
   const header = root.querySelector<HTMLElement>('.city-governance-head')!;
   const title = document.createElement('h2');
   const activeProject = config?.projects.find((project) => project.buildingId === activeBuilding);
@@ -92,11 +93,16 @@ function renderContents(): void {
     tabs.append(tabButton);
   }
   const status = root.querySelector<HTMLElement>('[data-city-status]')!;
-  status.textContent = state ? `云端进度 #${state.revision}` : '正在等待云端城市配置...';
+  status.textContent = state ? `云端进度 #${state.revision}` : loading ? '正在加载建设进度…' : '城市建设数据暂时不可用';
   updateFeedback();
   const body = root.querySelector<HTMLElement>('.city-governance-body')!;
   body.replaceChildren();
   if (!config || !state) {
+    if (loading) {
+      body.append(document.createTextNode('正在加载建设进度，请稍候…'));
+      restoreFocus(focused);
+      return;
+    }
     body.append(document.createTextNode('城市建设数据暂时不可用，请稍后重试。'));
     body.append(button('重试', () => {
       const retry = body.querySelector('button');
@@ -154,32 +160,59 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
 }
 
 function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean }>): void {
-  for (const project of projects) {
-    const saved = progress.find((entry) => entry.id === project.id);
-    const item = card(project.name, project.description);
-    item.dataset.projectId = project.id;
-    item.dataset.buildingId = project.buildingId ?? '';
-    item.classList.toggle('active', project.buildingId === activeBuilding);
-    const detail = document.createElement('p');
-    detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
-    item.append(detail);
-    if (!saved?.built) {
-      const amount = document.createElement('input');
-      amount.type = 'number'; amount.min = '1'; amount.step = '1';
-      amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
-      amount.dataset.focusKey = `amount:${project.id}`;
-      amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
-      amount.setAttribute('aria-label', `${project.name}捐款金额`);
-      item.append(amount, button('捐款', () => {
-        // Focus restoration can replace the freshly rendered amount node.
-        // Submit exactly the value in the current card, not a captured draft.
-        const liveInput = item.querySelector<HTMLInputElement>('input');
-        if (!liveInput) return;
-        const value = Number(liveInput.value);
-        void submitDonation(project.id, () => donateCity(project.id, value));
-      }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
+  const groups = [
+    { id: 'buildings', title: '公共建筑', description: '选择希望共同筹建的公共建筑，查看进度并参与捐款。', projects: projects.filter((project) => project.kind === 'building') },
+    { id: 'landscape', title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
+  ];
+  const navigation = document.createElement('nav');
+  navigation.className = 'city-governance-group-links';
+  navigation.setAttribute('aria-label', '建设项目分类');
+  if (projects.length) list.append(navigation);
+  for (const group of groups) {
+    if (!group.projects.length) continue;
+    const heading = document.createElement('div');
+    heading.className = 'city-governance-group-note';
+    const title = document.createElement('h2');
+    title.id = `city-project-group-${group.id}`;
+    title.tabIndex = -1;
+    title.dataset.focusKey = `group:${group.id}`;
+    title.textContent = group.title;
+    const jump = button(group.title, () => {
+      title.scrollIntoView({ block: 'start' });
+      title.focus({ preventScroll: true });
+    }, false, `group-jump:${group.id}`);
+    jump.setAttribute('aria-controls', title.id);
+    navigation.append(jump);
+    const description = document.createElement('p');
+    description.textContent = group.description;
+    heading.append(title, description);
+    list.append(heading);
+    for (const project of group.projects) {
+      const saved = progress.find((entry) => entry.id === project.id);
+      const item = card(project.name, project.description);
+      item.dataset.projectId = project.id;
+      item.dataset.buildingId = project.buildingId ?? '';
+      item.classList.toggle('active', project.buildingId === activeBuilding);
+      const detail = document.createElement('p');
+      detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
+      item.append(detail);
+      if (!saved?.built) {
+        const amount = document.createElement('input');
+        amount.type = 'number'; amount.min = '1'; amount.step = '1';
+        amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
+        amount.dataset.focusKey = `amount:${project.id}`;
+        amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
+        amount.setAttribute('aria-label', `${project.name}捐款金额`);
+        item.append(amount, button('捐款', () => {
+          // Focus restoration can replace the freshly rendered input.
+          const liveInput = item.querySelector<HTMLInputElement>('input');
+          if (!liveInput) return;
+          const value = Number(liveInput.value);
+          void submitDonation(project.id, () => donateCity(project.id, value));
+        }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
+      }
+      list.append(item);
     }
-    list.append(item);
   }
 }
 

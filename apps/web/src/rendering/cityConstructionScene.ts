@@ -17,11 +17,13 @@ export function createCityConstructionScene(options: {
   scene: THREE.Scene;
   makeMaterial: MeshHelpers['stdMat'];
   buildings: BuildingEntity[];
+  buildingPlots: readonly THREE.Object3D[];
   buildingAttachments?: ReadonlyMap<string, readonly THREE.Object3D[]>;
   getIsNight: () => boolean;
   getLightingPosition?: () => THREE.Vector3;
   refreshCollisions: () => void;
   refreshLabels: () => void;
+  onConstructionChanged: () => void;
   onBuildingRestored: (building: BuildingEntity) => void;
 }) {
   const root = new THREE.Group();
@@ -32,11 +34,20 @@ export function createCityConstructionScene(options: {
   // static batcher fixes instance capacity at creation and exposes only visibility
   // toggles, so keep per-plot groups while sharing resources until scene disposal.
   const visuals = new Map<string, Visual>();
+  const detachedPlots = new Map<THREE.Object3D, THREE.Object3D>();
   const resources = new ResourcePool();
   const makeDecoration = createConstructionDecorations(resources, options.makeMaterial);
   const lights: THREE.PointLight[] = [];
   const lightingPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   const detachedAttachments = new Map<THREE.Object3D, THREE.Object3D[]>();
+  const plotsByBuilding = new Map<string, THREE.Object3D[]>();
+  for (const plot of options.buildingPlots) {
+    const buildingId = plot.userData.buildingId as string | undefined;
+    if (!buildingId) continue;
+    const plots = plotsByBuilding.get(buildingId) ?? [];
+    plots.push(plot);
+    plotsByBuilding.set(buildingId, plots);
+  }
   let disposed = false;
   let night = options.getIsNight();
 
@@ -118,12 +129,22 @@ export function createCityConstructionScene(options: {
     const restored: BuildingEntity[] = [];
     let changed = false;
     for (const building of options.buildings) {
-      // A missing or mismatched snapshot means the governance service is
-      // unavailable. Preserve the normal city until a trusted snapshot arrives.
-      const pending = Boolean(config && state && state.configVersion === config.version
-        && !config.initialBuiltBuildingIds.includes(building.id)
-        && isConstructionPending(building.id));
+      const pending = isConstructionPending(building.id);
       building.group.userData.constructionPending = pending;
+      // Plot planes live directly in the scene, outside the building group.
+      // Detach the empty lot so it is no longer rendered.
+      // Explicit plot raycast targets still require isBuildingUnavailable.
+      for (const plot of plotsByBuilding.get(building.id) ?? []) {
+        if (pending && plot.parent) {
+          detachedPlots.set(plot, plot.parent);
+          plot.removeFromParent();
+          changed = true;
+        } else if (!pending && detachedPlots.has(plot)) {
+          detachedPlots.get(plot)!.add(plot);
+          detachedPlots.delete(plot);
+          changed = true;
+        }
+      }
       for (const attachment of options.buildingAttachments?.get(building.id) ?? []) {
         if (pending && !detachedAttachments.has(attachment)) {
           detachedAttachments.set(attachment, [...attachment.children]);
@@ -156,9 +177,9 @@ export function createCityConstructionScene(options: {
         changed = true;
       }
     }
-    const items: Item[] = [];
-    // A mismatched snapshot must never place decorations from another config.
+    // Retain existing visuals until a trusted snapshot can replace them.
     if (config && state && state.configVersion === config.version) {
+      const items: Item[] = [];
       const built = new Set(state.projects.filter((project) => project.built).map((project) => project.id));
       for (const project of config.projects) {
         if (!built.has(project.id)) continue;
@@ -170,24 +191,25 @@ export function createCityConstructionScene(options: {
         const decoration = config.decorations.find((entry) => entry.id === placed.decorationId);
         if (plot && decoration) items.push({ key: `plot:${plot.id}`, kind: decoration.kind, x: plot.x, z: plot.z });
       }
-    }
-    const wanted = new Set(items.map((item) => item.key));
-    for (const [key, visual] of visuals) {
-      if (!wanted.has(key)) { release(visual); visuals.delete(key); }
-    }
-    for (const item of items) {
-      if (!Number.isFinite(item.x) || !Number.isFinite(item.z)) continue;
-      if (item.kind === 'road' && (!(item.width! > 0) || !(item.depth! > 0))) continue;
-      const existing = visuals.get(item.key);
-      if (existing?.signature === JSON.stringify(item)) continue;
-      if (existing) release(existing);
-      visuals.set(item.key, makeVisual(item));
+      const wanted = new Set(items.map((item) => item.key));
+      for (const [key, visual] of visuals) {
+        if (!wanted.has(key)) { release(visual); visuals.delete(key); }
+      }
+      for (const item of items) {
+        if (!Number.isFinite(item.x) || !Number.isFinite(item.z)) continue;
+        if (item.kind === 'road' && (!(item.width! > 0) || !(item.depth! > 0))) continue;
+        const existing = visuals.get(item.key);
+        if (existing?.signature === JSON.stringify(item)) continue;
+        if (existing) release(existing);
+        visuals.set(item.key, makeVisual(item));
+      }
     }
     updateLighting();
     if (changed) {
       options.refreshCollisions();
       options.refreshLabels();
       restored.forEach(options.onBuildingRestored);
+      options.onConstructionChanged();
     }
   }
 
@@ -213,6 +235,8 @@ export function createCityConstructionScene(options: {
         building.labelY = saved.labelY;
       });
       hidden.clear();
+      detachedPlots.forEach((parent, plot) => parent.add(plot));
+      detachedPlots.clear();
       detachedAttachments.forEach((children, attachment) => attachment.add(...children));
       detachedAttachments.clear();
       root.removeFromParent();

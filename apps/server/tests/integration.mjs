@@ -207,6 +207,26 @@ await new Promise((resolve, reject) => {
   physicsLabServer.once('error', reject);
   physicsLabServer.listen(physicsLabPort, '127.0.0.1', resolve);
 });
+// Verify fresh-town access before preparing the established town used by this
+// suite's shopping and story scenarios. No test resident is needed for rejection.
+const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e', `
+  const assert = (await import('node:assert/strict')).default;
+  const { db, closeDatabase, recordBuildingVisit, purchaseBuilding } = await import('./dist/db.js');
+  const { isBuildingUnlockable } = await import('./dist/progression.js');
+  const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
+  assert.equal(isBuildingUnlockable('library'), false);
+  assert.throws(() => recordBuildingVisit('fresh-town-access-check', 'library'), /Building is not built/);
+  assert.throws(() => purchaseBuilding('fresh-town-access-check', 'library', 0), /Building is not built/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM player_progress').get().count, 0);
+  // Leave one project pending for real WebSocket access/error checks below.
+  for (const project of config.projects.filter((entry) => entry.buildingId && entry.buildingId !== 'library')) {
+    db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
+  }
+  closeDatabase();
+`], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
+if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout
+  || establishedTown.error?.message || `Established town fixture failed: signal=${establishedTown.signal}, status=${establishedTown.status}`);
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
@@ -276,7 +296,7 @@ const waitFor = (client, type, predicate = () => true) => {
   return new Promise((resolve, reject) => {
     const existing = client.messages.find((message) => message.type === type && predicate(message));
     if (existing) return resolve(existing);
-    const timeout = setTimeout(() => { writeFileSync('/tmp/server-startup-dump.log', serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
+    const timeout = setTimeout(() => { writeFileSync(join(tmpdir(), 'server-startup-dump.log'), serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
     const listener = (raw) => {
       const message = JSON.parse(raw);
       if (message.type !== type || !predicate(message)) return;
@@ -520,12 +540,23 @@ try {
   const storyEnding = await waitFor(alice, 'story.updated', (message) => message.story?.ending === 'reconciled');
   if (storyEnding.story.flags.heardWhisper !== false || storyEnding.story.visitCount !== 1) throw new Error('Story updates must merge flags without resetting other state');
 
+  assert.equal(alice.hello.catalog.buildingUnlockable.library, false);
+  for (const type of ['progress.building.visit', 'progress.building.unlock']) {
+    // Start after earlier messages so both requests must receive their own error.
+    const previousMessages = alice.messages.length;
+    send(alice, { type, buildingId: 'library' });
+    const rejection = await poll(() => alice.messages.slice(previousMessages).find((message) => message.type === 'error'), Boolean, `${type} pending rejection`);
+    assert.deepEqual(rejection, { type: 'error', message: 'Building is not built' });
+  }
+
   send(alice, { type: 'progress.building.unlock', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
   send(alice, { type: 'progress.building.visit', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
 
-  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  // The core House of Commons still exercises personal unlock validation;
+  // collectively completed projects are open to everyone.
+  send(alice, { type: 'progress.building.visit', buildingId: 'commons' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is locked');
   send(alice, { type: 'progress.building.unlock', buildingId: 'activity' });
   await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'activity' && message.progress.currency === 1200);

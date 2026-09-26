@@ -60,6 +60,7 @@ export function assembleCityWorld(options: {
   isStoryLocked: (building: BuildingEntity) => boolean;
   interactOrWalk: (building: BuildingEntity) => void;
   onModelsLoaded: () => void;
+  onConstructionChanged: () => void;
 }) {
   const { scene, resources, graphics } = options;
   const raycastBuildingGroups: THREE.Object3D[] = [];
@@ -157,7 +158,7 @@ export function assembleCityWorld(options: {
     });
   const buildingLabelController = createBuildingLabelController({
     getBuildings: () => options.buildings,
-    isStoryLocked: options.isBuildingUnavailable,
+    isUnavailable: options.isBuildingUnavailable,
     interact: options.interactOrWalk,
   });
   buildingLabelController.addLabels();
@@ -176,10 +177,12 @@ export function assembleCityWorld(options: {
     makeMaterial: graphics.mesh.stdMat,
     buildings: options.buildings,
     getIsNight: options.getIsNight,
+    buildingPlots: options.buildingPlotTargets,
     getLightingPosition: () => options.actors.cursorChar?.position ?? scene.position,
     buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
     refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
     refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
+    onConstructionChanged: options.onConstructionChanged,
     onBuildingRestored: (building) => { void loadModels([building]); },
   });
   void loadModels(options.buildings);

@@ -2,10 +2,11 @@ import type { BuildingEntity } from '../../city/buildingEntity';
 
 export function createBuildingLabelController(options: {
   getBuildings: () => readonly BuildingEntity[];
-  isStoryLocked: (building: BuildingEntity) => boolean;
+  isUnavailable: (building: BuildingEntity) => boolean;
   interact: (building: BuildingEntity) => void;
 }) {
   function addLabel(building: BuildingEntity): void {
+    if (options.isUnavailable(building)) return;
     const wrap = document.getElementById('labelsWrap');
     if (!wrap || building.labelEl) return;
     const element = document.createElement('a');
@@ -20,7 +21,10 @@ export function createBuildingLabelController(options: {
   }
 
   function addLabels(): void {
-    options.getBuildings().filter((building) => !options.isStoryLocked(building)).forEach(addLabel);
+    options.getBuildings().forEach((building) => {
+      if (options.isUnavailable(building)) removeLabel(building);
+      else addLabel(building);
+    });
   }
 
   function removeLabel(building: BuildingEntity): void {

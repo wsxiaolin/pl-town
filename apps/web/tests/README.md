@@ -9,6 +9,29 @@
 - `unit/`: pure TypeScript domain tests (quest engine, navigation, stats).
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
+- `pending-construction.spec.ts`: pending buildings, plots, labels, and attached
+  interactions stay hidden until construction completes, with header controls
+  contained on desktop, mobile landscape, and narrow mobile portrait viewports;
+  portrait starts behind the rotation prompt, then rotates to exercise gameplay.
+- `pending-initial-policy.spec.ts`: a configuration's newly initial building
+  becomes visible even when the matching construction snapshot cannot load.
+- `city-map-construction-updates.spec.ts`: an open city map updates its entries
+  when construction progress changes.
+- `city-map-theme.spec.ts`: an open map refreshes its image at dusk and dawn
+  without losing search focus or affecting the main WebGL context.
+- `city-map-scene-updates.spec.ts`: explicit damage, repair, and story access
+  changes refresh an open map, coalescing bulk scene edits into one snapshot.
+- `ws-building-errors.spec.ts`: authenticated building rejections use Chinese
+  toasts while preserving the existing WebSocket connection and session.
+- `pending-label.spec.ts`: global story unlocks cannot reveal pending labels;
+  construction completion still respects a subsequent story re-lock.
+- `pending-damage.spec.ts`: saved damage survives pending construction and
+  unrelated saves; explicit repair keeps hidden buildings repaired when built.
+- `pending-task-guidance.spec.ts`: pending story destinations and NPC quest
+  offers explain collective construction, then resume normal navigation and
+  quest progress when built, at desktop and mobile landscape sizes.
+- `city-governance-loading.spec.ts`: in-flight configuration/state reads show
+  loading before failure, preserve payment feedback, and retry uncertain receipts.
 - `city-governance-errors.spec.ts`: persistent target-labelled failure feedback,
   donation/decoration retries, draft preservation across tab changes and panel
   reopening, and mobile feedback layout.

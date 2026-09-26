@@ -1,8 +1,9 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { CITY_CONSTRUCTION_CONFIG as config } from './data/cityConstructionConfig.js';
+import { CITY_CONSTRUCTION_CONFIG as config, COLLECTIVE_STORY_BUILDING_IDS } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
+import { reconcileInitialBuildings } from './cityGovernanceMigration.js';
 import { reconcileLegacyAreaProjectLayout } from './cityAreaLayoutMigration.js';
 import { validateCityAreaPlacement } from './cityAreaPlacement.js';
 
@@ -18,6 +19,7 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (!(db.prepare('PRAGMA table_info(city_meta)').all() as Array<{ name: string }>).some((column) => column.name === 'epoch')) {
     db.exec("ALTER TABLE city_meta ADD COLUMN epoch TEXT NOT NULL DEFAULT ''");
   }
+  const { preserved: preservedBuildings, previousConfig } = reconcileInitialBuildings(db, config);
   const json = JSON.stringify(config);
   validateCityAreaPlacement(config);
   const unique = (values: string[]) => new Set(values).size === values.length;
@@ -31,10 +33,16 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (config.decorations.some((entry) => !Number.isSafeInteger(entry.cost) || entry.cost <= 0)) throw new Error('Invalid decoration cost');
   const buildingIds = new Set(BUILDING_CATALOG.map((entry) => entry.id));
   if (config.initialBuiltBuildingIds.some((id) => !buildingIds.has(id))) throw new Error('Unknown initial building');
+  if (COLLECTIVE_STORY_BUILDING_IDS.some((id) => config.initialBuiltBuildingIds.includes(id)
+    || !config.projects.some((project) => project.kind === 'building' && project.buildingId === id))) {
+    throw new Error('Story buildings must remain reachable through collective construction');
+  }
   for (const id of buildingIds) {
     if (!config.initialBuiltBuildingIds.includes(id) && !config.projects.some((project) => project.buildingId === id)) throw new Error(`Missing city building policy: ${id}`);
   }
   const validPoint = (x: number, z: number) => Number.isFinite(x) && Number.isFinite(z) && Math.abs(x) <= 42 && Math.abs(z) <= 42;
+  // Catalog additions/moves also change the clearance contract for persisted
+  // plots and placements. Reconcile affected layouts explicitly before release.
   const clearPoint = (x: number, z: number, halfWidth = 0.5, halfDepth = halfWidth) => validPoint(x, z)
     && Math.abs(x) + halfWidth <= 42 && Math.abs(z) + halfDepth <= 42
     && Math.abs(x) > halfWidth + 1.2 && Math.abs(z) > halfDepth + 1.2
@@ -61,9 +69,10 @@ export function initializeCityGovernance(db: Database.Database): void {
     db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
     const progress = db.prepare('SELECT funded, built FROM city_projects WHERE id = ?').get(project.id) as { funded: number; built: number };
     if (!Number.isSafeInteger(progress.funded) || progress.funded > project.cost || Boolean(progress.built) !== (progress.funded === project.cost)) throw new Error(`Invalid city project progress: ${project.id}`);
-    // Preserve buildings unlocked before city governance existed. Their project
-    // rows become completed without charging users or rewriting their progress.
-    if (project.buildingId && !progress.built && db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(project.buildingId)) {
+    // Reconcile legacy defaults and unlocks into completed project rows without
+    // debiting residents or inventing payment/idempotency records.
+    if (project.buildingId && !progress.built && preservedBuildings.has(project.buildingId)) {
+      if (progress.funded !== 0) throw new Error(`Preserved city building has funded progress: ${project.id}; use explicit reconciliation`);
       db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
     }
   }
@@ -80,17 +89,13 @@ export function initializeCityGovernance(db: Database.Database): void {
     || areaPlots.some((id) => !config.personalPlots.some((plot) => plot.id === id))) throw new Error('Invalid city construction areas');
   const decorations = db.prepare('SELECT plot_id, decoration_id FROM city_decorations').all() as Array<{ plot_id: string; decoration_id: string }>;
   if (decorations.some((entry) => !config.personalPlots.find((plot) => plot.id === entry.plot_id)?.options.includes(entry.decoration_id))) throw new Error('Persisted city decoration does not match config');
-  const meta = db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get() as { config_version: string } | undefined;
-  if (meta && meta.config_version !== config.version) {
-    const previous = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(meta.config_version) as { config_json: string } | undefined;
-    if (!previous) throw new Error('Missing persisted city config');
-    const old = JSON.parse(previous.config_json) as typeof config;
-    reconcileAreaCatalog(old, config);
-    const previouslyBuilt = new Set(old.initialBuiltBuildingIds);
+  if (previousConfig) {
+    reconcileAreaCatalog(previousConfig, config);
+    const previouslyBuilt = new Set(previousConfig.initialBuiltBuildingIds);
     if (config.initialBuiltBuildingIds.some((id) => !previouslyBuilt.has(id))) {
       throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
     }
-    for (const id of old.initialBuiltBuildingIds) {
+    for (const id of previousConfig.initialBuiltBuildingIds) {
       if (!config.initialBuiltBuildingIds.includes(id) && !config.projects.some((project) => project.buildingId === id)) {
         throw new Error('City initialBuiltBuildingIds migration requires explicit reconciliation');
       }
