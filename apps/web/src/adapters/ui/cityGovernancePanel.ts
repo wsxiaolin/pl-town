@@ -141,9 +141,9 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
     focus.dispose();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
     if (root === submittedPanel && root?.classList.contains('open') && refreshCityGovernanceSession() === session) {
-      const restoreSuccessFocus = focus.shouldRestore();
+      const restoreActionFocus = focus.shouldRestore(failed);
       render();
-      if (failed || restoreSuccessFocus) focusAction('projectId', id);
+      if (restoreActionFocus) focusAction('projectId', id);
     }
   }
 }
