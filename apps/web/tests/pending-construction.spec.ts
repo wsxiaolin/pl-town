@@ -54,7 +54,11 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       expect(await page.evaluate((buildingId) => (window as any)._mini.interactBuilding(buildingId), id)).toBe(false);
     }
     const archive = page.getByRole('button', { name: '档案', exact: true });
-    await archive.click({ force: true });
+    // Scene readiness does not guarantee the boot fade and header entrance have
+    // finished on a software-GL runner. Keep Playwright's stable/hit-target checks.
+    await expect(page.locator('#bootScreen')).toBeHidden();
+    await expect(page.locator('.ui-header')).toHaveCSS('opacity', '1');
+    await archive.click();
     await expect(page.locator('#statsPanel')).toHaveClass(/open/);
     await expect(archive).toHaveAttribute('aria-expanded', 'true');
     await expect(page.locator('#spBody')).toContainText('ACHIEVEMENTS');
@@ -110,6 +114,22 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     await page.keyboard.press('Tab');
     await expect(page.locator('#memorialClose')).toBeFocused();
     await page.locator('#statsToggle').evaluate((button) => button.focus());
+    await expect(page.locator('#memorialClose')).toBeFocused();
+    // Existing background controls are inert, so their focus() is ignored.
+    // A newly added, non-inert control exercises the separate focusin guard.
+    const focusProbe = await page.evaluate(() => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Memorial focus probe';
+      document.body.append(button);
+      let receivedFocus = false;
+      button.addEventListener('focus', () => { receivedFocus = true; }, { once: true });
+      const inert = button.inert;
+      button.focus();
+      button.remove();
+      return { inert, receivedFocus };
+    });
+    expect(focusProbe).toEqual({ inert: false, receivedFocus: true });
     await expect(page.locator('#memorialClose')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.locator('#memorialOverlay')).not.toHaveClass(/open/);
