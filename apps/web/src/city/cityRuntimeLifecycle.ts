@@ -5,8 +5,9 @@ import { stopInvasionCG } from './invasionCg';
 import { preloadTextureResources } from './textureResourcePreloader';
 import { readRenderSettings } from '../rendering/createRenderer';
 import { applyGpuSuggestedRenderSettings, describeGpuForBoot, probeGpu } from '../rendering/gpuCapability';
-import { resolveBootDecision, markBootComplete, type BootDecision } from './bootGate';
-import { createBootPipelineUi, describeDownload, downloadAllAssets, type BootPipelineUi } from '../adapters/ui/bootPipelineUi';
+import { resolveBootDecision, markBootComplete, refreshServerVersion, type BootDecision } from './bootGate';
+import { createBootPipelineUi, type BootPipelineUi } from '../adapters/ui/bootPipelineUi';
+import { describeDownload, downloadAllAssets } from '../core/assetDownloader';
 import { showMomentHeavy, showMomentSplash, stopMomentPresentation } from '../adapters/ui/momentSplashView';
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
@@ -59,7 +60,11 @@ export function createCityRuntimeLifecycle(options: {
     if (!started || signal.aborted) return;
 
     if (decision.mode === 'light') {
-      await texturePreload;
+      // The texture preload is a pop-in mitigation, not a correctness need —
+      // TextureLoader lazily loads anything not cached yet. Bound it so even
+      // a fully-evicted HTTP cache can never put 41 MB on the FAST path
+      // (review r3#1); the preloader keeps streaming in the background.
+      await Promise.race([texturePreload, new Promise((resolve) => window.setTimeout(resolve, 2_500))]);
       if (!started || signal.aborted) return;
       // The light path is the DEFAULT path — give it its own watchdog so a
       // backgrounded tab (rAF frozen → warm-up frames stalled) cannot seal
@@ -115,7 +120,9 @@ export function createCityRuntimeLifecycle(options: {
         pipeline.setDetail(describeDownload(progress));
       }, bootAbort.signal);
       if (bootAbort.signal.aborted) {
-        // Keep the watchdog's honest hint; the bar stays where it stopped.
+        // Watchdog fired mid-download: keep its honest hint on screen and
+        // leave the bar where it stopped — no fake 100%.
+        console.debug('[boot] download aborted by watchdog — degrading');
       } else {
         pipeline.setStageProgress('download', 1);
         pipeline.setDetail(describeDownload(download));
@@ -180,7 +187,7 @@ export function createCityRuntimeLifecycle(options: {
         console.error('First-frame precompile failed', error);
       }
     } else {
-      await options.prepareFirstFrame?.().catch((error) => console.error('First-frame precompile failed', error));
+      await options.prepareFirstFrame?.(undefined, precompileSignal).catch((error) => console.error('First-frame precompile failed', error));
     }
     if (!started) return;
 
@@ -197,8 +204,11 @@ export function createCityRuntimeLifecycle(options: {
         pipeline.setDetail('一切就绪');
         // Precache landed — future visits skip the heavy pipeline entirely.
         // The server version observed by THIS boot only becomes "consumed"
-        // here: a boot abandoned mid-download must re-run the update.
-        markBootComplete(serverVersion);
+        // here. When the decision never probed (first-visit / build-changed),
+        // take a fresh probe now so a build+server double deploy doesn't
+        // cost returning visitors a second heavy boot (review r3#4).
+        const consumedServerVersion = serverVersion ?? await refreshServerVersion().catch(() => null);
+        markBootComplete(consumedServerVersion);
       }
     }
 

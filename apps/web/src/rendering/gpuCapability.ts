@@ -55,12 +55,17 @@ function readWebGlRenderer(): { renderer: string; vendor: string } {
   }
 }
 
+/** Cached samples older than this are re-probed (driver/hardware changes). */
+const GPU_INFO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 function readCachedGpuInfo(): GpuInfo | null {
   try {
     const raw = localStorage.getItem(GPU_INFO_KEY);
     if (!raw) return null;
     const saved = JSON.parse(raw) as GpuInfo;
-    if (typeof saved?.renderer === 'string' && typeof saved?.tier === 'string') return saved;
+    if (typeof saved?.renderer !== 'string' || typeof saved?.tier !== 'string') return null;
+    if (typeof saved?.sampledAt !== 'number' || Date.now() - saved.sampledAt > GPU_INFO_TTL_MS) return null;
+    return saved;
   } catch { /* fall through to a fresh probe. */ }
   return null;
 }
@@ -98,8 +103,9 @@ export function gpuSummaryLine(info: GpuInfo): string {
  * saved render settings of their own.
  */
 export function applyGpuSuggestedRenderSettings(info: GpuInfo): void {
-  // Called before the boot decision — storage may be unavailable (private
-  // mode); the default preset is only a convenience, never a crash.
+  // Runs inside the heavy boot after the decision — storage may be
+  // unavailable (private mode); the default preset is only a convenience,
+  // never a crash.
   try {
     applyGpuSuggestedRenderSettingsInner(info);
   } catch { /* ignore. */ }
@@ -107,11 +113,18 @@ export function applyGpuSuggestedRenderSettings(info: GpuInfo): void {
 
 function applyGpuSuggestedRenderSettingsInner(info: GpuInfo): void {
   if (localStorage.getItem(RENDER_SETTINGS_KEY)) return;
-  const presets: Record<GpuTier, Partial<Record<'resolution' | 'antialias' | 'shadows' | 'textureRendering' | 'waterRendering', number | boolean>>> = {
-    discrete: { resolution: 2, antialias: true, shadows: false, textureRendering: true, waterRendering: true },
-    apple: { resolution: 2, antialias: true, shadows: false, textureRendering: true, waterRendering: true },
-    integrated: { resolution: 1.5, antialias: true, shadows: false, textureRendering: true, waterRendering: true },
-    software: { resolution: 1, antialias: false, shadows: false, textureRendering: false, waterRendering: false },
+  // Seeds only the RENDERING-cost knobs. textureRendering/waterRendering are
+  // user-visible quality switches that stay opt-in (their default `false`
+  // keeps the light boot free of any 41 MB texture re-read — review r3#1).
+  // Resolution stays viewport-aware: the mobile cap from DEFAULT_RENDER_
+  // SETTINGS wins over the tier, so phones don't get the desktop pixel count.
+  const mobile = matchMedia('(max-width: 680px)').matches;
+  const hiRes = mobile ? 1.5 : 2;
+  const presets: Record<GpuTier, Partial<Record<'resolution' | 'antialias' | 'shadows', number | boolean>>> = {
+    discrete: { resolution: hiRes, antialias: true, shadows: false },
+    apple: { resolution: hiRes, antialias: true, shadows: false },
+    integrated: { resolution: 1.5, antialias: true, shadows: false },
+    software: { resolution: 1, antialias: false, shadows: false },
     unknown: {},
   };
   const preset = presets[info.tier];

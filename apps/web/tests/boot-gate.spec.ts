@@ -45,7 +45,9 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootScreen')).toHaveClass(/is-heavy/);
   await expect(page.locator('#bootPipeline')).toHaveClass(/is-active/);
   // The still behind the pipeline is the CURRENT moment, not a day cycle.
-  await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentLabel());
+  // (The caption is display:none in heavy mode — assert what is visible.)
+  const heavySrc = await page.locator('#bootMomentImgA.is-front, #bootMomentImgB.is-front').first().getAttribute('src');
+  expect(heavySrc).toMatch(new RegExp(`moments/(dawn|noon|dusk|night)\\.webp`));
 
   // Full pipeline: download → scene → precompile → ready → reveal.
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });

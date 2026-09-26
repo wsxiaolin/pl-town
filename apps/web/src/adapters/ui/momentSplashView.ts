@@ -40,6 +40,7 @@ let cityReady = false;
 let minimumElapsed = false;
 let skipRequested = false;
 let revealListeners: (() => void) | null = null;
+let presentationStopped = false;
 
 function bootScreen(): HTMLElement | null {
   return document.getElementById('bootScreen');
@@ -82,7 +83,13 @@ function bindSkip(): void {
   // this module but keeps the same DOM, so a module flag would stack
   // duplicate listeners across hot updates.
   screen.dataset.momentSkipBound = 'true';
-  screen.addEventListener('pointerdown', () => { skipRequested = true; notifyReveal(); }, { capture: true });
+  const skip = (): void => { skipRequested = true; notifyReveal(); };
+  screen.addEventListener('pointerdown', skip, { capture: true });
+  // Keyboard parity for the "点击进入" hint (it is a CSS ::after, invisible
+  // to assistive tech on its own).
+  screen.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') skip();
+  }, { capture: true });
 }
 
 function notifyReveal(): void {
@@ -112,6 +119,9 @@ export function showMomentHeavy(): void {
   // no second timer, no visible swap (the still is the same current moment).
   screen.classList.remove('is-splash');
   screen.classList.add('is-moment', 'is-heavy');
+  // The pipeline rewrites its detail line constantly — stop screen-reader
+  // announcements from churning while it does.
+  screen.setAttribute('aria-live', 'off');
   showCurrentMoment();
   bindSkip();
 }
@@ -137,6 +147,7 @@ function freezeMomentPresentation(): void {
 }
 
 export function stopMomentPresentation(): void {
+  presentationStopped = true;
   freezeMomentPresentation();
   // Defensive reset so a same-document re-boot cannot inherit stale gate
   // flags. revealBound intentionally stays: the pointer listener must not
@@ -152,6 +163,7 @@ export function stopMomentPresentation(): void {
  * moment must have been on screen long enough (or the visitor clicked).
  */
 export function whenBootRevealAllowed(): Promise<void> {
+  if (presentationStopped || !bootScreen()) return Promise.resolve();
   return new Promise((resolve) => {
     const done = () => {
       revealListeners = null;

@@ -6,7 +6,6 @@ const textureModules = import.meta.glob('../assets/textures/**/*.{png,jpg,jpeg,w
 
 const failedUrls = new Set<string>();
 let ready = false;
-let started = false;
 let activeRun: { promise: Promise<void>; controller: AbortController; forced: boolean } | null = null;
 
 async function readTexture(url: string, signal: AbortSignal): Promise<void> {
@@ -63,14 +62,15 @@ export function preloadTextureResources(enabled = true, signal?: AbortSignal, fo
   // HTTP cache; a forced run re-opens the pass even after an ambient skip so
   // the first visit still lands a complete precache.
   if (ready && !force) return Promise.resolve();
-  started = true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), force ? 240_000 : 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
   const promise = runWithConcurrency(Object.values(textureModules), 6, controller.signal).then(() => {
     clearTimeout(timeout);
-    ready = true;
+    // Only a COMPLETED pass claims readiness — an aborted one must not
+    // short-circuit a later forced re-run.
+    if (!controller.signal.aborted) ready = true;
     if (activeRun?.promise === promise) activeRun = null;
   });
   activeRun = { promise, controller, forced: force };

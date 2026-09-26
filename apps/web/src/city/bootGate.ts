@@ -57,31 +57,59 @@ async function probeServerVersion(signal: AbortSignal): Promise<string | null> {
   }
 }
 
+/**
+ * Pure branch matrix of the gate — unit-tested in
+ * tests/unit/bootGateDecision.test.ts. `forced` always wins; otherwise the
+ * local markers decide, and a healthy local state upgrades to server-changed
+ * only when a KNOWN server version differs from the observed one.
+ */
+export function pickBootReason(input: {
+  forced: BootMode | null;
+  knownBuild: string | null;
+  precacheDone: boolean;
+  knownServerVersion: string | null;
+  buildId: string;
+  serverVersion: string | null;
+}): { mode: BootMode; reason: BootReason } {
+  if (input.forced === 'heavy') return { mode: 'heavy', reason: 'forced' };
+  if (input.forced === 'light') return { mode: 'light', reason: 'cached' };
+
+  let reason: BootReason = 'cached';
+  if (!input.knownBuild && !input.precacheDone) reason = 'first-visit';
+  else if (!input.precacheDone) reason = 'precache-missing';
+  else if (input.knownBuild !== input.buildId) reason = 'build-changed';
+  else if (
+    input.serverVersion !== null &&
+    input.knownServerVersion !== null &&
+    input.knownServerVersion !== input.serverVersion
+  ) reason = 'server-changed';
+  return { mode: reason === 'cached' ? 'light' : 'heavy', reason };
+}
+
 export async function resolveBootDecision(): Promise<BootDecision> {
   const forced = storedForcedMode();
-  if (forced === 'heavy') return { mode: 'heavy', reason: 'forced', buildId: currentBuildId(), serverVersion: null };
-  if (forced === 'light') return { mode: 'light', reason: 'cached', buildId: currentBuildId(), serverVersion: null };
+  if (forced) {
+    const picked = pickBootReason({ forced, knownBuild: null, precacheDone: false, knownServerVersion: null, buildId: currentBuildId(), serverVersion: null });
+    return { ...picked, buildId: currentBuildId(), serverVersion: null };
+  }
 
   const buildId = currentBuildId();
   const knownBuild = safeGet(BUILD_KEY);
   const knownServerVersion = safeGet(SERVER_VERSION_KEY);
   const precacheDone = safeGet(PRECACHE_KEY) === '1';
 
-  let reason: BootReason = 'cached';
-  if (!knownBuild && !precacheDone) reason = 'first-visit';
-  else if (!precacheDone) reason = 'precache-missing';
-  else if (knownBuild !== buildId) reason = 'build-changed';
-
   // The server probe only runs when the local state looks healthy — a first
   // visit or a stale build already forces the heavy path without it. 4.5 s
   // covers a cold-starting free-tier backend; AbortSignal.timeout keeps the
   // fetch itself from ever hanging the decision.
+  // Probe only when the local state looks healthy — every other reason is
+  // already heavy regardless of what the server says.
   let serverVersion: string | null = null;
-  if (reason === 'cached') {
+  if (safeGet(PRECACHE_KEY) === '1' && knownBuild === buildId) {
     serverVersion = await probeServerVersion(AbortSignal.timeout(4_500));
     if (serverVersion === null) console.warn('bootGate: /town-api/version probe failed — deciding locally');
-    if (serverVersion !== null && knownServerVersion !== null && knownServerVersion !== serverVersion) reason = 'server-changed';
   }
+  const { mode, reason } = pickBootReason({ forced: null, knownBuild, precacheDone, knownServerVersion, buildId, serverVersion });
 
   // Persist ONLY the server version, and only for a light decision (nothing
   // pending). The build id is deliberately NOT written here: markBootComplete
@@ -98,10 +126,15 @@ export async function resolveBootDecision(): Promise<BootDecision> {
 }
 
 /**
- * Persist the marker that this device holds a complete precache. The server
- * version observed by a heavy boot lands here — i.e. only after the pipeline
- * (download → precompile) actually finished.
+ * Persist the marker that this device holds a complete precache — the ONLY
+ * writer of the build id / precache keys. The server version lands here too:
+ * either the one observed when a `server-changed` decision was made, or (for
+ * builds that skipped the probe) a fresh probe taken at pipeline completion —
+ * so a deploy that changes build AND server never costs two heavy boots.
  */
+export async function refreshServerVersion(): Promise<string | null> {
+  return probeServerVersion(AbortSignal.timeout(4_500));
+}
 export function markBootComplete(serverVersion?: string | null): void {
   try {
     localStorage.setItem(BUILD_KEY, currentBuildId());
