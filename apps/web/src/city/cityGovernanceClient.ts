@@ -105,6 +105,20 @@ export function validState(value: unknown): value is CityState {
     && Array.isArray(item.decorations));
 }
 
+// The frontend and server deploy independently. Older snapshots have no vote
+// counts; accept only that missing additive field, never malformed counts.
+// Voting acknowledgements still use validState directly before releasing IDs.
+function readCityState(value: unknown): CityState | null {
+  if (validState(value)) return value;
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Partial<CityState>;
+  if (!Array.isArray(item.projects)) return null;
+  const normalized = { ...item, projects: item.projects.map((project) =>
+    project && typeof project === 'object' && !Object.hasOwn(project, 'votes')
+      ? { ...project, votes: 0 } : project) };
+  return validState(normalized) ? normalized : null;
+}
+
 function isOlderCityState(next: CityState): boolean {
   // A new configuration/epoch establishes a new sequence, even at revision zero.
   return Boolean(state && next.configVersion === state.configVersion
@@ -144,9 +158,9 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       notify();
       stateBeforeFetch = state;
       const stateResponse = await fetchJson('/town-api/city/state', signal, { cache: 'no-store' });
-      const nextState: unknown = stateResponse.ok ? await stateResponse.json() : null;
+      const nextState = readCityState(stateResponse.ok ? await stateResponse.json() : null);
       if (sequence !== loadSequence) return;
-      if (validState(nextState) && nextState.configVersion === config.version) {
+      if (nextState && nextState.configVersion === config.version) {
         // A WS update can arrive while this HTTP snapshot is in flight.
         if (!isOlderCityState(nextState)) state = nextState;
       } else if (state === stateBeforeFetch) state = null;
@@ -168,8 +182,9 @@ export function subscribeCityGovernance(listener: CityGovernanceListener): () =>
   return () => listeners.delete(listener);
 }
 
-export function applyCityState(next: unknown): boolean {
-  if (!validState(next)) return false;
+export function applyCityState(value: unknown): boolean {
+  const next = readCityState(value);
+  if (!next) return false;
   if (!config || next.configVersion !== config.version) { state = null; void loadCityGovernance(); notify(); return false; }
   if (isOlderCityState(next)) return false;
   state = next;
@@ -243,15 +258,16 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   // Report the rejected operation immediately; a slow refresh must not hide it.
   if (response.status === 409) void loadCityGovernance();
-  if (!response.ok || !validState(payload.state)) {
+  const confirmedState = readCityState(payload.state);
+  if (!response.ok || !confirmedState) {
     if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === operation) {
       pendingRequestIds.delete(operationKey);
     }
     throw new Error(cityOperationError(payload.error));
   }
   if (pendingRequestIds.get(operationKey) === operation) pendingRequestIds.delete(operationKey);
-  applyCityState(payload.state);
-  return { state: payload.state, replayed: payload.replayed === true };
+  applyCityState(confirmedState);
+  return { state: confirmedState, replayed: payload.replayed === true };
 }
 
 // These keys are the city HttpBodyError contract. Keep them aligned with
