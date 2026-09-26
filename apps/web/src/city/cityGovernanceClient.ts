@@ -36,6 +36,7 @@ const pendingRequestIds = new Map<string, PendingOperation>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 const pendingBuildings = new Set<string>();
+const trustedBuiltBuildings = new Set<string>();
 let loadSequence = 0;
 let activeLoad: Promise<void> | null = null;
 let activeSignal: AbortSignal | undefined;
@@ -52,10 +53,19 @@ function notify() {
     const builtProjects = new Set(state.projects.filter((project) => project.built).map((project) => project.id));
     const initialBuildings = new Set(config.initialBuiltBuildingIds);
     pendingBuildings.clear();
+    trustedBuiltBuildings.clear();
+    initialBuildings.forEach((id) => trustedBuiltBuildings.add(id));
     for (const project of config.projects) {
-      if (project.buildingId && !initialBuildings.has(project.buildingId) && !builtProjects.has(project.id)) {
-        pendingBuildings.add(project.buildingId);
-      }
+      if (!project.buildingId) continue;
+      if (initialBuildings.has(project.buildingId) || builtProjects.has(project.id)) trustedBuiltBuildings.add(project.buildingId);
+      else pendingBuildings.add(project.buildingId);
+    }
+  } else if (config) {
+    // While the new snapshot is unavailable, keep known construction outcomes
+    // and hide new project buildings until the server confirms completion.
+    const initialBuildings = new Set(config.initialBuiltBuildingIds);
+    for (const project of config.projects) {
+      if (project.buildingId && !initialBuildings.has(project.buildingId) && !trustedBuiltBuildings.has(project.buildingId)) pendingBuildings.add(project.buildingId);
     }
   }
   listeners.forEach((listener) => listener(config, state));
@@ -106,6 +116,8 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       if (!nextConfig?.version) throw new Error('City configuration unavailable');
       if (sequence !== loadSequence) return;
       config = nextConfig;
+      if (state?.configVersion !== config.version) state = null;
+      notify();
       stateBeforeFetch = state;
       const stateResponse = await fetchJson('/town-api/city/state', signal, { cache: 'no-store' });
       const nextState: unknown = stateResponse.ok ? await stateResponse.json() : null;
@@ -142,9 +154,9 @@ export function applyCityState(next: unknown): boolean {
 }
 
 export function isConstructionPending(buildingId: string): boolean {
-  // Before the first trusted snapshot the optional service has no policy.
-  // Reloads retain its last trusted policy, so pending buildings never flash
-  // back into view while a new config or state request is in flight.
+  // Before any configuration the optional service has no policy. Reloads keep
+  // trusted outcomes and hide newly configured projects until a matching state
+  // arrives, including when the state request fails.
   return pendingBuildings.has(buildingId);
 }
 
@@ -155,6 +167,7 @@ export function disposeCityGovernance(): void {
   config = null;
   state = null;
   pendingBuildings.clear();
+  trustedBuiltBuildings.clear();
   pendingRequestIds.clear();
   listeners.clear();
 }

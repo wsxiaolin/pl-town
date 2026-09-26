@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { BUILDING_DEFS } from '../src/city/data/buildings';
 import type { CityConfig } from '../src/city/cityGovernanceClient';
-import { stubCityWebSocket, waitForCityReady } from './helpers';
+import { pushCityState, stubCityWebSocket, waitForCityReady } from './helpers';
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
   test(`pending buildings hide models, lots, labels and map entries at ${viewport.width}px`, async ({ page }, testInfo) => {
@@ -12,10 +12,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     // server source loading. Server integration tests verify the real catalog.
     let config: CityConfig = {
       schemaVersion: 1, version: 'pending-test', initialBuiltBuildingIds: ['commons'],
-      projects: BUILDING_DEFS.filter((building) => building.id !== 'commons').map((building) => ({
+      projects: [...BUILDING_DEFS.filter((building) => building.id !== 'commons').map((building) => ({
         id: `build-${building.id}`, buildingId: building.id, name: building.label,
-        kind: 'building', description: '共同筹建', cost: 3000,
-      })),
+        kind: 'building' as const, description: '共同筹建', cost: 3000,
+      })), { id: 'greenbelt-benches', name: '绿道座椅', kind: 'decoration', description: '公共休憩点', cost: 300 }],
       personalPlots: [], decorations: [],
     };
     const libraryProject = config.projects.find((project) => project.buildingId === 'library')!;
@@ -85,22 +85,14 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     blockReload = true;
     config = { ...config, version: 'pending-test-next' };
     state = { ...state, configVersion: config.version };
-    // The harness serves Vite source modules; delay config reload to inspect
-    // the actual scene while its last trusted construction policy is retained.
-    await page.evaluate(async (nextState) => {
-      const modulePath = '/src/city/cityGovernanceClient.ts';
-      const { applyCityState } = await import(modulePath);
-      applyCityState(nextState);
-    }, state);
+    // Delay the config reload triggered by a real WebSocket broadcast.
+    await pushCityState(page, state);
     await expect.poll(() => configRequests).toBe(2);
     expect(await renderedBuildingIds()).toEqual(['commons']);
     expect(await page.evaluate(() => (window as any)._mini.interactBuilding('library'))).toBe(false);
+    const reloadedState = page.waitForResponse('**/town-api/city/state');
     releaseReload();
-    await page.evaluate(async () => {
-      const modulePath = '/src/city/cityGovernanceClient.ts';
-      const { loadCityGovernance } = await import(modulePath);
-      await loadCityGovernance();
-    });
+    await reloadedState;
     await expect(page.locator('.b-label-item')).toHaveCount(1);
     await expect(page.locator('.b-label-item[data-building-id="commons"]')).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath('pending-near.png') });
@@ -118,6 +110,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     await page.locator('#mapClose').click({ force: true });
     await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
     const panel = page.locator('.city-governance-panel');
+    await panel.getByRole('navigation', { name: '建设项目分类' }).getByRole('button', { name: '道路与绿化' }).click();
+    await expect(panel.getByRole('heading', { name: '道路与绿化' })).toBeFocused();
+    await expect(panel.locator('[data-project-id="greenbelt-benches"]')).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('public-works-jump.png') });
     await panel.locator('[data-building-id="library"]').getByRole('button', { name: '捐款', exact: true }).click();
     await expect.poll(renderedBuildingIds).toEqual(['commons', 'library']);
     await expect(page.locator('.b-label-item[data-building-id="library"]')).toHaveCount(1);

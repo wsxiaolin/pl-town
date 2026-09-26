@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { stubCityWebSocket, waitForCityReady } from './helpers';
+import { pushCityState, stubCityWebSocket, waitForCityReady } from './helpers';
 
 test('an open map updates construction access without creating more WebGL contexts', async ({ page }) => {
   const config = {
@@ -40,13 +40,7 @@ test('an open map updates construction access without creating more WebGL contex
   const shot = await page.locator('#mapImage').getAttribute('src');
   for (let revision = 1; revision <= 13; revision += 1) {
     const built = revision % 2 === 1;
-    await page.evaluate(async (nextState) => {
-      // Playwright uses the Vite dev harness; exercise its real state receiver
-      // without adding a production-only debug API for governance updates.
-      const modulePath = '/src/city/cityGovernanceClient.ts';
-      const { applyCityState } = await import(modulePath);
-      applyCityState(nextState);
-    }, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built, votes: 0 }] });
+    await pushCityState(page, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built, votes: 0 }] });
     await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(built ? 1 : 0);
     await expect(page.locator('.map-search-result[data-building-id="library"]')).toHaveCount(built ? 1 : 0);
   }
@@ -84,12 +78,7 @@ test('construction updates retain map search selection, focus and dismissed resu
   const activeId = await page.locator('.map-search-result.is-active').getAttribute('data-building-id');
   await expect(search).toHaveAttribute('aria-activedescendant', 'mapSearchResult-1');
   const updateLibrary = async (revision: number, built: boolean) => {
-    await page.evaluate(async (nextState) => {
-      // The Vite dev harness shares this module with the running city.
-      const modulePath = '/src/city/cityGovernanceClient.ts';
-      const { applyCityState } = await import(modulePath);
-      applyCityState(nextState);
-    }, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built, votes: 0 }] });
+    await pushCityState(page, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built, votes: 0 }] });
     await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(built ? 1 : 0);
   };
   await updateLibrary(1, true);
