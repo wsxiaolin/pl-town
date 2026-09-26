@@ -8,11 +8,15 @@ import assert from 'node:assert/strict';
 
 // Error text is currently the shared city protocol discriminator. A new server
 // rejection needs a safe localized client mapping, including its retry policy.
-const cityErrorClient = readFileSync(new URL('../../web/src/city/cityGovernanceClient.ts', import.meta.url), 'utf8');
-for (const file of ['cityGovernance.ts', 'cityGovernanceRouter.ts']) {
-  const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
-  for (const [, message] of source.matchAll(/(?:new HttpBodyError\(|error: )'([^']+)'/g)) {
-    assert.ok(cityErrorClient.includes(`'${message}':`), `Missing city error mapping: ${message}`);
+function checkCityErrorMappings() {
+  const cityErrorClient = readFileSync(new URL('../../web/src/city/cityGovernanceClient.ts', import.meta.url), 'utf8');
+  for (const file of ['cityGovernance.ts', 'cityGovernanceRouter.ts']) {
+    const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+    const errors = [...source.matchAll(/(?:new HttpBodyError\s*\(\s*|\berror\s*:\s*)(['"`])((?:\\.|(?!\1)[^\\\r\n])*)\1/g)];
+    assert.ok(errors.length > 0, `City error mapping contract: no literal errors found in ${file}`);
+    for (const [, , message] of errors) {
+      assert.ok(cityErrorClient.includes(`'${message}':`), `City error mapping contract: ${file} has no client mapping for ${message}`);
+    }
   }
 }
 
@@ -339,6 +343,7 @@ let bob;
 let charlie;
 let requester;
 try {
+  checkCityErrorMappings();
   await waitForServer();
 
   if (await rejectedWebSocketOrigin() !== 401) throw new Error('Untrusted WebSocket origins must be rejected during the handshake');

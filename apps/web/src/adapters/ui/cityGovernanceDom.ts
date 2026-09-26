@@ -16,7 +16,7 @@ export function actionButton(label: string, action?: () => void, disabled = fals
   element.type = 'button';
   element.textContent = label;
   element.disabled = disabled;
-  element.dataset.focusKey = focusKey;
+  if (focusKey) element.dataset.focusKey = focusKey;
   if (action) element.addEventListener('click', action);
   return element;
 }
