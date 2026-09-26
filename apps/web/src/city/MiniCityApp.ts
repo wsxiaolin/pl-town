@@ -514,6 +514,8 @@ function init() {
   });
   initStoryTaskGuideWiring({
     document,
+    isConstructionPending,
+    showToast: showUnlockToast,
     getBuildings: () => buildings,
     getEchoController: () => stories.echo,
     getCursor: () => cursorChar,
@@ -626,6 +628,7 @@ function init() {
   cityDialogs = createCityDialogController({
     document,
     buildingContent: BUILDING_CONTENT,
+    isConstructionPending,
     getQuestAction: (npcId) => questRuntime.getNpcAction(npcId, readQuestProgressView(multiplayerHousing)),
     performQuestAction: (action, at) => questRuntime.performNpcAction(action, at),
     onNpcInteracted: (npcId) => interactionTracker.recordNpcInteraction(npcId),

@@ -1,4 +1,4 @@
-import { donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, isCityGovernanceLoading, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
 import { actionButton as button, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
@@ -79,6 +79,7 @@ function renderContents(): void {
   const scrollTop = root.querySelector('.city-governance-body')?.scrollTop ?? 0;
   const config = getCityConfig();
   const state = getCityState();
+  const loading = isCityGovernanceLoading();
   const header = root.querySelector<HTMLElement>('.city-governance-head')!;
   const title = document.createElement('h2');
   const activeProject = config?.projects.find((project) => project.buildingId === activeBuilding);
@@ -92,11 +93,16 @@ function renderContents(): void {
     tabs.append(tabButton);
   }
   const status = root.querySelector<HTMLElement>('[data-city-status]')!;
-  status.textContent = state ? `云端进度 #${state.revision}` : '正在等待云端城市配置...';
+  status.textContent = state ? `云端进度 #${state.revision}` : loading ? '正在加载建设进度…' : '城市建设数据暂时不可用';
   updateFeedback();
   const body = root.querySelector<HTMLElement>('.city-governance-body')!;
   body.replaceChildren();
   if (!config || !state) {
+    if (loading) {
+      body.append(document.createTextNode('正在加载建设进度，请稍候…'));
+      restoreFocus(focused);
+      return;
+    }
     body.append(document.createTextNode('城市建设数据暂时不可用，请稍后重试。'));
     body.append(button('重试', () => {
       const retry = body.querySelector('button');

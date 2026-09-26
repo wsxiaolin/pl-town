@@ -116,6 +116,7 @@ async function fetchJson(path: string, signal?: AbortSignal, init?: RequestInit)
 
 export function getCityConfig(): CityConfig | null { return config; }
 export function getCityState(): CityState | null { return state; }
+export function isCityGovernanceLoading(): boolean { return activeLoad !== null; }
 
 export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
   if (activeLoad && !activeSignal?.aborted) return activeLoad;
@@ -167,6 +168,9 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       }
     }
   })();
+  // Publish only after assigning the promise: subscribers may request the same
+  // load, and a trailing refresh must stay loading throughout its notification.
+  notify();
   return activeLoad;
 }
 

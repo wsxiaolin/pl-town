@@ -90,6 +90,7 @@ export interface CityDialogControllerOptions {
   buildingContent: Readonly<Record<string, BuildingContentLike>>;
   getQuestAction: (npcId: string) => NpcQuestAction | null;
   performQuestAction: (action: NpcQuestAction, at: number) => QuestTransition;
+  isConstructionPending?: (buildingId: string) => boolean;
   onNpcInteracted: (npcId: string) => void;
   onDialogueAction?: (action: string, sourceId: string) => void;
   pauseNpcs: () => void;
@@ -250,9 +251,22 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     renderOptions(dialogOptions);
   };
 
+  const questConstructionHint = (action: NpcQuestAction): string => {
+    if (action.kind !== 'offer') return '';
+    const pendingNames = new Set<string>();
+    for (const objective of action.quest.stages[0]?.objectives ?? []) {
+      const target = objective.target;
+      if (target.type !== 'building.visited' || !options.isConstructionPending?.(target.buildingId)) continue;
+      pendingNames.add(options.buildingContent[target.buildingId]?.name ?? target.buildingId);
+    }
+    return pendingNames.size > 0
+      ? `\n\n${[...pendingNames].map((name) => `「${name}」`).join('、')}尚未建成，请前往众议院参与募捐，建成后再继续任务。`
+      : '';
+  };
+
   const renderQuestAction = (action: NpcQuestAction): void => {
     const copy = action.kind === 'offer' ? action.quest.offer : action.quest.completion;
-    renderLine(copy.text);
+    renderLine(copy.text + questConstructionHint(action));
     renderOptions([
       {
         text: copy.confirmLabel,
@@ -261,7 +275,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
           if (transition.changes.length > 0) {
             options.showToast(`${action.kind === 'offer' ? '任务已接受' : '任务已完成'} · ${action.quest.title}`);
           }
-          renderLine(copy.confirmedText);
+          renderLine(copy.confirmedText + questConstructionHint(action));
           renderOptions([
             { text: '继续交谈', onPick: () => activeNpc && renderNode(firstNode(activeNpc)) },
             { text: '告辞', onPick: () => controller.closeNpc() },
