@@ -26,6 +26,12 @@
   donation and area construction usable when the votes read endpoint returns
   404/405. Reopening or explicitly checking voting retries capability detection;
   transport/server failures and malformed mutation receipts remain errors.
+- `city-login-recovery.spec.ts`: a real client disconnect and automatic reconnect
+  followed by a rejected hello closes the commons dialog before ordinary login
+  or Physics Lab verification; server feedback, credentials, and focus remain usable.
+- `city-voting-epoch.spec.ts`: a conflict-triggered public read can observe a
+  restored city before reauthentication. A delayed successful vote receipt from
+  the previous epoch must not overwrite that state or announce a new success.
 
 Server integration tests live alongside the server in `server/tests/` because
 they require the server's runtime and dependencies.

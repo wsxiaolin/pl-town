@@ -24,7 +24,7 @@ import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
-import { isCityGovernancePanelOpen } from '../adapters/ui/cityGovernancePanel';
+import { closeCityGovernancePanel, isCityGovernancePanelOpen } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
@@ -611,6 +611,7 @@ function init() {
     checkAchievements,
     shouldShowIntro: shouldShowCG,
     startIntro: startCG,
+    beforeShow: closeCityGovernancePanel,
     proceed: proceedToCity,
   });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });

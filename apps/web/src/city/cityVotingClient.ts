@@ -1,6 +1,6 @@
 import { townApiUrl } from '../core/townApi';
 import { getResidentToken } from '../core/residentToken';
-import { applyCityState, getCityConfig, loadCityGovernance, makeRequestId, validState, type CityState } from './cityGovernanceClient';
+import { applyCityState, getCityConfig, getCityState, loadCityGovernance, makeRequestId, validState, type CityState } from './cityGovernanceClient';
 
 type VoteRecords = { epoch: string; projectIds: string[] };
 export type CityVotes = VoteRecords & { sessionId: number };
@@ -88,6 +88,7 @@ export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotesRead
 export async function voteCity(projectId: string): Promise<CityVotes | null> {
   const config = getCityConfig();
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试');
+  const requestedEpoch = getCityState()?.epoch;
   const owner = session();
   const key = JSON.stringify([owner.id, projectId, config.version]);
   const requestId = pending.get(key) ?? makeRequestId();
@@ -118,6 +119,11 @@ export async function voteCity(projectId: string): Promise<CityVotes | null> {
       throw new Error('投票未完成，请刷新后重试');
     }
     if (!votes(payload.votes) || !validState(payload.state)) throw new Error('投票结果暂时不可用，请重试');
+    // A conflict can reload public state after a restore, before reconnecting
+    // removes the revoked token. Do not publish that older, confirmed receipt.
+    const currentEpoch = getCityState()?.epoch;
+    if (requestedEpoch && currentEpoch && currentEpoch !== requestedEpoch
+      && payload.state.epoch !== currentEpoch) return null;
     // A newer websocket revision may arrive before this HTTP response. Keep its
     // city state while still accepting this resident's confirmed vote receipt.
     applyCityState(payload.state);

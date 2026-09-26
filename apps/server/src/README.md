@@ -33,6 +33,15 @@ writes schema 7 metadata before the server restarts. Existing project definition
 configuration IDs are unchanged. Vote request receipts are retained just like
 payment receipts, including duplicate votes submitted with another request ID.
 
+The vote-operation ledger grows once per accepted resident/request-ID pair, not
+per transport retry: retrying the same request ID reuses its receipt. A new ID
+for an already supported project deliberately adds a no-op receipt so that ID
+cannot later vote for a different project. The client retains uncertain IDs and
+disables confirmed choices. Votes, donations, and decoration purchases share the
+existing limit of 20 mutation attempts per resident per minute; this limits the
+write rate, not total storage. Future capacity work must preserve the permanent
+request-to-parameters binding through an explicit safe archival design.
+
 ## Story progress protocol
 
 Story content, display text, and branching rules live in the web client. The
