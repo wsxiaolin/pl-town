@@ -22,6 +22,8 @@ assert.throws(() => reconcileAreaCatalog(originalLayout, unknownLayout), /person
 assert.throws(() => reconcileAreaCatalog(config, unknownLayout), /personal plot ledger changed/);
 // The one-time destination is captured by value: changing the live catalog
 // cannot make this migration authorize an additional move.
+// AREA_PLOTS shares its objects with config.personalPlots. Always restore in
+// finally so later assertions cannot observe this intentionally invalid fixture.
 const originalX = AREA_PLOTS[0].x;
 AREA_PLOTS[0].x += 0.1;
 try {
