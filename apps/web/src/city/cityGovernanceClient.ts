@@ -28,6 +28,7 @@ type PendingOperation = { requestId: string; configVersion: string; body: Record
 const pendingRequestIds = new Map<string, PendingOperation>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
+const pendingBuildings = new Set<string>();
 let loadSequence = 0;
 let activeLoad: Promise<void> | null = null;
 let activeSignal: AbortSignal | undefined;
@@ -39,7 +40,19 @@ function cachedConfig(): CityConfig | null {
   } catch { return null; }
 }
 
-function notify() { listeners.forEach((listener) => listener(config, state)); }
+function notify() {
+  if (config && state?.configVersion === config.version) {
+    const builtProjects = new Set(state.projects.filter((project) => project.built).map((project) => project.id));
+    const initialBuildings = new Set(config.initialBuiltBuildingIds);
+    pendingBuildings.clear();
+    for (const project of config.projects) {
+      if (project.buildingId && !initialBuildings.has(project.buildingId) && !builtProjects.has(project.id)) {
+        pendingBuildings.add(project.buildingId);
+      }
+    }
+  }
+  listeners.forEach((listener) => listener(config, state));
+}
 
 function validState(value: unknown): value is CityState {
   const item = value as Partial<CityState> | null;
@@ -78,10 +91,11 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       const stateResponse = await fetchJson('/town-api/city/state', signal, { cache: 'no-store' });
       if (stateResponse.ok) {
         const nextState = await stateResponse.json() as unknown;
+        if (sequence !== loadSequence) return;
         state = validState(nextState) && nextState.configVersion === config.version ? nextState : null;
-      } else state = null;
+      } else if (sequence === loadSequence) state = null;
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
+      if (sequence === loadSequence && (error as Error).name !== 'AbortError') {
         config = config ?? cachedConfig();
         state = null;
       }
@@ -108,12 +122,10 @@ export function applyCityState(next: unknown): boolean {
 }
 
 export function isConstructionPending(buildingId: string): boolean {
-  // Keep the regular city usable while the optional governance service is unavailable.
-  if (!config || !state || state.configVersion !== config.version) return false;
-  if (config.initialBuiltBuildingIds.includes(buildingId)) return false;
-  const project = config.projects.find((item) => item.buildingId === buildingId);
-  if (!project) return false;
-  return !state.projects.some((item) => item.id === project.id && item.built);
+  // Before the first trusted snapshot the optional service has no policy.
+  // Reloads retain its last trusted policy, so pending buildings never flash
+  // back into view while a new config or state request is in flight.
+  return pendingBuildings.has(buildingId);
 }
 
 export function disposeCityGovernance(): void {
@@ -122,6 +134,7 @@ export function disposeCityGovernance(): void {
   activeSignal = undefined;
   config = null;
   state = null;
+  pendingBuildings.clear();
   pendingRequestIds.clear();
   listeners.clear();
 }

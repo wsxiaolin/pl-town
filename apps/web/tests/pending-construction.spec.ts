@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { CITY_CONSTRUCTION_CONFIG } from '../../server/src/data/cityConstructionConfig';
+import { BUILDING_DEFS } from '../src/city/data/buildings';
+import type { CityConfig } from '../src/city/cityGovernanceClient';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
@@ -7,15 +8,31 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     await page.setViewportSize(viewport);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const config = CITY_CONSTRUCTION_CONFIG;
+    // Exercise every client building without coupling the browser fixture to
+    // server source loading. Server integration tests verify the real catalog.
+    let config: CityConfig = {
+      schemaVersion: 1, version: 'pending-test', initialBuiltBuildingIds: ['commons'],
+      projects: BUILDING_DEFS.filter((building) => building.id !== 'commons').map((building) => ({
+        id: `build-${building.id}`, buildingId: building.id, name: building.label,
+        kind: 'building', description: '共同筹建', cost: 3000,
+      })),
+      personalPlots: [], decorations: [],
+    };
     const libraryProject = config.projects.find((project) => project.buildingId === 'library')!;
-    expect(config.projects.some((project) => project.buildingId === 'photostudio')).toBe(true);
     let state = { epoch: 'pending-test', revision: 0, configVersion: config.version,
       projects: config.projects.map((project) => ({ id: project.id, funded: 0, built: false })), decorations: [] };
+    let blockReload = false;
+    let configRequests = 0;
+    let releaseReload!: () => void;
+    const reloadGate = new Promise<void>((resolve) => { releaseReload = resolve; });
     stubCityWebSocket(page, { user: 'pending-tester', unlockedBuildings: ['commons', 'library'] });
     await page.route('**/town-api/telemetry/event', (route) => route.fulfill({ status: 204, body: '' }));
     await page.route('**/town-api/city/**', async (route) => {
       const endpoint = new URL(route.request().url()).pathname.split('/').at(-1);
+      if (endpoint === 'config') {
+        configRequests += 1;
+        if (blockReload) await reloadGate;
+      }
       if (endpoint === 'donate') {
         state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === libraryProject.id ? { ...project, funded: libraryProject.cost, built: true } : project) };
       }
@@ -30,6 +47,25 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       return [...ids].sort();
     });
     await expect.poll(renderedBuildingIds).toEqual(['commons']);
+    blockReload = true;
+    config = { ...config, version: 'pending-test-next' };
+    state = { ...state, configVersion: config.version };
+    // The harness serves Vite source modules; delay config reload to inspect
+    // the actual scene while its last trusted construction policy is retained.
+    await page.evaluate(async (nextState) => {
+      const modulePath = '/src/city/cityGovernanceClient.ts';
+      const { applyCityState } = await import(modulePath);
+      applyCityState(nextState);
+    }, state);
+    await expect.poll(() => configRequests).toBe(2);
+    expect(await renderedBuildingIds()).toEqual(['commons']);
+    expect(await page.evaluate(() => (window as any)._mini.interactBuilding('library'))).toBe(false);
+    releaseReload();
+    await page.evaluate(async () => {
+      const modulePath = '/src/city/cityGovernanceClient.ts';
+      const { loadCityGovernance } = await import(modulePath);
+      await loadCityGovernance();
+    });
     await expect(page.locator('.b-label-item')).toHaveCount(1);
     await expect(page.locator('.b-label-item[data-building-id="commons"]')).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath('pending-near.png') });

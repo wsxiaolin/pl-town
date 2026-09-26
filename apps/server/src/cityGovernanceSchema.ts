@@ -65,8 +65,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     if (!Number.isSafeInteger(progress.funded) || progress.funded > project.cost || Boolean(progress.built) !== (progress.funded === project.cost)) throw new Error(`Invalid city project progress: ${project.id}`);
     // Reconcile legacy defaults and unlocks into completed project rows without
     // debiting residents or inventing payment/idempotency records.
-    if (project.buildingId && !progress.built && (preservedBuildings.has(project.buildingId)
-      || (!old && db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(project.buildingId)))) {
+    if (project.buildingId && !progress.built && preservedBuildings.has(project.buildingId)) {
       db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
     }
   }

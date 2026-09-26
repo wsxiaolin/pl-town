@@ -179,7 +179,8 @@ export function assembleCityWorld(options: {
     buildingPlots: options.buildingPlotTargets,
     buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
     refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
-    refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); options.onConstructionChanged(); },
+    refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
+    onConstructionChanged: options.onConstructionChanged,
     onBuildingRestored: (building) => { void loadModels([building]); },
   });
   void loadModels(options.buildings);

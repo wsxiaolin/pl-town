@@ -19,7 +19,7 @@ export type MapControllerOptions = {
   getStats: () => { achievements?: readonly string[] };
   getCamera: () => THREE.Camera | null;
   getBuildingContent: (buildingId: string) => MapContent | undefined;
-  isStoryLocked: (building: BuildingEntity) => boolean;
+  isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getBuildingRoadEntry: (position: THREE.Vector3) => { x: number; z: number } | null;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
   movePlayerTo: (target: THREE.Vector3) => void;
@@ -150,7 +150,7 @@ export function createMapController(options: MapControllerOptions) {
     const buildingsById = new Map(options.getBuildings().map((building) => [building.id, building]));
     wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
       const building = buildingsById.get(icon.dataset.buildingId ?? '');
-      const available = Boolean(building && !options.isStoryLocked(building));
+      const available = Boolean(building && !options.isBuildingUnavailable(building));
       const selected = available && building?.id === confirmedBuildingId;
       icon.hidden = !available;
       icon.classList.toggle('is-confirmed', selected);
@@ -167,7 +167,7 @@ export function createMapController(options: MapControllerOptions) {
       return;
     }
 
-    const availableBuildings = buildings.filter((building) => !options.isStoryLocked(building));
+    const availableBuildings = buildings.filter((building) => !options.isBuildingUnavailable(building));
     const availableIds = new Set(availableBuildings.map((building) => building.id));
     const existingIcons = new Map<string, HTMLButtonElement>();
     wrap.querySelectorAll<HTMLButtonElement>('.map-icon').forEach((icon) => {
@@ -204,7 +204,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function openTip(building: BuildingEntity): void {
-    if (options.isStoryLocked(building)) return;
+    if (options.isBuildingUnavailable(building)) return;
     closeSearchResults();
     tipBuilding = building;
     confirmedBuildingId = building.id;
@@ -233,7 +233,7 @@ export function createMapController(options: MapControllerOptions) {
     const terms = query.trim().split(/\s+/).map(normalizeSearchText).filter(Boolean);
     if (terms.length === 0) return [];
     return options.getBuildings()
-      .filter((building) => !options.isStoryLocked(building))
+      .filter((building) => !options.isBuildingUnavailable(building))
       .map((building) => {
         const content = options.getBuildingContent(building.id);
         const name = content?.name ?? building.label ?? building.id;
@@ -253,13 +253,15 @@ export function createMapController(options: MapControllerOptions) {
       .slice(0, MAX_SEARCH_RESULTS);
   }
 
-  function renderSearchResults(): void {
+  function renderSearchResults(preserveSelection = false): void {
     const input = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
     const results = options.document.getElementById('mapSearchResults');
     if (!input || !results) return;
     const query = input.value.trim();
+    const activeBuildingId = preserveSelection ? searchResults[activeSearchIndex]?.building.id : undefined;
     searchResults = findSearchResults(query);
-    activeSearchIndex = searchResults.length > 0 ? 0 : -1;
+    const preservedIndex = searchResults.findIndex((result) => result.building.id === activeBuildingId);
+    activeSearchIndex = preservedIndex >= 0 ? preservedIndex : searchResults.length > 0 ? 0 : -1;
     results.replaceChildren();
     if (!query) {
       closeSearchResults();
@@ -352,7 +354,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function teleportToBuilding(buildingId: string): boolean {
-    const building = options.getBuildings().find((item) => item.id === buildingId && !options.isStoryLocked(item));
+    const building = options.getBuildings().find((item) => item.id === buildingId && !options.isBuildingUnavailable(item));
     if (!building) return false;
     teleport(building);
     return true;
@@ -366,7 +368,7 @@ export function createMapController(options: MapControllerOptions) {
     }, { signal });
     options.document.getElementById('mapTipClose')?.addEventListener('click', closeTip, { signal });
     const searchInput = options.document.getElementById('mapSearchInput') as HTMLInputElement | null;
-    searchInput?.addEventListener('input', renderSearchResults, { signal });
+    searchInput?.addEventListener('input', () => renderSearchResults(), { signal });
     searchInput?.addEventListener('focus', () => {
       if (searchInput.value.trim()) renderSearchResults();
     }, { signal });
@@ -405,12 +407,16 @@ export function createMapController(options: MapControllerOptions) {
 
   function invalidateShot(): void {
     shotData = null;
-    if (tipBuilding && options.isStoryLocked(tipBuilding)) closeTip();
+    if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {
-      // Refresh availability immediately; capture the background on the next
-      // open instead of allocating a WebGL context for every live city update.
+      // Icons/search show live availability. The background remains a snapshot
+      // until the next open, avoiding a WebGL context for every city update.
       renderIcons();
-      renderSearchResults();
+      if (options.document.getElementById('mapSearchResults')?.hidden === false) {
+        // Rebuild only the options: retain input focus and the active building
+        // even when availability changes the result order.
+        renderSearchResults(true);
+      }
       updateMarker();
     }
   }

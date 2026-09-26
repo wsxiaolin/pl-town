@@ -192,7 +192,8 @@ const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e'
   }
   closeDatabase();
 `], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
-if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout);
+if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout
+  || establishedTown.error?.message || `Established town fixture failed: signal=${establishedTown.signal}, status=${establishedTown.status}`);
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
