@@ -42,10 +42,12 @@ const MAP_SHOT_CENTER_Z = 0;
 const MAX_SEARCH_RESULTS = 6;
 
 export function createMapController(options: MapControllerOptions) {
+  const view = options.document.defaultView ?? window;
   let open = false;
   let shotData: string | null = null;
   let shotRenderer: THREE.WebGLRenderer | null = null;
   let shotCamera: THREE.OrthographicCamera | null = null;
+  let shotRefreshFrame: number | null = null;
   let iconsBuilt = false;
   let tipBuilding: BuildingEntity | null = null;
   let markerLeft = Number.NaN;
@@ -62,6 +64,7 @@ export function createMapController(options: MapControllerOptions) {
       overlay?.classList.add('show');
       updateImage();
     } else {
+      cancelShotRefresh();
       overlay?.classList.remove('show');
       (options.document.getElementById('mapSearchInput') as HTMLInputElement | null)?.blur();
       closeTip();
@@ -405,12 +408,18 @@ export function createMapController(options: MapControllerOptions) {
     }, { signal });
   }
 
-  function invalidateShot(reason: 'availability' | 'theme' = 'availability'): void {
+  function cancelShotRefresh(): void {
+    if (shotRefreshFrame !== null) view.cancelAnimationFrame(shotRefreshFrame);
+    shotRefreshFrame = null;
+  }
+
+  function invalidateShot(reason: 'availability' | 'theme' | 'scene' = 'availability'): void {
     shotData = null;
     if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {
       // Availability changes update live controls without taking a new snapshot
-      // for every city broadcast. Theme changes also refresh the visible image.
+      // for every city broadcast. Explicit scene/theme changes refresh the
+      // visible image once per frame, including multi-building damage batches.
       renderIcons();
       if (options.document.getElementById('mapSearchResults')?.hidden === false) {
         // Rebuild only the options: retain input focus and the active building
@@ -418,11 +427,17 @@ export function createMapController(options: MapControllerOptions) {
         renderSearchResults(true);
       }
       updateMarker();
-      if (reason === 'theme') updateImage();
+      if (reason !== 'availability' && shotRefreshFrame === null) {
+        shotRefreshFrame = view.requestAnimationFrame(() => {
+          shotRefreshFrame = null;
+          if (open) updateImage();
+        });
+      }
     }
   }
 
   function destroy(): void {
+    cancelShotRefresh();
     shotRenderer?.dispose();
     shotRenderer?.forceContextLoss();
     shotRenderer = null;

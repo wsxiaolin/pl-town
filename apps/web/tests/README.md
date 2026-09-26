@@ -19,6 +19,8 @@
   when construction progress changes.
 - `city-map-theme.spec.ts`: an open map refreshes its image at dusk and dawn
   without losing search focus or affecting the main WebGL context.
+- `city-map-scene-updates.spec.ts`: explicit damage, repair, and story access
+  changes refresh an open map, coalescing bulk scene edits into one snapshot.
 - `ws-building-errors.spec.ts`: authenticated building rejections use Chinese
   toasts while preserving the existing WebSocket connection and session.
 - `pending-label.spec.ts`: global story unlocks cannot reveal pending labels;

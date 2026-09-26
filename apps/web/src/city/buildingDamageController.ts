@@ -11,7 +11,7 @@ import {
 export type BuildingDamageControllerOptions = {
   getBuildings: () => DamageableBuilding[];
   getResidences: () => DamageableBuilding[];
-  invalidateMap: () => void;
+  invalidateMap: (reason: 'availability' | 'scene') => void;
   refreshResidenceLabels: () => void;
   setResidenceVisualVisible?: (id: string, visible: boolean) => void;
   storage?: Pick<Storage, 'getItem' | 'setItem'>;
@@ -43,7 +43,7 @@ export function createBuildingDamageController(options: BuildingDamageController
       destroyedIds.add(id);
       updateResidenceVisual(building, false);
       persist();
-      options.invalidateMap();
+      options.invalidateMap('scene');
     }
     return destroyed;
   }
@@ -57,7 +57,7 @@ export function createBuildingDamageController(options: BuildingDamageController
     if (!restored && !wasDestroyed) return false;
     if (!pending) updateResidenceVisual(building, true);
     persist();
-    options.invalidateMap();
+    options.invalidateMap('scene');
     return true;
   }
 
@@ -77,7 +77,9 @@ export function createBuildingDamageController(options: BuildingDamageController
     allBuildings().forEach(item => {
       if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
     });
-    options.invalidateMap();
+    // Model loading also replays this state during construction broadcasts;
+    // only explicit damage/repair should request a fresh visible map image.
+    options.invalidateMap('availability');
   }
 
   return {
