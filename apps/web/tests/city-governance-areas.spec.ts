@@ -2,8 +2,10 @@ import { expect, test } from '@playwright/test';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
 
-for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 }]) {
-  test(`area construction previews quantity and total and retries one batch at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+const scenarios = [{ width: 1280, height: 800 }, { width: 844, height: 390 }]
+  .flatMap((viewport) => [false, true].map((committedBeforeLoss) => ({ viewport, committedBeforeLoss })));
+for (const { viewport, committedBeforeLoss } of scenarios) {
+  test(`area construction retries ${committedBeforeLoss ? 'a committed full area' : 'an uncommitted batch'} at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -18,6 +20,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
     };
     let state: CityState = { epoch: 'area-test', revision: 0, configVersion: config.version, projects: [], decorations: [] };
     const requests: Array<{ areaId: string; decorationId: string; quantity: number; requestId: string; configVersion: string }> = [];
+    const receipts = new Map<string, string>();
+    let charged = 0;
     stubCityWebSocket(page, { user: 'area-tester', unlockedBuildings: ['commons'] });
     await page.route('**/town-api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
@@ -26,10 +30,20 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
       if (path.endsWith('/city/decorate')) {
         const body = route.request().postDataJSON();
         requests.push(body);
-        if (requests.length === 1) return route.abort('connectionreset');
+        if (requests.length === 1 && !committedBeforeLoss) return route.abort('connectionreset');
         if (requests.length === 2) return route.fulfill({ status: 503, json: { error: '请稍后重试' } });
-        state = { ...state, revision: 1, decorations: plots.slice(0, body.quantity).map((plot) => ({ plotId: plot.id, decorationId: body.decorationId, ownerId: 'area-tester', ownerNickname: 'area-tester' })) };
-        return route.fulfill({ status: 200, json: { state } });
+        const fingerprint = JSON.stringify([body.areaId, body.decorationId, body.quantity, body.configVersion]);
+        const replayed = receipts.has(body.requestId);
+        if (replayed && receipts.get(body.requestId) !== fingerprint) {
+          return route.fulfill({ status: 409, json: { error: 'requestId already used with different parameters' } });
+        }
+        if (!replayed) {
+          receipts.set(body.requestId, fingerprint);
+          charged += body.quantity * 240;
+          state = { ...state, revision: state.revision + 1, decorations: plots.slice(0, body.quantity).map((plot) => ({ plotId: plot.id, decorationId: body.decorationId, ownerId: 'area-tester', ownerNickname: 'area-tester' })) };
+        }
+        if (requests.length === 1) return route.abort('connectionreset');
+        return route.fulfill({ status: 200, json: { state, replayed } });
       }
       if (path.endsWith('/telemetry/event')) return route.fulfill({ status: 204, body: '' });
       return route.continue();
@@ -52,9 +66,37 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
     await area.getByRole('combobox').selectOption('cherry');
     await expect(area.locator('[data-city-area-total]')).toContainText('总价 1,440 金币');
     await expect(area.locator('.city-area-cell.selected')).toHaveCount(6);
+    await quantity.focus();
+    state = { ...state, revision: state.revision + 1 };
+    await page.evaluate(async (next) => {
+      const modulePath = '/src/city/cityGovernanceClient.ts';
+      const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+      client.applyCityState(next);
+    }, state);
+    await expect(quantity).toBeFocused();
+    await quantity.fill('0');
+    await expect(action).toBeDisabled();
+    await quantity.fill('5');
+    await expect(area.locator('[data-city-area-total]')).toContainText('总价 1,200 金币');
+    await expect(area.locator('.city-area-cell.selected')).toHaveCount(5);
+    await expect(action).toBeEnabled();
+    const chosenQuantity = committedBeforeLoss ? 20 : 6;
+    await quantity.fill(String(chosenQuantity));
     await action.click();
     await expect(action).toBeEnabled();
     await expect(panel.getByRole('alert')).toBeVisible();
+    if (committedBeforeLoss) {
+      // The original response was lost after committing. The city broadcast now
+      // fills every slot, but the unconfirmed receipt must still be retryable.
+      await page.evaluate(async (next) => {
+        const modulePath = '/src/city/cityGovernanceClient.ts';
+        const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+        client.applyCityState(next);
+      }, state);
+      await expect(area.locator('.city-area-cell.occupied')).toHaveCount(20);
+      await expect(area.locator('[data-city-area-total]')).toContainText('结果待确认');
+      await expect(action).toBeEnabled();
+    }
     config.version = 'area-test-v2';
     state = { ...state, configVersion: config.version };
     await page.evaluate(async () => {
@@ -62,16 +104,22 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 
       const client = await import(/* @vite-ignore */ modulePath);
       await client.loadCityGovernance();
     });
-    await expect(quantity).toHaveValue('6');
+    await expect(quantity).toHaveValue(String(chosenQuantity));
     await expect(quantity).toBeDisabled();
     await action.click();
     await expect(action).toBeEnabled();
     await expect(panel.getByRole('alert')).toBeVisible();
     await action.click();
-    await expect(area).toContainText('已建 6 / 20 处');
-    await expect(area.locator('.city-area-cell.occupied')).toHaveCount(6);
+    await expect(area).toContainText(`已建 ${chosenQuantity} / 20 处`);
+    await expect(area.locator('.city-area-cell.occupied')).toHaveCount(chosenQuantity);
     expect(requests).toHaveLength(3);
-    for (const request of requests) expect(request).toMatchObject({ areaId: 'north-meadow', decorationId: 'cherry', quantity: 6, requestId: requests[0].requestId, configVersion: 'area-test' });
+    for (const request of requests) expect(request).toMatchObject({ areaId: 'north-meadow', decorationId: 'cherry', quantity: chosenQuantity, requestId: requests[0]!.requestId, configVersion: 'area-test' });
+    expect(receipts.size).toBe(1);
+    expect(charged).toBe(chosenQuantity * 240);
+    if (committedBeforeLoss) {
+      await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
+      await expect(action).toBeDisabled();
+    }
     await expect(panel.getByRole('alert')).toHaveCount(0);
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
