@@ -8,9 +8,6 @@ name: Snapshot Render database to OSS
 
 on:
   workflow_dispatch:
-  schedule:
-    # Daily safety net between deploys: 18:00 UTC = 02:00 Asia/Shanghai.
-    - cron: '0 18 * * *'
   push:
     branches: [main]
 
