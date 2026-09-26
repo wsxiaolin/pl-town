@@ -16,6 +16,7 @@ function focusAction(dataKey: 'projectId' | 'plotId' | 'cityArea', id: string): 
     if (item.dataset[dataKey] === id) {
       const action = item.querySelector<HTMLButtonElement>('button');
       if (action) {
+        // Failed actions should scroll back into view so the user can retry.
         action.focus();
         return;
       }
@@ -134,7 +135,11 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
       amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
       item.append(amount, button('捐款', () => {
-        const value = Number(donationDrafts.get(project.id) ?? amount.value);
+        // Focus restoration can replace the freshly rendered amount node.
+        // Submit exactly the value in the current card, not a captured draft.
+        const liveInput = item.querySelector<HTMLInputElement>('input');
+        if (!liveInput) return;
+        const value = Number(liveInput.value);
         void submit('projectId', project.id, () => donateCity(project.id, value));
       }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
     }
