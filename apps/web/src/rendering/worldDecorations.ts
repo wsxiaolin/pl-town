@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
+import { createPondWaterSurface, type AnimatedWaterSurface } from './animatedWater';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
 import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
@@ -12,6 +13,11 @@ import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
 type Palette = Record<string, number>;
 
 type Vec3 = readonly [number, number, number];
+const POND_WATER_DAY = new THREE.Color(0x3b7691);
+const POND_WATER_NIGHT = new THREE.Color(0x15283c);
+const POND_SUN_DAY = new THREE.Color(0x8fb0c8);
+const POND_SUN_NIGHT = new THREE.Color(0x263b50);
+const POND_SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 
 export interface WorldDecorationsOptions {
   scene: THREE.Scene;
@@ -38,6 +44,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   } = options;
   let lampPosts: InstancedBatch | undefined, lampLights: InstancedBatch | undefined;
   let treeTrunks: InstancedBatch | undefined, treeCrowns: InstancedBatch | undefined;
+  const pondSurfaces: AnimatedWaterSurface[] = [];
   let decorationObstacleBounds: THREE.Box3[] | null = null;
   let residenceVisualBatch: RetainedStaticMeshBatch | null = null;
   const residenceRoots: RetainedStaticMeshRoot[] = [];
@@ -54,12 +61,29 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   function addDecorations() {
     const existingSceneChildren = new Set(scene.children);
     addDistrictBuildings();
+    addLegacyScenery();
+    addLamps([[-2.2,0,-3.0],[2.4,0,2.8]]);
     addSignpost(-4.0,0,-5.0);
     addSuburbHouse(12, 32, 90);
     addSuburbHouse(-12, -32, -90);
     const decorationRoots = scene.children.filter((child)=>!existingSceneChildren.has(child));
     batchStaticMeshes(scene, decorationRoots, interactiveDecorationRoots);
     residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots);
+  }
+
+  function addLegacyScenery() {
+    addTrees([[-4.2,0,-3.8],[3.6,0,-5.2],[4.2,0,3.4],[-6.2,0,-4.2],[6.5,0,-4.0],[-6.5,0,5.2],[6.0,0,5.8],[-3.0,0,6.5],[5.5,0,-7.0],[-15,0,-15],[-21,0,-21],[-27,0,-27],[-12,0,-27],[-27,0,-12],[27,0,27],[12,0,27],[27,0,12],[27,0,-27],[21,0,-21],[-27,0,27],[-21,0,27],[-27,0,0],[27,0,0],[0,0,-27],[0,0,27],[-30,0,0],[30,0,0],[0,0,-30],[0,0,30],[-36,0,-36],[36,0,36],[36,0,-36],[-36,0,36]]);
+    addLamps([[-3.2,0,-1.8],[3.5,0,1.5],[-1.8,0,4.5],[-18.9,0,1.9],[18.9,0,-1.9]]);
+    for (const position of [-30,-24,-18,-6,6,18,24,30]) addLamps([[position,0,-18.9],[position,0,18.9],[-18.9,0,position],[18.9,0,position]]);
+    addBench(-3.9, 0, 2.4, 0); addBench(5.1, 0, -1.8, Math.PI / 2);
+    addBench(-15, 0, -15, 0); addBench(15, 0, 15, Math.PI / 2);
+    addArch(-5.5, 0, -6.2, Math.PI / 5); addArch(-21, 0, -21, Math.PI / 6);
+    addGazebo(-21, 0, 0); addGazebo(21, 0, 0);
+    addStoneRing(-21, 0, 12); addStoneRing(21, 0, -12);
+    addFlowerbed(-3, 0, 4); addFlowerbed(3, 0, -4); addFlowerbed(-15, 0, 15); addFlowerbed(15, 0, -15);
+    addDecorativeColumn(5.2, 0, 5); addDecorativeColumn(-15, 0, 15);
+    addMarketStalls(-9, 6, 4, 0); addMarketStalls(6, -12, 3, 1);
+    addPond(-24, -24, 3); addPond(24, 24, 2.5);
   }
 
   function addDistrictBuildings() {
@@ -166,6 +190,57 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     part(group, new THREE.BoxGeometry(0.22, 0.24, 1.78), material, [0, 1.72, 0]);
     group.position.set(x, y, z); group.rotation.y = rotY; scene.add(group);
   }
+  function addGazebo(x: number, y: number, z: number) {
+    const group = new THREE.Group();
+    const gazeboCorners: Array<[number, number]> = [[-0.85, -0.85], [-0.85, 0.85], [0.85, -0.85], [0.85, 0.85]];
+    for (const [cx, cz] of gazeboCorners) {
+      part(group, new THREE.CylinderGeometry(0.08, 0.08, 1.4, 10), { color: 0xedece9, roughness: 0.6 }, [cx, 0.7, cz]);
+    }
+    part(group, new THREE.ConeGeometry(1.1, 0.65, 4), { color: 0xe8e7e4, roughness: 0.6 }, [0, 1.75, 0]);
+    group.position.set(x, y, z); scene.add(group);
+  }
+  function addStoneRing(x: number, y: number, z: number) {
+    for (let index = 0; index < 8; index++) {
+      const angle = index * Math.PI / 4;
+      const stone = part(null, new THREE.CylinderGeometry(0.1, 0.13, 0.48, 8), { color: 0xe4e3e0, roughness: 0.85 });
+      stone.position.set(x + Math.cos(angle) * 0.95, 0.24 + y, z + Math.sin(angle) * 0.95);
+      scene.add(stone);
+    }
+  }
+  function addFlowerbed(x: number, y: number, z: number) {
+    const group = new THREE.Group();
+    part(group, new THREE.CylinderGeometry(0.28, 0.24, 0.14, 12), { color: 0xc4a86d, roughness: 0.7 }, [0, 0.07, 0]);
+    for (let index = 0; index < 6; index++) {
+      const angle = index * Math.PI / 3;
+      part(group, new THREE.SphereGeometry(0.06, 8, 8), { color: [0xe85858, 0xe8a838, 0xa858e8][index % 3]!, roughness: 0.8 }, [Math.cos(angle) * 0.15, 0.14, Math.sin(angle) * 0.15], false);
+    }
+    group.position.set(x, y, z); scene.add(group);
+  }
+  function addDecorativeColumn(x: number, y: number, z: number) {
+    const group = new THREE.Group();
+    part(group, new THREE.CylinderGeometry(0.22, 0.28, 0.55, 12), { color: 0xeeedea, roughness: 0.4 }, [0, 0.38, 0]);
+    part(group, new THREE.SphereGeometry(0.15, 12, 12), { color: 0xf8f7f5, roughness: 0.2 }, [0, 0.85, 0]);
+    group.position.set(x, y, z); scene.add(group);
+  }
+  function addPond(cx: number, cz: number, radius: number) {
+    const surface = createPondWaterSurface(new THREE.CircleGeometry(radius, 24), {
+      sunDirection: POND_SUN_DIRECTION, waterColorDay: POND_WATER_DAY, waterColorNight: POND_WATER_NIGHT,
+      sunColorDay: POND_SUN_DAY, sunColorNight: POND_SUN_NIGHT, timeScale: 0.16, size: 14, alpha: 0.98,
+    });
+    surface.water.rotation.x = -Math.PI / 2;
+    surface.water.position.set(cx, 0.058, cz);
+    surface.water.renderOrder = RENDER_ORDER.water;
+    scene.add(surface.water); pondSurfaces.push(surface);
+  }
+  function addMarketStalls(x: number, z: number, count: number, direction: number) {
+    for (let index = 0; index < count; index++) {
+      const group = new THREE.Group();
+      part(group, new THREE.BoxGeometry(1.2, 0.08, 0.8), { color: [0xe8a838, 0x3b6fe0, 0xe85858][index % 3]!, roughness: 0.6 }, [0, 1.2, 0]);
+      part(group, new THREE.BoxGeometry(1, 0.5, 0.6), { color: 0xc4a86d, roughness: 0.6 }, [0, 0.25, 0]);
+      group.position.set(direction === 0 ? x + index * 1.5 : x, 0, direction === 1 ? z + index * 1.5 : z);
+      scene.add(group); interactiveDecorationRoots.add(group); addRaycastGroup(group); addObstacleGroup?.(group);
+    }
+  }
   function addSignpost(x: number, y: number, z: number) {
     const g=new THREE.Group();
     part(g,new THREE.CylinderGeometry(0.03,0.03,0.9,8),{color:0xD0CFCC,roughness:0.8,tex:'wood',rx:1,ry:1},[0,0.45,0]);
@@ -208,7 +283,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addDecorations, addLamps,
     setResidenceVisualVisible: (residenceId: string, visible: boolean) => residenceVisualBatch?.setVisible(residenceId, visible),
     addTrees, addBench, addArch,
-    update(_elapsedSeconds?: number) {},
-    setWaterDaylight(_value?: number, _instant = false) {},
+    update(elapsedSeconds: number) { pondSurfaces.forEach((surface) => surface.update(elapsedSeconds)); },
+    setWaterDaylight(value: number, instant = false) { pondSurfaces.forEach((surface) => surface.setDaylight(value, instant)); },
   };
 }
