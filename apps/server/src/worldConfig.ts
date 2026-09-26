@@ -1,11 +1,13 @@
 import { db } from './db.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
+import { coerceShopProduct, cloneShopCatalog, DEFAULT_SHOP_CATALOG, SHOP_PRODUCT_MAX, type ShopProduct } from './shopCatalog.js';
 import type { Weather } from './types.js';
 
 /**
  * Server-wide world configuration persisted in SQLite and applied to every
- * resident: the weather the server broadcasts, and per-building unlock
- * overrides. Kept deliberately small: one JSON row per logical section in
+ * resident: the weather the server broadcasts, the per-building unlock
+ * overrides, and the shop catalog (name/price/availability per product).
+ * Kept deliberately small: one JSON row per logical section in
  * `world_config`, cached in memory because the server is single-process.
  */
 
@@ -15,6 +17,9 @@ export type BuildingUnlockState = (typeof BUILDING_UNLOCK_STATES)[number];
 export type BuildingOverrides = Record<string, BuildingUnlockState>;
 
 export type WeatherConfig = { value: Weather; autoBroadcast: boolean };
+
+export type { ShopProduct };
+export { DEFAULT_SHOP_CATALOG };
 
 // The generated catalog mirrors exactly the buildings the server manages
 // (BUILDING_PRICES), so validating against it keeps "accepted" == "effective".
@@ -57,8 +62,43 @@ function parseOverrides(value: unknown): BuildingOverrides {
   return overrides;
 }
 
+/** Lenient parse for the persisted row: skip broken entries, fall back to the shipped defaults. */
+function parseShopProducts(value: unknown): ShopProduct[] {
+  const entries = value && typeof value === 'object' && Array.isArray((value as { products?: unknown }).products)
+    ? (value as { products: unknown[] }).products
+    : null;
+  if (!entries) return cloneShopCatalog(DEFAULT_SHOP_CATALOG);
+  const products: ShopProduct[] = [];
+  const seen = new Set<string>();
+  for (const raw of entries) {
+    const product = coerceShopProduct(raw);
+    if (!product || seen.has(product.itemId)) continue;
+    seen.add(product.itemId);
+    products.push(product);
+    if (products.length >= SHOP_PRODUCT_MAX) break;
+  }
+  return products;
+}
+
+/** Validate an untrusted shop payload; returns null when the shape is wrong. */
+export function sanitizeShopProducts(input: unknown): ShopProduct[] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const entries = (input as { products?: unknown }).products;
+  if (!Array.isArray(entries) || entries.length > SHOP_PRODUCT_MAX) return null;
+  const products: ShopProduct[] = [];
+  const seen = new Set<string>();
+  for (const raw of entries) {
+    const product = coerceShopProduct(raw);
+    if (!product || seen.has(product.itemId)) return null;
+    seen.add(product.itemId);
+    products.push(product);
+  }
+  return products;
+}
+
 let weatherCache: WeatherConfig | null = null;
 let overridesCache: BuildingOverrides | null = null;
+let shopCache: ShopProduct[] | null = null;
 
 export function getWeatherConfig(): WeatherConfig {
   if (!weatherCache) weatherCache = parseWeather(readRow('weather'));
@@ -81,6 +121,23 @@ export function getBuildingOverrides(): BuildingOverrides {
 export function resetWorldConfig(): void {
   weatherCache = null;
   overridesCache = null;
+  shopCache = null;
+}
+
+export function getShopProducts(): ShopProduct[] {
+  if (!shopCache) shopCache = parseShopProducts(readRow('shop'));
+  return shopCache.map((product) => ({ ...product }));
+}
+
+/**
+ * Persist an already-sanitized catalog (`sanitizeShopProducts` output). The
+ * validated array is stored as-is so the write path stays lossless; only the
+ * persisted row goes through the lenient parser on the next read.
+ */
+export function setShopProducts(products: ShopProduct[]): ShopProduct[] {
+  writeRow('shop', { products });
+  shopCache = products;
+  return products.map((product) => ({ ...product }));
 }
 
 export function setBuildingOverrides(overrides: BuildingOverrides): BuildingOverrides {

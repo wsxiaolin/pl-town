@@ -1,7 +1,8 @@
 import type { PlayerProgress } from './types.js';
 import { isCityBuildingBuilt, isCityProjectBuilt } from './cityGovernance.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
-import { getBuildingOverrides, type BuildingUnlockState } from './worldConfig.js';
+import { DEFAULT_SHOP_CATALOG, type ShopProduct } from './shopCatalog.js';
+import { getBuildingOverrides, getShopProducts, type BuildingUnlockState } from './worldConfig.js';
 
 export const INITIAL_CURRENCY = 1200;
 export const FILM_CITY_EXPERIENCE_PRICE = 400;
@@ -72,12 +73,11 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   murder_contact: 0,
 });
 
-export const SHOP_PRODUCTS = Object.freeze({
-  dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
-  beef: { itemId: 'beef', name: '牛肉', unitPrice: 45 },
-  radish: { itemId: 'radish', name: '萝卜', unitPrice: 20 },
-  music_box: { itemId: 'music_box', name: '音乐盒', unitPrice: 120 },
-});
+export type ShopProductEntry = { itemId: string; name: string; unitPrice: number };
+
+// The live shop catalog is defined after REPEATABLE_REWARDS below; see
+// applyShopCatalog / initShopCatalog for how the admin-configured catalog
+// (world_config "shop" row) is mirrored into these bindings.
 
 export const DAILY_REWARDS = Object.freeze({
   mandarin_daily: { itemId: 'mandarin', quantity: 1 },
@@ -92,10 +92,55 @@ export const REPEATABLE_REWARDS = Object.freeze({
   ice_accept: { itemId: 'ice_lemonade', quantity: 1 },
 });
 
-export const CONSUMABLE_ITEM_IDS: ReadonlySet<string> = new Set([
+/**
+ * The live shop catalog. Admin-configurable through the console (world_config
+ * "shop" row). Starts as the shipped defaults; `initShopCatalog` mirrors the
+ * persisted catalog during boot and admin updates re-run `applyShopCatalog`.
+ * Consumers must reference the binding itself (`SHOP_PRODUCTS.x`) instead of
+ * destructuring so they always see the current catalog.
+ */
+export let SHOP_PRODUCTS: Readonly<Record<string, ShopProductEntry>> = Object.freeze(
+  Object.fromEntries(DEFAULT_SHOP_CATALOG.filter((product) => product.enabled).map((product) => [product.itemId, { itemId: product.itemId, name: product.name, unitPrice: product.unitPrice }])),
+);
+export let CONSUMABLE_ITEM_IDS: ReadonlySet<string> = new Set([
   ...Object.values(SHOP_PRODUCTS).map((product) => product.itemId),
   REPEATABLE_REWARDS.ice_accept.itemId,
 ]);
+
+function buildShopCatalog(products: readonly ShopProduct[]): { catalog: Readonly<Record<string, ShopProductEntry>>; consumable: ReadonlySet<string> } {
+  const active: Record<string, ShopProductEntry> = {};
+  for (const product of products) {
+    if (!product.enabled) continue;
+    active[product.itemId] = { itemId: product.itemId, name: product.name, unitPrice: product.unitPrice };
+  }
+  return {
+    catalog: Object.freeze(active),
+    // Consumables are decoupled from availability: story branches hand out
+    // and consume known items (tea/beef/radish/music_box), so a delisted
+    // product must stay consumable for residents who already own it.
+    consumable: new Set([
+      ...DEFAULT_SHOP_CATALOG.map((product) => product.itemId),
+      ...Object.values(active).map((entry) => entry.itemId),
+      REPEATABLE_REWARDS.ice_accept.itemId,
+    ]),
+  };
+}
+
+/** Swap in an admin-configured catalog and refresh the live bindings. */
+export function applyShopCatalog(products: readonly ShopProduct[]): void {
+  const { catalog, consumable } = buildShopCatalog(products);
+  SHOP_PRODUCTS = catalog;
+  CONSUMABLE_ITEM_IDS = consumable;
+}
+
+/**
+ * Load the persisted shop catalog from world_config. Called from the server
+ * boot sequence — not at module load — because module-load order can reach
+ * this file before `db` finishes evaluating (adminRouter import chain).
+ */
+export function initShopCatalog(): void {
+  applyShopCatalog(getShopProducts());
+}
 
 export type ProgressionCatalog = {
   initialCurrency: number;

@@ -4,6 +4,7 @@ const state = {
   offsiteEnabled: false, localBackups: [],
   worldWeather: '', worldWeatherAuto: false, worldWeatherDraft: '', worldWeatherAutoDraft: false,
   worldBuildings: [], worldOverrides: {}, worldDraft: {}, worldSelectedId: '',
+  worldShop: [], worldShopDraft: [],
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -19,6 +20,8 @@ const formatDuration = (seconds) => {
   const days = Math.floor(seconds / 86400); const hours = Math.floor(seconds % 86400 / 3600); const minutes = Math.floor(seconds % 3600 / 60);
   return days ? `${days} 天 ${hours} 小时` : hours ? `${hours} 小时 ${minutes} 分` : `${minutes} 分钟`;
 };
+import { createShopEditor } from '/admin/shop-editor.js';
+
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = String(text);
@@ -45,6 +48,8 @@ async function api(path, options = {}) {
   if (!response.ok) throw new Error(payload.error?.message || '请求失败');
   return payload;
 }
+
+const shopEditor = createShopEditor({ state, node, showNotice, confirmAction, api });
 
 function showLogin() {
   state.csrf = ''; state.actor = '';
@@ -508,8 +513,12 @@ async function loadWorld() {
   state.worldBuildings.forEach((building) => { if (building.override) state.worldOverrides[building.id] = building.override; });
   state.worldDraft = { ...state.worldOverrides };
   if (!state.worldBuildings.some((building) => building.id === state.worldSelectedId)) state.worldSelectedId = state.worldBuildings[0]?.id || '';
+  state.worldShop = Array.isArray(world.shop) ? world.shop : [];
+  state.worldShopDraft = state.worldShop.map((product) => ({ ...product }));
+  shopEditor.applyLimits(world.shopLimits);
   renderWorldWeatherOptions();
   renderWorldWeather();
+  shopEditor.render();
   renderWorldBuildingOptions();
   renderWorldMap();
   renderWorldSelected();
@@ -765,5 +774,22 @@ $('#worldBuildingSelect').addEventListener('change', (event) => selectWorldBuild
 $('#worldWeatherApply').addEventListener('click', () => void applyWorldWeather());
 $('#worldBuildingsSave').addEventListener('click', () => void saveWorldBuildings());
 $('#worldBuildingsReset').addEventListener('click', resetWorldBuildings);
+$('#worldShopAdd').addEventListener('click', () => shopEditor.addRow());
+$('#worldShopSave').addEventListener('click', () => void shopEditor.save());
+$('#worldShopReset').addEventListener('click', () => shopEditor.reset());
+
+const SIDEBAR_COLLAPSED_KEY = 'admin.sidebar.collapsed';
+const appShell = $('.app-shell');
+const sidebarToggle = $('#sidebarToggle');
+const readSidebarCollapsed = () => { try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { return false; } };
+const writeSidebarCollapsed = (collapsed) => { try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* storage unavailable */ } };
+const applySidebarExpanded = () => sidebarToggle.setAttribute('aria-expanded', appShell.classList.contains('is-sidebar-collapsed') ? 'false' : 'true');
+if (readSidebarCollapsed()) appShell.classList.add('is-sidebar-collapsed');
+applySidebarExpanded();
+sidebarToggle.addEventListener('click', () => {
+  const collapsed = appShell.classList.toggle('is-sidebar-collapsed');
+  writeSidebarCollapsed(collapsed);
+  applySidebarExpanded();
+});
 
 try { const session = await api('/session'); session.authenticated ? showApp(session) : showLogin(); } catch { showLogin(); }

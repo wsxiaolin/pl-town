@@ -98,10 +98,15 @@ export function normalizePlayerProgress(value: unknown): PlayerProgress {
   };
 }
 
-export function inventoryEntries(progress: PlayerProgress): Array<{ itemId: string; name: string; quantity: number }> {
+/**
+ * Inventory rows for the backpack panel. Names resolve from the live shop
+ * catalog first, so a renamed or newly configured product keeps showing its
+ * configured name instead of falling back to the raw item id.
+ */
+export function inventoryEntries(progress: PlayerProgress, products?: Readonly<Record<string, { name?: string }>>): Array<{ itemId: string; name: string; quantity: number }> {
   return Object.entries(progress.inventory)
     .filter((entry): entry is [string, number] => Number.isInteger(entry[1]) && entry[1] > 0)
-    .map(([itemId, quantity]) => ({ itemId, name: ITEM_LABELS[itemId] ?? itemId, quantity }))
+    .map(([itemId, quantity]) => ({ itemId, name: products?.[itemId]?.name ?? ITEM_LABELS[itemId] ?? itemId, quantity }))
     .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
 }
 

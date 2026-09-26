@@ -16,7 +16,7 @@ import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
@@ -400,7 +400,7 @@ const http = createServer(async (request, response) => {
     setWeather: (weather) => { serverWeather = weather; broadcastWeather(); },
     getWeatherConfig: () => getWeatherConfig(),
     setWeatherConfig: (config) => { const next = setWeatherConfig(config); serverWeather = next.value; broadcastWeather(); return next; },
-    resetWorldConfig: () => { resetWorldConfig(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
+    resetWorldConfig: () => { resetWorldConfig(); initShopCatalog(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
     broadcastWorldCatalog,
   })) return;
   if (await handleDeploySnapshot(request, response)) return;
@@ -699,6 +699,7 @@ async function boot(): Promise<void> {
     }
   }
   startAutomaticBackups();
+  initShopCatalog();
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error);
     http.once('error', onError);

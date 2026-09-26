@@ -39,7 +39,7 @@
     </aside>
 
     <main class="workspace">
-      <header class="topbar"><div><p class="eyebrow">OPERATIONS</p><h1 id="viewTitle">运行概览</h1></div><div class="topbar-actions"><span class="health-dot"></span><span>服务在线</span><button class="secondary" id="refreshButton" type="button">刷新</button></div></header>
+      <header class="topbar"><div class="topbar-leading"><button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="收起或展开侧栏" title="收起/展开侧栏">☰</button><div><p class="eyebrow">OPERATIONS</p><h1 id="viewTitle">运行概览</h1></div></div><div class="topbar-actions"><span class="health-dot"></span><span>服务在线</span><button class="secondary" id="refreshButton" type="button">刷新</button></div></header>
       <div class="notice" id="notice" role="status" hidden></div>
 
       <section class="view active" data-page="overview">
@@ -62,19 +62,35 @@
 
       <section class="view" data-page="world" hidden>
         <div class="two-column world-columns">
-          <section class="panel">
-            <header><div><p class="eyebrow">WEATHER</p><h2>天气全局广播</h2></div><span class="status" id="worldWeatherState">—</span></header>
-            <p class="hint">设置全服天气。开启自动广播后每分钟推送一次；关闭后只在登录或手动广播时下发。</p>
-            <div class="world-weather">
-              <label class="field-label" for="worldWeatherSelect">当前天气</label>
-              <select id="worldWeatherSelect"></select>
-              <label class="world-switch"><input type="checkbox" id="worldWeatherAuto" /><span>开启自动全局广播</span></label>
-              <div class="world-actions">
-                <button class="primary" id="worldWeatherApply" type="button">应用并广播</button>
-                <span id="worldWeatherDirty" class="world-dirty"></span>
+          <div class="world-col">
+            <section class="panel">
+              <header><div><p class="eyebrow">WEATHER</p><h2>天气全局广播</h2></div><span class="status" id="worldWeatherState">—</span></header>
+              <p class="hint">设置全服天气。开启自动广播后每分钟推送一次；关闭后只在登录或手动广播时下发。</p>
+              <div class="world-weather">
+                <label class="field-label" for="worldWeatherSelect">当前天气</label>
+                <select id="worldWeatherSelect"></select>
+                <label class="world-switch"><input type="checkbox" id="worldWeatherAuto" /><span>开启自动全局广播</span></label>
+                <div class="world-actions">
+                  <button class="primary" id="worldWeatherApply" type="button">应用并广播</button>
+                  <span id="worldWeatherDirty" class="world-dirty"></span>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+            <section class="panel">
+              <header><div><p class="eyebrow">SHOP CATALOG</p><h2>商品配置</h2></div><span class="status" id="worldShopState">—</span></header>
+              <p class="hint">全服商店在售商品。价格与名称实时生效并推送给在线居民；停用后商品从商店下架，已购道具保留。剧情会发放/回收龙井茶、牛肉、萝卜、音乐盒——移除这些商品会让对应剧情分支无法完成。</p>
+              <div class="shop-editor">
+                <div class="shop-head" aria-hidden="true"><span>商品 ID</span><span>名称</span><span>单价</span><span>在售</span><span></span></div>
+                <div id="worldShopRows"></div>
+                <div class="shop-actions">
+                  <button class="secondary" id="worldShopAdd" type="button">添加商品</button>
+                  <button class="primary" id="worldShopSave" type="button">保存商品配置</button>
+                  <button class="secondary" id="worldShopReset" type="button">放弃更改</button>
+                  <span id="worldShopDirty" class="world-dirty"></span>
+                </div>
+              </div>
+            </section>
+          </div>
           <section class="panel">
             <header><div><p class="eyebrow">BUILDING UNLOCK</p><h2>建筑解锁配置</h2></div><span class="status" id="worldBuildingSummary">—</span></header>
             <p class="hint">点地图或下拉选择建筑后设置策略。「全局解锁」对所有人开放；「强制锁定」会拒绝已解锁居民进入。</p>
@@ -143,11 +159,11 @@
 
       <section class="view" data-page="backups" hidden>
         <div class="toolbar"><p>在线一致性备份，可下载或从控制台恢复。</p><button class="primary" id="backupButton" type="button">创建备份</button></div>
-        <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>创建时间</th><th>校验</th><th>大小</th><th class="align-right">操作</th></tr></thead><tbody id="backupRows"></tbody></table></div>
+        <div class="table-wrap"><table class="backup-table"><thead><tr><th>备份文件</th><th>创建时间</th><th>校验</th><th>大小</th><th class="align-right">操作</th></tr></thead><tbody id="backupRows"></tbody></table></div>
         <section class="panel panel--offsite" id="offsitePanel" hidden>
           <header><div><p class="eyebrow">OFFSITE OSS</p><h2>异地备份（阿里云 OSS）</h2></div></header>
           <p class="hint">保存在阿里云 OSS。下载不会生成本地副本；缺失的备份也可直接恢复。</p>
-          <div class="table-wrap"><table><thead><tr><th>备份文件</th><th>上传时间</th><th>校验</th><th>大小</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="offsiteRows"></tbody></table></div>
+          <div class="table-wrap"><table class="backup-table"><thead><tr><th>备份文件</th><th>上传时间</th><th>校验</th><th>大小</th><th>状态</th><th class="align-right">操作</th></tr></thead><tbody id="offsiteRows"></tbody></table></div>
         </section>
       </section>
 

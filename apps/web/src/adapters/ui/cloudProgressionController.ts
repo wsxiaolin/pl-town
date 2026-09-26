@@ -36,6 +36,15 @@ const PRODUCT_PRESENTATIONS: Readonly<Record<string, { icon: string; detail: str
   radish: { icon: '萝', detail: '新鲜萝卜 · 林澈遗愿所需食材' },
   music_box: { icon: '音', detail: '经典旋律音乐盒 · 林澈遗愿所需物品' },
 });
+// Known items keep their hand-picked glyph; an admin-configured product falls
+// back to the first character of its (possibly renamed) configured name.
+const KNOWN_ITEM_ICONS: Readonly<Record<string, string>> = Object.freeze({
+  city_guide: '册', mandarin: '柑', dragonwell_tea: '茶', beef: '肉', radish: '萝',
+  music_box: '音', city_badge: '章', tirpitz_card: '舰',
+  [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.icon,
+  [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.icon,
+});
+const itemIcon = (itemId: string, name: string): string => KNOWN_ITEM_ICONS[itemId] ?? name.charAt(0) ?? '册';
 const repeatableRewardIds: ReadonlySet<string> = new Set(Object.values(ICE_KING_REWARDS).map((reward) => reward.id));
 const iceRewardById = new Map(Object.values(ICE_KING_REWARDS).map((reward) => [reward.id, reward]));
 
@@ -179,14 +188,14 @@ else if (event.type === 'shop.purchased') {
     if (currencyValue) currencyValue.textContent = String(progress.currency);
     if (shopCurrencyValue) shopCurrencyValue.textContent = String(progress.currency);
     if (inventoryList) {
-      const entries = inventoryEntries(progress);
+      const entries = inventoryEntries(progress, catalog.products);
       inventoryList.replaceChildren(...(entries.length ? entries.map((entry) => {
         const row = options.document.createElement('div');
         row.className = 'sp-ul-item done';
         row.dataset.itemId = entry.itemId;
         const icon = options.document.createElement('span');
         icon.className = 'inventory-item-icon';
-        icon.textContent = entry.itemId === 'mandarin' ? '柑' : entry.itemId === 'dragonwell_tea' ? '茶' : entry.itemId === 'beef' ? '肉' : entry.itemId === 'radish' ? '萝' : entry.itemId === 'music_box' ? '音' : entry.itemId === 'city_badge' ? '章' : entry.itemId === 'tirpitz_card' ? '舰' : entry.itemId === ICE_KING_ITEMS.wetCrown.id ? ICE_KING_ITEMS.wetCrown.icon : entry.itemId === ICE_KING_ITEMS.lemonade.id ? ICE_KING_ITEMS.lemonade.icon : '册';
+        icon.textContent = itemIcon(entry.itemId, entry.name);
         const name = options.document.createElement('span');
         name.className = 'sp-ul-name';
         name.textContent = entry.name;
