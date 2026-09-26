@@ -73,7 +73,7 @@ export function stubCityWebSocket(
   void page.addInitScript(({ u, w, unlocked }) => {
     const NativeWebSocket = window.WebSocket;
     class StubGameWebSocket extends EventTarget {
-      readyState = NativeWebSocket.CONNECTING;
+      readyState: number = NativeWebSocket.CONNECTING;
       progress = {
         currency: 0,
         inventory: {},
@@ -126,7 +126,7 @@ export function stubWorldCatalogWebSocket(page: Page, user = 'catalog-tester'): 
   void page.addInitScript((u) => {
     const NativeWebSocket = window.WebSocket;
     class CatalogGameWebSocket extends EventTarget {
-      readyState = NativeWebSocket.CONNECTING;
+      readyState: number = NativeWebSocket.CONNECTING;
       progress = {
         currency: 0,
         inventory: {},

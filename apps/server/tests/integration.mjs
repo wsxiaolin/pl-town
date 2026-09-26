@@ -4,6 +4,17 @@ import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
+import assert from 'node:assert/strict';
+
+// Error text is currently the shared city protocol discriminator. A new server
+// rejection needs a safe localized client mapping, including its retry policy.
+const cityErrorClient = readFileSync(new URL('../../web/src/city/cityGovernanceClient.ts', import.meta.url), 'utf8');
+for (const file of ['cityGovernance.ts', 'cityGovernanceRouter.ts']) {
+  const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+  for (const [, message] of source.matchAll(/(?:new HttpBodyError\(|error: )'([^']+)'/g)) {
+    assert.ok(cityErrorClient.includes(`'${message}':`), `Missing city error mapping: ${message}`);
+  }
+}
 
 const port = 8791;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
