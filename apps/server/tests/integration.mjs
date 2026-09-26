@@ -4,6 +4,31 @@ import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
+import assert from 'node:assert/strict';
+
+// Error text is currently the shared city protocol discriminator. A new server
+// rejection needs a safe localized client mapping, including its retry policy.
+// These city modules own business rejection messages. The selected outer HTTP
+// failures below also need localized text, but cannot resolve an earlier attempt
+// whose response was lost: they do not confirm its saved city receipt.
+function checkCityErrorMappings() {
+  const cityErrorClient = readFileSync(new URL('../../web/src/city/cityGovernanceClient.ts', import.meta.url), 'utf8');
+  const clientKeys = new Set([...cityErrorClient.matchAll(/^\s*(['"])((?:\\.|(?!\1)[^\\\r\n])*)\1\s*:/gm)].map((match) => match[2]));
+  for (const file of ['cityGovernance.ts', 'cityGovernanceRouter.ts']) {
+    const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+    const errors = [...source.matchAll(/(?:new HttpBodyError\s*\(\s*|\berror\s*:\s*)(['"`])((?:\\.|(?!\1)[^\\\r\n])*)\1/g)];
+    assert.ok(errors.length > 0, `City error mapping contract: no literal errors found in ${file}`);
+    for (const [, , message] of errors) {
+      assert.ok(clientKeys.has(message), `City error mapping contract: ${file} has no client mapping for ${message}`);
+    }
+  }
+  const httpSource = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const httpErrors = new Set([...httpSource.matchAll(/\berror\s*:\s*(['"`])((?:\\.|(?!\1)[^\\\r\n])*)\1/g)].map((match) => match[2]));
+  for (const message of ['Too many requests', 'Request origin is not allowed', 'Internal server error']) {
+    assert.ok(httpErrors.has(message), `City error mapping contract: outer HTTP error changed: ${message}`);
+    assert.ok(clientKeys.has(message), `City error mapping contract: outer HTTP error has no client mapping: ${message}`);
+  }
+}
 
 const port = 8791;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
@@ -309,6 +334,7 @@ let bob;
 let charlie;
 let requester;
 try {
+  checkCityErrorMappings();
   await waitForServer();
 
   if (await rejectedWebSocketOrigin() !== 401) throw new Error('Untrusted WebSocket origins must be rejected during the handshake');
