@@ -127,6 +127,30 @@ test('construction access retains the last trusted policy during config reload a
   assert.equal(availability.isBuildingUnavailable(building), true);
 });
 
+test('a cold start with readable config and unavailable state exposes only initial buildings', async (context) => {
+  const apiGlobals = ['__TOWN_VITE_API_BASE__', '__TOWN_VITE_SERVER_URL__'];
+  const descriptors = apiGlobals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
+  apiGlobals.forEach((key) => Object.defineProperty(globalThis, key, { value: '', configurable: true }));
+  context.after(() => {
+    disposeCityGovernance();
+    apiGlobals.forEach((key, index) => {
+      const descriptor = descriptors[index];
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    });
+  });
+  disposeCityGovernance();
+  const projectBuildings = ['library', 'academy', 'commons_outer'];
+  context.mock.method(globalThis, 'fetch', async (input: string) => {
+    if (input.endsWith('/config')) return Response.json({ version: 'cold-start', initialBuiltBuildingIds: ['commons'],
+      projects: projectBuildings.map((id) => ({ id: `build-${id}`, buildingId: id })) });
+    return new Response(null, { status: 503 });
+  });
+  await loadCityGovernance();
+  assert.equal(isConstructionPending('commons'), false);
+  for (const id of projectBuildings) assert.equal(isConstructionPending(id), true);
+});
+
 test('new configured buildings stay hidden when state loading fails without changing known outcomes', async (context) => {
   const apiGlobals = ['__TOWN_VITE_API_BASE__', '__TOWN_VITE_SERVER_URL__'];
   const descriptors = apiGlobals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
