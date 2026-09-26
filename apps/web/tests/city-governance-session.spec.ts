@@ -2,7 +2,9 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
 
-async function openGovernance(page: Page, mutate: (route: Route) => void | Promise<void>) {
+async function openGovernance(
+  page: Page, mutate: (route: Route) => void | Promise<void>, configure?: (config: CityConfig) => void,
+) {
   const config: CityConfig = {
     schemaVersion: 1, version: 'session-fixture', initialBuiltBuildingIds: ['commons'],
     projects: [
@@ -18,6 +20,7 @@ async function openGovernance(page: Page, mutate: (route: Route) => void | Promi
       { id: 'pine', name: '松树', kind: 'pine', cost: 120 },
     ],
   };
+  configure?.(config);
   const fixture = {
     state: {
       epoch: 'session-epoch', revision: 0, configVersion: config.version,
@@ -226,3 +229,76 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   expect(fixture.errors).toEqual([]);
 });
 }
+
+test('personal construction refreshes cross-tab sessions before rendering area drafts', async ({ page, context }) => {
+  const requests: Array<{ quantity: number; decorationId: string }> = [];
+  const fixture = await openGovernance(page, async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  });
+  const panel = page.locator('.city-governance-panel');
+  const personalTab = panel.getByRole('button', { name: '个人建设', exact: true });
+  const area = panel.locator('[data-city-area="session-garden"]');
+  await personalTab.click();
+  await area.getByRole('spinbutton').fill('2');
+  await area.getByRole('combobox').selectOption('pine');
+  await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
+
+  // A second tab changes storage without calling this page's client helpers.
+  // The next ordinary panel render must detect that change before using drafts.
+  const otherTab = await context.newPage();
+  try {
+    await otherTab.route('**/session-source', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Session source</title>' }));
+    await otherTab.goto(new URL('/session-source', page.url()).href);
+    await otherTab.evaluate(() => localStorage.setItem('minicityServerToken', 'cross-tab-resident'));
+  } finally { await otherTab.close(); }
+
+  await personalTab.click();
+  await expect(panel.locator('.city-governance-list')).toHaveCount(1);
+  await expect(area).toHaveCount(1);
+  await expect(area.getByRole('spinbutton')).toHaveValue('4');
+  await expect(area.getByRole('combobox')).toHaveValue('flowers');
+  await area.getByRole('spinbutton').fill('3');
+  await area.getByRole('button', { name: '批量建设', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toMatchObject({ quantity: 3, decorationId: 'flowers' });
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  await expect(panel.locator('.city-governance-list')).toHaveCount(1);
+  await expect(area.getByRole('spinbutton')).toHaveValue('3');
+  expect(fixture.errors).toEqual([]);
+});
+
+test('area availability explains decoration limits and scales narrow previews', async ({ page }) => {
+  const fixture = await openGovernance(page, (route) => route.fulfill({ status: 409, json: { error: 'Insufficient currency' } }), (config) => {
+    config.personalPlots.forEach((plot, index) => { plot.options = index < 2 ? ['pine'] : ['flowers']; });
+    const narrowPlots = Array.from({ length: 2 }, (_, index) => ({
+      id: `narrow-${index}`, name: `窄花园 ${index + 1}`, x: 38, z: -40 + index * 2, options: ['flowers'],
+    }));
+    config.personalPlots.push(...narrowPlots);
+    config.personalAreas!.push({ id: 'narrow-garden', name: '窄花园', plotIds: narrowPlots.map(({ id }) => id) });
+  });
+  fixture.state = { ...fixture.state, revision: 1, decorations: [0, 1].map((index) => ({
+    plotId: `session-plot-${index}`, decorationId: 'pine', ownerId: 'another-resident', ownerNickname: '其他居民',
+  })) };
+  await publishState(page, fixture.state);
+  const panel = page.locator('.city-governance-panel');
+  await panel.getByRole('button', { name: '个人建设', exact: true }).click();
+  const area = panel.locator('[data-city-area="session-garden"]');
+  await area.getByRole('combobox').selectOption('pine');
+  await expect(area.locator('[data-city-area-total]')).toHaveText('该区域没有适合松树的空地，请选择其他装饰。');
+  await expect(area.getByRole('button', { name: '批量建设', exact: true })).toBeDisabled();
+  await area.getByRole('combobox').selectOption('flowers');
+  await area.getByRole('spinbutton').fill('2');
+  await expect(area.getByRole('button', { name: '批量建设', exact: true })).toBeEnabled();
+  const widePreview = await area.locator('.city-area-preview').boundingBox();
+  const narrowPreview = await panel.locator('[data-city-area="narrow-garden"] .city-area-preview').boundingBox();
+  expect(widePreview!.width).toBeGreaterThan(narrowPreview!.width * 3);
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+  fixture.state = { ...fixture.state, revision: 2, decorations: [...fixture.state.decorations, ...[2, 3].map((index) => ({
+    plotId: `session-plot-${index}`, decorationId: 'flowers', ownerId: 'another-resident', ownerNickname: '其他居民',
+  }))] };
+  await publishState(page, fixture.state);
+  await expect(area.locator('[data-city-area-total]')).toHaveText('该区域已无可用地块');
+  expect(fixture.errors).toEqual([]);
+});

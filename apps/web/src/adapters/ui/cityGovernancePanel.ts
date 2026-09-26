@@ -8,6 +8,7 @@ let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 let operationNotice = '';
+let rendering = false;
 const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
 
@@ -57,6 +58,18 @@ function restoreFocus(previous: HTMLElement | null): void {
 }
 
 function render(): void {
+  if (!root || rendering) return;
+  rendering = true;
+  try {
+    // Cross-tab authentication changes notify subscribers synchronously. Refresh
+    // before reading drafts, and let that notification clear them without a
+    // nested render appending a second list to the same panel body.
+    refreshCityGovernanceSession();
+    renderContents();
+  } finally { rendering = false; }
+}
+
+function renderContents(): void {
   if (!root) return;
   const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
     ? document.activeElement : null;
