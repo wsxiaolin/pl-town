@@ -574,7 +574,7 @@ function init() {
     getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant), stopCameraMotion: () => cameraController?.stop(),
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
-      || Boolean(cityDialogs?.isOpen()) || Boolean(stories?.echo.isInteriorView()),
+      || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
   });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
@@ -586,7 +586,7 @@ function init() {
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     getPlayerPath: () => view.getPlayerPath(),
     setPlayerPath: (path) => view.setPlayerPath(path),
-    isDialogOpen: () => Boolean(cityDialogs?.isOpen()),
+    isDialogOpen: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen(),
     isMapOpen: () => Boolean(mapController?.isOpen()),
     buildRoadPath: roadNavigation.buildRoadPath,
     clamp: roadNavigation.clamp,
@@ -595,7 +595,7 @@ function init() {
     getEcho: () => stories?.echo,
     getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
-    onIdle: () => interactionPointer.handlePlayerIdle(),
+    onIdle: () => { if (!isCityGovernancePanelOpen()) interactionPointer.handlePlayerIdle(); },
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
     addDistance: (amount) => interactionTracker.flushDistance(amount),
     getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },

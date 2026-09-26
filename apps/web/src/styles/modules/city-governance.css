@@ -161,6 +161,11 @@
   width: min(11rem, 100%);
 }
 @media (max-width: 600px) {
+  .city-governance-panel :is([data-city-status], [data-city-feedback], [data-city-notice], [data-city-vote-feedback]) {
+    margin-left: max(1rem, env(safe-area-inset-left));
+    margin-right: max(1rem, env(safe-area-inset-right));
+  }
+
   .city-governance-head, .city-governance-tabs, .city-governance-body {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));

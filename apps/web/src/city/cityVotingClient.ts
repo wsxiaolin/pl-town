@@ -22,7 +22,10 @@ export function getCityVotingSessionId(): number | null {
 
 async function request(path: string, init: RequestInit): Promise<Response> {
   try { return await fetch(townApiUrl(path), init); }
-  catch { throw new Error('网络连接中断，请稍后重试'); }
+  catch {
+    if (init.signal?.aborted && init.signal.reason?.name === 'TimeoutError') throw new Error('投票服务响应超时，请稍后重试');
+    throw new Error('网络连接中断，请稍后重试');
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -48,6 +51,8 @@ export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotes | n
   const owner = session();
   const isCurrent = () => !signal?.aborted && owner.id === getCityVotingSessionId();
   try {
+    // GET has no JSON body; Bearer authentication keeps the token out of URLs.
+    // POST below follows the existing construction mutation body's token field.
     const response = await request('/town-api/city/votes', {
       cache: 'no-store', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
       headers: { accept: 'application/json', authorization: `Bearer ${owner.token}` },

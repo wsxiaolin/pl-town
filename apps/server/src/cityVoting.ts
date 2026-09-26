@@ -32,7 +32,8 @@ export function voteCity(user: User, body: Record<string, unknown>) {
     if (!project) throw new HttpBodyError('Unknown project', 404);
     if (project.kind !== 'building') throw new HttpBodyError('Only building projects accept votes', 400);
     const existing = db.prepare('SELECT revision FROM city_votes WHERE user_id = ? AND project_id = ?').get(user.id, projectId) as { revision: number } | undefined;
-    // Preserve all request receipts so a delayed retry never casts an extra vote.
+    // Keep even no-op receipts bound to their original project/config fingerprint:
+    // reusing that requestId for another project must still fail after a retry.
     const recordReceipt = (revision: number, replayed: boolean) => {
       db.prepare('INSERT INTO city_vote_operations (user_id, request_id, fingerprint, revision) VALUES (?, ?, ?, ?)').run(user.id, requestId, fingerprint, revision);
       return result(revision, replayed);

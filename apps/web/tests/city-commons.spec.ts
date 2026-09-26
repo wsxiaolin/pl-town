@@ -116,6 +116,17 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
       await page.setViewportSize({ width: 390, height: 844 });
       expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
       expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      const gutters = await panel.evaluate((element) => {
+        const heading = element.querySelector('.city-governance-head')!;
+        const headStyle = getComputedStyle(heading);
+        return {
+          left: headStyle.paddingLeft, right: headStyle.paddingRight,
+          feedback: [...element.querySelectorAll('[data-city-status], [data-city-feedback], [data-city-notice], [data-city-vote-feedback]')]
+            .map((region) => { const style = getComputedStyle(region); return { left: style.marginLeft, right: style.marginRight }; }),
+        };
+      });
+      expect(gutters.feedback).toHaveLength(4);
+      for (const region of gutters.feedback) expect(region).toEqual({ left: gutters.left, right: gutters.right });
       await page.screenshot({ path: testInfo.outputPath('commons-mobile-portrait.png') });
     }
     await page.keyboard.press('Escape');
@@ -215,6 +226,79 @@ test('an expired session closes the top-layer panel before showing login', async
   await expect(panel).not.toBeVisible();
   await expect(page.locator('#loginOverlay')).toBeVisible();
   await expect(page.locator('#loginInput')).toBeFocused();
+  const closedPanel = page.locator('.city-governance-panel');
+  await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveText('');
+  await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveJSProperty('hidden', true);
+});
+
+test('a rejected vote leaves its closed dialog clear while login takes focus', async ({ page }) => {
+  await fixture(page);
+  await page.route('**/town-api/city/vote', (route) => route.fulfill({ status: 401, json: { error: 'Please sign in' } }));
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  await panel.locator('[data-building-id="catcafe"]').getByRole('button', { name: '投票建设' }).click();
+  await expect(panel).not.toBeVisible();
+  await expect(page.locator('#loginInput')).toBeFocused();
+  await settlePaint(page);
+  const closedPanel = page.locator('.city-governance-panel');
+  await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveText('');
+  await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveJSProperty('hidden', true);
+});
+
+test('commons cancels an active city route and camera drag while its modal is open', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await fixture(page);
+  await page.keyboard.press('Escape');
+  const started = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    const point = new mini.THREE.Vector3(0, 0, -20).project(mini.camera);
+    document.querySelector('#c')!.dispatchEvent(new MouseEvent('click', {
+      bubbles: true, clientX: (point.x + 1) * innerWidth / 2, clientY: (1 - point.y) * innerHeight / 2,
+    }));
+    const pathLength = mini.getPlayerPath().length;
+    mini.interactBuilding('commons');
+    return { pathLength, position: mini.player.position.toArray(), frame: mini.renderer.info.render.frame };
+  });
+  expect(started.pathLength).toBeGreaterThan(0);
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  await expect(panel).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any)._mini.getPlayerPath().length)).toBe(0);
+  await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame)).toBeGreaterThan(started.frame + 8);
+  expect(await page.evaluate(() => (window as any)._mini.player.position.toArray())).toEqual(started.position);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame)).toBeGreaterThan(started.frame + 16);
+  expect(await page.evaluate(() => (window as any)._mini.getPlayerPath().length)).toBe(0);
+
+  await page.mouse.move(640, 400);
+  await page.mouse.down();
+  await expect(page.locator('body')).toHaveClass(/camera-pan-active/);
+  await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
+  await expect(panel).toBeVisible();
+  await expect(page.locator('body')).not.toHaveClass(/camera-pan-active/);
+  await page.mouse.up();
+  await expect(panel.getByRole('button', { name: '关闭' })).toBeFocused();
+});
+
+test('a vote timeout explains the stalled request and preserves its retry receipt', async ({ page }) => {
+  const api = await fixture(page);
+  let stalled: Route | null = null;
+  let firstRequestId = '';
+  await page.route('**/town-api/city/vote', async (route) => {
+    if (!stalled) {
+      stalled = route;
+      firstRequestId = route.request().postDataJSON().requestId;
+      return;
+    }
+    await route.fallback();
+  });
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const cafe = panel.locator('[data-building-id="catcafe"]');
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await expect(panel.getByRole('alert')).toHaveText('投票服务响应超时，请稍后重试', { timeout: 12_000 });
+  await cafe.getByRole('button', { name: '投票建设' }).click();
+  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
+  expect(api.requests).toHaveLength(1);
+  expect(api.requests[0]!.requestId).toBe(firstRequestId);
+  await (stalled as Route | null)?.abort().catch(() => {});
 });
 
 test('a committed vote with malformed totals retries the same receipt', async ({ page }) => {

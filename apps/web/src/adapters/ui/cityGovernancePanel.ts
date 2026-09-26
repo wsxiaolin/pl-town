@@ -236,7 +236,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
             const operation = { sessionId: getCityVotingSessionId() };
             if (voting.get(project.id)?.sessionId === operation.sessionId) return;
             const panel = root;
-            const isCurrent = () => root === panel && operation.sessionId === getCityVotingSessionId()
+            const isCurrent = () => root === panel && root?.open && operation.sessionId === getCityVotingSessionId()
               && voting.get(project.id) === operation;
             voteError = '';
             votesLoading?.abort();
@@ -301,8 +301,9 @@ function containTabFocus(event: KeyboardEvent): void {
       && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden');
   const first = focusable[0];
   const last = focusable.at(-1);
-  // Native modal dialogs make the page inert, but allow Tab to reach browser
-  // chrome. Keep the keyboard loop in the panel as well.
+  // Native modal dialogs make the page inert, but Chromium still allows Tab
+  // to reach browser chrome. Recompute visible controls after async card updates
+  // so keyboard navigation keeps a complete loop inside the panel.
   if (!first || !last) { event.preventDefault(); return; }
   const active = document.activeElement;
   if (event.shiftKey && (active === first || !focusable.includes(active as HTMLElement))) {
@@ -415,8 +416,8 @@ export function closeCityGovernancePanel(): void {
   if (!root?.open) return;
   unavailableFocus = null;
   root.close();
-  // Keep per-tab scroll across reopening so residents can return to the same
-  // construction projects. Disposal starts a new city session and clears it.
+  // Reopening starts on voting; selecting personal construction again restores
+  // its saved scroll. Disposal starts a new city session and clears both tabs.
   votesLoading?.abort();
   votesLoading = null;
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
