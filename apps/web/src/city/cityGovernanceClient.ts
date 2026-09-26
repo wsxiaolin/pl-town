@@ -175,10 +175,20 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     window.dispatchEvent(new CustomEvent('minicity:login-required'));
     throw new Error('请先登录');
   }
-  const operationKey = `${path}:${JSON.stringify(body)}`;
+  const operationKey = `${path}:${String(body.projectId ?? body.plotId)}`;
   // The server fingerprint includes configVersion. Preserve the complete receipt
   // after an uncertain outcome, even if the current catalog changes before retry.
-  const operation = pendingRequestIds.get(operationKey)
+  const retained = pendingRequestIds.get(operationKey);
+  if (retained && JSON.stringify(retained.body) !== JSON.stringify(body)) {
+    // A changed amount/decoration is a new payment, not a retry. Resolve the
+    // target's uncertain operation before accepting another set of parameters.
+    if (retained.body.projectId !== undefined) {
+      throw new Error(`上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
+    }
+    const decoration = config.decorations.find((entry) => entry.id === retained.body.decorationId);
+    throw new Error(`这块地上一笔「${decoration?.name ?? retained.body.decorationId}」建设结果尚未确认，请恢复原装饰重试，确认结果后再修改。`);
+  }
+  const operation = retained
     ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
   const { requestId, configVersion } = operation;
   pendingRequestIds.set(operationKey, operation);
