@@ -120,6 +120,10 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
   const submittedPanel = root;
   const actionKey = `projectId:${id}`;
   if (pendingActions.has(actionKey)) return;
+  const config = getCityConfig();
+  const targetName = config?.projects.find((project) => project.id === id)?.name ?? '该项目';
+  // Capture the submitted target before a refresh can replace its catalog entry.
+  const targetPrefix = `「${targetName}」`;
   const action = Symbol(actionKey);
   pendingActions.set(actionKey, action);
   const focus = trackPendingActionFocus(`donate:${id}`);
@@ -135,7 +139,8 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
   } catch (error) {
     if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     failed = true;
-    operationError = error instanceof Error ? error.message : '建设失败，请重试';
+    const message = error instanceof Error ? error.message : '建设失败，请重试';
+    operationError = message.startsWith(targetPrefix) ? message : `${targetPrefix}${message}`;
     errorActionKey = actionKey;
   } finally {
     focus.dispose();

@@ -9,6 +9,9 @@
 - `unit/`: pure TypeScript domain tests (quest engine, navigation, stats).
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
+- `city-governance-errors.spec.ts`: persistent target-labelled failure feedback,
+  donation/decoration retries, draft preservation across tab changes and panel
+  reopening, and mobile feedback layout.
 - `city-governance-session.spec.ts`: concurrent focus, draft continuity,
   queued conflict refreshes, HTTP receipt retry policy, target parameter locking,
   and isolation between login sessions. Uncertain receipts remain in memory for

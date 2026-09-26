@@ -202,9 +202,12 @@ for (const [action, failure] of scenarios) {
     // Drafts must survive removal of their controls, not just an immediate refresh.
     const currentTab = action === 'donate' ? '城市集体建设' : '个人建设';
     const otherTab = action === 'donate' ? '个人建设' : '城市集体建设';
+    const targetName = action === 'donate' ? '猫猫咖啡厅' : '测试花园';
     await panel.getByRole('button', { name: otherTab, exact: true }).click();
     await expect(panel.getByRole('alert')).toContainText(message);
+    await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
     await panel.getByRole('button', { name: currentTab, exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
     expect(await feedback?.evaluate((node) => node === document.querySelector('[data-city-feedback]'))).toBe(true);
     await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
     await actionButton.click();

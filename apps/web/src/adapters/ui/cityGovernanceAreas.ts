@@ -1,4 +1,4 @@
-import { decorateCity, decorateCityArea, getPendingCityAreaOperation, refreshCityGovernanceSession, type CityConfig, type CityState, type CityMutationResult } from '../../city/cityGovernanceClient';
+import { decorateCity, decorateCityArea, getCityConfig, getPendingCityAreaOperation, refreshCityGovernanceSession, type CityConfig, type CityState, type CityMutationResult } from '../../city/cityGovernanceClient';
 import { actionButton, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
 type Draft = { decorationId: string; pending: boolean };
@@ -40,6 +40,11 @@ async function submitConstruction(
   const isCurrentDraft = () => drafts.get(id) === draft && refreshCityGovernanceSession() === session;
   if (!isCurrentDraft()) return;
   if (draft.pending) return;
+  const config = getCityConfig();
+  const targetName = dataKey === 'cityArea'
+    ? config?.personalAreas?.find((area) => area.id === id)?.name ?? '该区域'
+    : config?.personalPlots.find((plot) => plot.id === id)?.name ?? '这块地';
+  const targetPrefix = `「${targetName}」`;
   draft.pending = true;
   const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`);
   const actionKey = `${dataKey}:${id}`;
@@ -53,7 +58,8 @@ async function submitConstruction(
   } catch (error) {
     if (!isCurrentDraft()) return;
     failed = true;
-    feedback.reportError(errorMessage(error), actionKey);
+    const message = errorMessage(error);
+    feedback.reportError(message.startsWith(targetPrefix) ? message : `${targetPrefix}${message}`, actionKey);
   }
   finally {
     focus.dispose();
