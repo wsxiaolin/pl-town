@@ -119,6 +119,12 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
   const submittedPanel = root;
   const actionKey = `${dataKey}:${id}`;
   if (pendingActions.has(actionKey)) return;
+  const config = getCityConfig();
+  const targetName = dataKey === 'projectId'
+    ? config?.projects.find((project) => project.id === id)?.name ?? '该项目'
+    : config?.personalPlots.find((plot) => plot.id === id)?.name ?? '这块地';
+  // Capture the submitted target before a refresh can replace its catalog entry.
+  const targetPrefix = `「${targetName}」`;
   const action = Symbol(actionKey);
   pendingActions.set(actionKey, action);
   const focused = document.activeElement as HTMLElement | null;
@@ -142,7 +148,8 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
   } catch (error) {
     if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     failed = true;
-    operationError = error instanceof Error ? error.message : '建设失败，请重试';
+    const message = error instanceof Error ? error.message : '建设失败，请重试';
+    operationError = message.startsWith(targetPrefix) ? message : `${targetPrefix}${message}`;
     errorActionKey = actionKey;
   } finally {
     focusController.abort();
