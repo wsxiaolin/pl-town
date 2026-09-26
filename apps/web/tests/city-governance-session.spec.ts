@@ -73,8 +73,11 @@ test('concurrent submissions restore their own focus without interrupting anothe
   await expect(secondButton).toBeFocused();
   await expect(panel.getByRole('alert')).toContainText('金币不足');
 
-  // An ordinary successful action restores the button lost during its pending render.
+  // The modal keeps focus on an available control in the same card while its
+  // donation button is disabled; success must preserve that fallback.
   await firstButton.click();
+  const firstFallback = first.getByRole('button', { name: '投票建设', exact: true });
+  await expect(firstFallback).toBeFocused();
   await expect.poll(() => pending.length).toBe(3);
   fixture.state = { ...fixture.state, revision: 2, projects: [
     { id: 'build-catcafe', funded: 200, built: false, votes: 0 },
@@ -82,7 +85,7 @@ test('concurrent submissions restore their own focus without interrupting anothe
   ] };
   await pending[2]!.fulfill({ json: { state: fixture.state } });
   await expect(firstButton).toBeEnabled();
-  await expect(firstButton).toBeFocused();
+  await expect(firstFallback).toBeFocused();
 
   await firstButton.click();
   await expect.poll(() => pending.length).toBe(4);
@@ -227,3 +230,41 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   expect(fixture.errors).toEqual([]);
 });
 }
+
+test('personal construction refreshes cross-tab sessions before rendering area drafts', async ({ page, context }) => {
+  const requests: Array<{ quantity: number; decorationId: string }> = [];
+  const fixture = await openGovernance(page, async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  });
+  const panel = page.locator('.city-governance-panel');
+  const personalTab = panel.getByRole('button', { name: '个人建设', exact: true });
+  const area = panel.locator('[data-city-area="session-garden"]');
+  await personalTab.click();
+  await area.getByRole('spinbutton').fill('2');
+  await area.getByRole('combobox').selectOption('pine');
+  await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
+
+  // A second tab changes storage without calling this page's client helpers.
+  // The next ordinary panel render must detect that change before using drafts.
+  const otherTab = await context.newPage();
+  try {
+    await otherTab.route('**/session-source', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Session source</title>' }));
+    await otherTab.goto(new URL('/session-source', page.url()).href);
+    await otherTab.evaluate(() => localStorage.setItem('minicityServerToken', 'cross-tab-resident'));
+  } finally { await otherTab.close(); }
+
+  await personalTab.click();
+  await expect(panel.locator('.city-governance-list')).toHaveCount(1);
+  await expect(area).toHaveCount(1);
+  await expect(area.getByRole('spinbutton')).toHaveValue('4');
+  await expect(area.getByRole('combobox')).toHaveValue('flowers');
+  await area.getByRole('spinbutton').fill('3');
+  await area.getByRole('button', { name: '批量建设', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toMatchObject({ quantity: 3, decorationId: 'flowers' });
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  await expect(panel.locator('.city-governance-list')).toHaveCount(1);
+  await expect(area.getByRole('spinbutton')).toHaveValue('3');
+  expect(fixture.errors).toEqual([]);
+});

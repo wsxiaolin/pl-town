@@ -112,7 +112,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     const panel = page.locator('.city-governance-panel');
     await panel.getByRole('navigation', { name: '建设项目分类' }).getByRole('button', { name: '道路与绿化' }).click();
     await expect(panel.getByRole('heading', { name: '道路与绿化' })).toBeFocused();
-    await expect(panel.locator('[data-project-id="greenbelt-benches"]')).toBeInViewport();
+    await expect(panel.locator('[data-city-project="greenbelt-benches"]')).toBeInViewport();
     await page.screenshot({ path: testInfo.outputPath('public-works-jump.png') });
     await panel.locator('[data-building-id="library"]').getByRole('button', { name: '捐款', exact: true }).click();
     await expect.poll(renderedBuildingIds).toEqual(['commons', 'library']);

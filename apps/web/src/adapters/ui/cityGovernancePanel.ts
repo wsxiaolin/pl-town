@@ -16,6 +16,8 @@ let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
+let rendering = false;
+let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
 const INPUT_SELECTOR = '[data-city-input],select[aria-label]';
@@ -56,10 +58,22 @@ function updateFeedback(): void {
 }
 
 function render(preferredFocusKey?: string): void {
+  if (!root || rendering) return;
+  rendering = true;
+  try {
+    // Authentication notifications can synchronously request another render.
+    // Clear the old resident's drafts before reading any DOM values or receipts.
+    refreshCityGovernanceSession();
+    renderContents(preferredFocusKey);
+  } finally { rendering = false; }
+}
+
+function renderContents(preferredFocusKey?: string): void {
   if (!root) return;
   const focused = root.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
-  const focusKey = preferredFocusKey ?? focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
-  const focusProject = focusedCardKey(focused);
+  const resumedFocus = focused && unavailableFocus?.fallback === focused ? unavailableFocus : null;
+  const focusKey = preferredFocusKey ?? resumedFocus?.key ?? focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
+  const focusProject = resumedFocus?.projectId ?? focusedCardKey(focused);
   const previousBody = root.querySelector<HTMLElement>('.city-governance-body');
   if (previousBody?.dataset.cityTab) tabScrollTop.set(previousBody.dataset.cityTab, previousBody.scrollTop);
   const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
@@ -92,8 +106,13 @@ function render(preferredFocusKey?: string): void {
       void loadCityGovernance().finally(render);
     }, false, 'reload'));
     if (focused) restorePanelFocus(focusKey, focusProject, focused);
+    // Keep focus inside the modal while the matching snapshot loads. Restore
+    // the previous control only if the user stays on that temporary fallback.
+    unavailableFocus = focused && focusKey
+      ? { key: focusKey, projectId: focusProject, fallback: document.activeElement } : null;
     return;
   }
+  unavailableFocus = null;
   const list = document.createElement('div');
   list.className = 'city-governance-list';
   if (activeTab === 'collective') renderCollective(list, config.projects, state);
@@ -346,6 +365,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         operationError = '';
         operationNotice = '';
         voteError = '';
+        unavailableFocus = null;
         voting.clear();
         myVotes = null;
         votesLoading?.abort();
@@ -393,6 +413,7 @@ async function refreshVotes(): Promise<void> {
 
 export function closeCityGovernancePanel(): void {
   if (!root?.open) return;
+  unavailableFocus = null;
   root.close();
   // Keep per-tab scroll across reopening so residents can return to the same
   // construction projects. Disposal starts a new city session and clears it.
@@ -413,6 +434,7 @@ export function disposeCityGovernancePanel(): void {
   unsubscribe = null;
   root?.remove();
   root = null;
+  unavailableFocus = null;
   activeBuilding = '';
   activeTab = 'collective';
   operationError = '';
