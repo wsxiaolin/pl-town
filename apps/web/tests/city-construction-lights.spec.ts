@@ -2,19 +2,84 @@ import { expect, test } from '@playwright/test';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 
-// Self-contained copy of the immutable layouts in server/data/cityConstructionAreas.ts:
-// two 5x4 meadows and two 2x12 parks, including the real outer edges at +/-41.
-// Keep the browser suite independent of the server's TypeScript module graph.
-const AREA_PLOTS: CityConfig['personalPlots'] = [
-  { id: 'north-meadow', name: '北侧花海', x: -13, z: -41, columns: 5, rows: 4 },
-  { id: 'east-park', name: '东侧林荫带', x: 38.5, z: -31, columns: 2, rows: 12 },
-  { id: 'south-meadow', name: '南侧花海', x: -13, z: 33.5, columns: 5, rows: 4 },
-  { id: 'west-park', name: '西侧林荫带', x: -41, z: 3.5, columns: 2, rows: 12 },
-].flatMap((area) => Array.from({ length: area.columns * area.rows }, (_, index) => ({
-  id: `${area.id}-${String(index + 1).padStart(2, '0')}`, name: `${area.name} ${index + 1} 号`,
-  x: area.x + (index % area.columns) * 2.5, z: area.z + Math.floor(index / area.columns) * 2.5,
-  options: ['oak', 'pine', 'cherry', 'lamp', 'bench', 'flowers'],
-})));
+// Server integration verifies this isolated fixture against every production plot.
+import AREA_PLOTS from './fixtures/city-area-plots.json' with { type: 'json' };
+
+test('constructed decorations use the city weather materials across creation and weather changes', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (/(?:WebGL.*(?:error|lost|INVALID)|shader error|VALIDATE_STATUS|GL_INVALID)/i.test(message.text())) errors.push(message.text());
+  });
+  const kinds = ['flowers', 'oak', 'pine', 'cherry', 'bench', 'lamp'] as const;
+  const config: CityConfig = {
+    schemaVersion: 1, version: 'construction-weather',
+    projects: [{ id: 'weather-path', name: '公共绿道', description: '公共道路', kind: 'road', cost: 800, road: { x: 22, z: -40, width: 8, depth: 1 } }],
+    personalPlots: AREA_PLOTS.slice(0, kinds.length),
+    decorations: kinds.map((kind) => ({ id: kind, name: kind, kind, cost: 80 })),
+    initialBuiltBuildingIds: ['commons'],
+  };
+  let state: CityState = { epoch: 'construction-weather', revision: 0, configVersion: config.version,
+    projects: [{ id: 'weather-path', funded: 0, built: false, votes: 0 }], decorations: [] };
+  stubCityWebSocket(page, { user: 'weather-builder', unlockedBuildings: ['commons'] });
+  await page.route('**/town-api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/city/config')) return route.fulfill({ json: config });
+    if (path.endsWith('/city/state')) return route.fulfill({ json: state });
+    if (path.endsWith('/telemetry/event')) return route.fulfill({ status: 204, body: '' });
+    return route.continue();
+  });
+  await waitForCityReady(page, 'weather-builder');
+  const inspect = () => page.evaluate(() => {
+    const mini = (window as any)._mini;
+    const materials = new Map<string, { uuid: string; color: number; baseColor: number; roughness: number; metalness: number }>();
+    mini.scene.getObjectByName('city-construction').traverse((object: any) => {
+      if (!object.isMesh) return;
+      const material = object.material;
+      materials.set(material.uuid, { uuid: material.uuid, color: material.color.getHex(),
+        baseColor: material.userData.weatherBaseColor?.getHex() ?? -1,
+        roughness: material.roughness, metalness: material.metalness });
+    });
+    return { materials: [...materials.values()], contextLost: mini.renderer.getContext().isContextLost(), frame: mini.renderer.info.render.frame };
+  });
+  const publish = () => page.evaluate(async (next) => {
+    const modulePath = '/src/city/cityGovernanceClient.ts';
+    const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+    client.applyCityState(next);
+  }, state);
+
+  await page.evaluate(() => (window as any)._mini.weather.set('rain'));
+  state = { ...state, revision: 1, decorations: [{ plotId: AREA_PLOTS[0]!.id, decorationId: 'flowers', ownerId: 'weather-builder', ownerNickname: 'weather-builder' }] };
+  await publish();
+  const rainy = await inspect();
+  expect(rainy.materials).toHaveLength(1);
+  expect(rainy.materials[0]!.roughness).toBeLessThanOrEqual(0.48);
+  expect(rainy.materials[0]!.metalness).toBeGreaterThanOrEqual(0.08);
+
+  await page.evaluate(() => (window as any)._mini.weather.set('snow'));
+  state = { ...state, revision: 2, projects: [{ id: 'weather-path', funded: 800, built: true, votes: 0 }],
+    decorations: kinds.map((kind, index) => ({ plotId: AREA_PLOTS[index]!.id, decorationId: kind, ownerId: 'weather-builder', ownerNickname: 'weather-builder' })) };
+  await publish();
+  const snowy = await inspect();
+  expect(snowy.materials).toHaveLength(3);
+  expect(snowy.materials.map(({ uuid }) => uuid)).toContain(rainy.materials[0]!.uuid);
+  for (const material of snowy.materials) {
+    expect(material.roughness).toBeGreaterThanOrEqual(0.86);
+    expect(material.baseColor).not.toBe(-1);
+    expect(material.color).not.toBe(material.baseColor);
+  }
+  await page.evaluate(() => (window as any)._mini.weather.set('clear'));
+  const clear = await inspect();
+  expect(clear.materials.map(({ uuid }) => uuid).sort()).toEqual(snowy.materials.map(({ uuid }) => uuid).sort());
+  for (const material of clear.materials) {
+    expect(material.roughness).toBeCloseTo(0.85);
+    expect(material.metalness).toBe(0);
+    expect(material.color).toBe(material.baseColor);
+  }
+  expect(clear.contextLost).toBe(false);
+  await expect.poll(async () => (await inspect()).frame).toBeGreaterThan(clear.frame);
+  expect(errors).toEqual([]);
+});
 
 test('88 constructed lamps keep their globes and a bounded night light budget', async ({ page }) => {
   const errors: string[] = [];

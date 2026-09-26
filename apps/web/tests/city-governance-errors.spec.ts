@@ -116,6 +116,13 @@ for (const [action, failure] of scenarios) {
     await waitForCityReady(page, 'error-tester');
     await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
     const panel = page.locator('.city-governance-panel');
+    if (action === 'decorate') {
+      expect(await panel.locator('.city-governance-head').evaluate((header) => {
+        const panelBounds = header.parentElement!.getBoundingClientRect();
+        const headerBounds = header.getBoundingClientRect();
+        return Math.abs(headerBounds.left - panelBounds.left) < 1 && Math.abs(headerBounds.right - panelBounds.right) < 1;
+      })).toBe(true);
+    }
     const feedback = await panel.locator('[data-city-feedback]').elementHandle();
     if (action === 'decorate') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
     const targetCard = panel.locator('.city-governance-card').filter({ hasText: action === 'donate' ? '猫猫咖啡厅' : '测试花园' }).first();

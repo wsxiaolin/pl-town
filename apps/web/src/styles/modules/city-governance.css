@@ -108,7 +108,7 @@
 }
 .city-governance-group-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .5rem; }
 .city-governance-group-note { grid-column: 1 / -1; }
-.city-governance-group-note h2 { margin: .5rem 0 .3rem; font-size: 1rem; }
+.city-governance-group-note h2 { margin: .8rem 0 .4rem; font-size: 1.2rem; }
 .city-governance-group-note p { margin: 0 0 .25rem; color: #52634f; font-size: .9rem; line-height: 1.6; }
 .city-governance-card {
   min-width: 0;

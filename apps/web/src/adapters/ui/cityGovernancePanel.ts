@@ -8,7 +8,9 @@ let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
+let errorActionKey = '';
 let operationNotice = '';
+let rendering = false;
 const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
 const tabScrollTop = new Map<string, number>();
@@ -16,7 +18,6 @@ let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
-let rendering = false;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
@@ -159,7 +160,8 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
   pendingActions.set(actionKey, action);
   const focus = trackPendingActionFocus(`donate:${id}`);
   let failed = false;
-  operationError = '';
+  // Retrying this target replaces its error; another card's request does not.
+  if (errorActionKey === actionKey) { operationError = ''; errorActionKey = ''; }
   operationNotice = '';
   render();
   try {
@@ -170,6 +172,7 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
     if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     failed = true;
     operationError = error instanceof Error ? error.message : '建设失败，请重试';
+    errorActionKey = actionKey;
   } finally {
     focus.dispose();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
@@ -288,7 +291,14 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
   renderCityPersonalAreas(list, config, state, {
     rerender: () => { if (root?.open) render(); },
-    reportError: (message) => { operationError = message; operationNotice = ''; updateFeedback(); },
+    reportError: (message, actionKey) => {
+      if (message || errorActionKey === actionKey) {
+        operationError = message;
+        errorActionKey = message ? actionKey : '';
+      }
+      operationNotice = '';
+      updateFeedback();
+    },
     reportNotice: (message) => { operationNotice = message; updateFeedback(); },
     focusAction: (dataKey, id) => { if (root?.open) focusAction(dataKey, id); },
   });
@@ -316,7 +326,7 @@ function containTabFocus(event: KeyboardEvent): void {
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
-  if (activeBuilding !== buildingId) { operationError = ''; operationNotice = ''; }
+  if (activeBuilding !== buildingId) { operationError = ''; errorActionKey = ''; operationNotice = ''; }
   activeBuilding = buildingId;
   if (!root) {
     root = document.createElement('dialog');
@@ -364,6 +374,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         donationDrafts.clear();
         clearCityConstructionDrafts();
         operationError = '';
+        errorActionKey = '';
         operationNotice = '';
         voteError = '';
         unavailableFocus = null;
@@ -423,6 +434,7 @@ export function closeCityGovernancePanel(): void {
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   returnFocus = null;
   operationError = '';
+  errorActionKey = '';
   operationNotice = '';
   voteError = '';
   updateFeedback();
@@ -438,6 +450,7 @@ export function disposeCityGovernancePanel(): void {
   unavailableFocus = null;
   activeBuilding = '';
   activeTab = 'collective';
+  errorActionKey = '';
   operationError = '';
   operationNotice = '';
   pendingActions.clear();

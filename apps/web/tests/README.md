@@ -10,7 +10,7 @@
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
 - `city-governance-session.spec.ts`: concurrent focus, draft continuity, HTTP
-  receipt retry policy, and isolation between login sessions. Uncertain receipts
+  receipt retry policy, target parameter locking, and isolation between login sessions. Uncertain receipts
   remain in memory for the running page and original login token; reload or
   disposal ends that retry guarantee. The client does not persist new credentials
   or payment receipts.
