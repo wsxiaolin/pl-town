@@ -75,7 +75,7 @@
   background: #fff0e8;
   color: #873c27;
 }
-.city-governance-panel [data-city-notice] {
+.city-governance-panel [role="status"] {
   flex-shrink: 0;
   margin: .7rem 1.5rem 0;
   padding: .7rem 1rem;
@@ -85,7 +85,7 @@
   color: #24543e;
   line-height: 1.5;
 }
-.city-governance-panel [data-city-notice]:empty {
+.city-governance-panel [role="status"]:empty {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -171,7 +171,7 @@
   width: min(11rem, 100%);
 }
 @media (max-width: 600px) {
-  .city-governance-panel :is([data-city-status], [data-city-feedback], [data-city-notice], [data-city-vote-feedback]) {
+  .city-governance-panel :is([data-city-status], [role="alert"], [role="status"]) {
     margin-left: max(1rem, env(safe-area-inset-left));
     margin-right: max(1rem, env(safe-area-inset-right));
   }

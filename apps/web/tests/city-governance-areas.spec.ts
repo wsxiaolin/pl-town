@@ -146,7 +146,7 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
     expect(receipts.size).toBe(1);
     expect(charged).toBe(chosenQuantity * 240);
     if (committedBeforeLoss) {
-      await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
+      await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('上一笔已成功，未重复扣费。');
       await expect(action).toBeDisabled();
     }
     await expect(panel.getByRole('alert')).toHaveCount(0);

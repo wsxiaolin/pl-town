@@ -96,7 +96,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
     expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
     expect(await panel.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(247, 245, 237)');
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    const notice = panel.getByRole('status');
+    const notice = panel.getByRole('status', { name: '投票结果', exact: true });
     await expect(notice).toHaveText('');
     const noticeNode = await notice.elementHandle();
     expect(await notice.evaluate((element) => !element.hasAttribute('hidden')
@@ -104,8 +104,8 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
     const cafe = panel.locator('[data-building-id="catcafe"]');
     await cafe.getByRole('button', { name: '投票建设' }).click();
     await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
-    await expect(panel.getByRole('status')).toHaveText('「猫猫咖啡厅」投票成功，已计入建设支持。');
-    expect(await noticeNode!.evaluate((element) => element === document.querySelector('[data-city-notice]'))).toBe(true);
+    await expect(panel.getByRole('status', { name: '投票结果', exact: true })).toHaveText('「猫猫咖啡厅」投票成功，已计入建设支持。');
+    expect(await noticeNode!.evaluate((element) => element === document.querySelector('[data-city-vote-notice]'))).toBe(true);
     await expect(cafe).toContainText('1 位居民支持建设');
     await expect(cafe).toContainText('募捐进度 0 金币 / 3,000 金币');
     await expect(cafe.getByRole('button', { name: '捐款', exact: true })).toBeEnabled();
@@ -132,11 +132,11 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
         const headStyle = getComputedStyle(heading);
         return {
           left: headStyle.paddingLeft, right: headStyle.paddingRight,
-          feedback: [...element.querySelectorAll('[data-city-status], [data-city-feedback], [data-city-notice], [data-city-vote-feedback]')]
+          feedback: [...element.querySelectorAll('[data-city-status], [role="alert"], [role="status"]')]
             .map((region) => { const style = getComputedStyle(region); return { left: style.marginLeft, right: style.marginRight }; }),
         };
       });
-      expect(gutters.feedback).toHaveLength(4);
+      expect(gutters.feedback).toHaveLength(5);
       for (const region of gutters.feedback) expect(region).toEqual({ left: gutters.left, right: gutters.right });
       await page.screenshot({ path: testInfo.outputPath('commons-mobile-portrait.png') });
     }
@@ -443,7 +443,7 @@ test('out-of-order successful votes preserve both confirmed project choices', as
   await pending.get('shrine')!.fulfill({ json: response(['catcafe', 'shrine']) });
   await expect(shrine.getByRole('button', { name: '已投票' })).toBeDisabled();
   await pending.get('catcafe')!.fulfill({ json: response(['catcafe']) });
-  await expect(panel.getByRole('status')).toHaveText('「猫猫咖啡厅」投票成功，已计入建设支持。');
+  await expect(panel.getByRole('status', { name: '投票结果', exact: true })).toHaveText('「猫猫咖啡厅」投票成功，已计入建设支持。');
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
   await expect(shrine.getByRole('button', { name: '已投票' })).toBeDisabled();
   await expect(shrine).toContainText('1 位居民支持建设');

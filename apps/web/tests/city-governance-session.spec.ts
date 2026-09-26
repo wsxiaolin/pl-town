@@ -320,7 +320,7 @@ for (const action of ['donate', 'decorate'] as const) {
       await expect(panel.getByRole('alert')).not.toContainText(failure.error);
     }
     await button.click();
-    await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
+    await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('上一笔已成功，未重复扣费。');
     expect(requests).toHaveLength(5);
     for (const retry of requests.slice(1)) expect(retry).toEqual(requests[0]);
     expect(committed.size).toBe(1);
@@ -436,13 +436,13 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   await pending[2]!.fulfill({ json: { state: { ...fixture.state, epoch: 'old-session', revision: 900 }, replayed: true } });
   await expect(button).toBeDisabled();
   await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #0');
-  await expect(panel.getByRole('status')).toHaveText('');
+  await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('');
 
   fixture.state = { ...fixture.state, revision: 1 };
   await pending[3]!.fulfill({ json: { state: fixture.state, replayed: true } });
   await expect(button).toBeEnabled();
   await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #1');
-  await expect(panel.getByRole('status')).toContainText('上一笔已成功');
+  await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toContainText('上一笔已成功');
   expect(fixture.errors).toEqual([]);
 });
 }

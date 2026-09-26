@@ -19,6 +19,7 @@ let myVotes: CityVotes | null = null;
 let votesUnavailableSession: number | null = null;
 let votesLoading: AbortController | null = null;
 let voteError = '';
+let voteNotice = '';
 let voteFeedbackRevision = 0;
 let votesEpoch: string | null = null;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
@@ -53,12 +54,13 @@ function updateFeedback(): void {
     ['[data-city-feedback]', operationError],
     ['[data-city-notice]', operationNotice],
     ['[data-city-vote-feedback]', activeTab === 'collective' ? voteError : ''],
+    ['[data-city-vote-notice]', activeTab === 'collective' ? voteNotice : ''],
   ] as const) {
     const region = root?.querySelector<HTMLElement>(selector);
     if (!region) continue;
-    // Keep the status live region in the accessibility tree before success.
-    // Its empty state is visually collapsed by CSS, not display:none/hidden.
-    if (selector !== '[data-city-notice]') region.hidden = !message;
+    // Keep both status regions in the accessibility tree before success.
+    // Their empty states collapse visually in CSS, not with display:none/hidden.
+    if (region.getAttribute('role') !== 'status') region.hidden = !message;
     if (region.textContent !== message) region.textContent = message;
   }
 }
@@ -278,7 +280,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
               && voting.get(project.id) === operation;
             voteError = '';
             voteFeedbackRevision += 1;
-            operationNotice = '';
+            voteNotice = '';
             votesLoading?.abort();
             votesLoading = null;
             voting.set(project.id, operation);
@@ -288,7 +290,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
               const result = await voteCity(project.id);
               if (result && isCurrent()) {
                 acceptVotes(result);
-                operationNotice = `「${project.name}」投票成功，已计入建设支持。`;
+                voteNotice = `「${project.name}」投票成功，已计入建设支持。`;
               }
             }
             catch (error) {
@@ -367,7 +369,7 @@ function containTabFocus(event: KeyboardEvent): void {
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
-  if (activeBuilding !== buildingId) { operationError = ''; errorActionKey = ''; operationNotice = ''; }
+  if (activeBuilding !== buildingId) { operationError = ''; errorActionKey = ''; operationNotice = ''; voteNotice = ''; }
   activeBuilding = buildingId;
   if (root?.open) { render(); return; }
   if (!root) {
@@ -389,15 +391,21 @@ export function openCityGovernancePanel(buildingId = ''): void {
     const notice = document.createElement('p');
     notice.dataset.cityNotice = 'true';
     notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-label', '建设结果');
     notice.setAttribute('aria-atomic', 'true');
     const voteFeedback = document.createElement('p');
     voteFeedback.dataset.cityVoteFeedback = 'true';
     voteFeedback.setAttribute('role', 'alert');
     voteFeedback.setAttribute('aria-atomic', 'true');
     voteFeedback.hidden = true;
+    const voteStatus = document.createElement('p');
+    voteStatus.dataset.cityVoteNotice = 'true';
+    voteStatus.setAttribute('role', 'status');
+    voteStatus.setAttribute('aria-label', '投票结果');
+    voteStatus.setAttribute('aria-atomic', 'true');
     const body = document.createElement('main');
     body.className = 'city-governance-body';
-    root.append(header, tabs, status, feedback, notice, voteFeedback, body);
+    root.append(header, tabs, status, feedback, notice, voteFeedback, voteStatus, body);
     document.body.append(root);
     root.addEventListener('cancel', (event) => { event.preventDefault(); closeCityGovernancePanel(); });
     root.addEventListener('keydown', (event) => {
@@ -418,6 +426,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
         errorActionKey = '';
         operationNotice = '';
         voteError = '';
+        voteNotice = '';
         votesEpoch = null;
         unavailableFocus = null;
         voting.clear();
@@ -496,6 +505,7 @@ export function closeCityGovernancePanel(): void {
   errorActionKey = '';
   operationNotice = '';
   voteError = '';
+  voteNotice = '';
   updateFeedback();
 }
 
@@ -519,6 +529,7 @@ export function disposeCityGovernancePanel(): void {
   myVotes = null;
   votesUnavailableSession = null;
   voteError = '';
+  voteNotice = '';
   voteFeedbackRevision = 0;
   votesEpoch = null;
   voting.clear();

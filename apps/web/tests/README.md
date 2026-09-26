@@ -20,8 +20,11 @@
   credentials or payment receipts.
 - `city-commons.spec.ts`: full-screen voting, resident isolation, retained vote
   records, close/fallback scroll restoration, and repeated-open focus. Vote and
-  payment success share one persistent status region, present before its text is
-  set as required by [WAI ARIA22](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22).
+  payment success use separate labelled persistent status regions, present before
+  their text is set as required by [WAI ARIA22](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22).
+- `city-governance-notices.spec.ts`: concurrent donation retries and votes preserve
+  both success messages in either response order, with independent feedback when
+  another operation begins. Empty status regions stay accessible and visually collapse.
 - `city-voting-compatibility.spec.ts`: independently deployed older servers keep
   donation and area construction usable when the votes read endpoint returns
   404/405. Reopening or explicitly checking voting retries capability detection;

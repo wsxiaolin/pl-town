@@ -226,7 +226,7 @@ for (const [action, failure] of scenarios) {
     expect(retry).toEqual(first);
     if (failure !== 'insufficient coins') expect(retryId).toBe(firstId);
     else expect(retryId).not.toBe(firstId);
-    if (failure !== 'insufficient coins') await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
+    if (failure !== 'insufficient coins') await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('上一笔已成功，未重复扣费。');
     if (action === 'donate') {
       // A confirmed replay releases the old ID; another donation is a new charge.
       await actionButton.click();
@@ -234,7 +234,7 @@ for (const [action, failure] of scenarios) {
       expect(requests[2]!.requestId).not.toBe(retryId);
       expect(requests[2]!.configVersion).toBe(config.version);
       expect(committedRequests.size).toBe(2);
-      await expect(panel.getByRole('status')).toHaveText('');
+      await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('');
       if (failure === 'insufficient coins') {
         // After focus restoration, the action's original input may be detached.
         await input.fill('450');

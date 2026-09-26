@@ -73,7 +73,7 @@ test('a delayed vote cannot overwrite a restored epoch read after a conflict', a
   await expect(cafe.getByRole('button', { name: '正在投票…' })).toHaveCount(0);
   expect(await readState()).toEqual(state);
   await expect(cafe.getByRole('button', { name: '投票建设' })).toBeEnabled();
-  await expect(panel.getByRole('status')).toHaveText('');
+  await expect(panel.getByRole('status', { name: '投票结果', exact: true })).toHaveText('');
   for (const route of revokedReads) await route.fulfill({ status: 401, json: { error: 'Please sign in' } }).catch(() => {});
   expect(errors).toEqual([]);
 });
