@@ -6,6 +6,7 @@ export function createBuildingLabelController(options: {
   interact: (building: BuildingEntity) => void;
 }) {
   function addLabel(building: BuildingEntity): void {
+    if (options.isUnavailable(building)) return;
     const wrap = document.getElementById('labelsWrap');
     if (!wrap || building.labelEl) return;
     const element = document.createElement('a');
