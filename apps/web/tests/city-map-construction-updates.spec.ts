@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 import { pushCityState, stubCityWebSocket, waitForCityReady } from './helpers';
 
 test('an open map updates construction access without creating more WebGL contexts', async ({ page }) => {
+  // Keep the real town clock away from dusk/dawn: theme changes intentionally
+  // refresh snapshots, while this test isolates construction broadcasts.
+  await page.clock.setFixedTime(new Date('2026-09-25T00:12:00Z'));
   const config = {
     schemaVersion: 1, version: 'map-construction-test', initialBuiltBuildingIds: ['commons'],
     projects: [{ id: 'build-library', buildingId: 'library', name: '图书馆', kind: 'building', description: '共同筹建', cost: 3000 }],

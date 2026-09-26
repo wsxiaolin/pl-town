@@ -520,6 +520,18 @@ try {
     assert.throws(() => restoreFromBackupFile(layoutPath), /City project changed/);
     assert.deepEqual(constructionLedger(), beforeLayoutLedger);
     restoreFromBackupFile(path);
+    // A legacy initial building could not also be a funded project. Reject a
+    // corrupt mixed ledger instead of silently filling its partial funding.
+    const mixedPreservation = new Database(preAreaPath);
+    const preservedProject = config.projects.find((project) => project.buildingId === 'library');
+    assert(oldConfig.initialBuiltBuildingIds.includes(preservedProject.buildingId));
+    assert.equal(mixedPreservation.prepare('SELECT id FROM city_projects WHERE id = ?').get(preservedProject.id), undefined);
+    mixedPreservation.prepare('INSERT INTO city_projects (id, definition_json, funded, built) VALUES (?, ?, 1, 0)')
+      .run(preservedProject.id, JSON.stringify(preservedProject));
+    mixedPreservation.close();
+    const beforePreservationFailure = constructionLedger();
+    assert.throws(() => restoreFromBackupFile(preAreaPath), /Preserved city building has funded progress/);
+    assert.deepEqual(constructionLedger(), beforePreservationFailure);
     const damagedPath = ${JSON.stringify(join(dataDir, 'city-damaged.sqlite'))};
     await backupDatabase(damagedPath);
     const damaged = new Database(damagedPath);

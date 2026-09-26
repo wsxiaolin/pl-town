@@ -13,6 +13,10 @@
   interactions stay hidden until construction completes, on desktop and mobile.
 - `city-map-construction-updates.spec.ts`: an open city map updates its entries
   when construction progress changes.
+- `city-map-theme.spec.ts`: an open map refreshes its image at dusk and dawn
+  without losing search focus or affecting the main WebGL context.
+- `ws-building-errors.spec.ts`: authenticated building rejections use Chinese
+  toasts while preserving the existing WebSocket connection and session.
 - `pending-label.spec.ts`: global story unlocks cannot reveal pending labels;
   construction completion still respects a subsequent story re-lock.
 - `pending-damage.spec.ts`: saved damage survives pending construction and

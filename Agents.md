@@ -112,6 +112,8 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`personalAreas`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 和 `city_vote_operations` 保存建设及投票请求的幂等记录，防止历史请求重放后重复扣款或重复计票，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
 
+新增建筑目录坐标或移动建筑也会改变既有地块和公共装饰的间距校验。发布前应验证保存的布局；若新目录使旧布局不再有效，必须同时提高治理配置版本并提供显式布局对账，不能只更新目录后让历史城市启动失败。
+
 ## AI 自动化工作流
 
 仓库包含两个移植自 `NetLogo-Mobile/plweb2` 的 AI 自动化工作流，均使用 OpenCode CLI（`opencode-ai`）与 `skills` 工具（`npx skills update` 读取根目录 `skills-lock.json`）。两者在 CI 中独立运行，不依赖本地开发环境。
