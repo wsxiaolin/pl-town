@@ -117,28 +117,43 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
 }
 
 function renderCollective(list: HTMLElement, projects: CityProject[], progress: Array<{ id: string; funded: number; built: boolean }>): void {
-  for (const project of projects) {
-    const saved = progress.find((entry) => entry.id === project.id);
-    const item = card(project.name, project.description);
-    item.dataset.projectId = project.id;
-    item.dataset.buildingId = project.buildingId ?? '';
-    item.classList.toggle('active', project.buildingId === activeBuilding);
-    const detail = document.createElement('p');
-    detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
-    item.append(detail);
-    if (!saved?.built) {
-      const amount = document.createElement('input');
-      amount.type = 'number'; amount.min = '1'; amount.step = '1';
-      amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
-      amount.dataset.focusKey = `amount:${project.id}`;
-      amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
-      amount.setAttribute('aria-label', `${project.name}捐款金额`);
-      item.append(amount, button('捐款', () => {
-        const value = Number(donationDrafts.get(project.id) ?? amount.value);
-        void submit('projectId', project.id, () => donateCity(project.id, value));
-      }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
+  const groups = [
+    { title: '公共建筑', description: '待建建筑及其地皮暂不显示；共同筹建完成后开放。', projects: projects.filter((project) => project.kind === 'building') },
+    { title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
+  ];
+  for (const group of groups) {
+    if (!group.projects.length) continue;
+    const heading = document.createElement('div');
+    heading.className = 'city-governance-group-note';
+    const title = document.createElement('h3');
+    title.textContent = group.title;
+    const description = document.createElement('p');
+    description.textContent = group.description;
+    heading.append(title, description);
+    list.append(heading);
+    for (const project of group.projects) {
+      const saved = progress.find((entry) => entry.id === project.id);
+      const item = card(project.name, project.description);
+      item.dataset.projectId = project.id;
+      item.dataset.buildingId = project.buildingId ?? '';
+      item.classList.toggle('active', project.buildingId === activeBuilding);
+      const detail = document.createElement('p');
+      detail.textContent = saved?.built ? '已建成，全城居民共享' : `募捐进度 ${money(saved?.funded ?? 0)} / ${money(project.cost)}`;
+      item.append(detail);
+      if (!saved?.built) {
+        const amount = document.createElement('input');
+        amount.type = 'number'; amount.min = '1'; amount.step = '1';
+        amount.value = donationDrafts.get(project.id) ?? String(Math.min(project.cost - (saved?.funded ?? 0), 100));
+        amount.dataset.focusKey = `amount:${project.id}`;
+        amount.addEventListener('input', () => { donationDrafts.set(project.id, amount.value); });
+        amount.setAttribute('aria-label', `${project.name}捐款金额`);
+        item.append(amount, button('捐款', () => {
+          const value = Number(donationDrafts.get(project.id) ?? amount.value);
+          void submit('projectId', project.id, () => donateCity(project.id, value));
+        }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
+      }
+      list.append(item);
     }
-    list.append(item);
   }
 }
 

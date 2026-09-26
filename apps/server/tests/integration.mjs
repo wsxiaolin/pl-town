@@ -193,11 +193,18 @@ await new Promise((resolve, reject) => {
   physicsLabServer.once('error', reject);
   physicsLabServer.listen(physicsLabPort, '127.0.0.1', resolve);
 });
-// This suite exercises access, shopping and stories in an established town.
-// Fresh construction and migration policies are covered by city-governance.mjs.
+// Verify fresh-town access before preparing the established town used by this
+// suite's shopping and story scenarios. No test resident is needed for rejection.
 const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e', `
-  const { db, closeDatabase } = await import('./dist/db.js');
+  const assert = (await import('node:assert/strict')).default;
+  const { db, closeDatabase, recordBuildingVisit, purchaseBuilding } = await import('./dist/db.js');
+  const { isBuildingUnlockable } = await import('./dist/progression.js');
   const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
+  assert.equal(isBuildingUnlockable('library'), false);
+  assert.throws(() => recordBuildingVisit('fresh-town-access-check', 'library'), /Building is not built/);
+  assert.throws(() => purchaseBuilding('fresh-town-access-check', 'library', 0), /Building is not built/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM player_progress').get().count, 0);
   for (const project of config.projects.filter((entry) => entry.buildingId)) {
     db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
   }

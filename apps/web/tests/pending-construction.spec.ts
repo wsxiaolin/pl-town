@@ -47,6 +47,40 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       return [...ids].sort();
     });
     await expect.poll(renderedBuildingIds).toEqual(['commons']);
+    for (const id of ['stats', 'elevator', 'commons_outer']) {
+      expect(await page.evaluate((buildingId) => (window as any)._mini.interactBuilding(buildingId), id)).toBe(false);
+    }
+    const archive = page.getByRole('button', { name: '档案', exact: true });
+    await archive.click({ force: true });
+    await expect(page.locator('#statsPanel')).toHaveClass(/open/);
+    await expect(archive).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#spBody')).toContainText('ACHIEVEMENTS');
+    await expect(page.locator('#spBody .sp-cards')).toBeVisible();
+    await expect.poll(() => page.locator('#statsPanel').evaluate((panel) => {
+      const bounds = panel.getBoundingClientRect();
+      return bounds.left >= 0 && bounds.right <= innerWidth + 0.5;
+    })).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('new-town-archive.png') });
+    await page.getByRole('button', { name: '永退纪念碑', exact: true }).click();
+    await expect(page.locator('#statsPanel')).not.toHaveClass(/open/);
+    await expect(page.locator('#memorialOverlay')).toHaveClass(/open/);
+    await expect(page.locator('#memorialTitle')).toHaveText('物实永退用户纪念碑');
+    await expect(page.locator('.memorial-name')).toHaveCount(30);
+    await expect(page.locator('#memorialClose')).toBeFocused();
+    await page.locator('#memorialNext').click();
+    await expect(page.locator('#memorialPager')).toHaveText('2 / 4');
+    await page.screenshot({ path: testInfo.outputPath('new-town-memorial.png') });
+    await page.locator('#memorialClose').press('Escape');
+    await expect(page.locator('#memorialOverlay')).not.toHaveClass(/open/);
+    await expect(archive).toBeFocused();
+    expect(await renderedBuildingIds()).toEqual(['commons']);
+    expect(await page.evaluate(() => {
+      const header = document.querySelector('.ui-header')!;
+      return [...header.querySelectorAll('button')].every((button) => {
+        const rect = button.getBoundingClientRect();
+        return rect.width === 0 || (rect.left >= 0 && rect.right <= innerWidth);
+      });
+    })).toBe(true);
     blockReload = true;
     config = { ...config, version: 'pending-test-next' };
     state = { ...state, configVersion: config.version };

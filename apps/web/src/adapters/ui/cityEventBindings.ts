@@ -2,7 +2,9 @@ export function bindCityUiEvents(options: {
   signal: AbortSignal;
   closeRenderSettings: () => void;
   onYouClick: () => void;
+  openStats: () => void;
   closeStats: () => void;
+  openMemorial: () => void;
   setStatsMode: (mode: 'clean' | 'raw') => void;
   closeWorks: () => void;
   closeWriterCatalog: () => void;
@@ -39,6 +41,11 @@ export function bindCityUiEvents(options: {
     else void document.documentElement.requestFullscreen();
   }, { signal });
   document.getElementById('spClose')?.addEventListener('click', options.closeStats, { signal });
+  document.getElementById('statsToggle')?.addEventListener('click', options.openStats, { signal });
+  document.getElementById('spMemorial')?.addEventListener('click', () => {
+    options.closeStats();
+    options.openMemorial();
+  }, { signal });
   document.getElementById('spModeClean')?.addEventListener('click', () => options.setStatsMode('clean'), { signal });
   document.getElementById('spModeRaw')?.addEventListener('click', () => options.setStatsMode('raw'), { signal });
   document.getElementById('worksClose')?.addEventListener('click', options.closeWorks, { signal });

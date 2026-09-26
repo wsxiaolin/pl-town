@@ -352,6 +352,7 @@ const eventBindings = createEventBindings({
   getMutualAidController: () => mutualAidController,
   toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
+  openMemorial: () => cityDialogs?.openMemorial(),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
   getLoginController: () => loginController,
   isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
