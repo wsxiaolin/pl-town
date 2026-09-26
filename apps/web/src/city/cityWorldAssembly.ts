@@ -174,9 +174,11 @@ export function assembleCityWorld(options: {
   const constructionScene = createCityConstructionScene({
     scene,
     buildings: options.buildings,
+    plots: options.buildingPlotTargets,
     getIsNight: options.getIsNight,
     buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
     refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
+    hideLabel: (building) => buildingLabelController.removeLabel(building),
     refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
     onBuildingRestored: (building) => { void loadModels([building]); },
   });

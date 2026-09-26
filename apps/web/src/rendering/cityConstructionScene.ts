@@ -12,16 +12,19 @@ type Visual = { signature: string; root: THREE.Group; glow?: THREE.MeshStandardM
 export function createCityConstructionScene(options: {
   scene: THREE.Scene;
   buildings: BuildingEntity[];
+  plots?: readonly THREE.Object3D[];
   buildingAttachments?: ReadonlyMap<string, readonly THREE.Object3D[]>;
   getIsNight: () => boolean;
   refreshCollisions: () => void;
   refreshLabels: () => void;
+  hideLabel: (building: BuildingEntity) => void;
   onBuildingRestored: (building: BuildingEntity) => void;
 }) {
   const root = new THREE.Group();
   root.name = 'city-construction';
   options.scene.add(root);
   const hidden = new Map<BuildingEntity, { children: THREE.Object3D[]; labelY?: number; body?: THREE.Mesh }>();
+  const hiddenPlots = new Set<THREE.Object3D>();
   const visuals = new Map<string, Visual>();
   const detachedAttachments = new Map<THREE.Object3D, THREE.Object3D[]>();
   let disposed = false;
@@ -129,6 +132,13 @@ export function createCityConstructionScene(options: {
         && !config.initialBuiltBuildingIds.includes(building.id)
         && isConstructionPending(building.id));
       building.group.userData.constructionPending = pending;
+      building.group.visible = !pending;
+      for (const plot of options.plots ?? []) {
+        if (plot.userData.buildingId !== building.id) continue;
+        if (pending && plot.visible) { plot.visible = false; hiddenPlots.add(plot); }
+        else if (!pending && hiddenPlots.has(plot)) { plot.visible = true; hiddenPlots.delete(plot); }
+      }
+      if (pending) options.hideLabel(building);
       for (const attachment of options.buildingAttachments?.get(building.id) ?? []) {
         if (pending && !detachedAttachments.has(attachment)) {
           detachedAttachments.set(attachment, [...attachment.children]);
@@ -211,8 +221,12 @@ export function createCityConstructionScene(options: {
         building.group.add(...saved.children);
         building.body = saved.body;
         building.labelY = saved.labelY;
+        building.group.visible = true;
+        building.group.userData.constructionPending = false;
       });
       hidden.clear();
+      hiddenPlots.forEach((plot) => { plot.visible = true; });
+      hiddenPlots.clear();
       detachedAttachments.forEach((children, attachment) => attachment.add(...children));
       detachedAttachments.clear();
       root.removeFromParent();
