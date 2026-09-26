@@ -2,9 +2,9 @@
 // which GPU will actually render the city, and to seed sensible quality
 // defaults. WebGL deliberately hides eGPU/discrete details behind a generic
 // vendor string, so we read the unmasked renderer (WEBGL_debug_renderer_info)
-// and classify by keyword; when WebGPU is available we cross-check the
-// adapter info. The raw renderer string is always surfaced so an external
-// GPU (eGPU) shows up under its own name as reported by the driver.
+// and classify by keyword. The raw renderer string is always surfaced so an
+// external GPU (eGPU) shows up under its own name as reported by the driver.
+// WebGPU support is a synchronous navigator.gpu existence check.
 
 export type GpuTier = 'discrete' | 'integrated' | 'apple' | 'software' | 'unknown';
 
@@ -54,16 +54,6 @@ function readWebGlRenderer(): { renderer: string; vendor: string } {
   }
 }
 
-async function probeWebGpu(): Promise<boolean> {
-  try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown | null> } }).gpu;
-    if (!gpu) return false;
-    return Boolean(await gpu.requestAdapter());
-  } catch {
-    return false;
-  }
-}
-
 function readCachedGpuInfo(): GpuInfo | null {
   try {
     const raw = localStorage.getItem(GPU_INFO_KEY);
@@ -75,32 +65,19 @@ function readCachedGpuInfo(): GpuInfo | null {
 }
 
 /**
- * Resolve the device's GPU identity. Uses the cached first-boot sample when
- * present (cheap + stable); pass `refresh: true` during the heavy boot to
- * re-probe once and refresh WebGPU availability.
- */
-export async function resolveGpuInfo(refresh = false): Promise<GpuInfo> {
-  const cached = readCachedGpuInfo();
-  if (cached && !refresh) return { ...cached, webgpu: cached.webgpu };
-  const { renderer, vendor } = readWebGlRenderer();
-  const webgpu = await probeWebGpu();
-  const { tier, tierLabel } = classifyGpu(renderer || 'unknown');
-  const info: GpuInfo = { renderer: renderer || '未知', vendor, tier, tierLabel, webgpu, sampledAt: Date.now() };
-  try { localStorage.setItem(GPU_INFO_KEY, JSON.stringify(info)); } catch { /* storage may be unavailable. */ }
-  return info;
-}
-
-/**
  * Synchronous probe for the boot path — cached sample when available, else a
- * quick WebGL read (WebGPU availability enriches the line asynchronously via
- * `resolveGpuInfo` and is picked up on later boots).
+ * quick WebGL read. The probe context is destroyed via WEBGL_lose_context and
+ * the result cached, so the second-context cost (see Agents.md warning) is
+ * paid once per device, never per boot. WebGPU availability is a synchronous
+ * `navigator.gpu` existence check — informational only.
  */
 export function probeGpu(): GpuInfo {
   const cached = readCachedGpuInfo();
   if (cached) return cached;
   const { renderer, vendor } = readWebGlRenderer();
   const { tier, tierLabel } = classifyGpu(renderer || 'unknown');
-  const info: GpuInfo = { renderer: renderer || '未知', vendor, tier, tierLabel, webgpu: false, sampledAt: Date.now() };
+  const webgpu = Boolean((navigator as Navigator & { gpu?: unknown }).gpu);
+  const info: GpuInfo = { renderer: renderer || '未知', vendor, tier, tierLabel, webgpu, sampledAt: Date.now() };
   try { localStorage.setItem(GPU_INFO_KEY, JSON.stringify(info)); } catch { /* ignore. */ }
   return info;
 }

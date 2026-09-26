@@ -4,8 +4,9 @@
 //
 // Light visit: the boot screen shows the matching still with a slow drift and
 // a small caption, holds for a breath, then fades into the city or login.
-// Heavy visit: all four stills slowly cycle behind the download pipeline, so
-// the wait reads as one day passing over the city.
+// Heavy visit: the SAME current-moment still holds behind the download
+// pipeline — the splash must match the clock outside, so there is no
+// day-passing cycle; the progress bar carries the sense of time.
 
 import dawnUrl from '../assets/moments/dawn.webp';
 import noonUrl from '../assets/moments/noon.webp';
@@ -24,18 +25,21 @@ type MomentDefinition = {
 };
 
 // 5:00–10:59 dawn · 11:00–16:59 noon · 17:00–19:59 dusk · 20:00–4:59 night
-const MOMENTS: MomentDefinition[] = [
+const MOMENTS: readonly MomentDefinition[] = [
   { name: 'dawn', label: '清晨', caption: '清晨的物实小城', url: dawnUrl, fromHour: 5 },
   { name: 'noon', label: '正午', caption: '正午的物实小城', url: noonUrl, fromHour: 11 },
   { name: 'dusk', label: '黄昏', caption: '黄昏的物实小城', url: duskUrl, fromHour: 17 },
   { name: 'night', label: '夜晚', caption: '夜幕下的物实小城', url: nightUrl, fromHour: 20 },
 ];
 
+// Precomputed once — momentForHour must not clone+sort on every probe.
+const ORDERED_MOMENTS: readonly MomentDefinition[] = [...MOMENTS].sort((a, b) => a.fromHour - b.fromHour);
+
 export function momentForHour(hour: number): MomentDefinition {
-  const ordered = [...MOMENTS].sort((a, b) => a.fromHour - b.fromHour);
-  // MOMENTS is a non-empty constant; the last entry (20:00) covers deep night.
-  let current: MomentDefinition = ordered[ordered.length - 1]!;
-  for (const moment of ordered) {
+  // ORDERED_MOMENTS is a non-empty constant; the last entry (20:00) covers
+  // deep night.
+  let current: MomentDefinition = ORDERED_MOMENTS[ORDERED_MOMENTS.length - 1]!;
+  for (const moment of ORDERED_MOMENTS) {
     if (hour >= moment.fromHour) current = moment;
   }
   return current;
@@ -54,16 +58,10 @@ let cityReady = false;
 let minimumElapsed = false;
 let skipRequested = false;
 let revealListeners: (() => void) | null = null;
-let slideshowTimer: number | null = null;
 let revealBound = false;
 
 function bootScreen(): HTMLElement | null {
   return document.getElementById('bootScreen');
-}
-
-function setMomentImage(img: HTMLImageElement | null, url: string): void {
-  if (!img) return;
-  img.src = url;
 }
 
 function swapToMoment(moment: MomentDefinition, instant: boolean): void {
@@ -92,18 +90,8 @@ function swapToMoment(moment: MomentDefinition, instant: boolean): void {
   }
 }
 
-function startSlideshow(): void {
-  stopSlideshow();
-  // Heavy boot holds the CURRENT real-world moment: the still must match the
-  // clock outside, so no day-passing cycle — the progress bar carries time.
+function showCurrentMoment(): void {
   swapToMoment(momentForDate(), true);
-}
-
-function stopSlideshow(): void {
-  if (slideshowTimer !== null) {
-    clearTimeout(slideshowTimer);
-    slideshowTimer = null;
-  }
 }
 
 function bindSkip(): void {
@@ -131,12 +119,12 @@ export function showMomentSplash(): void {
 }
 
 /** Heavy visit: the current real-world moment holds behind the pipeline. */
-export function showMomentSlideshow(): void {
+export function showMomentHeavy(): void {
   const screen = bootScreen();
   if (!screen) return;
   screen.classList.remove('is-splash');
   screen.classList.add('is-moment', 'is-heavy');
-  startSlideshow();
+  showCurrentMoment();
   scheduleMinimumElapsed();
   bindSkip();
 }
@@ -145,8 +133,31 @@ function scheduleMinimumElapsed(): void {
   window.setTimeout(notifyMinimumElapsed, MIN_SPLASH_MS);
 }
 
+/**
+ * Reveal completed (or the session tore down): the stills are hidden, so stop
+ * their slow drift animations and drop the decoded bitmaps. Keeps GPU/CPU
+ * memory from idling on an invisible 60fps transform for the whole session.
+ */
+function freezeMomentPresentation(): void {
+  for (const id of ['bootMomentImgA', 'bootMomentImgB']) {
+    const img = document.getElementById(id) as HTMLImageElement | null;
+    if (!img) continue;
+    img.style.animation = 'none';
+    // Clear only after the boot fade has fully finished — clearing earlier
+    // would flash a blank frame during the fade-out.
+    window.setTimeout(() => { img.removeAttribute('src'); }, SLIDESHOW_FADE_MS + 400);
+  }
+}
+
 export function stopMomentPresentation(): void {
-  stopSlideshow();
+  freezeMomentPresentation();
+  // Defensive reset so a same-document re-boot cannot inherit stale gate
+  // flags. revealBound intentionally stays: the pointer listener must not
+  // stack across re-binds.
+  cityReady = false;
+  minimumElapsed = false;
+  skipRequested = false;
+  revealListeners = null;
 }
 
 /**
@@ -173,10 +184,5 @@ export function notifyCityReady(): void {
 /** Called once the minimum splash display time has elapsed. */
 export function notifyMinimumElapsed(): void {
   minimumElapsed = true;
-  checkReveal();
-}
-
-export function requestSkipMoment(): void {
-  skipRequested = true;
   checkReveal();
 }

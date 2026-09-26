@@ -16,12 +16,16 @@ const fallbackServerUrl = 'wss://pl-town.onrender.com';
 const serverUrl = process.env.VITE_SERVER_URL ?? (cloudflarePages ? fallbackServerUrl : '');
 
 // Build identity for the boot gate: a visitor only takes the fast path while
-// this id matches the one stored after their last full precache.
+// this id matches the one stored after their last full precache. A dirty
+// working tree gets a `-dirty` suffix so uncommitted local edits always
+// invalidate the precache instead of silently reusing stale bundles.
 function webBuildId(): string {
   const pkg = JSON.parse(readFileSync(resolve(webRoot, 'package.json'), 'utf8')) as { version?: string };
   let commit = 'local';
   try {
     commit = execSync('git rev-parse --short HEAD', { cwd: webRoot, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || commit;
+    const dirty = execSync('git status --porcelain', { cwd: webRoot, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (dirty) commit = `${commit}-dirty`;
   } catch { /* not a git checkout (e.g. Pages zip build) — version still identifies the bundle. */ }
   return `${pkg.version ?? '0.0.0'}+${commit}`;
 }

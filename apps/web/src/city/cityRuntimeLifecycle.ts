@@ -7,17 +7,19 @@ import { readRenderSettings } from '../rendering/createRenderer';
 import { applyGpuSuggestedRenderSettings, describeGpuForBoot, probeGpu } from '../rendering/gpuCapability';
 import { resolveBootDecision, markBootComplete, type BootDecision } from './bootGate';
 import { createBootPipelineUi, describeDownload, downloadAllAssets, type BootPipelineUi } from './bootPipeline';
-import { showMomentSlideshow, showMomentSplash, stopMomentPresentation } from './momentSplash';
-import { showUnlockToast } from './toast';
+import { showMomentHeavy, showMomentSplash, stopMomentPresentation } from './momentSplash';
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
+
+/** Hard ceiling for the heavy boot's networked + precompile stages. */
+const BOOT_WATCHDOG_MS = 240_000;
 
 export function createCityRuntimeLifecycle(options: {
   reduced: boolean;
   isNight: () => boolean;
   initCity: () => void;
   /** Heavy boot only: precompile shaders + warm-up frames before reveal. */
-  prepareFirstFrame?: (onProgress?: (fraction: number) => void) => Promise<void>;
+  prepareFirstFrame?: (onProgress?: (fraction: number) => void, signal?: AbortSignal) => Promise<void>;
   startTutorial: () => void;
   proceedToCity: () => void;
   showLogin: () => void;
@@ -70,11 +72,27 @@ export function createCityRuntimeLifecycle(options: {
    * Heavy boot — first visit, updated build/server, or lost precache.
    * Download everything, build the scene, precompile the render pipeline,
    * then persist the precache marker so future visits take the fast path.
+   * A 240 s watchdog bounds the networked stages: a single stalled response
+   * (or a backgrounded tab freezing the rAF-driven precompile) degrades to
+   * the procedural-fallback boot instead of trapping the visitor on the
+   * splash forever.
    */
   async function runHeavyBoot(decision: BootDecision, pipeline: BootPipelineUi, signal: AbortSignal, texturePreload: Promise<void>) {
+    const bootAbort = new AbortController();
+    const forwardSessionAbort = () => bootAbort.abort();
+    signal.addEventListener('abort', forwardSessionAbort, { once: true });
+    const watchdog = window.setTimeout(() => {
+      pipeline.setDetail('加载超时，正在尽力进入小城…');
+      bootAbort.abort();
+    }, BOOT_WATCHDOG_MS);
+    const finish = () => {
+      window.clearTimeout(watchdog);
+      signal.removeEventListener('abort', forwardSessionAbort);
+    };
+
     const gpu = probeGpu();
     applyGpuSuggestedRenderSettings(gpu);
-    showMomentSlideshow();
+    showMomentHeavy();
     pipeline.show();
     pipeline.setGpu(describeGpuForBoot(gpu));
     pipeline.beginStage('download');
@@ -84,26 +102,28 @@ export function createCityRuntimeLifecycle(options: {
       const download = await downloadAllAssets((progress) => {
         pipeline.setStageProgress('download', progress.loadedFiles / Math.max(1, progress.totalFiles));
         pipeline.setDetail(describeDownload(progress));
-      }, signal);
+      }, bootAbort.signal);
       pipeline.setStageProgress('download', 1);
       pipeline.setDetail(describeDownload(download));
     } catch {
       pipeline.setDetail('部分资源下载失败，已回退程序化材质');
     }
-    if (!started || signal.aborted) return;
+    if (!started || signal.aborted) { finish(); return; }
 
-    // Texture preload re-runs with force: it populates the runtime texture
-    // registry from the just-filled HTTP cache, ignoring data-saver modes.
+    // Texture preload re-runs with force: it re-warms the HTTP cache from
+    // scratch, ignoring the texture setting and data-saver modes so the
+    // precache lands in full.
     pipeline.beginStage('scene');
     pipeline.setDetail('校验高清材质包…');
     await texturePreload;
-    await preloadTextureResources(true, signal, true).catch(() => {});
-    if (!started || signal.aborted) return;
+    await preloadTextureResources(true, bootAbort.signal, true).catch(() => {});
+    if (!started || signal.aborted) { finish(); return; }
 
-    await bootCity(pipeline, true);
+    await bootCity(pipeline, true, decision.serverVersion, bootAbort.signal);
+    finish();
   }
 
-  async function bootCity(pipeline: BootPipelineUi, heavy: boolean) {
+  async function bootCity(pipeline: BootPipelineUi, heavy: boolean, serverVersion?: string | null, precompileSignal?: AbortSignal) {
     if (!started) return;
     try {
       await loadCityGovernance(eventController.signal);
@@ -131,7 +151,7 @@ export function createCityRuntimeLifecycle(options: {
         await options.prepareFirstFrame?.((fraction) => {
           pipeline.setStageProgress('precompile', fraction);
           if (fraction < 1) pipeline.setDetail(`预编译着色器与首帧预热 ${Math.round(fraction * 100)}%`);
-        });
+        }, precompileSignal);
       } catch (error) {
         console.error('First-frame precompile failed', error);
       }
@@ -145,7 +165,9 @@ export function createCityRuntimeLifecycle(options: {
       pipeline.setStageProgress('ready', 1);
       pipeline.setDetail('一切就绪');
       // Precache landed — future visits skip the heavy pipeline entirely.
-      markBootComplete();
+      // The server version observed by THIS boot only becomes "consumed"
+      // here: a boot abandoned mid-download must re-run the update.
+      markBootComplete(serverVersion);
     }
 
     window.dispatchEvent(new CustomEvent('minicity:city-ready'));

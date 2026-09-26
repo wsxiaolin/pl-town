@@ -18,6 +18,10 @@ export const RENDER_SETTINGS = JSON.stringify({
  */
 export async function seedCityStorage(page: Page, user = 'tester'): Promise<void> {
   await page.addInitScript(({ settings, u }) => {
+    // Spec boots must take the light path: the heavy pipeline (45 MB download
+    // + shader precompile behind SwiftShader) is its own dedicated test and
+    // would blow every other spec's timeout budget.
+    localStorage.setItem('minicityForceBoot', 'light');
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', u);
     localStorage.setItem('minicityRenderSettings', settings);

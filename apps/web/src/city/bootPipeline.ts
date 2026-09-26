@@ -17,7 +17,6 @@ const assetUrls: string[] = Object.values(
 
 export type DownloadProgress = {
   loadedBytes: number;
-  totalBytes: number;
   loadedFiles: number;
   totalFiles: number;
   failedFiles: number;
@@ -32,7 +31,6 @@ export type BootPipelineUi = {
   setDetail: (text: string) => void;
   setGpu: (text: string) => void;
   show: () => void;
-  hide: () => void;
 };
 
 const STAGE_WEIGHTS: Record<PipelineStage, number> = { download: 0.68, scene: 0.06, precompile: 0.22, ready: 0.04 };
@@ -78,7 +76,6 @@ export function createBootPipelineUi(): BootPipelineUi {
       gpuEl.hidden = !text;
     },
     show() { root?.classList.add('is-active'); },
-    hide() { root?.classList.remove('is-active'); },
   };
 }
 
@@ -92,35 +89,45 @@ export async function downloadAllAssets(
   signal?: AbortSignal,
 ): Promise<DownloadProgress> {
   const progress: DownloadProgress = {
-    loadedBytes: 0, totalBytes: 0, loadedFiles: 0, totalFiles: assetUrls.length, failedFiles: 0, done: false,
+    loadedBytes: 0, loadedFiles: 0, totalFiles: assetUrls.length, failedFiles: 0, done: false,
   };
   if (assetUrls.length === 0) { progress.done = true; onProgress({ ...progress }); return progress; }
 
   let cursor = 0;
   const concurrency = Math.min(6, assetUrls.length);
 
+  // 45 MB arrives as thousands of stream chunks — emitting per chunk would
+  // hammer the DOM. Cap updates to ~0.1 MB steps (file completions pass).
+  let emittedBytes = -1;
+  let emittedFiles = -1;
+  const emit = (force = false): void => {
+    if (!force && progress.loadedBytes - emittedBytes < 102_400 && progress.loadedFiles === emittedFiles) return;
+    emittedBytes = progress.loadedBytes;
+    emittedFiles = progress.loadedFiles;
+    onProgress({ ...progress });
+  };
+
   const fetchOne = async (url: string): Promise<void> => {
     try {
       const response = await fetch(url, { signal });
       if (!response.ok) throw new Error(String(response.status));
-      const length = Number(response.headers.get('content-length') ?? 0);
-      if (Number.isFinite(length) && length > 0) progress.totalBytes += length;
       if (response.body) {
         const reader = response.body.getReader();
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           progress.loadedBytes += value.byteLength;
-          onProgress({ ...progress });
+          emit();
         }
       }
       progress.loadedFiles += 1;
+      emit(true);
     } catch (error) {
       if (signal?.aborted) return;
       progress.failedFiles += 1;
       void error;
+      emit(true);
     }
-    onProgress({ ...progress });
   };
 
   const workers = Array.from({ length: concurrency }, async () => {

@@ -664,6 +664,14 @@ try {
   await waitFor(alice, 'error', (message) => message.message === 'Invalid member');
   const healthAfterMaliciousMessage = await fetch(`${adminOrigin}/healthz`);
   if (!healthAfterMaliciousMessage.ok) throw new Error('Malformed housing messages must not terminate the server');
+
+  const versionResponse = await fetch(`${adminOrigin}/town-api/version`);
+  if (!versionResponse.ok) throw new Error('/town-api/version must respond 200');
+  if (versionResponse.headers.get('cache-control') !== 'no-store') throw new Error('/town-api/version must be no-store (the client boot gate probes it every visit)');
+  const versionBody = await versionResponse.json();
+  if (typeof versionBody.version !== 'string' || !versionBody.version) throw new Error('/town-api/version must expose a version string');
+  if (typeof versionBody.commit !== 'string') throw new Error('/town-api/version must expose a commit string (may be empty without git metadata)');
+  if ('startedAt' in versionBody) throw new Error('/town-api/version must not disclose the server boot wall-clock');
   send(bob, { type: 'housing.apply', buildingId });
   const application = await waitFor(alice, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'application' && request.requesterId === bob.hello.user.id));
   send(alice, { type: 'housing.accept', requestId: application.requests.find((request) => request.kind === 'application').id });

@@ -15,7 +15,7 @@ export type TextureProgress = {
 const failedUrls = new Set<string>();
 let ready = false;
 let started = false;
-let inFlight: Promise<void> | null = null;
+let activeRun: { promise: Promise<void>; controller: AbortController; forced: boolean } | null = null;
 let progress: TextureProgress = {
   loadedBytes: 0,
   totalBytes: 0,
@@ -32,10 +32,15 @@ function publish(): void {
   listeners.forEach((listener) => listener(state));
 }
 
+/**
+ * Coalesces per-chunk progress into at most ~7 DOM updates per second via a
+ * timer (not rAF): 45 MB arrives as thousands of chunks, and a backgrounded
+ * tab stops scheduling rAF entirely, which used to freeze the progress bar.
+ */
 function publishSoon(): void {
   if (publishQueued) return;
   publishQueued = true;
-  requestAnimationFrame(() => { publishQueued = false; publish(); });
+  window.setTimeout(() => { publishQueued = false; publish(); }, 150);
 }
 
 async function readTexture(url: string, signal: AbortSignal): Promise<void> {
@@ -93,25 +98,48 @@ export function subscribeTextureResourceProgress(listener: TextureProgressListen
 }
 
 export function preloadTextureResources(enabled = true, signal?: AbortSignal, force = false): Promise<void> {
-  if (started) return inFlight ?? Promise.resolve();
-  started = true;
+  if (activeRun) {
+    if (!force || activeRun.forced) return activeRun.promise;
+    // A forced run (heavy boot) upgrades an in-flight ambient pass: the
+    // precache must use the full-URL, long-timeout semantics, so cancel the
+    // ambient pass and restart with force semantics.
+    activeRun.controller.abort();
+    void activeRun.promise.catch(() => {});
+    activeRun = null;
+  }
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  // Heavy boot passes force=true: the precache must land in full regardless
-  // of the visitor's texture setting or data-saver mode.
+  // force (heavy boot) ignores the texture setting and data-saver modes: the
+  // precache must land in full so city load never waits on the network.
   if (!force && (!enabled || connection?.saveData || connection?.effectiveType === 'slow-2g')) {
     ready = true;
-    inFlight = Promise.resolve();
-    return inFlight;
+    return Promise.resolve();
   }
+  // An ambient run already completed — re-running would only re-read the
+  // HTTP cache; a forced run re-opens the pass even after an ambient skip so
+  // the first visit still lands a complete precache.
+  if (ready && !force) return Promise.resolve();
+  started = true;
+  // Fresh counters per run: an aborted (upgraded) ambient pass must not
+  // leave its half-fetched URLs marked as failed for the city renderer.
+  failedUrls.clear();
+  progress = {
+    loadedBytes: 0,
+    totalBytes: 0,
+    loadedFiles: 0,
+    totalFiles: Object.values(textureModules).length,
+    failedFiles: 0,
+  };
   publish();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), force ? 240_000 : 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  inFlight = runWithConcurrency(Object.values(textureModules), 6, controller.signal).then(() => {
+  const promise = runWithConcurrency(Object.values(textureModules), 6, controller.signal).then(() => {
     clearTimeout(timeout);
     ready = true;
     publish();
+    if (activeRun?.promise === promise) activeRun = null;
   });
-  return inFlight;
+  activeRun = { promise, controller, forced: force };
+  return promise;
 }

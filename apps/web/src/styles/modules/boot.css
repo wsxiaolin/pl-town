@@ -80,7 +80,6 @@
 .boot-title-row h1 { color: #F7F9FE; font-size: clamp(22px, 3vw, 32px); font-weight: 500; letter-spacing: 0.04em; line-height: 1.2; text-shadow: 0 1px 16px rgba(4, 8, 14, 0.7); }
 .boot-live { display: inline-flex; align-items: center; gap: 6px; color: #C9D8F2; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; white-space: nowrap; }
 .boot-live i { width: 6px; height: 6px; border-radius: 50%; background: #F2A36F; box-shadow: 0 0 0 4px rgba(242, 163, 111, 0.12); animation: boot-pulse 1.6s ease-in-out infinite; }
-.boot-subtitle { margin-top: 10px; color: rgba(220, 232, 255, 0.78); font-size: 12px; letter-spacing: 0.06em; text-shadow: 0 1px 12px rgba(4, 8, 14, 0.7); }
 .boot-screen:not(.is-heavy) .boot-content { display: none; }
 
 /* Bottom progress pipeline — one slow honest bar for the whole heavy boot. */
@@ -126,7 +125,6 @@
 .boot-gpu-line { margin-top: 5px; color: rgba(122, 142, 174, 0.85); font-size: 10px; letter-spacing: 0.06em; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .boot-screen:not(.is-heavy) .boot-pipeline { display: none; }
-.boot-screen .texture-load-panel[hidden] { display: none; }
 
 @keyframes boot-moment-drift {
   from { transform: scale(1.06) translateX(-0.6%); }

@@ -777,22 +777,41 @@ function disposeSession() {
 }
 
 /**
- * Boot precompile: links every shader program in the scene and renders a few
- * warm-up frames (mirror water, sky, lighting programs + GPU texture upload)
- * so the first visible frame is instant. Runs on BOTH heavy and light boots;
- * the frame loop stays held until this resolves. Never blocks entry on
- * failure — releaseRender always runs.
+ * Aborts (resolves) a pending promise when the boot watchdog fires. Used so a
+ * stuck shader compile can never trap the visitor behind the splash forever —
+ * the render gate releases and the boot degrades to a plain first frame.
  */
-async function prepareFirstFrame(onProgress?: (fraction: number) => void): Promise<void> {
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.resolve(undefined as T);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => resolve(undefined as T);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+}
+
+/**
+ * Compiles the scene's GPU programs and renders warm-up frames BEFORE the
+ * first visible frame, so visitors never watch a shader-compilation freeze.
+ * `signal` is the boot watchdog: on abort the gate releases immediately and
+ * the boot proceeds (worst case: one janky first frame — better than an
+ * eternal splash). Any failure — releaseRender always runs.
+ */
+async function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
   try {
     if (!renderer || !scene || !camera) return;
     onProgress?.(0.15);
-    await renderer.compileAsync(scene, camera);
+    await abortable(renderer.compileAsync(scene, camera), signal);
     onProgress?.(0.7);
     for (let i = 0; i < 3; i += 1) {
+      if (signal?.aborted) break;
       renderer.render(scene, camera);
       onProgress?.(0.7 + (i + 1) * 0.1);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await abortable(new Promise((resolve) => requestAnimationFrame(resolve)), signal);
     }
     onProgress?.(1);
   } catch (error) {

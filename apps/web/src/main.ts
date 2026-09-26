@@ -1,12 +1,9 @@
 import './styles/index.css';
 import { destroyMiniCity, startMiniCity } from './city/MiniCityApp';
 import { initTelemetry } from './core/telemetryClient';
-import { subscribeTextureResourceProgress } from './city/textureResourcePreloader';
-import { finishTextureLoadUi, updateTextureLoadUi } from './adapters/ui/textureLoadUi';
 import { notifyCityReady, stopMomentPresentation, whenBootRevealAllowed } from './city/momentSplash';
 
 void initTelemetry();
-subscribeTextureResourceProgress(updateTextureLoadUi);
 
 async function requestLandscape(): Promise<void> {
   if (window.innerHeight <= window.innerWidth) return;
@@ -23,12 +20,13 @@ async function requestLandscape(): Promise<void> {
 void requestLandscape();
 window.addEventListener('pointerdown', requestLandscape, { once: true });
 
-startMiniCity();
-
+// Listeners register BEFORE startMiniCity: the city-ready event can only be
+// observed reliably once both sides are wired.
 window.addEventListener('minicity:city-ready', () => {
-  finishTextureLoadUi();
   notifyCityReady();
 }, { once: true });
+
+startMiniCity();
 
 // The boot screen fades only when the city is ready AND the moment splash has
 // had its breath (or the visitor clicked through it).

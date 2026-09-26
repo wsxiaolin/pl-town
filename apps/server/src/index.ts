@@ -453,7 +453,9 @@ const http = createServer(async (request, response) => {
   }
   if (request.method === 'GET' && request.url === '/town-api/version') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ version: SERVER_VERSION, commit: SERVER_COMMIT, startedAt }));
+    // Only the fields the client boot gate reads — startedAt (server boot
+    // wall-clock) stays out of the public payload.
+    response.end(JSON.stringify({ version: SERVER_VERSION, commit: SERVER_COMMIT }));
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
