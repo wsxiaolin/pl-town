@@ -21,7 +21,7 @@ async function damageCity(page: Page, initiallyBuilt: boolean) {
     epoch: 'pending-damage', revision: 0, configVersion: config.version,
     projects: config.projects.map(({ id }) => ({
       id, funded: initiallyBuilt && id === 'build-research' ? 3000 : 0,
-      built: initiallyBuilt && id === 'build-research',
+      built: initiallyBuilt && id === 'build-research', votes: 0,
     })), decorations: [],
   };
   stubCityWebSocket(page, { user: 'pending-damage-tester', unlockedBuildings: ['commons', 'research'] });

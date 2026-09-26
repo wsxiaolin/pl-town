@@ -4,6 +4,7 @@ import { CITY_CONSTRUCTION_CONFIG as config, COLLECTIVE_STORY_BUILDING_IDS } fro
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
 import { reconcileInitialBuildings } from './cityGovernanceMigration.js';
+import { initializeCityVoting } from './cityVotingSchema.js';
 import { reconcileLegacyAreaProjectLayout } from './cityAreaLayoutMigration.js';
 import { validateCityAreaPlacement } from './cityAreaPlacement.js';
 
@@ -105,4 +106,5 @@ export function initializeCityGovernance(db: Database.Database): void {
   db.prepare('INSERT OR IGNORE INTO city_meta (id, revision, config_version, epoch) VALUES (1, 0, ?, ?)').run(config.version, randomUUID());
   db.prepare("UPDATE city_meta SET epoch = ? WHERE epoch = ''").run(randomUUID());
   db.prepare('UPDATE city_meta SET config_version = ?, revision = revision + 1 WHERE id = 1 AND config_version <> ?').run(config.version, config.version);
+  initializeCityVoting(db);
 }

@@ -13,7 +13,9 @@ const dataDir = mkdtempSync(join(tmpdir(), 'minicity-city-'));
 const env = { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir, LOG_DIR: join(dataDir, 'logs'), BACKUP_DIR: join(dataDir, 'backups'), HOST: '127.0.0.1', PORT: '8787', ALLOW_ORIGINLESS_WEBSOCKET: 'true', AUTO_BACKUP_ENABLED: 'false', BACKUP_ON_START: 'false', BIGMODEL_API_KEY: '', OSS_ENABLED: 'false', ALLOWED_ORIGINS: 'https://city.example.test', ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_ACCOUNTS_JSON: '' };
 const cwd = new URL('..', import.meta.url);
 function fixture(code) {
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd, env, encoding: 'utf8', timeout: 15000 });
+  // Keep large migration fixtures off the command line for Windows hosts.
+  const result = spawnSync(process.execPath, ['--input-type=module'], { cwd, env, input: code, encoding: 'utf8', timeout: 15000 });
+  assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 fixture(`
@@ -140,6 +142,38 @@ try {
   assert.equal(config.projects.find((entry) => entry.id === 'greenbelt-trees').placements.length, 2);
   for (const id of ['north-community-garden', 'south-community-grove']) assert.ok(config.projects.find((entry) => entry.id === id).placements.length >= 8);
   const project = config.projects.find((entry) => entry.buildingId === 'catcafe');
+  const votingResident = await resident('city-token-a');
+  const votingObserver = await resident('city-token-b');
+  assert.equal((await fetch(`${base}/town-api/city/votes`)).status, 401);
+  const vote = { token: 'city-token-a', requestId: 'vote-first', projectId: project.id };
+  await post('vote', { ...vote, token: 'invalid' }, 401);
+  await post('vote', { ...vote, requestId: '' }, 400);
+  await post('vote', { ...vote, projectId: 'missing' }, 404);
+  await post('vote', { ...vote, projectId: 'east-gate-path' }, 400);
+  await post('vote', { ...vote, configVersion: 'old' }, 409);
+  const voted = await post('vote', vote);
+  assert.equal(voted.state.projects.find((entry) => entry.id === project.id).votes, 1);
+  assert.equal(voted.state.projects.find((entry) => entry.id === project.id).funded, 0);
+  assert.deepEqual(voted.votes.projectIds, [project.id]);
+  await votingObserver.wait((entry) => entry.type === 'city.updated' && entry.state.revision === voted.state.revision);
+  assert.equal(votingResident.messages.find((entry) => entry.type === 'hello').progress.currency, 10000);
+  const repeatedVote = await post('vote', vote);
+  assert.equal(repeatedVote.replayed, true);
+  assert.equal(repeatedVote.operationRevision, voted.state.revision);
+  assert.equal((await post('vote', { ...vote, requestId: 'another-click' })).state.revision, voted.state.revision);
+  await post('vote', { ...vote, projectId: config.projects.find((entry) => entry.buildingId === 'shrine').id }, 409);
+  const secondVote = await post('vote', { ...vote, token: 'city-token-b' });
+  assert.equal(secondVote.state.projects.find((entry) => entry.id === project.id).votes, 2);
+  const myVotesResponse = await fetch(`${base}/town-api/city/votes`, { headers: { authorization: 'Bearer city-token-a' } });
+  assert.equal(myVotesResponse.headers.get('cache-control'), 'no-store');
+  assert.deepEqual((await myVotesResponse.json()).projectIds, [project.id]);
+  const anotherProject = config.projects.find((entry) => entry.buildingId === 'shrine');
+  const concurrentVotes = await Promise.all(['vote-race-a', 'vote-race-b'].map((requestId) => post('vote', { ...vote, requestId, projectId: anotherProject.id })));
+  assert.equal(concurrentVotes.filter((entry) => entry.replayed).length, 1);
+  assert.equal(concurrentVotes[1].state.projects.find((entry) => entry.id === anotherProject.id).votes, 1);
+  await stop();
+  await start();
+  assert.equal((await post('vote', vote)).replayed, true);
   const a = await resident('city-token-a');
   const b = await resident('city-token-b');
   const hello = a.messages.find((entry) => entry.type === 'hello');
@@ -170,6 +204,8 @@ try {
   assert.equal(finish.state.projects.find((entry) => entry.id === project.id).built, true);
   await b.wait((entry) => entry.type === 'world.catalog' && entry.catalog.buildingUnlockable.catcafe === true);
   await post('donate', { ...donation, requestId: 'finished' }, 409);
+  // Replaying an existing vote remains safe even after construction completes.
+  assert.equal((await post('vote', vote)).replayed, true);
   // Reset rate windows before the next independent group of scenarios.
   await stop();
   await start();
@@ -233,8 +269,12 @@ try {
   const beforeRestart = await (await fetch(`${base}/town-api/city/state`)).json();
   await stop();
   await start();
-  assert.deepEqual(await (await fetch(`${base}/town-api/city/state`)).json(), beforeRestart);
-  assert.equal((await post('donate', donation)).replayed, true);
+  const afterRestart = await (await fetch(`${base}/town-api/city/state`)).json();
+  assert.deepEqual(afterRestart, beforeRestart);
+  // Restart isolates this process-local rate budget. The GET above is free;
+  // this replay and the following 19 mutations fill its 20-request window.
+  const restartReplay = await post('donate', donation);
+  assert.equal(restartReplay.replayed, true);
   for (let i = 0; i < 19; i++) await post('donate', donation);
   await post('donate', donation, 429);
   await stop();
@@ -242,6 +282,7 @@ try {
     const assert = (await import('node:assert/strict')).default;
     const { db, getUser, purchaseBuilding, recordBuildingVisit, purchaseItem, backupDatabase, restoreFromBackupFile, closeDatabase } = await import('./dist/db.js');
     const { mutateCity, getCityState } = await import('./dist/cityGovernance.js');
+    const { voteCity, getCityVotes } = await import('./dist/cityVoting.js');
     const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
     const { BUILDING_CATALOG } = await import('./dist/data/buildingCatalog.js');
     const { LEGACY_INITIAL_BUILDINGS, LEGACY_UNLOCK_PRESERVATION_BUILDINGS, reconcileInitialBuildings } = await import('./dist/cityGovernanceMigration.js');
@@ -262,6 +303,9 @@ try {
     assert.equal(getCityState().decorations.find((entry) => entry.ownerId === user.id).ownerNickname, 'RenamedResident');
     db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run(user.nickname, user.id);
     db.prepare('UPDATE player_progress SET currency = 0 WHERE user_id = ?').run(user.id);
+    const freeVote = voteCity(user, { configVersion: config.version, requestId: 'zero-balance-vote', projectId: config.projects.find((entry) => entry.buildingId === 'academy').id });
+    assert.equal(db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency, 0);
+    assert.ok(freeVote.votes.projectIds.includes(config.projects.find((entry) => entry.buildingId === 'academy').id));
     const before = getCityState();
     assert.throws(() => mutateCity(user, 'donate', { configVersion: config.version, requestId: 'poor', projectId: 'greenbelt-trees', amount: 1 }), /Insufficient/);
     assert.deepEqual(getCityState(), before);
@@ -292,6 +336,8 @@ try {
     assert.notEqual(restored.epoch, before.epoch);
     assert.deepEqual({ ...restored, epoch: before.epoch }, before);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM city_operations').get().n, operationsBefore);
+    assert.deepEqual(getCityVotes(user.id).projectIds, freeVote.votes.projectIds);
+    assert.equal(voteCity(user, { configVersion: config.version, requestId: 'zero-balance-vote', projectId: config.projects.find((entry) => entry.buildingId === 'academy').id }).replayed, true);
     assert.equal(db.prepare('SELECT session_expires_at FROM users WHERE id = ?').get(user.id).session_expires_at, null);
     const { initializeCityGovernance } = await import('./dist/cityGovernanceSchema.js');
     const stored = db.prepare('SELECT config_json FROM city_configs WHERE version = ?').get(config.version).config_json;
@@ -417,13 +463,18 @@ try {
     for (const project of LEGACY_AREA_PROJECTS) oldLayoutDb.prepare('UPDATE city_projects SET definition_json = ? WHERE id = ?').run(JSON.stringify(project), project.id);
     for (const operation of oldLayoutDb.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
       const fingerprint = JSON.parse(operation.fingerprint);
-      assert([4, 5].includes(fingerprint.length) && fingerprint.at(-1) === config.version);
+      assert(Array.isArray(fingerprint) && fingerprint.at(-1) === config.version
+        && ((fingerprint.length === 4 && ['donate', 'decorate'].includes(fingerprint[0]))
+          || (fingerprint.length === 5 && fingerprint[0] === 'decorate-area')));
       fingerprint[fingerprint.length - 1] = oldLayout.version;
       oldLayoutDb.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
     }
     const layoutDecorations = oldLayoutDb.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all();
     assert(layoutDecorations.some((entry) => LEGACY_AREA_PLOTS.some((plot) => plot.id === entry.plot_id)));
     const layoutReceipts = oldLayoutDb.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
+    const layoutVotes = oldLayoutDb.prepare('SELECT * FROM city_votes ORDER BY user_id, project_id').all();
+    const layoutVoteReceipts = oldLayoutDb.prepare('SELECT * FROM city_vote_operations ORDER BY user_id, request_id').all();
+    assert(layoutVotes.length > 0 && layoutVoteReceipts.length > 0);
     const layoutFunding = oldLayoutDb.prepare('SELECT id, funded, built FROM city_projects ORDER BY id').all();
     const layoutBalance = oldLayoutDb.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all();
     oldLayoutDb.close();
@@ -431,6 +482,8 @@ try {
     assert.equal(getCityState().configVersion, config.version);
     assert.deepEqual(db.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all(), layoutDecorations);
     assert.deepEqual(db.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all(), layoutReceipts);
+    assert.deepEqual(db.prepare('SELECT * FROM city_votes ORDER BY user_id, project_id').all(), layoutVotes);
+    assert.deepEqual(db.prepare('SELECT * FROM city_vote_operations ORDER BY user_id, request_id').all(), layoutVoteReceipts);
     assert.deepEqual(db.prepare('SELECT id, funded, built FROM city_projects ORDER BY id').all(), layoutFunding);
     assert.deepEqual(db.prepare('SELECT user_id, currency FROM player_progress ORDER BY user_id').all(), layoutBalance);
     for (const project of config.projects.filter((entry) => LEGACY_AREA_PROJECTS.some((old) => old.id === entry.id))) {
@@ -447,7 +500,7 @@ try {
       areaId: purchasedAreaId, decorationId: purchasedDecorationId, quantity: purchasedQuantity,
     }).replayed, true);
     const beforeLayoutFailure = getCityState();
-    const constructionLedger = () => Object.fromEntries(['city_configs', 'city_meta', 'city_projects', 'city_decorations', 'city_operations', 'player_progress']
+    const constructionLedger = () => Object.fromEntries(['city_configs', 'city_meta', 'city_projects', 'city_decorations', 'city_operations', 'city_votes', 'city_vote_operations', 'player_progress']
       .map((table) => [table, db.prepare('SELECT * FROM ' + table + ' ORDER BY rowid').all()]));
     const beforeLayoutLedger = constructionLedger();
     db.transaction(() => initializeCityGovernance(db))();
@@ -561,11 +614,25 @@ try {
     }
     // A pre-city backup preserves historical defaults and explicit unlocks,
     // but cannot retain city operations that did not exist in that snapshot.
+    // Backups from the construction-only schema migrate to empty votes without
+    // changing project funding, decorations, or paid request receipts.
+    const preVotePath = ${JSON.stringify(join(dataDir, 'city-pre-vote.sqlite'))};
+    await backupDatabase(preVotePath);
+    const preVote = new Database(preVotePath);
+    preVote.exec('DROP TABLE city_vote_operations; DROP TABLE city_votes');
+    preVote.pragma('user_version = 6');
+    preVote.close();
+    const fundedBeforeVotingMigration = getCityState().projects.map(({ votes, ...project }) => project);
+    restoreFromBackupFile(preVotePath);
+    assert.ok(getCityState().projects.every((project) => project.votes === 0));
+    assert.deepEqual(getCityState().projects.map(({ votes, ...project }) => project), fundedBeforeVotingMigration);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM city_operations').get().n, operationsBefore);
+    assert.deepEqual(getCityVotes(user.id).projectIds, []);
     const legacyPath = ${JSON.stringify(join(dataDir, 'city-legacy.sqlite'))};
     await backupDatabase(legacyPath);
     const legacy = new Database(legacyPath);
     legacy.pragma('foreign_keys = OFF');
-    for (const table of ['city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs']) legacy.exec('DROP TABLE ' + table);
+    for (const table of ['city_vote_operations', 'city_votes', 'city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs']) legacy.exec('DROP TABLE ' + table);
     legacy.prepare('INSERT OR IGNORE INTO player_building_unlocks VALUES (?, ?, ?)').run(user.id, 'academy', new Date().toISOString());
     // Beacon is governed by the current ledger. A legacy admin override must
     // not gift it merely because the pre-ledger database mentions it.
@@ -597,7 +664,8 @@ try {
     closeDatabase();
   `);
   const backup = new Database(join(dataDir, 'city-backup.sqlite'), { readonly: true });
-  assert.equal(backup.pragma('user_version', { simple: true }), 6);
+  const { MINICITY_SCHEMA_VERSION } = await import('../dist/databaseMetadata.js');
+  assert.equal(backup.pragma('user_version', { simple: true }), MINICITY_SCHEMA_VERSION);
   assert.equal(backup.pragma('foreign_key_check').length, 0);
   backup.close();
   console.log('City governance integration passed');

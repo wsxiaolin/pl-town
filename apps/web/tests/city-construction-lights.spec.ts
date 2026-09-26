@@ -20,7 +20,7 @@ test('constructed decorations use the city weather materials across creation and
     initialBuiltBuildingIds: ['commons'],
   };
   let state: CityState = { epoch: 'construction-weather', revision: 0, configVersion: config.version,
-    projects: [{ id: 'weather-path', funded: 0, built: false }], decorations: [] };
+    projects: [{ id: 'weather-path', funded: 0, built: false, votes: 0 }], decorations: [] };
   stubCityWebSocket(page, { user: 'weather-builder', unlockedBuildings: ['commons'] });
   await page.route('**/town-api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -57,7 +57,7 @@ test('constructed decorations use the city weather materials across creation and
   expect(rainy.materials[0]!.metalness).toBeGreaterThanOrEqual(0.08);
 
   await page.evaluate(() => (window as any)._mini.weather.set('snow'));
-  state = { ...state, revision: 2, projects: [{ id: 'weather-path', funded: 800, built: true }],
+  state = { ...state, revision: 2, projects: [{ id: 'weather-path', funded: 800, built: true, votes: 0 }],
     decorations: kinds.map((kind, index) => ({ plotId: AREA_PLOTS[index]!.id, decorationId: kind, ownerId: 'weather-builder', ownerNickname: 'weather-builder' })) };
   await publish();
   const snowy = await inspect();

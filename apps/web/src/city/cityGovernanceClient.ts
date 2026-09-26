@@ -14,10 +14,14 @@ export type CityConfig = {
 };
 export type CityState = {
   epoch: string; revision: number; configVersion: string;
-  projects: Array<{ id: string; funded: number; built: boolean }>;
+  projects: Array<{ id: string; funded: number; built: boolean; votes?: number }>;
   decorations: Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>;
 };
+type CityStateWithVotes = Omit<CityState, 'projects'> & {
+  projects: Array<CityState['projects'][number] & { votes: number }>;
+};
 import { townApiUrl } from '../core/townApi';
+import { getResidentToken } from '../core/residentToken';
 
 // This module is the existing browser transport facade, including safe error
 // adaptation. Pure gameplay rules do not depend on this HTTP/storage boundary.
@@ -83,7 +87,7 @@ function notify() {
 // The multiplayer adapter calls this after authentication changes. Reading the
 // token here also detects changes made in another tab before a mutation/reply.
 export function refreshCityGovernanceSession(): symbol {
-  const token = localStorage.getItem('minicityServerToken');
+  const token = getResidentToken();
   if (!mutationSession || mutationSession.token !== token) {
     const requests = (token && pendingRequestsByToken.get(token)) || new Map<string, PendingOperation>();
     if (token) pendingRequestsByToken.set(token, requests);
@@ -99,10 +103,26 @@ function isCurrentSession(session: MutationSession): boolean {
   return refreshCityGovernanceSession() === session.generation;
 }
 
-function validState(value: unknown): value is CityState {
+function validCityState(value: unknown, allowMissingVoteCounts: boolean): value is CityState {
   const item = value as Partial<CityState> | null;
   return Boolean(item && typeof item.epoch === 'string' && Number.isSafeInteger(item.revision)
-    && typeof item.configVersion === 'string' && Array.isArray(item.projects) && Array.isArray(item.decorations));
+    && typeof item.configVersion === 'string' && Array.isArray(item.projects)
+    && item.projects.every((project) => project && typeof project.id === 'string'
+      && Number.isSafeInteger(project.funded) && project.funded >= 0 && typeof project.built === 'boolean'
+      && ((allowMissingVoteCounts && !Object.hasOwn(project, 'votes'))
+        || (typeof project.votes === 'number' && Number.isSafeInteger(project.votes) && project.votes >= 0)))
+    && Array.isArray(item.decorations));
+}
+
+export function validState(value: unknown): value is CityStateWithVotes {
+  return validCityState(value, false);
+}
+
+// The frontend and server deploy independently. Older snapshots have no vote
+// counts; keep those unknown, and reject explicitly malformed counts.
+// Voting acknowledgements still use validState directly before releasing IDs.
+function readCityState(value: unknown): CityState | null {
+  return validCityState(value, true) ? value : null;
 }
 
 function isOlderCityState(next: CityState): boolean {
@@ -146,9 +166,9 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
       notify();
       stateBeforeFetch = state;
       const stateResponse = await fetchJson('/town-api/city/state', signal, { cache: 'no-store' });
-      const nextState: unknown = stateResponse.ok ? await stateResponse.json() : null;
+      const nextState = readCityState(stateResponse.ok ? await stateResponse.json() : null);
       if (sequence !== loadSequence) return;
-      if (validState(nextState) && nextState.configVersion === config.version) {
+      if (nextState && nextState.configVersion === config.version) {
         // A WS update can arrive while this HTTP snapshot is in flight.
         if (!isOlderCityState(nextState)) state = nextState;
       } else if (state === stateBeforeFetch) state = null;
@@ -193,8 +213,9 @@ export function subscribeCityGovernance(listener: CityGovernanceListener): () =>
   return () => listeners.delete(listener);
 }
 
-export function applyCityState(next: unknown): boolean {
-  if (!validState(next)) return false;
+export function applyCityState(value: unknown): boolean {
+  const next = readCityState(value);
+  if (!next) return false;
   if (!config || next.configVersion !== config.version) { state = null; void loadCityGovernance(); notify(); return false; }
   if (isOlderCityState(next)) return false;
   state = next;
@@ -283,15 +304,16 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   // Report the rejected operation immediately; a slow refresh must not hide it.
   if (response.status === 409) refreshCityGovernance();
-  if (!response.ok || !validState(payload.state)) {
+  const confirmedState = readCityState(payload.state);
+  if (!response.ok || !confirmedState) {
     if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === operation) {
       pendingRequestIds.delete(operationKey);
     }
     throw new Error(cityOperationError(payload.error));
   }
   if (pendingRequestIds.get(operationKey) === operation) pendingRequestIds.delete(operationKey);
-  applyCityState(payload.state);
-  return { state: payload.state, replayed: payload.replayed === true };
+  applyCityState(confirmedState);
+  return { state: confirmedState, replayed: payload.replayed === true };
 }
 
 // These keys are the city HttpBodyError contract. Keep them aligned with
@@ -344,7 +366,10 @@ function cityOperationError(error?: string): string {
   return '建设请求失败，请稍后重试。';
 }
 
-function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+export function makeRequestId() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return `city-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
+}
 export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
 export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }
 export function decorateCityArea(areaId: string, decorationId: string, quantity: number) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }); }

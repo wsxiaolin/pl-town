@@ -21,7 +21,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
     epoch: 'test-epoch',
     revision: 0,
     configVersion: config.version,
-    projects: [{ id: 'build-catcafe', funded: 0, built: false }],
+    projects: [{ id: 'build-catcafe', funded: 0, built: false, votes: 0 }],
     decorations: [],
   };
   const requestIds: string[] = [];
@@ -43,6 +43,10 @@ test('city governance retries donations idempotently and renders both tabs', asy
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state) });
       return;
     }
+    if (url.pathname.endsWith('/city/votes')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ epoch: state.epoch, projectIds: [] }) });
+      return;
+    }
     if (!url.pathname.endsWith('/city/donate')) {
       await route.continue();
       return;
@@ -57,7 +61,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
     state = {
       ...state,
       revision: 1,
-      projects: [{ id: 'build-catcafe', funded: body.amount, built: false }],
+      projects: [{ id: 'build-catcafe', funded: body.amount, built: false, votes: 0 }],
     };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ state }) });
   });
@@ -66,7 +70,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
   await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
 
   const panel = page.locator('.city-governance-panel');
-  await expect(panel).toHaveClass(/open/);
+  await expect(panel).toHaveAttribute('open', '');
   await expect(panel.getByRole('button', { name: '城市集体建设' })).toHaveClass(/active/);
   const project = panel.locator('.city-governance-card').first();
   await expect(project).toContainText('募捐进度 0 金币 / 3,000 金币');

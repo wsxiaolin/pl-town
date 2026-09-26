@@ -28,11 +28,11 @@ type ConstructionFeedback = {
   rerender: () => void;
   reportError: (message: string, actionKey: string) => void;
   reportNotice: (message: string) => void;
-  focusAction: (dataKey: 'cityArea' | 'plotId', id: string) => void;
+  focusAction: (dataKey: 'cityArea' | 'cityPlot', id: string) => void;
 };
 
 async function submitConstruction(
-  draft: Draft, dataKey: 'cityArea' | 'plotId', id: string,
+  draft: Draft, dataKey: 'cityArea' | 'cityPlot', id: string,
   mutation: () => Promise<CityMutationResult>, feedback: ConstructionFeedback,
 ): Promise<void> {
   const session = refreshCityGovernanceSession();
@@ -46,7 +46,7 @@ async function submitConstruction(
     : config?.personalPlots.find((plot) => plot.id === id)?.name ?? '这块地';
   const targetPrefix = `「${targetName}」`;
   draft.pending = true;
-  const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`);
+  const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'plot-build'}:${id}`);
   const actionKey = `${dataKey}:${id}`;
   feedback.reportError('', actionKey);
   feedback.rerender();
@@ -94,10 +94,10 @@ export function renderCityPersonalAreas(
     }
     if (!pendingReceipt && !ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
     const select = decorationSelect(area.name, config, ids);
-    select.dataset.focusKey = `area-decoration:${area.id}`;
+    select.dataset.cityFocus = `area-decoration:${area.id}`;
     select.value = draft.decorationId;
     const quantity = document.createElement('input');
-    quantity.dataset.focusKey = `area-quantity:${area.id}`;
+    quantity.dataset.cityFocus = `area-quantity:${area.id}`;
     quantity.type = 'number'; quantity.min = '1'; quantity.step = '1'; quantity.value = draft.quantityText;
     quantity.setAttribute('aria-label', `${area.name}建设数量`);
     const total = document.createElement('p');
@@ -154,7 +154,7 @@ export function renderCityPersonalAreas(
   // The original individually purchased plots keep their IDs and remain usable.
   for (const plot of config.personalPlots.filter((entry) => !grouped.has(entry.id))) {
     const item = card(plot.name, '选择一项装饰，建设完成后全城居民都能看到。');
-    item.dataset.plotId = plot.id;
+    item.dataset.cityPlot = plot.id;
     const built = occupied.get(plot.id);
     if (built) {
       const owner = document.createElement('p');
@@ -162,8 +162,8 @@ export function renderCityPersonalAreas(
       item.append(owner);
     } else {
       const select = decorationSelect(plot.name, config, plot.options);
-      select.dataset.focusKey = `decoration:${plot.id}`;
-      const action = actionButton('建设', undefined, false, `decorate:${plot.id}`);
+      select.dataset.cityFocus = `plot-decoration:${plot.id}`;
+      const action = actionButton('建设', undefined, false, `plot-build:${plot.id}`);
       const draft = plotDrafts.get(plot.id) ?? { decorationId: select.value, pending: false };
       plotDrafts.set(plot.id, draft);
       if (!plot.options.includes(draft.decorationId)) draft.decorationId = select.value;
@@ -171,7 +171,7 @@ export function renderCityPersonalAreas(
       select.disabled = action.disabled = draft.pending;
       select.addEventListener('change', () => { draft.decorationId = select.value; });
       action.addEventListener('click', () => {
-        void submitConstruction(draft, 'plotId', plot.id, () => decorateCity(plot.id, draft.decorationId), feedback);
+        void submitConstruction(draft, 'cityPlot', plot.id, () => decorateCity(plot.id, draft.decorationId), feedback);
       });
       item.append(select, action);
     }

@@ -30,6 +30,7 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/city/config')) return route.fulfill({ status: 200, json: config });
       if (path.endsWith('/city/state')) return route.fulfill({ status: 200, json: state });
+      if (path.endsWith('/city/votes')) return route.fulfill({ status: 200, json: { epoch: state.epoch, projectIds: [] } });
       if (path.endsWith('/city/decorate')) {
         const body = route.request().postDataJSON();
         requests.push(body);
@@ -125,6 +126,7 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
     }
     config.version = 'area-test-v2';
     state = { ...state, configVersion: config.version };
+    await action.focus();
     await page.evaluate(async () => {
       const modulePath = '/src/city/cityGovernanceClient.ts';
       const client = await import(/* @vite-ignore */ modulePath);
@@ -132,6 +134,7 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
     });
     await expect(quantity).toHaveValue(String(chosenQuantity));
     await expect(quantity).toBeDisabled();
+    await expect(action).toBeFocused();
     await action.click();
     await expect(action).toBeEnabled();
     await expect(panel.getByRole('alert')).toBeVisible();
@@ -143,7 +146,7 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
     expect(receipts.size).toBe(1);
     expect(charged).toBe(chosenQuantity * 240);
     if (committedBeforeLoss) {
-      await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
+      await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('上一笔已成功，未重复扣费。');
       await expect(action).toBeDisabled();
     }
     await expect(panel.getByRole('alert')).toHaveCount(0);

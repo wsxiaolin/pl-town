@@ -21,6 +21,7 @@ export type LoginControllerOptions = {
   checkAchievements: () => void;
   shouldShowIntro: () => boolean;
   startIntro: () => void;
+  beforeShow?: () => void;
   proceed: (nickname?: string, password?: string, pl?: { login: string; password: string }) => void;
 };
 
@@ -112,9 +113,10 @@ export function createLoginController(options: LoginControllerOptions) {
   function showLogin(): void {
     const overlay = document.getElementById('loginOverlay');
     if (!overlay) return;
+    options.beforeShow?.();
     overlay.style.display = 'flex';
     requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.remove('hidden')));
-    window.setTimeout(() => document.getElementById('loginInput')?.focus(), 300);
+    window.setTimeout(() => document.getElementById(verifyStep ? 'plLoginInput' : 'loginInput')?.focus(), 300);
   }
 
   function checkLogin(): void {
