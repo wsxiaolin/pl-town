@@ -98,8 +98,8 @@ function render(): void {
   restoreFocus(focused);
 }
 
-async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
-  const actionKey = `${dataKey}:${id}`;
+async function submitDonation(id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
+  const actionKey = `projectId:${id}`;
   if (pendingActions.has(actionKey)) return;
   pendingActions.add(actionKey);
   operationError = '';
@@ -113,7 +113,7 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
   } finally {
     pendingActions.delete(actionKey);
     render();
-    if (operationError && root?.classList.contains('open')) focusAction(dataKey, id);
+    if (operationError && root?.classList.contains('open')) focusAction('projectId', id);
   }
 }
 
@@ -140,7 +140,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
         const liveInput = item.querySelector<HTMLInputElement>('input');
         if (!liveInput) return;
         const value = Number(liveInput.value);
-        void submit('projectId', project.id, () => donateCity(project.id, value));
+        void submitDonation(project.id, () => donateCity(project.id, value));
       }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`));
     }
     list.append(item);
@@ -148,14 +148,12 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
 }
 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
-  renderCityPersonalAreas(list, config, state, render, (message) => {
-    operationError = message;
-    operationNotice = '';
-    updateFeedback();
-  }, (message) => {
-    operationNotice = message;
-    updateFeedback();
-  }, (dataKey, id) => { if (root?.classList.contains('open')) focusAction(dataKey, id); });
+  renderCityPersonalAreas(list, config, state, {
+    rerender: render,
+    reportError: (message) => { operationError = message; operationNotice = ''; updateFeedback(); },
+    reportNotice: (message) => { operationNotice = message; updateFeedback(); },
+    focusAction: (dataKey, id) => { if (root?.classList.contains('open')) focusAction(dataKey, id); },
+  });
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {

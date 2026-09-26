@@ -150,11 +150,16 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     throw new Error('请先登录');
   }
   const operationKey = `${path}:${body.areaId !== undefined
-    ? JSON.stringify({ areaId: body.areaId, decorationId: body.decorationId })
+    ? JSON.stringify({ areaId: body.areaId })
     : JSON.stringify(body)}`;
+  const previousOperation = pendingRequestIds.get(operationKey);
+  if (body.areaId !== undefined && previousOperation
+    && (previousOperation.body.decorationId !== body.decorationId || previousOperation.body.quantity !== body.quantity)) {
+    throw new Error('该区域上一笔建设结果仍待确认，请先按原装饰和数量重试。');
+  }
   // The server fingerprint includes configVersion. Preserve the complete receipt
   // after an uncertain outcome, even if the current catalog changes before retry.
-  const operation = pendingRequestIds.get(operationKey)
+  const operation = previousOperation
     ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
   const { requestId, configVersion } = operation;
   pendingRequestIds.set(operationKey, operation);
@@ -233,10 +238,9 @@ export function donateCity(projectId: string, amount: number) { return mutate('/
 export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }
 export function decorateCityArea(areaId: string, decorationId: string, quantity: number) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }); }
 export function getPendingCityAreaOperation(areaId: string): { decorationId: string; quantity: number } | null {
-  for (const operation of pendingRequestIds.values()) {
-    if (operation.body.areaId === areaId && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
-      return { decorationId: operation.body.decorationId, quantity: operation.body.quantity };
-    }
+  const operation = pendingRequestIds.get(`/town-api/city/decorate:${JSON.stringify({ areaId })}`);
+  if (operation && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
+    return { decorationId: operation.body.decorationId, quantity: operation.body.quantity };
   }
   return null;
 }

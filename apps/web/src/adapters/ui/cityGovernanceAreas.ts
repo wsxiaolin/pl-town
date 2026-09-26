@@ -1,10 +1,12 @@
-import { decorateCity, decorateCityArea, getPendingCityAreaOperation, type CityConfig, type CityState } from '../../city/cityGovernanceClient';
+import { decorateCity, decorateCityArea, getPendingCityAreaOperation, type CityConfig, type CityState, type CityMutationResult } from '../../city/cityGovernanceClient';
 import { actionButton, card, money } from './cityGovernanceDom';
 
-type Draft = { decorationId: string; quantity: number; pending: boolean };
-const drafts = new Map<string, Draft>();
+type Draft = { decorationId: string; pending: boolean };
+type AreaDraft = Draft & { quantityText: string };
+const areaDrafts = new Map<string, AreaDraft>();
+const plotDrafts = new Map<string, Draft>();
 
-export function clearCityConstructionDrafts(): void { drafts.clear(); }
+export function clearCityConstructionDrafts(): void { areaDrafts.clear(); plotDrafts.clear(); }
 
 function decorationSelect(name: string, config: CityConfig, ids: string[]): HTMLSelectElement {
   const select = document.createElement('select');
@@ -22,26 +24,52 @@ function decorationSelect(name: string, config: CityConfig, ids: string[]): HTML
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '建设失败，请重试'; }
 
+type ConstructionFeedback = {
+  rerender: () => void;
+  reportError: (message: string) => void;
+  reportNotice: (message: string) => void;
+  focusAction: (dataKey: 'cityArea' | 'plotId', id: string) => void;
+};
+
+async function submitConstruction(
+  draft: Draft, dataKey: 'cityArea' | 'plotId', id: string,
+  mutation: () => Promise<CityMutationResult>, feedback: ConstructionFeedback,
+): Promise<void> {
+  if (draft.pending) return;
+  draft.pending = true;
+  feedback.reportError('');
+  feedback.rerender();
+  let failed = false;
+  try {
+    const result = await mutation();
+    feedback.reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
+  } catch (error) { failed = true; feedback.reportError(errorMessage(error)); }
+  finally {
+    draft.pending = false;
+    feedback.rerender();
+    if (failed) feedback.focusAction(dataKey, id);
+  }
+}
+
 export function renderCityPersonalAreas(
-  list: HTMLElement, config: CityConfig, state: CityState, rerender: () => void,
-  reportError: (message: string) => void, reportNotice: (message: string) => void,
-  focusAction: (dataKey: 'cityArea' | 'plotId', id: string) => void,
+  list: HTMLElement, config: CityConfig, state: CityState, feedback: ConstructionFeedback,
 ): void {
   const occupied = new Map(state.decorations.map((entry) => [entry.plotId, entry]));
+  const plotsById = new Map(config.personalPlots.map((plot) => [plot.id, plot]));
   const grouped = new Set((config.personalAreas ?? []).flatMap((area) => area.plotIds));
   for (const area of config.personalAreas ?? []) {
-    const plots = area.plotIds.flatMap((id) => config.personalPlots.find((plot) => plot.id === id) ?? []);
+    const plots = area.plotIds.flatMap((id) => { const plot = plotsById.get(id); return plot ? [plot] : []; });
     const item = card(area.name, `在同一区域连续建设，已建 ${plots.filter((plot) => occupied.has(plot.id)).length} / ${plots.length} 处。`);
     item.dataset.cityArea = area.id;
     const ids = config.decorations.filter((decoration) => plots.some((plot) => plot.options.includes(decoration.id))).map((decoration) => decoration.id);
-    const draft = drafts.get(area.id) ?? { decorationId: ids[0] ?? '', quantity: Math.min(20, plots.length), pending: false };
-    drafts.set(area.id, draft);
+    const draft = areaDrafts.get(area.id) ?? { decorationId: ids[0] ?? '', quantityText: String(Math.min(20, plots.length)), pending: false };
+    areaDrafts.set(area.id, draft);
     const pendingReceipt = getPendingCityAreaOperation(area.id);
     if (pendingReceipt) {
       // A lost response may already have charged the original request. Keep
       // the visible draft aligned with that immutable receipt before retry.
       draft.decorationId = pendingReceipt.decorationId;
-      draft.quantity = pendingReceipt.quantity;
+      draft.quantityText = String(pendingReceipt.quantity);
     }
     if (!pendingReceipt && !ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
     const select = decorationSelect(area.name, config, ids);
@@ -49,7 +77,7 @@ export function renderCityPersonalAreas(
     select.value = draft.decorationId;
     const quantity = document.createElement('input');
     quantity.dataset.focusKey = `area-quantity:${area.id}`;
-    quantity.type = 'number'; quantity.min = '1'; quantity.step = '1'; quantity.value = String(draft.quantity);
+    quantity.type = 'number'; quantity.min = '1'; quantity.step = '1'; quantity.value = draft.quantityText;
     quantity.setAttribute('aria-label', `${area.name}建设数量`);
     const total = document.createElement('p');
     total.dataset.cityAreaTotal = 'true';
@@ -62,13 +90,14 @@ export function renderCityPersonalAreas(
     preview.style.gridTemplateColumns = `repeat(${columns.length}, minmax(0, 1fr))`;
     const action = actionButton('批量建设', undefined, false, `area-build:${area.id}`);
     const update = () => {
+      const count = Number(draft.quantityText);
       const available = plots.filter((plot) => !occupied.has(plot.id) && plot.options.includes(draft.decorationId));
       quantity.max = String(Math.max(available.length, pendingReceipt?.quantity ?? 0));
-      const valid = Number.isSafeInteger(draft.quantity) && draft.quantity >= 1 && draft.quantity <= available.length;
-      const selected = new Set(valid ? available.slice(0, draft.quantity).map((plot) => plot.id) : []);
+      const valid = Number.isSafeInteger(count) && count >= 1 && count <= available.length;
+      const selected = new Set(valid ? available.slice(0, count).map((plot) => plot.id) : []);
       const cost = config.decorations.find((entry) => entry.id === draft.decorationId)?.cost ?? 0;
-      total.textContent = pendingReceipt ? `上次 ${draft.quantity} 处建设结果待确认，可安全重试，不会重复扣费。`
-        : valid ? `将建设 ${draft.quantity} 处 · 总价 ${money(cost * draft.quantity)} · 可用 ${available.length} 处`
+      total.textContent = pendingReceipt ? `上次 ${count} 处建设结果待确认，可安全重试，不会重复扣费。`
+        : valid ? `将建设 ${count} 处 · 总价 ${money(cost * count)} · 可用 ${available.length} 处`
         : available.length ? `请输入 1–${available.length} 之间的整数` : '该区域已无可用地块';
       // A city broadcast can already show the committed plots as occupied.
       // Confirming its pending receipt remains safe even with no capacity left.
@@ -87,16 +116,11 @@ export function renderCityPersonalAreas(
       }
     };
     select.addEventListener('change', () => { draft.decorationId = select.value; update(); });
-    quantity.addEventListener('input', () => { draft.quantity = Number(quantity.value); update(); });
-    action.addEventListener('click', async () => {
+    quantity.addEventListener('input', () => { draft.quantityText = quantity.value; update(); });
+    action.addEventListener('click', () => {
       if (action.disabled) return;
-      draft.pending = true; reportError(''); update();
-      let failed = false;
-      try {
-        const result = await decorateCityArea(area.id, draft.decorationId, draft.quantity);
-        reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
-      } catch (error) { failed = true; reportError(errorMessage(error)); }
-      finally { draft.pending = false; rerender(); if (failed) focusAction('cityArea', area.id); }
+      void submitConstruction(draft, 'cityArea', area.id,
+        () => decorateCityArea(area.id, draft.decorationId, Number(draft.quantityText)), feedback);
     });
     update();
     item.append(preview, select, quantity, total, action);
@@ -115,19 +139,14 @@ export function renderCityPersonalAreas(
       const select = decorationSelect(plot.name, config, plot.options);
       select.dataset.focusKey = `decoration:${plot.id}`;
       const action = actionButton('建设', undefined, false, `decorate:${plot.id}`);
-      const draft = drafts.get(plot.id) ?? { decorationId: select.value, quantity: 1, pending: false };
-      drafts.set(plot.id, draft);
+      const draft = plotDrafts.get(plot.id) ?? { decorationId: select.value, pending: false };
+      plotDrafts.set(plot.id, draft);
+      if (!plot.options.includes(draft.decorationId)) draft.decorationId = select.value;
       select.value = draft.decorationId;
       select.disabled = action.disabled = draft.pending;
       select.addEventListener('change', () => { draft.decorationId = select.value; });
-      action.addEventListener('click', async () => {
-        draft.pending = true; reportError(''); action.disabled = true; select.disabled = true;
-        let failed = false;
-        try {
-          const result = await decorateCity(plot.id, select.value);
-          reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
-        } catch (error) { failed = true; reportError(errorMessage(error)); }
-        finally { draft.pending = false; rerender(); if (failed) focusAction('plotId', plot.id); }
+      action.addEventListener('click', () => {
+        void submitConstruction(draft, 'plotId', plot.id, () => decorateCity(plot.id, draft.decorationId), feedback);
       });
       item.append(select, action);
     }
