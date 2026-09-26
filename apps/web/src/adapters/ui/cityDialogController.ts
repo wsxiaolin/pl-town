@@ -106,7 +106,7 @@ export interface CityDialogController {
   openBuilding(building: BuildingLike): void;
   closeBuilding(): void;
   closeLyrics(): void;
-  openMemorial(): void;
+  openMemorial(beforeOpen?: () => void): void;
   closeMemorial(): void;
   openNpc(npc: NpcEntityLike, playerPosition?: { x: number; z: number }): void;
   openStory(story: StoryDialogModel): void;
@@ -325,9 +325,12 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     getElement<HTMLSpanElement>(document, 'memorialPager').textContent = `${memorialIndex + 1} / ${memorialPageCount}`;
   };
 
-  const openMemorial = (): void => {
+  const openMemorial = (beforeOpen?: () => void): void => {
     const roster = options.memorialRoster;
     if (!roster) return;
+    // Close the source panel only when this destination exists, before capturing
+    // its restored focus so closing the memorial returns to the archive button.
+    beforeOpen?.();
     memorialReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     memorialPageCount = Math.max(1, Math.ceil(roster.names.length / MEMORIAL_NAMES_PER_PAGE));
     memorialIndex = 0;

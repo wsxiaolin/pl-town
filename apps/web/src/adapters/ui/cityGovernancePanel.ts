@@ -203,7 +203,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
   const navigation = document.createElement('nav');
   navigation.className = 'city-governance-group-links';
   navigation.setAttribute('aria-label', '建设项目分类');
-  list.append(navigation);
+  if (projects.length) list.append(navigation);
   for (const group of groups) {
     if (!group.projects.length) continue;
     const heading = document.createElement('div');

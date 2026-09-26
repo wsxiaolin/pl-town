@@ -2,6 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { MEMORIAL_ROSTER } from '../../src/city/data/memorialRoster';
+import { createCityDialogController } from '../../src/adapters/ui/cityDialogController';
+
+test('missing memorial roster keeps the source panel open without touching its DOM', () => {
+  let sourceClosed = false;
+  const controller = createCityDialogController({
+    document: new Proxy({} as Document, { get() { throw new Error('Unavailable memorial must not access DOM'); } }),
+    buildingContent: {},
+    getQuestAction: () => null,
+    performQuestAction: () => { throw new Error('No quest action expected'); },
+    onNpcInteracted: () => {}, pauseNpcs: () => {}, resumeNpcs: () => {}, showToast: () => {},
+  });
+  controller.openMemorial(() => { sourceClosed = true; });
+  assert.equal(sourceClosed, false);
+});
 
 test('Memorial roster keeps the supplied name list verbatim', () => {
   assert.equal(MEMORIAL_ROSTER.names.length, 120);

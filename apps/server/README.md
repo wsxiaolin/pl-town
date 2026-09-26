@@ -69,4 +69,4 @@ npm run db:restore -w @minicity/server -- <backup-file> <expected-sha256> --conf
 
 ## 建设施工与历史城市迁移
 
-治理配置 `2026-09-26.pending.2` 中，全新城市仅中心众议院（`commons`）初始建成，其余命名建筑共同筹建；升级和恢复保留历史已建成内容，不改居民余额与支付收据。新城入口、经济取舍和显式对账规则见[城市建设策略与历史迁移](../../docs/city-construction-policy-migration.md)。
+治理配置 `2026-09-26.pending.3` 中，全新城市仅中心众议院（`commons`）初始建成，其余命名建筑共同筹建；升级和恢复保留历史已建成内容，并显式对账修正后的区域布局，不改居民余额与支付收据。新城入口、经济取舍和显式对账规则见[城市建设策略与历史迁移](../../docs/city-construction-policy-migration.md)。

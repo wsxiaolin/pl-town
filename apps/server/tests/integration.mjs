@@ -219,7 +219,8 @@ const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e'
   assert.throws(() => purchaseBuilding('fresh-town-access-check', 'library', 0), /Building is not built/);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM player_progress').get().count, 0);
-  for (const project of config.projects.filter((entry) => entry.buildingId)) {
+  // Leave one project pending for real WebSocket access/error checks below.
+  for (const project of config.projects.filter((entry) => entry.buildingId && entry.buildingId !== 'library')) {
     db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
   }
   closeDatabase();
@@ -538,6 +539,15 @@ try {
   send(alice, { type: 'story.update', storyId: 'sample-story', ending: 'reconciled', flags: { heardWhisper: false } });
   const storyEnding = await waitFor(alice, 'story.updated', (message) => message.story?.ending === 'reconciled');
   if (storyEnding.story.flags.heardWhisper !== false || storyEnding.story.visitCount !== 1) throw new Error('Story updates must merge flags without resetting other state');
+
+  assert.equal(alice.hello.catalog.buildingUnlockable.library, false);
+  for (const type of ['progress.building.visit', 'progress.building.unlock']) {
+    // Start after earlier messages so both requests must receive their own error.
+    const previousMessages = alice.messages.length;
+    send(alice, { type, buildingId: 'library' });
+    const rejection = await poll(() => alice.messages.slice(previousMessages).find((message) => message.type === 'error'), Boolean, `${type} pending rejection`);
+    assert.deepEqual(rejection, { type: 'error', message: 'Building is not built' });
+  }
 
   send(alice, { type: 'progress.building.unlock', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');

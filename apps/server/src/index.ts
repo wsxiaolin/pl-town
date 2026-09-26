@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
-import { getCityState } from './cityGovernance.js';
+import { getCityState, isCityBuildingBuilt } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -228,6 +228,7 @@ async function handle(client: Client, raw: string) {
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
+      if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       const progress = db.getPlayerProgress(userId);
       if (!progress.unlockedBuildings.includes(message.buildingId) && !isBuildingGloballyUnlocked(message.buildingId)) return fail(client.socket, 'Building is locked');
@@ -237,6 +238,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.building.unlock') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
+      if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       try {
         const result = db.purchaseBuilding(userId, message.buildingId, BUILDING_PRICES[message.buildingId]!);
