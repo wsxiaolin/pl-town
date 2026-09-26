@@ -113,7 +113,7 @@ function applyWorldCatalog(catalog: { globallyUnlockedBuildings?: readonly strin
     toUnlock.forEach((building) => buildingLabelController?.addLabel(building));
     buildingLabelController?.applyRenames();
   }
-  if (toUnlock.length > 0 || toLock.length > 0) mapController?.invalidateShot();
+  if (toUnlock.length > 0 || toLock.length > 0) mapController?.invalidateShot('scene');
 }
 let cityDialogs: CityDialogController | null = null;
 let stories: StoryOrchestration;
@@ -499,7 +499,7 @@ function init() {
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
     getResidences: () => residences,
-    invalidateMap: () => mapController?.invalidateShot(),
+    invalidateMap: (reason) => mapController?.invalidateShot(reason),
     refreshResidenceLabels: () => multiplayerHousing?.renderMapHouseTags(),
     setResidenceVisualVisible: (id, visible) => worldDecorations?.setResidenceVisualVisible(id, visible),
   });
@@ -684,7 +684,7 @@ function init() {
     },
     clearTravel: () => { view.clearPlayerPath(); interactionPointer.clearPending(); },
     setWeather: (weather) => graphics.weather.set(weather),
-    invalidateMap: () => mapController?.invalidateShot(),
+    invalidateMap: () => mapController?.invalidateShot('scene'),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     focusCamera: (x, z) => cameraController?.focus(x, z),
     sendLocalPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
