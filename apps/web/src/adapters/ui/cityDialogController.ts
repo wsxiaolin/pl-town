@@ -253,6 +253,8 @@ export function createCityDialogController(options: CityDialogControllerOptions)
 
   const questConstructionHint = (action: NpcQuestAction): string => {
     if (action.kind !== 'offer') return '';
+    // An offer describes the first actionable stage, not later objectives that
+    // may only become relevant after the resident advances the quest.
     const pendingNames = new Set<string>();
     for (const objective of action.quest.stages[0]?.objectives ?? []) {
       const target = objective.target;

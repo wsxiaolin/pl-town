@@ -41,6 +41,8 @@ export function initializeCityGovernance(db: Database.Database): void {
     if (!config.initialBuiltBuildingIds.includes(id) && !config.projects.some((project) => project.buildingId === id)) throw new Error(`Missing city building policy: ${id}`);
   }
   const validPoint = (x: number, z: number) => Number.isFinite(x) && Number.isFinite(z) && Math.abs(x) <= 42 && Math.abs(z) <= 42;
+  // Catalog additions/moves also change the clearance contract for persisted
+  // plots and placements. Reconcile affected layouts explicitly before release.
   const clearPoint = (x: number, z: number, halfWidth = 0.5, halfDepth = halfWidth) => validPoint(x, z)
     && Math.abs(x) + halfWidth <= 42 && Math.abs(z) + halfDepth <= 42
     && Math.abs(x) > halfWidth + 1.2 && Math.abs(z) > halfDepth + 1.2
@@ -70,6 +72,7 @@ export function initializeCityGovernance(db: Database.Database): void {
     // Reconcile legacy defaults and unlocks into completed project rows without
     // debiting residents or inventing payment/idempotency records.
     if (project.buildingId && !progress.built && preservedBuildings.has(project.buildingId)) {
+      if (progress.funded !== 0) throw new Error(`Preserved city building has funded progress: ${project.id}; use explicit reconciliation`);
       db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
     }
   }

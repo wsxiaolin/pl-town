@@ -405,12 +405,12 @@ export function createMapController(options: MapControllerOptions) {
     }, { signal });
   }
 
-  function invalidateShot(): void {
+  function invalidateShot(reason: 'availability' | 'theme' = 'availability'): void {
     shotData = null;
     if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {
-      // Icons/search show live availability. The background remains a snapshot
-      // until the next open, avoiding a WebGL context for every city update.
+      // Availability changes update live controls without taking a new snapshot
+      // for every city broadcast. Theme changes also refresh the visible image.
       renderIcons();
       if (options.document.getElementById('mapSearchResults')?.hidden === false) {
         // Rebuild only the options: retain input focus and the active building
@@ -418,6 +418,7 @@ export function createMapController(options: MapControllerOptions) {
         renderSearchResults(true);
       }
       updateMarker();
+      if (reason === 'theme') updateImage();
     }
   }
 

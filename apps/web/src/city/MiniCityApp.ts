@@ -180,7 +180,7 @@ const themeClock = createThemeClock({
   getGameClock: () => gameClock,
   setGameClock: (value) => { gameClock = value; },
   announceGuide: () => stories?.announceGuide(),
-  invalidateMapShot: () => mapController?.invalidateShot(),
+  invalidateMapShot: () => mapController?.invalidateShot('theme'),
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
   saveStats,
