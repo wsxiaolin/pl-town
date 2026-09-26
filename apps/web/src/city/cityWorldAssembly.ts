@@ -175,6 +175,7 @@ export function assembleCityWorld(options: {
     scene,
     buildings: options.buildings,
     getIsNight: options.getIsNight,
+    getLightingPosition: () => options.actors.cursorChar?.position ?? scene.position,
     buildingAttachments: new Map([['catcafe', catCafeAttachments]]),
     refreshCollisions: options.roadNavigation.cacheBuildingBoxes,
     refreshLabels: () => { buildingLabelController.addLabels(); buildingLabelController.applyRenames(); },
