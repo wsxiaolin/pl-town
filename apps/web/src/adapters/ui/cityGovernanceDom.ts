@@ -11,11 +11,12 @@ export function card(title: string, description: string): HTMLElement {
   return item;
 }
 
-export function actionButton(label: string, action?: () => void, disabled = false): HTMLButtonElement {
+export function actionButton(label: string, action?: () => void, disabled = false, focusKey = ''): HTMLButtonElement {
   const element = document.createElement('button');
   element.type = 'button';
   element.textContent = label;
   element.disabled = disabled;
+  element.dataset.cityFocus = focusKey;
   if (action) element.addEventListener('click', action);
   return element;
 }

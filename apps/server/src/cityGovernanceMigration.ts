@@ -14,6 +14,15 @@ export const LEGACY_INITIAL_BUILDINGS = Object.freeze([
   'records', 'guesthouse', 'film_city', 'academy_library', 'photostudio',
 ]);
 
+// Only pre-ledger personal unlocks from this historical catalog are converted
+// to collective completion. Future projects need their own explicit migration.
+export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
+  'catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop',
+  'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
+  'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall',
+  'wushi_restaurant', 'tavern',
+]);
+
 export function reconcileInitialBuildings(db: Database.Database, config: CityConstructionConfig): ReadonlySet<string> {
   const meta = db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get() as { config_version: string } | undefined;
   if (meta?.config_version === config.version) return new Set();
@@ -34,28 +43,16 @@ export function reconcileInitialBuildings(db: Database.Database, config: CityCon
   // client already rendered it. Derive that compatibility case from the
   // persisted config so future config versions cannot be forgotten here.
   const hadPhotoStudioProject = previousConfig?.projects.some((project) => project.buildingId === 'photostudio') === true;
-  const hasPhotoStudioProject = config.projects.some((project) => project.buildingId === 'photostudio');
-  if (previousConfig && !hadPhotoStudioProject && hasPhotoStudioProject
-    && !db.prepare("SELECT 1 FROM city_projects WHERE id = 'build-photostudio'").get()) {
+  const photoStudioProject = config.projects.find((project) => project.buildingId === 'photostudio');
+  if (previousConfig && !hadPhotoStudioProject && photoStudioProject
+    && !db.prepare('SELECT 1 FROM city_projects WHERE id = ?').get(photoStudioProject.id)) {
     preserved.add('photostudio');
   }
-  // Previously global-open buildings without a construction ledger row were
-  // standing before this policy. Existing pending projects still need funding.
-  // Offline restores can read schema 5 backups from before world_config existed.
-  const hasWorldConfig = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'world_config'").get();
-  const overrides = hasWorldConfig
-    ? db.prepare("SELECT value_json FROM world_config WHERE key = 'buildings'").get() as { value_json: string } | undefined
-    : undefined;
-  // A pre-ledger world override describes the old standing city. Once a
-  // versioned city config exists, an override may refer to a building added
-  // later and must never turn that future project into a gifted building.
-  const preLedgerTown = !meta && previousInitial.length > 0;
-  if (overrides && preLedgerTown) {
-    const states = JSON.parse(overrides.value_json) as Record<string, unknown>;
-    for (const project of config.projects) {
-      if (project.buildingId && states[project.buildingId] === 'open'
-        && previousInitial.includes(project.buildingId)
-        && !db.prepare('SELECT 1 FROM city_projects WHERE id = ?').get(project.id)) preserved.add(project.buildingId);
+  // Admin access overrides are not construction receipts. They never widen
+  // preservation, and schema 5 backups need no world_config table here.
+  if (!meta && previousInitial.length > 0) {
+    for (const id of LEGACY_UNLOCK_PRESERVATION_BUILDINGS) {
+      if (db.prepare('SELECT 1 FROM player_building_unlocks WHERE building_id = ? LIMIT 1').get(id)) preserved.add(id);
     }
   }
   for (const id of preserved) {

@@ -3,6 +3,7 @@ import test from 'node:test';
 import * as THREE from 'three';
 import { applyBuildingDestroyedPresentation } from '../../src/city/buildingDamage';
 import { createBuildingAvailability, storyLockedBuildingIds } from '../../src/city/buildingAvailability';
+import { applyCityState, disposeCityGovernance, isConstructionPending, loadCityGovernance } from '../../src/city/cityGovernanceClient';
 
 test('storyLockedBuildingIds only keeps flagged definitions', () => {
   const ids = storyLockedBuildingIds([
@@ -24,6 +25,7 @@ test('building availability treats story-lock and destruction independently', ()
   const availability = createBuildingAvailability({
     storyLockedIds: new Set(['echo_cabin']),
     getResidences: () => [destroyedResidence],
+    isConstructionPending: () => false,
   });
 
   assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), true);
@@ -38,6 +40,7 @@ test('applyGloballyUnlocked clears a story lock in place', () => {
   const availability = createBuildingAvailability({
     storyLockedIds: new Set(['echo_cabin']),
     getResidences: () => [],
+    isConstructionPending: () => false,
   });
 
   assert.equal(availability.isStoryLocked({ id: 'echo_cabin' }), true);
@@ -54,6 +57,7 @@ test('applyGloballyUnlocked is authoritative and re-locks when the id disappears
   const availability = createBuildingAvailability({
     storyLockedIds: new Set(['echo_cabin']),
     getResidences: () => [],
+    isConstructionPending: () => false,
   });
 
   availability.applyGloballyUnlocked(['echo_cabin']);
@@ -66,11 +70,59 @@ test('applyGloballyUnlocked is authoritative and re-locks when the id disappears
 
 test('construction visibility also blocks interaction until the project is completed', () => {
   const group = new THREE.Group();
-  const availability = createBuildingAvailability({ storyLockedIds: new Set(), getResidences: () => [] });
+  let pending = true;
+  const availability = createBuildingAvailability({ storyLockedIds: new Set(), getResidences: () => [], isConstructionPending: () => pending });
   const building = { id: 'library', group };
-  group.userData.constructionPending = true;
   availability.applyGloballyUnlocked(['library']);
   assert.equal(availability.isBuildingUnavailable(building), true);
-  group.userData.constructionPending = false;
+  pending = false;
   assert.equal(availability.isBuildingUnavailable(building), false);
+});
+
+test('construction access retains the last trusted policy during config reload and network failure', async (context) => {
+  const apiGlobals = ['__TOWN_VITE_API_BASE__', '__TOWN_VITE_SERVER_URL__'];
+  const descriptors = apiGlobals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
+  apiGlobals.forEach((key) => Object.defineProperty(globalThis, key, { value: '', configurable: true }));
+  context.after(() => {
+    disposeCityGovernance();
+    apiGlobals.forEach((key, index) => {
+      const descriptor = descriptors[index];
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    });
+  });
+  disposeCityGovernance();
+  let version = 'construction-access-v1';
+  let built = false;
+  let unavailable = false;
+  let reloadGate: Promise<void> | undefined;
+  context.mock.method(globalThis, 'fetch', async (input: string) => {
+    if (unavailable) throw new Error('offline');
+    if (input.endsWith('/config')) {
+      await reloadGate;
+      return Response.json({ version, initialBuiltBuildingIds: ['commons'], projects: [{ id: 'library-project', buildingId: 'library' }] });
+    }
+    return Response.json({ epoch: 'test', revision: 1, configVersion: version, projects: [{ id: 'library-project', built, funded: built ? 3000 : 0, votes: 0 }], decorations: [] });
+  });
+  const building = { id: 'library', group: new THREE.Group() };
+  const availability = createBuildingAvailability({ storyLockedIds: new Set(), getResidences: () => [], isConstructionPending });
+  assert.equal(availability.isBuildingUnavailable(building), false);
+  await loadCityGovernance();
+  assert.equal(availability.isBuildingUnavailable(building), true);
+
+  let releaseReload!: () => void;
+  reloadGate = new Promise((resolve) => { releaseReload = resolve; });
+  version = 'construction-access-v2';
+  built = true;
+  applyCityState({ epoch: 'test', revision: 1, configVersion: version, projects: [], decorations: [] });
+  const reloading = loadCityGovernance();
+  assert.equal(availability.isBuildingUnavailable(building), true);
+  releaseReload();
+  await reloading;
+  assert.equal(availability.isBuildingUnavailable(building), false);
+
+  applyCityState({ epoch: 'test', revision: 2, configVersion: version, projects: [{ id: 'library-project', funded: 0, built: false, votes: 0 }], decorations: [] });
+  unavailable = true;
+  await loadCityGovernance();
+  assert.equal(availability.isBuildingUnavailable(building), true);
 });

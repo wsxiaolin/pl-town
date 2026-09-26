@@ -3,7 +3,6 @@ import type { BuildingEntity } from './buildingEntity';
 import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 import { openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
-import { isConstructionPending } from './cityGovernanceClient';
 
 type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
 
@@ -35,7 +34,6 @@ const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityP
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
   function openGovernanceIfNeeded(building: BuildingEntity): boolean {
     if (building.id !== 'commons' && building.id !== 'commons_outer') return false;
-    if (isConstructionPending(building.id)) return false;
     openCityGovernancePanel(building.id);
     options.trackInteraction(building.id);
     return true;
@@ -49,7 +47,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateUnlocked(b: BuildingEntity) {
-    if (isConstructionPending(b.id) || options.isBuildingUnavailable(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     if (openGovernanceIfNeeded(b)) return;
     if (options.interactWithFeature?.(b)) return;
     if (b.id === 'film_city') {
@@ -116,7 +114,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   }
 
   function navigateTo(b: BuildingEntity) {
-    if (isConstructionPending(b.id) || options.isBuildingUnavailable(b)) return;
+    if (options.isBuildingUnavailable(b)) return;
     if (openGovernanceIfNeeded(b)) return;
     options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
   }

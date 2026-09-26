@@ -22,7 +22,11 @@ function decorationSelect(name: string, config: CityConfig, ids: string[]): HTML
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '建设失败，请重试'; }
 
-export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, state: CityState, rerender: () => void, reportError: (message: string) => void): void {
+export function renderCityPersonalAreas(
+  list: HTMLElement, config: CityConfig, state: CityState, rerender: () => void,
+  reportError: (message: string) => void, reportNotice: (message: string) => void,
+  focusAction: (dataKey: 'cityArea' | 'cityPlot', id: string) => void,
+): void {
   const occupied = new Map(state.decorations.map((entry) => [entry.plotId, entry]));
   const grouped = new Set((config.personalAreas ?? []).flatMap((area) => area.plotIds));
   for (const area of config.personalAreas ?? []) {
@@ -39,7 +43,7 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
       draft.decorationId = pendingReceipt.decorationId;
       draft.quantity = pendingReceipt.quantity;
     }
-    if (!ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
+    if (!pendingReceipt && !ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
     const select = decorationSelect(area.name, config, ids);
     select.dataset.cityFocus = `area-decoration:${area.id}`;
     select.value = draft.decorationId;
@@ -56,17 +60,19 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
     const columns = [...new Set(plots.map((plot) => plot.x))].sort((a, b) => a - b);
     const rows = [...new Set(plots.map((plot) => plot.z))].sort((a, b) => a - b);
     preview.style.gridTemplateColumns = `repeat(${columns.length}, minmax(0, 1fr))`;
-    const action = actionButton('批量建设');
-    action.dataset.cityFocus = `area-build:${area.id}`;
+    const action = actionButton('批量建设', undefined, false, `area-build:${area.id}`);
     const update = () => {
       const available = plots.filter((plot) => !occupied.has(plot.id) && plot.options.includes(draft.decorationId));
-      quantity.max = String(available.length);
+      quantity.max = String(Math.max(available.length, pendingReceipt?.quantity ?? 0));
       const valid = Number.isSafeInteger(draft.quantity) && draft.quantity >= 1 && draft.quantity <= available.length;
       const selected = new Set(valid ? available.slice(0, draft.quantity).map((plot) => plot.id) : []);
       const cost = config.decorations.find((entry) => entry.id === draft.decorationId)?.cost ?? 0;
-      total.textContent = valid ? `将建设 ${draft.quantity} 处 · 总价 ${money(cost * draft.quantity)} · 可用 ${available.length} 处`
+      total.textContent = pendingReceipt ? `上次 ${draft.quantity} 处建设结果待确认，可安全重试，不会重复扣费。`
+        : valid ? `将建设 ${draft.quantity} 处 · 总价 ${money(cost * draft.quantity)} · 可用 ${available.length} 处`
         : available.length ? `请输入 1–${available.length} 之间的整数` : '该区域已无可用地块';
-      action.disabled = draft.pending || !valid;
+      // A city broadcast can already show the committed plots as occupied.
+      // Confirming its pending receipt remains safe even with no capacity left.
+      action.disabled = draft.pending || (!pendingReceipt && !valid);
       select.disabled = quantity.disabled = draft.pending || Boolean(pendingReceipt);
       preview.replaceChildren();
       for (const plot of plots) {
@@ -80,14 +86,17 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
         preview.append(cell);
       }
     };
-    select.addEventListener('change', () => { draft.decorationId = select.value; reportError(''); update(); });
-    quantity.addEventListener('input', () => { draft.quantity = Number(quantity.value); reportError(''); update(); });
+    select.addEventListener('change', () => { draft.decorationId = select.value; update(); });
+    quantity.addEventListener('input', () => { draft.quantity = Number(quantity.value); update(); });
     action.addEventListener('click', async () => {
       if (action.disabled) return;
       draft.pending = true; reportError(''); update();
-      try { await decorateCityArea(area.id, draft.decorationId, draft.quantity); }
-      catch (error) { reportError(errorMessage(error)); }
-      finally { draft.pending = false; rerender(); }
+      let failed = false;
+      try {
+        const result = await decorateCityArea(area.id, draft.decorationId, draft.quantity);
+        reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
+      } catch (error) { failed = true; reportError(errorMessage(error)); }
+      finally { draft.pending = false; rerender(); if (failed) focusAction('cityArea', area.id); }
     });
     update();
     item.append(preview, select, quantity, total, action);
@@ -105,18 +114,20 @@ export function renderCityPersonalAreas(list: HTMLElement, config: CityConfig, s
     } else {
       const select = decorationSelect(plot.name, config, plot.options);
       select.dataset.cityFocus = `plot-decoration:${plot.id}`;
-      const action = actionButton('建设');
-      action.dataset.cityFocus = `plot-build:${plot.id}`;
+      const action = actionButton('建设', undefined, false, `plot-build:${plot.id}`);
       const draft = drafts.get(plot.id) ?? { decorationId: select.value, quantity: 1, pending: false };
       drafts.set(plot.id, draft);
       select.value = draft.decorationId;
       select.disabled = action.disabled = draft.pending;
-      select.addEventListener('change', () => { draft.decorationId = select.value; reportError(''); });
+      select.addEventListener('change', () => { draft.decorationId = select.value; });
       action.addEventListener('click', async () => {
         draft.pending = true; reportError(''); action.disabled = true; select.disabled = true;
-        try { await decorateCity(plot.id, select.value); }
-        catch (error) { reportError(errorMessage(error)); }
-        finally { draft.pending = false; rerender(); }
+        let failed = false;
+        try {
+          const result = await decorateCity(plot.id, select.value);
+          reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
+        } catch (error) { failed = true; reportError(errorMessage(error)); }
+        finally { draft.pending = false; rerender(); if (failed) focusAction('cityPlot', plot.id); }
       });
       item.append(select, action);
     }

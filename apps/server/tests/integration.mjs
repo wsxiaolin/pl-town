@@ -4,6 +4,17 @@ import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
+import assert from 'node:assert/strict';
+
+// Error text is currently the shared city protocol discriminator. A new server
+// rejection needs a safe localized client mapping, including its retry policy.
+const cityErrorClient = readFileSync(new URL('../../web/src/city/cityGovernanceClient.ts', import.meta.url), 'utf8');
+for (const file of ['cityGovernance.ts', 'cityGovernanceRouter.ts']) {
+  const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+  for (const [, message] of source.matchAll(/(?:new HttpBodyError\(|error: )'([^']+)'/g)) {
+    assert.ok(cityErrorClient.includes(`'${message}':`), `Missing city error mapping: ${message}`);
+  }
+}
 
 const port = 8791;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
@@ -192,7 +203,8 @@ const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e'
   }
   closeDatabase();
 `], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
-if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout);
+if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout
+  || establishedTown.error?.message || `Established town fixture failed: signal=${establishedTown.signal}, status=${establishedTown.status}`);
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {

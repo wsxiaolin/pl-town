@@ -53,12 +53,14 @@ async function stop() {
   for (const socket of sockets.splice(0)) socket.terminate();
   const child = server;
   server = undefined;
+  // A signal-terminated child keeps exitCode=null. Repeated cleanup must not
+  // wait for an exit event that has already fired (including on Windows).
   if (child && child.exitCode === null && child.signalCode === null) {
     const exited = once(child, 'exit');
     child.kill('SIGTERM');
     const timeout = setTimeout(() => child.kill('SIGKILL'), 5000);
-    await exited;
-    clearTimeout(timeout);
+    try { await exited; }
+    finally { clearTimeout(timeout); }
   }
 }
 async function resident(token) {
@@ -271,7 +273,7 @@ try {
     const { voteCity, getCityVotes } = await import('./dist/cityVoting.js');
     const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
     const { BUILDING_CATALOG } = await import('./dist/data/buildingCatalog.js');
-    const { LEGACY_INITIAL_BUILDINGS } = await import('./dist/cityGovernanceMigration.js');
+    const { LEGACY_INITIAL_BUILDINGS, LEGACY_UNLOCK_PRESERVATION_BUILDINGS, reconcileInitialBuildings } = await import('./dist/cityGovernanceMigration.js');
     const legacyPendingBuildings = [
       'catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop',
       'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
@@ -279,6 +281,7 @@ try {
       'wushi_restaurant', 'tavern',
     ];
     const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
+    assert.deepEqual([...LEGACY_UNLOCK_PRESERVATION_BUILDINGS].sort(), [...legacyPendingBuildings].sort());
     const legacyPolicyIds = new Set([...LEGACY_INITIAL_BUILDINGS, ...legacyPendingBuildings]);
     assert.equal(legacyPolicyIds.size, BUILDING_CATALOG.length, 'legacy construction policy must cover every catalog building');
     assert.deepEqual([...legacyPolicyIds].filter((id) => !catalogBuildingIds.has(id)), [], 'legacy policy must not contain removed buildings');
@@ -331,6 +334,22 @@ try {
     db.prepare('UPDATE city_configs SET config_json = ? WHERE version = ?').run(stored, config.version);
     // Failed restore must roll back every table and close its source handle.
     const Database = (await import('better-sqlite3')).default;
+    // Unlock preservation is a one-time pre-ledger policy, not a fallback for
+    // arbitrary missing project rows or buildings introduced in later releases.
+    const policyDb = new Database(':memory:');
+    policyDb.exec('CREATE TABLE users (id TEXT); CREATE TABLE city_meta (id INTEGER, config_version TEXT); CREATE TABLE city_configs (version TEXT, config_json TEXT); CREATE TABLE city_projects (id TEXT); CREATE TABLE player_building_unlocks (building_id TEXT)');
+    policyDb.prepare('INSERT INTO users VALUES (?)').run(user.id);
+    for (const id of ['academy', 'writingclub_outer', 'future-default-building']) policyDb.prepare('INSERT INTO player_building_unlocks VALUES (?)').run(id);
+    const futureConfig = { ...config, version: 'future-policy', projects: [...config.projects,
+      { id: 'future-project', buildingId: 'future-default-building', kind: 'building', name: 'Future', description: 'Future', cost: 3000 }] };
+    const preservedLegacy = reconcileInitialBuildings(policyDb, futureConfig);
+    assert.equal(preservedLegacy.has('academy'), true);
+    assert.equal(preservedLegacy.has('future-default-building'), false);
+    policyDb.prepare('INSERT INTO city_configs VALUES (?, ?)').run(config.version, JSON.stringify(config));
+    policyDb.prepare('INSERT INTO city_meta VALUES (1, ?)').run(config.version);
+    const preservedUpgrade = reconcileInitialBuildings(policyDb, futureConfig);
+    for (const id of ['academy', 'writingclub_outer', 'future-default-building']) assert.equal(preservedUpgrade.has(id), false);
+    policyDb.close();
     // The first pending-building policy missed the client-only photo studio.
     // A real old ledger has neither its project definition nor its progress row.
     const photoPath = ${JSON.stringify(join(dataDir, 'city-before-photostudio.sqlite'))};

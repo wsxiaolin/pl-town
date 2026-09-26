@@ -53,6 +53,7 @@ import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatur
 import { createWeatherEffect } from '../rendering/weatherEffect';
 import { createNavigationTargetMarker } from '../rendering/navigationTargetMarker';
 import { createBuildingAvailability, storyLockedBuildingIds } from './buildingAvailability';
+import { isConstructionPending } from './cityGovernanceClient';
 import { applyStoryLockedBuildingPresentation, restoreStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
 import { addCityLighting, createCityOrthographicCamera, createCityScene, createCityWebRenderer } from './citySceneBootstrap';
 import { createStoryOrchestration, routeNpcDialog, type StoryOrchestration } from './storyOrchestration';
@@ -92,6 +93,7 @@ const residences: ResidenceEntity[] = [];
 const availability = createBuildingAvailability({
   storyLockedIds: storyLockedBuildingIds(BUILDING_DEFS),
   getResidences: () => residences,
+  isConstructionPending,
 });
 const baseStoryLockedIds = storyLockedBuildingIds(BUILDING_DEFS);
 
@@ -551,7 +553,7 @@ function init() {
     getStats,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
-    isStoryLocked: availability.isBuildingUnavailable,
+    isBuildingUnavailable: availability.isBuildingUnavailable,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     movePlayerTo: (target) => playerController?.moveTo(target),

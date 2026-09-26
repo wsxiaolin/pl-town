@@ -1,6 +1,6 @@
-import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityProject, type CityState } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityMutationResult, type CityProject, type CityState } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
-import { card, money } from './cityGovernanceDom';
+import { actionButton as button, card, money } from './cityGovernanceDom';
 import { getCityVotingSessionId, loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
 let root: HTMLDialogElement | null = null;
@@ -8,6 +8,8 @@ let unsubscribe: (() => void) | null = null;
 let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
+let operationNotice = '';
+const pendingActions = new Set<string>();
 const donationDrafts = new Map<string, string>();
 const tabScrollTop = new Map<string, number>();
 let returnFocus: HTMLElement | null = null;
@@ -32,14 +34,25 @@ function handleLoginRequired(): void {
   closeCityGovernancePanel();
 }
 
-function button(label: string, action: () => void, disabled = false): HTMLButtonElement {
-  const element = document.createElement('button');
-  element.type = 'button';
-  element.textContent = label;
-  element.disabled = disabled;
-  element.dataset.cityFocus = label;
-  element.addEventListener('click', action);
-  return element;
+function focusAction(dataKey: 'projectId' | 'cityPlot' | 'cityArea', id: string): void {
+  const prefix = dataKey === 'projectId' ? 'donate' : dataKey === 'cityArea' ? 'area-build' : 'plot-build';
+  const action = [...root?.querySelectorAll<HTMLButtonElement>('button[data-city-focus]') ?? []]
+    .find((element) => element.dataset.cityFocus === `${prefix}:${id}` && !element.disabled);
+  const fallback = root?.querySelector<HTMLButtonElement>('.city-governance-tabs button.active');
+  (action ?? fallback)?.focus({ preventScroll: true });
+}
+
+function updateFeedback(): void {
+  for (const [selector, message] of [
+    ['[data-city-feedback]', operationError],
+    ['[data-city-notice]', operationNotice],
+    ['[data-city-vote-feedback]', activeTab === 'collective' ? voteError : ''],
+  ] as const) {
+    const region = root?.querySelector<HTMLElement>(selector);
+    if (!region) continue;
+    region.hidden = !message;
+    if (region.textContent !== message) region.textContent = message;
+  }
 }
 
 function render(preferredFocusKey?: string): void {
@@ -52,53 +65,33 @@ function render(preferredFocusKey?: string): void {
   const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
   const config = getCityConfig();
   const state = getCityState();
-  root.replaceChildren();
-  const header = document.createElement('header');
-  header.className = 'city-governance-head';
+  const header = root.querySelector<HTMLElement>('.city-governance-head')!;
   const title = document.createElement('h2');
   const activeProject = config?.projects.find((project) => project.buildingId === activeBuilding);
   title.id = 'city-governance-title';
   title.textContent = activeProject ? `众议院 · ${activeProject.name}` : '众议院';
-  header.append(title, button('关闭', closeCityGovernancePanel));
-  root.append(header);
-  const tabs = document.createElement('nav');
-  tabs.className = 'city-governance-tabs';
+  header.replaceChildren(title, button('关闭', closeCityGovernancePanel, false, 'close'));
+  const tabs = root.querySelector<HTMLElement>('.city-governance-tabs')!;
+  tabs.replaceChildren();
   for (const [tab, label] of [['collective', '城市集体建设'], ['personal', '个人建设']] as const) {
-    const tabButton = button(label, () => { activeTab = tab; render(); });
+    const tabButton = button(label, () => { activeTab = tab; render(); }, false, `tab:${tab}`);
     tabButton.classList.toggle('active', activeTab === tab);
     tabButton.setAttribute('aria-pressed', String(activeTab === tab));
     tabs.append(tabButton);
   }
-  root.append(tabs);
-  const status = document.createElement('p');
-  status.dataset.cityStatus = 'true';
+  const status = root.querySelector<HTMLElement>('[data-city-status]')!;
   status.textContent = state ? `云端进度 #${state.revision}` : '正在等待云端城市配置...';
-  root.append(status);
-  if (operationError) {
-    const feedback = document.createElement('p');
-    feedback.dataset.cityFeedback = 'true';
-    feedback.setAttribute('role', 'alert');
-    feedback.textContent = operationError;
-    root.append(feedback);
-  }
-  if (voteError && activeTab === 'collective') {
-    const feedback = document.createElement('p');
-    feedback.setAttribute('role', 'alert');
-    feedback.dataset.cityVoteFeedback = 'true';
-    feedback.textContent = voteError;
-    root.append(feedback);
-  }
-  const body = document.createElement('main');
-  body.className = 'city-governance-body';
+  updateFeedback();
+  const body = root.querySelector<HTMLElement>('.city-governance-body')!;
+  body.replaceChildren();
   if (!config || !state) {
     body.append(document.createTextNode('城市建设数据暂时不可用，请稍后重试。'));
     body.append(button('重试', () => {
       const retry = body.querySelector('button');
       if (retry instanceof HTMLButtonElement) retry.disabled = true;
       void loadCityGovernance().finally(render);
-    }));
-    root.append(body);
-    if (focused) restorePanelFocus(focusKey, focusProject);
+    }, false, 'reload'));
+    if (focused) restorePanelFocus(focusKey, focusProject, focused);
     return;
   }
   const list = document.createElement('div');
@@ -107,25 +100,51 @@ function render(preferredFocusKey?: string): void {
   else renderPersonal(list, config, state);
   body.append(list);
   body.dataset.cityTab = activeTab;
-  root.append(body);
   body.scrollTop = tabScrollTop.get(activeTab) ?? 0;
   for (const input of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)) {
     const previous = values.get(input.dataset.cityInput ?? input.getAttribute('aria-label'));
     if (previous !== undefined) input.value = previous;
   }
-  if (focused) restorePanelFocus(focusKey, focusProject);
+  if (focused) restorePanelFocus(focusKey, focusProject, focused);
 }
 
-function restorePanelFocus(focusKey: string | null | undefined, projectId?: string): void {
+function restorePanelFocus(focusKey: string | null | undefined, projectId?: string, previous?: HTMLElement): void {
   if (!root) return;
   const replacement = focusKey ? [...root.querySelectorAll<HTMLElement>(FOCUS_SELECTOR)]
     .find((element) => (element.dataset.cityFocus ?? element.getAttribute('aria-label')) === focusKey) : undefined;
-  if (replacement && !replacement.hasAttribute('disabled')) replacement.focus({ preventScroll: true });
+  if (replacement && !replacement.hasAttribute('disabled')) {
+    // Number inputs do not expose their caret. Reuse the focused donation draft
+    // node, whose listener does not close over any other rendered controls.
+    if (focusKey?.startsWith('donate-input:') && previous instanceof HTMLInputElement
+      && previous.dataset.cityFocus === focusKey && replacement instanceof HTMLInputElement) {
+      replacement.replaceWith(previous);
+      previous.focus({ preventScroll: true });
+    } else replacement.focus({ preventScroll: true });
+  }
   else {
     const project = projectId ? [...root.querySelectorAll<HTMLElement>(CARD_SELECTOR)]
       .find((element) => focusedCardKey(element) === projectId) : undefined;
     const nextAction = project?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
-    (nextAction ?? root.querySelector<HTMLButtonElement>('.city-governance-head button'))?.focus({ preventScroll: true });
+    (nextAction ?? root.querySelector<HTMLButtonElement>('.city-governance-tabs button.active')
+      ?? root.querySelector<HTMLButtonElement>('.city-governance-head button'))?.focus({ preventScroll: true });
+  }
+}
+
+async function submitDonation(projectId: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
+  if (pendingActions.has(projectId)) return;
+  pendingActions.add(projectId);
+  operationError = '';
+  operationNotice = '';
+  render();
+  try {
+    const result = await mutation();
+    operationNotice = result.replayed ? '上一笔已成功，未重复扣费。' : '';
+  } catch (error) {
+    operationError = error instanceof Error ? error.message : '建设失败，请重试';
+  } finally {
+    pendingActions.delete(projectId);
+    render();
+    if (operationError && root?.open) focusAction('projectId', projectId);
   }
 }
 
@@ -165,8 +184,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
             if (focusedCardKey(currentFocus) === project.id) retryFocus = `vote:${project.id}`;
           }
           finally { voting.delete(project.id); render(retryFocus); }
-        }, Boolean(voted) || voting.has(project.id));
-        action.dataset.cityFocus = `vote:${project.id}`;
+        }, Boolean(voted) || voting.has(project.id), `vote:${project.id}`);
         item.append(action);
       }
     }
@@ -178,17 +196,10 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
       amount.dataset.cityFocus = `donate-input:${project.id}`;
       amount.addEventListener('input', () => donationDrafts.set(project.id, amount.value));
       amount.setAttribute('aria-label', `${project.name}捐款金额`);
-      const action = button('捐款', async () => {
-        action.disabled = true;
-        operationError = '';
-        root?.querySelector('[data-city-feedback]')?.remove();
-        try { await donateCity(project.id, Number(amount.value)); render(); }
-        catch (error) {
-          operationError = error instanceof Error ? error.message : '捐款失败，请重试';
-          render();
-        }
-      });
-      action.dataset.cityFocus = `donate:${project.id}`;
+      const action = button('捐款', () => {
+        const value = Number(donationDrafts.get(project.id) ?? amount.value);
+        void submitDonation(project.id, () => donateCity(project.id, value));
+      }, pendingActions.has(project.id), `donate:${project.id}`);
       item.append(amount, action);
     }
     list.append(item);
@@ -198,8 +209,12 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
   renderCityPersonalAreas(list, config, state, render, (message) => {
     operationError = message;
-    if (!message) root?.querySelector('[data-city-feedback]')?.remove();
-  });
+    operationNotice = '';
+    updateFeedback();
+  }, (message) => {
+    operationNotice = message;
+    updateFeedback();
+  }, (dataKey, id) => { if (root?.open) focusAction(dataKey, id); });
 }
 
 function containTabFocus(event: KeyboardEvent): void {
@@ -223,12 +238,37 @@ function containTabFocus(event: KeyboardEvent): void {
 }
 
 export function openCityGovernancePanel(buildingId = ''): void {
+  if (activeBuilding !== buildingId) { operationError = ''; operationNotice = ''; }
   activeBuilding = buildingId;
   if (!root) {
     root = document.createElement('dialog');
     root.className = 'city-governance-panel';
     root.setAttribute('aria-labelledby', 'city-governance-title');
     root.setAttribute('aria-modal', 'true');
+    const header = document.createElement('header');
+    header.className = 'city-governance-head';
+    const tabs = document.createElement('nav');
+    tabs.className = 'city-governance-tabs';
+    const status = document.createElement('p');
+    status.dataset.cityStatus = 'true';
+    const feedback = document.createElement('p');
+    feedback.dataset.cityFeedback = 'true';
+    feedback.setAttribute('role', 'alert');
+    feedback.setAttribute('aria-atomic', 'true');
+    feedback.hidden = true;
+    const notice = document.createElement('p');
+    notice.dataset.cityNotice = 'true';
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-atomic', 'true');
+    notice.hidden = true;
+    const voteFeedback = document.createElement('p');
+    voteFeedback.dataset.cityVoteFeedback = 'true';
+    voteFeedback.setAttribute('role', 'alert');
+    voteFeedback.setAttribute('aria-atomic', 'true');
+    voteFeedback.hidden = true;
+    const body = document.createElement('main');
+    body.className = 'city-governance-body';
+    root.append(header, tabs, status, feedback, notice, voteFeedback, body);
     document.body.append(root);
     root.addEventListener('cancel', (event) => { event.preventDefault(); closeCityGovernancePanel(); });
     root.addEventListener('keydown', (event) => {
@@ -282,6 +322,9 @@ export function closeCityGovernancePanel(): void {
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   returnFocus = null;
   operationError = '';
+  operationNotice = '';
+  voteError = '';
+  updateFeedback();
 }
 
 export function disposeCityGovernancePanel(): void {
@@ -294,6 +337,8 @@ export function disposeCityGovernancePanel(): void {
   activeBuilding = '';
   activeTab = 'collective';
   operationError = '';
+  operationNotice = '';
+  pendingActions.clear();
   donationDrafts.clear();
   tabScrollTop.clear();
   clearCityConstructionDrafts();

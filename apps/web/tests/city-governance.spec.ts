@@ -70,7 +70,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
   await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
 
   const panel = page.locator('.city-governance-panel');
-  await expect(panel).toHaveClass(/open/);
+  await expect(panel).toHaveAttribute('open', '');
   await expect(panel.getByRole('button', { name: '城市集体建设' })).toHaveClass(/active/);
   const project = panel.locator('.city-governance-card').first();
   await expect(project).toContainText('募捐进度 0 金币 / 3,000 金币');
