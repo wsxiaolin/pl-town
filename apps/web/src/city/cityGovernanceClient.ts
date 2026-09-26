@@ -19,11 +19,15 @@ export type CityState = {
 import { townApiUrl } from '../core/townApi';
 
 export type CityGovernanceListener = (config: CityConfig | null, state: CityState | null) => void;
+export type CityMutationResult = { state: CityState; replayed: boolean };
 
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
-const pendingRequestIds = new Map<string, string>();
+type PendingOperation = { requestId: string; configVersion: string; body: Record<string, unknown> };
+// Do not expire uncertain receipts: the server may already have charged them.
+// Only a confirmed outcome or disposal of this client session releases an ID.
+const pendingRequestIds = new Map<string, PendingOperation>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
 let loadSequence = 0;
@@ -124,7 +128,7 @@ export function disposeCityGovernance(): void {
   listeners.clear();
 }
 
-async function mutate(path: string, body: Record<string, unknown>): Promise<CityState> {
+async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
   const token = localStorage.getItem('minicityServerToken');
   if (!token) {
@@ -132,37 +136,45 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     throw new Error('请先登录');
   }
   const operationKey = `${path}:${JSON.stringify(body)}`;
-  const requestId = pendingRequestIds.get(operationKey) ?? makeRequestId();
-  pendingRequestIds.set(operationKey, requestId);
+  // The server fingerprint includes configVersion. Preserve the complete receipt
+  // after an uncertain outcome, even if the current catalog changes before retry.
+  const operation = pendingRequestIds.get(operationKey)
+    ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
+  const { requestId, configVersion } = operation;
+  pendingRequestIds.set(operationKey, operation);
   let response: Response;
-  let payload: { state?: CityState; error?: string };
+  let payload: { state?: CityState; error?: string; replayed?: boolean };
   try {
-    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...body, token, configVersion: config.version, requestId }), headers: { 'content-type': 'application/json' } });
+    response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...operation.body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
   } catch {
     // Keep the request ID: a lost response does not mean the server rolled back.
+    console.debug('[city-governance] request transport failed');
     throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
   }
   try {
-    payload = await response.json() as typeof payload;
+    const parsed: unknown = await response.json();
+    payload = parsed && typeof parsed === 'object' ? parsed as typeof payload : {};
   } catch {
     // A malformed response may still follow a committed operation, so retain the ID.
+    console.debug('[city-governance] response JSON could not be parsed');
     throw new Error('服务器响应格式异常，请重试；重复请求不会重复扣费。');
   }
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
-  if (response.status === 409) {
-    await loadCityGovernance();
-  }
+  // Report the rejected operation immediately; a slow refresh must not hide it.
+  if (response.status === 409) void loadCityGovernance();
   if (!response.ok || !validState(payload.state)) {
-    if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === requestId) {
+    if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === operation) {
       pendingRequestIds.delete(operationKey);
     }
     throw new Error(cityOperationError(payload.error));
   }
-  if (pendingRequestIds.get(operationKey) === requestId) pendingRequestIds.delete(operationKey);
+  if (pendingRequestIds.get(operationKey) === operation) pendingRequestIds.delete(operationKey);
   applyCityState(payload.state);
-  return payload.state;
+  return { state: payload.state, replayed: payload.replayed === true };
 }
 
+// These keys are the city HttpBodyError contract. Keep them aligned with
+// cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
 const cityOperationMessages: Record<string, string> = {
     'Invalid requestId': '建设请求无效，请刷新页面后重试。',
     'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
@@ -183,11 +195,15 @@ const cityOperationMessages: Record<string, string> = {
 };
 
 function isDefinitiveRejection(response: Response, error?: string): boolean {
-  return response.status >= 400 && response.status < 500 && Boolean(error && cityOperationMessages[error]);
+  // Authentication and rate checks run before receipt lookup. A 401/429 says
+  // nothing about whether an earlier attempt committed, so keep its receipt.
+  return [400, 404, 409].includes(response.status) && typeof error === 'string'
+    && Object.hasOwn(cityOperationMessages, error);
 }
 
 function cityOperationError(error?: string): string {
-  return error && cityOperationMessages[error] ? cityOperationMessages[error] : '建设请求失败，请稍后重试。';
+  return typeof error === 'string' && Object.hasOwn(cityOperationMessages, error)
+    ? cityOperationMessages[error]! : '建设请求失败，请稍后重试。';
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
