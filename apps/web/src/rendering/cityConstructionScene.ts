@@ -5,7 +5,7 @@ import { restoreBuildingPresentation } from '../city/buildingDamage';
 import { getCityConfig, getCityState, isConstructionPending, subscribeCityGovernance } from '../city/cityGovernanceClient';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ResourcePool } from '../core/ResourcePool';
-import { createConstructionFlowers } from './constructionFlowers';
+import { createConstructionDecorations } from './constructionDecorations';
 
 type Kind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
 type Item = { key: string; kind: Kind | 'road'; x: number; z: number; width?: number; depth?: number };
@@ -31,7 +31,7 @@ export function createCityConstructionScene(options: {
   const visuals = new Map<string, Visual>();
   const detachedPlots = new Map<THREE.Object3D, THREE.Object3D>();
   const resources = new ResourcePool();
-  const makeFlowers = createConstructionFlowers(resources);
+  const makeDecoration = createConstructionDecorations(resources);
   const lights: THREE.PointLight[] = [];
   const lightingPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
   const detachedAttachments = new Map<THREE.Object3D, THREE.Object3D[]>();
@@ -56,7 +56,10 @@ export function createCityConstructionScene(options: {
     group.position.set(item.x, SURFACE_Y.landscape + 0.012, item.z);
     group.name = item.key;
     const visual: Visual = { signature: JSON.stringify(item), root: group };
-    const material = (color: number) => resources.material({ color }, () => new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+    const material = (parameters: THREE.MeshStandardMaterialParameters) => {
+      const settings = { roughness: 0.85, depthWrite: true, polygonOffset: false, ...parameters };
+      return resources.material(settings, () => new THREE.MeshStandardMaterial(settings));
+    };
     const part = (geometry: THREE.BufferGeometry, mat: THREE.MeshStandardMaterial, x: number, y: number, z: number) => {
       const mesh = new THREE.Mesh(resources.geometry(geometry), mat);
       mesh.position.set(x, y, z);
@@ -66,41 +69,18 @@ export function createCityConstructionScene(options: {
       return mesh;
     };
     if (item.kind === 'road') {
-      const mat = material(0xaeb8ad);
-      mat.depthWrite = false;
-      mat.polygonOffset = true;
-      mat.polygonOffsetFactor = -1;
-      mat.polygonOffsetUnits = -1;
+      const mat = material({ color: 0xaeb8ad, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
       const mesh = part(new THREE.PlaneGeometry(item.width!, item.depth!), mat, 0, 0, 0);
       mesh.rotation.x = -Math.PI / 2;
       mesh.renderOrder = RENDER_ORDER.roadMarking;
       group.position.y = SURFACE_Y.roadMarking + 0.012;
     } else if (item.kind === 'lamp') {
-      const metal = material(0x4e5a59);
-      part(new THREE.CylinderGeometry(0.08, 0.14, 0.14, 10), metal, 0, 0.07, 0);
-      part(new THREE.CylinderGeometry(0.045, 0.065, 1.65, 8), metal, 0, 0.9, 0);
-      visual.glow = material(0xffecc9);
-      visual.glow.emissive.setHex(0xffd9a1);
+      group.add(makeDecoration('lamp-post'));
+      // Keep the globe separate: only its shared material changes emission at dusk.
+      visual.glow = material({ color: 0xffecc9, emissive: 0xffd9a1 });
       part(new THREE.SphereGeometry(0.16, 12, 8), visual.glow, 0, 1.8, 0);
-    } else if (item.kind === 'bench') {
-      const wood = material(0xa97950);
-      const metal = material(0x515a59);
-      for (const x of [-0.48, 0.48]) part(new THREE.BoxGeometry(0.09, 0.45, 0.45), metal, x, 0.225, 0);
-      part(new THREE.BoxGeometry(1.3, 0.1, 0.5), wood, 0, 0.48, 0);
-      part(new THREE.BoxGeometry(1.3, 0.35, 0.08), wood, 0, 0.72, -0.22);
-    } else if (item.kind === 'flowers') {
-      group.add(makeFlowers());
     } else {
-      const wood = material(0x795b43);
-      part(new THREE.CylinderGeometry(0.09, 0.16, 1.25, 9), wood, 0, 0.625, 0);
-      const foliage = material(item.kind === 'cherry' ? 0xe5a2bd : item.kind === 'pine' ? 0x376956 : 0x68944f);
-      if (item.kind === 'pine') {
-        for (let i = 0; i < 3; i++) part(new THREE.ConeGeometry(0.72 - i * 0.16, 0.95, 9), foliage, 0, 1.15 + i * 0.45, 0);
-      } else {
-        for (const [x, y, z, radius] of [[0, 1.7, 0, 0.66], [-0.42, 1.4, 0.1, 0.48], [0.4, 1.45, -0.1, 0.5]]) {
-          part(new THREE.SphereGeometry(radius, 10, 8), foliage, x!, y!, z!);
-        }
-      }
+      group.add(makeDecoration(item.kind));
     }
     root.add(group);
     return visual;
@@ -128,8 +108,12 @@ export function createCityConstructionScene(options: {
     lamps.sort((a, b) => a.root.position.distanceToSquared(lightingPosition) - b.root.position.distanceToSquared(lightingPosition));
     lights.forEach((light, index) => {
       const lamp = lamps[index];
-      if (lamp) light.position.copy(lamp.root.position).y += 1.8;
-      light.intensity = night && lamp ? 1.4 : 0;
+      light.intensity = 0;
+      if (lamp) {
+        light.position.copy(lamp.root.position);
+        light.position.y += 1.8;
+        if (night) light.intensity = 1.4;
+      }
     });
   }
 

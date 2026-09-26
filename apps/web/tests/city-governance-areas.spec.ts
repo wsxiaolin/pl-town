@@ -58,7 +58,7 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
     await expect(area.locator('[data-city-area-total]')).toContainText('总价 1,600 金币');
     const quantity = area.getByRole('spinbutton', { name: '北侧花海建设数量' });
     const action = area.getByRole('button', { name: '批量建设' });
-    for (const invalid of ['0', '21', '1.5']) {
+    for (const invalid of ['', '0', '21', '1.5']) {
       await quantity.fill(invalid);
       await expect(action).toBeDisabled();
     }
@@ -74,6 +74,16 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
       client.applyCityState(next);
     }, state);
     await expect(quantity).toBeFocused();
+    await quantity.fill('');
+    state = { ...state, revision: state.revision + 1 };
+    await page.evaluate(async (next) => {
+      const modulePath = '/src/city/cityGovernanceClient.ts';
+      const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+      client.applyCityState(next);
+    }, state);
+    await expect(quantity).toHaveValue('');
+    await expect(quantity).toBeFocused();
+    await expect(action).toBeDisabled();
     await quantity.fill('0');
     await expect(action).toBeDisabled();
     await quantity.fill('5');
@@ -85,6 +95,19 @@ for (const { viewport, committedBeforeLoss } of scenarios) {
     await action.click();
     await expect(action).toBeEnabled();
     await expect(panel.getByRole('alert')).toBeVisible();
+    const mismatchedRetries = await page.evaluate(async (count) => {
+      const modulePath = '/src/city/cityGovernanceClient.ts';
+      const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+      const errors: string[] = [];
+      for (const [decorationId, quantity] of [['cherry', count - 1], ['flowers', count]] as const) {
+        try { await client.decorateCityArea('north-meadow', decorationId, quantity); }
+        catch (error) { errors.push(error instanceof Error ? error.message : String(error)); }
+      }
+      return errors;
+    }, chosenQuantity);
+    expect(mismatchedRetries).toHaveLength(2);
+    for (const message of mismatchedRetries) expect(message).toContain('请先按原装饰和数量重试');
+    expect(requests).toHaveLength(1);
     if (committedBeforeLoss) {
       // The original response was lost after committing. The city broadcast now
       // fills every slot, but the unconfirmed receipt must still be retryable.
