@@ -1,6 +1,6 @@
-import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
-import { actionButton as button, card, money } from './cityGovernanceDom';
+import { actionButton as button, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
 let root: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -8,7 +8,7 @@ let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 let operationNotice = '';
-const pendingActions = new Set<string>();
+const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
 
 function focusAction(dataKey: 'projectId' | 'plotId' | 'cityArea', id: string): void {
@@ -50,6 +50,7 @@ function restoreFocus(previous: HTMLElement | null): void {
   // Only the donation handler is independent of the rendered card controls.
   // Area quantity handlers update their own preview, total and action nodes.
   if (previous.dataset.focusKey.startsWith('amount:') && previous instanceof HTMLInputElement && replacement instanceof HTMLInputElement) {
+    donationDrafts.set(previous.dataset.focusKey.slice('amount:'.length), previous.value);
     replacement.replaceWith(previous);
     previous.focus({ preventScroll: true });
   } else replacement.focus({ preventScroll: true });
@@ -99,21 +100,33 @@ function render(): void {
 }
 
 async function submitDonation(id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
+  const session = refreshCityGovernanceSession();
+  const submittedPanel = root;
   const actionKey = `projectId:${id}`;
   if (pendingActions.has(actionKey)) return;
-  pendingActions.add(actionKey);
+  const action = Symbol(actionKey);
+  pendingActions.set(actionKey, action);
+  const focus = trackPendingActionFocus(`donate:${id}`);
+  let failed = false;
   operationError = '';
   operationNotice = '';
   render();
   try {
     const result = await mutation();
+    if (!result || root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     operationNotice = result.replayed ? '上一笔已成功，未重复扣费。' : '';
   } catch (error) {
+    if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
+    failed = true;
     operationError = error instanceof Error ? error.message : '建设失败，请重试';
   } finally {
-    pendingActions.delete(actionKey);
-    render();
-    if (operationError && root?.classList.contains('open')) focusAction('projectId', id);
+    focus.dispose();
+    if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
+    if (root === submittedPanel && root?.classList.contains('open') && refreshCityGovernanceSession() === session) {
+      const restoreSuccessFocus = focus.shouldRestore();
+      render();
+      if (failed || restoreSuccessFocus) focusAction('projectId', id);
+    }
   }
 }
 
@@ -149,7 +162,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], progress: 
 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
   renderCityPersonalAreas(list, config, state, {
-    rerender: render,
+    rerender: () => { if (root?.classList.contains('open')) render(); },
     reportError: (message) => { operationError = message; operationNotice = ''; updateFeedback(); },
     reportNotice: (message) => { operationNotice = message; updateFeedback(); },
     focusAction: (dataKey, id) => { if (root?.classList.contains('open')) focusAction(dataKey, id); },
@@ -184,7 +197,17 @@ export function openCityGovernancePanel(buildingId = ''): void {
     root.append(header, tabs, status, feedback, notice, body);
     document.body.append(root);
     root.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCityGovernancePanel(); });
+    let session = refreshCityGovernanceSession();
     unsubscribe = subscribeCityGovernance(() => {
+      const nextSession = refreshCityGovernanceSession();
+      if (session !== nextSession) {
+        session = nextSession;
+        pendingActions.clear();
+        donationDrafts.clear();
+        clearCityConstructionDrafts();
+        operationError = '';
+        operationNotice = '';
+      }
       if (!root?.classList.contains('open')) return;
       render();
     });

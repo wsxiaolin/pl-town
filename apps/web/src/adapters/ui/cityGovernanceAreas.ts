@@ -1,5 +1,5 @@
-import { decorateCity, decorateCityArea, getPendingCityAreaOperation, type CityConfig, type CityState, type CityMutationResult } from '../../city/cityGovernanceClient';
-import { actionButton, card, money } from './cityGovernanceDom';
+import { decorateCity, decorateCityArea, getPendingCityAreaOperation, refreshCityGovernanceSession, type CityConfig, type CityState, type CityMutationResult } from '../../city/cityGovernanceClient';
+import { actionButton, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
 type Draft = { decorationId: string; pending: boolean };
 type AreaDraft = Draft & { quantityText: string };
@@ -35,19 +35,33 @@ async function submitConstruction(
   draft: Draft, dataKey: 'cityArea' | 'plotId', id: string,
   mutation: () => Promise<CityMutationResult>, feedback: ConstructionFeedback,
 ): Promise<void> {
+  const session = refreshCityGovernanceSession();
+  const drafts = dataKey === 'cityArea' ? areaDrafts : plotDrafts;
+  const isCurrentDraft = () => drafts.get(id) === draft && refreshCityGovernanceSession() === session;
+  if (!isCurrentDraft()) return;
   if (draft.pending) return;
   draft.pending = true;
+  const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`);
   feedback.reportError('');
   feedback.rerender();
   let failed = false;
   try {
     const result = await mutation();
+    if (!result || !isCurrentDraft()) return;
     feedback.reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
-  } catch (error) { failed = true; feedback.reportError(errorMessage(error)); }
+  } catch (error) {
+    if (!isCurrentDraft()) return;
+    failed = true;
+    feedback.reportError(errorMessage(error));
+  }
   finally {
-    draft.pending = false;
-    feedback.rerender();
-    if (failed) feedback.focusAction(dataKey, id);
+    focus.dispose();
+    if (isCurrentDraft()) {
+      draft.pending = false;
+      const restoreSuccessFocus = focus.shouldRestore();
+      feedback.rerender();
+      if (failed || restoreSuccessFocus) feedback.focusAction(dataKey, id);
+    }
   }
 }
 
@@ -96,7 +110,7 @@ export function renderCityPersonalAreas(
       const valid = Number.isSafeInteger(count) && count >= 1 && count <= available.length;
       const selected = new Set(valid ? available.slice(0, count).map((plot) => plot.id) : []);
       const cost = config.decorations.find((entry) => entry.id === draft.decorationId)?.cost ?? 0;
-      total.textContent = pendingReceipt ? `上次 ${count} 处建设结果待确认，可安全重试，不会重复扣费。`
+      total.textContent = pendingReceipt ? `上次 ${count} 处建设结果待确认，在当前页面及登录会话内重试不会重复扣费。`
         : valid ? `将建设 ${count} 处 · 总价 ${money(cost * count)} · 可用 ${available.length} 处`
         : available.length ? `请输入 1–${available.length} 之间的整数` : '该区域已无可用地块';
       // A city broadcast can already show the committed plots as occupied.
