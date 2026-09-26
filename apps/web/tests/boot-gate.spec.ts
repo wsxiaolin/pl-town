@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { stubCityWebSocket, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted } from './helpers';
+import { seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted } from './helpers';
 
 // The boot gate is the front door of the city: these specs pin the two boot
 // paths end to end (light moment splash vs heavy pipeline) so refactors of
