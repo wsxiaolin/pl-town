@@ -406,6 +406,9 @@ try {
     preArea.prepare("DELETE FROM city_operations WHERE request_id LIKE 'area-%'").run();
     for (const operation of preArea.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
       const fingerprint = JSON.parse(operation.fingerprint);
+      assert(Array.isArray(fingerprint) && fingerprint.length === 4
+        && ['donate', 'decorate'].includes(fingerprint[0]) && fingerprint[3] === config.version,
+      'Only legacy donate/decorate receipts can be rewritten into the pre-area fixture');
       fingerprint[3] = oldConfig.version;
       preArea.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
     }

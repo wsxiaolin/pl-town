@@ -1,7 +1,7 @@
 import { RESIDENT_TOKEN_KEY as TOKEN_KEY } from '../core/residentToken';
 import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
 import { isWeather, type Weather } from '../city/weather';
-import { applyCityState } from '../city/cityGovernanceClient';
+import { applyCityState, refreshCityGovernanceSession } from '../city/cityGovernanceClient';
 
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
 export type NetUser = { id: string; nickname: string; position: NetPosition; verified?: boolean };
@@ -118,7 +118,7 @@ export class MultiplayerClient {
   private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(this.credentials.nickname, this.credentials.password, this.credentials.pl), 2500); }
   private handle(raw: string) {
     let message: ServerMessage; try { message = JSON.parse(raw) as ServerMessage; } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); this.authorized = true; this.credentials.pl = undefined; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); trackEvent('player.connect', { nickname: message.user?.nickname }); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.credentials.pl = undefined; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
@@ -136,6 +136,7 @@ export class MultiplayerClient {
       const errorMessage = message.message ?? '服务器请求失败';
       if (!this.authorized && !this.closed) {
         localStorage.removeItem(TOKEN_KEY);
+        refreshCityGovernanceSession();
         this.callbacks.authenticationFailed?.(errorMessage, message.code);
         this.closed = true;
         window.clearTimeout(this.reconnectTimer);

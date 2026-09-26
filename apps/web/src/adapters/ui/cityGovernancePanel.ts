@@ -1,6 +1,6 @@
-import { donateCity, getCityConfig, getCityState, loadCityGovernance, subscribeCityGovernance, type CityMutationResult, type CityProject, type CityState } from '../../city/cityGovernanceClient';
+import { donateCity, getCityConfig, getCityState, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject, type CityState } from '../../city/cityGovernanceClient';
 import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
-import { actionButton as button, card, money } from './cityGovernanceDom';
+import { actionButton as button, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 import { getCityVotingSessionId, loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
 let root: HTMLDialogElement | null = null;
@@ -9,7 +9,7 @@ let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 let operationNotice = '';
-const pendingActions = new Set<string>();
+const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
 const tabScrollTop = new Map<string, number>();
 let returnFocus: HTMLElement | null = null;
@@ -117,6 +117,7 @@ function restorePanelFocus(focusKey: string | null | undefined, projectId?: stri
     // node, whose listener does not close over any other rendered controls.
     if (focusKey?.startsWith('donate-input:') && previous instanceof HTMLInputElement
       && previous.dataset.cityFocus === focusKey && replacement instanceof HTMLInputElement) {
+      donationDrafts.set(focusKey.slice('donate-input:'.length), previous.value);
       replacement.replaceWith(previous);
       previous.focus({ preventScroll: true });
     } else replacement.focus({ preventScroll: true });
@@ -130,21 +131,34 @@ function restorePanelFocus(focusKey: string | null | undefined, projectId?: stri
   }
 }
 
-async function submitDonation(projectId: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
-  if (pendingActions.has(projectId)) return;
-  pendingActions.add(projectId);
+async function submitDonation(id: string, mutation: () => Promise<CityMutationResult>): Promise<void> {
+  const session = refreshCityGovernanceSession();
+  const submittedPanel = root;
+  const actionKey = `projectId:${id}`;
+  if (pendingActions.has(actionKey)) return;
+  const action = Symbol(actionKey);
+  pendingActions.set(actionKey, action);
+  const focus = trackPendingActionFocus(`donate:${id}`);
+  let failed = false;
   operationError = '';
   operationNotice = '';
   render();
   try {
     const result = await mutation();
+    if (!result || root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
     operationNotice = result.replayed ? '上一笔已成功，未重复扣费。' : '';
   } catch (error) {
+    if (root !== submittedPanel || refreshCityGovernanceSession() !== session) return;
+    failed = true;
     operationError = error instanceof Error ? error.message : '建设失败，请重试';
   } finally {
-    pendingActions.delete(projectId);
-    render();
-    if (operationError && root?.open) focusAction('projectId', projectId);
+    focus.dispose();
+    if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
+    if (root === submittedPanel && root?.open && refreshCityGovernanceSession() === session) {
+      const restoreSuccessFocus = focus.shouldRestore();
+      render();
+      if (failed || restoreSuccessFocus) focusAction('projectId', id);
+    }
   }
 }
 
@@ -244,7 +258,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
           if (!liveInput) return;
           const value = Number(liveInput.value);
           void submitDonation(project.id, () => donateCity(project.id, value));
-        }, pendingActions.has(project.id), `donate:${project.id}`);
+        }, pendingActions.has(`projectId:${project.id}`), `donate:${project.id}`);
         item.append(amount, action);
       }
       list.append(item);
@@ -253,14 +267,12 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
 }
 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
-  renderCityPersonalAreas(list, config, state, render, (message) => {
-    operationError = message;
-    operationNotice = '';
-    updateFeedback();
-  }, (message) => {
-    operationNotice = message;
-    updateFeedback();
-  }, (dataKey, id) => { if (root?.open) focusAction(dataKey, id); });
+  renderCityPersonalAreas(list, config, state, {
+    rerender: () => { if (root?.open) render(); },
+    reportError: (message) => { operationError = message; operationNotice = ''; updateFeedback(); },
+    reportNotice: (message) => { operationNotice = message; updateFeedback(); },
+    focusAction: (dataKey, id) => { if (root?.open) focusAction(dataKey, id); },
+  });
 }
 
 function containTabFocus(event: KeyboardEvent): void {
@@ -323,7 +335,25 @@ export function openCityGovernancePanel(buildingId = ''): void {
       if (event.key === 'Escape') { event.preventDefault(); closeCityGovernancePanel(); }
     });
     window.addEventListener('minicity:login-required', handleLoginRequired, true);
+    let session = refreshCityGovernanceSession();
     unsubscribe = subscribeCityGovernance(() => {
+      const nextSession = refreshCityGovernanceSession();
+      if (session !== nextSession) {
+        session = nextSession;
+        pendingActions.clear();
+        donationDrafts.clear();
+        clearCityConstructionDrafts();
+        operationError = '';
+        operationNotice = '';
+        voteError = '';
+        voting.clear();
+        myVotes = null;
+        votesLoading?.abort();
+        votesLoading = null;
+        // Old input nodes must not restore the previous resident's drafts.
+        root?.querySelector('.city-governance-body')?.replaceChildren();
+        if (root?.open) void refreshVotes();
+      }
       if (!root?.open) return;
       if (myVotes && myVotes.epoch !== getCityState()?.epoch) { myVotes = null; void refreshVotes(); }
       render();
