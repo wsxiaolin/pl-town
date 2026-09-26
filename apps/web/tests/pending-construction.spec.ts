@@ -5,6 +5,9 @@ import { pushCityState, stubCityWebSocket, waitForCityReady } from './helpers';
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
   test(`pending buildings hide models, lots, labels and map entries at ${viewport.width}px`, async ({ page }, testInfo) => {
+    // This covers archive, memorial, map and construction with several WebGL
+    // captures. Software rendering needs a larger overall flow budget.
+    test.setTimeout(120_000);
     await page.setViewportSize(viewport);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
