@@ -42,6 +42,67 @@ async function publishState(page: Page, state: CityState): Promise<void> {
   }, state);
 }
 
+test('conflicts during an older snapshot queue one fresh read after it completes', async ({ page }) => {
+  let mutations = 0;
+  const fixture = await openGovernance(page, (route) => {
+    mutations += 1;
+    return route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  });
+  const staleState = structuredClone(fixture.state);
+  let olderRead: Route | undefined;
+  let stateReads = 0;
+  await page.route('**/town-api/city/state', (route) => {
+    stateReads += 1;
+    if (stateReads === 1) olderRead = route;
+    else return route.fulfill({ json: fixture.state });
+  });
+  await page.evaluate(async () => {
+    const modulePath = '/src/city/cityGovernanceClient.ts';
+    const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
+    void client.loadCityGovernance();
+  });
+  await expect.poll(() => stateReads).toBe(1);
+  fixture.state = { ...fixture.state, revision: 1, projects: [
+    { id: 'build-catcafe', funded: 250, built: false },
+    { id: 'build-library', funded: 0, built: false },
+  ] };
+  const panel = page.locator('.city-governance-panel');
+  await panel.locator('[data-project-id="build-catcafe"]').getByRole('button', { name: '捐款', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  const secondButton = panel.locator('[data-project-id="build-library"]').getByRole('button', { name: '捐款', exact: true });
+  await secondButton.click();
+  await expect.poll(() => mutations).toBe(2);
+  await expect(secondButton).toBeEnabled();
+  // Both conflicts arrived after the held GET captured its now-stale snapshot.
+  expect(stateReads).toBe(1);
+  await olderRead!.fulfill({ json: staleState });
+  await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #1');
+  await expect(panel.locator('[data-project-id="build-catcafe"]')).toContainText('250 金币 / 3,000 金币');
+  expect(stateReads).toBe(2);
+  expect(fixture.errors).toEqual([]);
+});
+
+test('a late failed donation leaves another card draft and focus in place', async ({ page }) => {
+  let pending: Route | undefined;
+  const fixture = await openGovernance(page, (route) => { pending = route; });
+  const panel = page.locator('.city-governance-panel');
+  const firstButton = panel.locator('[data-project-id="build-catcafe"]').getByRole('button', { name: '捐款', exact: true });
+  const secondInput = panel.locator('[data-project-id="build-library"]').getByRole('spinbutton');
+  await firstButton.click();
+  await expect.poll(() => Boolean(pending)).toBe(true);
+  await secondInput.fill('275');
+  const inputNode = await secondInput.elementHandle();
+  const scrollTop = await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop);
+  await pending!.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  await expect(firstButton).toBeEnabled();
+  await expect(secondInput).toBeFocused();
+  await expect(secondInput).toHaveValue('275');
+  expect(await inputNode!.evaluate((input) => input === document.activeElement)).toBe(true);
+  expect(await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop)).toBe(scrollTop);
+  expect(fixture.errors).toEqual([]);
+});
+
 test('concurrent submissions restore their own focus without interrupting another card', async ({ page }) => {
   const pending: Route[] = [];
   const fixture = await openGovernance(page, (route) => { pending.push(route); });

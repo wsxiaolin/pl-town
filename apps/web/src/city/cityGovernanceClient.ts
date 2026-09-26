@@ -41,6 +41,7 @@ let state: CityState | null = null;
 let loadSequence = 0;
 let activeLoad: Promise<void> | null = null;
 let activeSignal: AbortSignal | undefined;
+let refreshAfterLoad = false;
 
 function cachedConfig(): CityConfig | null {
   try {
@@ -94,6 +95,7 @@ export function getCityState(): CityState | null { return state; }
 export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
   if (activeLoad && !activeSignal?.aborted) return activeLoad;
   activeLoad = null;
+  refreshAfterLoad = false;
   const sequence = ++loadSequence;
   activeSignal = signal;
   activeLoad = (async () => {
@@ -125,10 +127,30 @@ export function loadCityGovernance(signal?: AbortSignal): Promise<void> {
         if (state === stateBeforeFetch) state = null;
       }
     } finally {
-      if (sequence === loadSequence) { activeLoad = null; activeSignal = undefined; notify(); }
+      if (sequence === loadSequence) {
+        activeLoad = null;
+        activeSignal = undefined;
+        // A rejected mutation can arrive after this GET captured its snapshot.
+        // Coalesce those invalidations into one trailing load; completion alone
+        // never queues another request, and disposal cancels this flag.
+        const needsRefresh = refreshAfterLoad;
+        refreshAfterLoad = false;
+        if (needsRefresh) refreshCityGovernance();
+        notify();
+      }
     }
   })();
   return activeLoad;
+}
+
+function refreshCityGovernance(): void {
+  if (activeLoad && !activeSignal?.aborted) {
+    refreshAfterLoad = true;
+    return;
+  }
+  void loadCityGovernance().catch((error: unknown) => {
+    console.debug('[city-governance] background refresh failed', error instanceof Error ? error.name : 'UnknownError');
+  });
 }
 
 export function subscribeCityGovernance(listener: CityGovernanceListener): () => void {
@@ -159,6 +181,7 @@ export function disposeCityGovernance(): void {
   loadSequence += 1;
   activeLoad = null;
   activeSignal = undefined;
+  refreshAfterLoad = false;
   config = null;
   state = null;
   mutationSession = null;
@@ -200,7 +223,7 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     if (!isCurrentSession(session)) return null;
     // Keep the request ID: a lost response does not mean the server rolled back.
     console.debug('[city-governance] request transport failed', error instanceof Error ? error.name : 'UnknownError');
-    throw new Error('网络连接异常，请在当前页面重试；同一登录会话内重试不会重复扣费。');
+    throw new Error(`网络连接异常，${uncertainPaymentGuidance}`);
   }
   try {
     const parsed: unknown = await response.json();
@@ -209,12 +232,12 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
     if (!isCurrentSession(session)) return null;
     // A malformed response may still follow a committed operation, so retain the ID.
     console.debug('[city-governance] response JSON could not be parsed', error instanceof Error ? error.name : 'UnknownError');
-    throw new Error('服务器响应格式异常，请在当前页面重试；同一登录会话内重试不会重复扣费。');
+    throw new Error(`服务器响应格式异常，${uncertainPaymentGuidance}`);
   }
   if (!isCurrentSession(session)) return null;
   if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
   // Report the rejected operation immediately; a slow refresh must not hide it.
-  if (response.status === 409) void loadCityGovernance();
+  if (response.status === 409) refreshCityGovernance();
   if (!response.ok || !validState(payload.state)) {
     if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === operation) {
       pendingRequestIds.delete(operationKey);
@@ -225,6 +248,8 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   applyCityState(payload.state);
   return { state: payload.state, replayed: payload.replayed === true };
 }
+
+const uncertainPaymentGuidance = '请在当前页面重试；同一登录会话内重试不会重复扣费。刷新页面或重新登录后无法确认上一笔，请先核对余额和建设进度。';
 
 // These keys are the city HttpBodyError contract. Keep them aligned with
 // cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.

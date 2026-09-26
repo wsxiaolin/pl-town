@@ -128,7 +128,7 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
   if (errorActionKey === actionKey) { operationError = ''; errorActionKey = ''; }
   operationNotice = '';
   render();
-  // Rebuilding a disabled button loses focus. Restore it on success only if
+  // Rebuilding a disabled button loses focus. Restore it only if
   // the user has not since focused, clicked or typed elsewhere in the page.
   const focusController = new AbortController();
   const movedOn = () => { returnFocus = false; };
@@ -148,9 +148,9 @@ async function submit(dataKey: 'projectId' | 'plotId', id: string, mutation: () 
     focusController.abort();
     if (pendingActions.get(actionKey) === action) pendingActions.delete(actionKey);
     if (root === submittedPanel && root?.classList.contains('open') && refreshCityGovernanceSession() === session) {
-      const restoreSuccessFocus = returnFocus && document.activeElement === document.body;
+      const restoreActionFocus = returnFocus && (failed || document.activeElement === document.body);
       render();
-      if (failed || restoreSuccessFocus) focusAction(dataKey, id);
+      if (restoreActionFocus) focusAction(dataKey, id);
     }
   }
 }
