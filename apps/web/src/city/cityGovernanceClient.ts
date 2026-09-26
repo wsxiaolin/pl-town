@@ -20,11 +20,14 @@ export type CityState = {
 import { townApiUrl } from '../core/townApi';
 
 export type CityGovernanceListener = (config: CityConfig | null, state: CityState | null) => void;
+export type CityMutationResult = { state: CityState; replayed: boolean };
 
 const CONFIG_CACHE_KEY = 'minicityCityConfig';
 const ETAG_CACHE_KEY = 'minicityCityConfigEtag';
 const listeners = new Set<CityGovernanceListener>();
 type PendingOperation = { requestId: string; configVersion: string; body: Record<string, unknown> };
+// Do not expire uncertain receipts: the server may already have charged them.
+// Only a confirmed outcome or disposal of this client session releases an ID.
 const pendingRequestIds = new Map<string, PendingOperation>();
 let config: CityConfig | null = null;
 let state: CityState | null = null;
@@ -139,7 +142,7 @@ export function disposeCityGovernance(): void {
   listeners.clear();
 }
 
-async function mutate(path: string, body: Record<string, unknown>, explicitRequestId?: string): Promise<CityState> {
+async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
   if (!config) throw new Error('城市建设数据暂时不可用，请稍后重试。');
   const token = localStorage.getItem('minicityServerToken');
   if (!token) {
@@ -149,44 +152,60 @@ async function mutate(path: string, body: Record<string, unknown>, explicitReque
   const operationKey = `${path}:${body.areaId !== undefined
     ? JSON.stringify({ areaId: body.areaId, decorationId: body.decorationId })
     : JSON.stringify(body)}`;
-  // An uncertain response may already have committed. Retry the entire original
-  // receipt, including its catalog version, even after a live config refresh.
-  const operation = explicitRequestId ? { requestId: explicitRequestId, configVersion: config.version, body }
-    : pendingRequestIds.get(operationKey) ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
+  // The server fingerprint includes configVersion. Preserve the complete receipt
+  // after an uncertain outcome, even if the current catalog changes before retry.
+  const operation = pendingRequestIds.get(operationKey)
+    ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
   const { requestId, configVersion } = operation;
-  if (!explicitRequestId) pendingRequestIds.set(operationKey, operation);
+  pendingRequestIds.set(operationKey, operation);
   let response: Response;
-  let payload: { state?: CityState; error?: string };
+  let payload: { state?: CityState; error?: string; replayed?: boolean };
   try {
     response = await fetchJson(path, undefined, { method: 'POST', body: JSON.stringify({ ...operation.body, token, configVersion, requestId }), headers: { 'content-type': 'application/json' } });
-    payload = await response.json() as typeof payload;
   } catch {
     // Keep the request ID: a lost response does not mean the server rolled back.
+    console.debug('[city-governance] request transport failed');
     throw new Error('网络连接异常，请重试；重复请求不会重复扣费。');
   }
-  // Authentication/rate failures happen before the receipt lookup and cannot
-  // establish whether an earlier attempt committed. Keep those receipts too.
-  const confirmed = (response.ok && validState(payload.state))
-    || ([400, 404, 409].includes(response.status) && typeof payload.error === 'string');
-  if (confirmed && !explicitRequestId && pendingRequestIds.get(operationKey) === operation) pendingRequestIds.delete(operationKey);
-  if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
-  if (response.status === 409) {
-    await loadCityGovernance();
+  try {
+    const parsed: unknown = await response.json();
+    payload = parsed && typeof parsed === 'object' ? parsed as typeof payload : {};
+  } catch {
+    // A malformed response may still follow a committed operation, so retain the ID.
+    console.debug('[city-governance] response JSON could not be parsed');
+    throw new Error('服务器响应格式异常，请重试；重复请求不会重复扣费。');
   }
-  if (!response.ok || !validState(payload.state)) throw new Error(cityOperationError(payload.error));
+  if (response.status === 401) window.dispatchEvent(new CustomEvent('minicity:login-required'));
+  // Report the rejected operation immediately; a slow refresh must not hide it.
+  if (response.status === 409) void loadCityGovernance();
+  if (!response.ok || !validState(payload.state)) {
+    if (isDefinitiveRejection(response, payload.error) && pendingRequestIds.get(operationKey) === operation) {
+      pendingRequestIds.delete(operationKey);
+    }
+    throw new Error(cityOperationError(payload.error));
+  }
+  if (pendingRequestIds.get(operationKey) === operation) pendingRequestIds.delete(operationKey);
   applyCityState(payload.state);
-  return payload.state;
+  return { state: payload.state, replayed: payload.replayed === true };
 }
 
-function cityOperationError(error?: string): string {
-  const messages: Record<string, string> = {
+// These keys are the city HttpBodyError contract. Keep them aligned with
+// cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
+const cityOperationMessages: Record<string, string> = {
     'Unknown construction area': '建设区域不存在，请刷新后重试。',
-    'Unknown plot or decoration': '建设地块或装饰不存在，请刷新后重试。',
     'No available plots in this area': '该区域已全部建设，请选择其他区域。',
     'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
     'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
     'Quantity requires an area': '请先选择批量建设区域。',
     'Invalid decoration total': '建设总价无效，请重新选择数量。',
+    'Invalid requestId': '建设请求无效，请刷新页面后重试。',
+    'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
+    'Invalid target': '建设目标无效，请重新选择项目或地块。',
+    'Invalid decorationId': '装饰类型无效，请重新选择后重试。',
+    'requestId already used with different parameters': '这次建设请求参数已变化，请重新提交当前内容。',
+    'Decoration is not allowed on this plot': '这块地不支持当前装饰，请选择其他装饰。',
+    'Unknown project': '建设项目不存在，请刷新页面后重试。',
+    'Unknown plot or decoration': '地块或装饰不存在，请刷新页面后重试。',
     'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
     'Plot already occupied': '这块地已被建设，请选择其他空地。',
     'Project already built': '该项目已建成，请选择其他建设项目。',
@@ -194,14 +213,25 @@ function cityOperationError(error?: string): string {
     'Amount must be a positive safe integer': '请输入大于 0 的整数捐款金额。',
     'Too many city mutations': '操作太频繁，请稍后重试。',
     'Please sign in': '请先登录后再参与城市建设。',
-  };
-  return error && messages[error] ? messages[error] : '建设请求失败，请稍后重试。';
+    'Unknown city endpoint': '城市建设服务暂时不可用，请稍后重试。',
+};
+
+function isDefinitiveRejection(response: Response, error?: string): boolean {
+  // Authentication and rate checks run before receipt lookup. A 401/429 says
+  // nothing about whether an earlier attempt committed, so keep its receipt.
+  return [400, 404, 409].includes(response.status) && typeof error === 'string'
+    && Object.hasOwn(cityOperationMessages, error);
+}
+
+function cityOperationError(error?: string): string {
+  return typeof error === 'string' && Object.hasOwn(cityOperationMessages, error)
+    ? cityOperationMessages[error]! : '建设请求失败，请稍后重试。';
 }
 
 function makeRequestId() { return `city-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
-export function donateCity(projectId: string, amount: number, requestId?: string) { return mutate('/town-api/city/donate', { projectId, amount }, requestId); }
-export function decorateCity(plotId: string, decorationId: string, requestId?: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }, requestId); }
-export function decorateCityArea(areaId: string, decorationId: string, quantity: number, requestId?: string) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }, requestId); }
+export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
+export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }
+export function decorateCityArea(areaId: string, decorationId: string, quantity: number) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }); }
 export function getPendingCityAreaOperation(areaId: string): { decorationId: string; quantity: number } | null {
   for (const operation of pendingRequestIds.values()) {
     if (operation.body.areaId === areaId && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
