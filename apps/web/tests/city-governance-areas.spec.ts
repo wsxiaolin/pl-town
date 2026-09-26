@@ -6,6 +6,9 @@ const scenarios = [{ width: 1280, height: 800 }, { width: 844, height: 390 }]
   .flatMap((viewport) => [false, true].map((committedBeforeLoss) => ({ viewport, committedBeforeLoss })));
 for (const { viewport, committedBeforeLoss } of scenarios) {
   test(`area construction retries ${committedBeforeLoss ? 'a committed full area' : 'an uncommitted batch'} at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    // The full retry/config-rollover flow renders the city throughout. Allow
+    // software WebGL enough total time without relaxing individual assertions.
+    test.setTimeout(120_000);
     await page.setViewportSize(viewport);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
