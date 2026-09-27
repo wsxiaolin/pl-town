@@ -186,7 +186,17 @@ function notifyMinimumElapsed(): void {
  * visit retries the pipeline.
  */
 export function forceRevealBootScreen(message: string): void {
+  // The pipeline bar is display:none until is-active — show it so the
+  // failure message lands somewhere VISIBLE on both paths (review r8#2:
+  // a bare canvas with no message defeats the fallback's purpose).
+  document.getElementById('bootPipeline')?.classList.add('is-active');
   const detail = document.getElementById('bootPipelineDetail');
   if (detail) detail.textContent = message;
+  // Release the splash gate + stop the drift animation, or the reveal never
+  // fires and the 26s transform keeps running behind the hidden screen.
+  presentationStopped = true;
+  freezeMomentPresentation();
+  cityReady = true;
+  notifyReveal();
   bootScreen()?.classList.add('is-ready');
 }

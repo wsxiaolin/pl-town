@@ -69,7 +69,11 @@ import { forceRevealBootScreen } from '../adapters/ui/momentSplashView';
 
 const resources = new ResourcePool();
 const MOBILE = () => window.innerWidth <= 680;
-const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Deliberately NOT prefers-reduced-motion: this flag feeds world assembly
+// and the burn effect, whose reduced-motion behavior was never reviewed or
+// tested. The boot splash reads the media query itself (momentSplashView);
+// wiring the CITY-wide flag is a separate, deliberate change (review r8#7).
+const REDUCED = false;
 const CONFIG = CITY_CONFIG;
 let renderer: THREE.WebGLRenderer;
 const graphics = createCityGraphics(resources, () => renderer);
@@ -248,6 +252,7 @@ const sceneAnimations = createSceneAnimations({
 });
 
 const frameLoop = createFrameLoop({
+  onFirstRender: () => flushPendingEntrance(),
   getRenderer: () => renderer,
   getScene: () => scene,
   getCamera: () => camera,
@@ -735,6 +740,23 @@ function init() {
   multiplayerHousing.setupUI();
 }
 
+  // The entrance animation must START when the render gate releases, not
+  // when the login resolves: the gate is held through the shader precompile,
+  // and starting the growth earlier means the first visible frame already
+  // shows the buildings settled (review r8#1). runEntrance defers until the
+  // first rendered frame (frameLoop onFirstRender), then runs immediately.
+  let pendingEntrance: (() => void) | null = null;
+  let entranceGateOpen = false;
+  function runEntrance(entrance: () => void): void {
+    if (entranceGateOpen) entrance();
+    else pendingEntrance = entrance;
+  }
+  function flushPendingEntrance(): void {
+    entranceGateOpen = true;
+    pendingEntrance?.();
+    pendingEntrance = null;
+  }
+
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
   const entrance = () => {
     sceneAnimations.entranceAnimation();
@@ -743,8 +765,8 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
     localStorage.removeItem('minicityPassword');
   };
   // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
-  if (password === undefined && pl === undefined) entrance();
-  else loginController?.holdCityEntrance(entrance);
+  if (password === undefined && pl === undefined) runEntrance(entrance);
+  else loginController?.holdCityEntrance(() => runEntrance(entrance));
   multiplayerHousing.connect(nickname, password, pl);
   checkAchievements();
 }

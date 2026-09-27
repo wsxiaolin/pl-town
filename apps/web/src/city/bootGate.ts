@@ -12,6 +12,32 @@ declare const __MINICITY_BUILD_ID__: string;
 
 import { probeServerVersion, refreshServerVersion } from '../core/serverVersionProbe';
 
+/** Injectable storage so the marker state machine is unit-testable in node. */
+export type BootStorage = {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+  remove(key: string): void;
+};
+
+const domStorage: BootStorage = {
+  get: (key) => safeGet(key),
+  set: (key, value) => { try { localStorage.setItem(key, value); } catch { /* private mode */ } },
+  remove: (key) => { try { localStorage.removeItem(key); } catch { /* ignore */ } },
+};
+
+/** Pure marker reader — the boot decision's input state (unit-testable). */
+export function readBootMarkers(storage: BootStorage): {
+  knownBuild: string | null;
+  knownServerVersion: string | null;
+  precacheDone: boolean;
+} {
+  return {
+    knownBuild: storage.get(BUILD_KEY),
+    knownServerVersion: storage.get(SERVER_VERSION_KEY),
+    precacheDone: storage.get(PRECACHE_KEY) === '1',
+  };
+}
+
 export type BootMode = 'heavy' | 'light';
 export type BootReason = 'first-visit' | 'build-changed' | 'server-changed' | 'precache-missing' | 'forced' | 'cached';
 
@@ -122,17 +148,15 @@ export async function resolveBootDecision(): Promise<BootDecision> {
  * builds that skipped the probe) a fresh probe taken at pipeline completion —
  * so a deploy that changes build AND server never costs two heavy boots.
  */
-export function markBootComplete(serverVersion?: string | null): void {
-  try {
-    localStorage.setItem(BUILD_KEY, currentBuildId());
-    localStorage.setItem(PRECACHE_KEY, '1');
-    if (serverVersion) localStorage.setItem(SERVER_VERSION_KEY, serverVersion);
-    // Unknown ≠ stale: a heavy boot whose late probe failed must not leave
-    // the PREVIOUS fingerprint armed — that would re-trigger server-changed
-    // on the next visit forever. Clearing routes the next visit through the
-    // "never seen" branch of pickBootReason instead (review r6#S1).
-    else localStorage.removeItem(SERVER_VERSION_KEY);
-  } catch { /* ignore. */ }
+export function markBootComplete(serverVersion?: string | null, storage: BootStorage = domStorage): void {
+  storage.set(BUILD_KEY, currentBuildId());
+  storage.set(PRECACHE_KEY, '1');
+  if (serverVersion) storage.set(SERVER_VERSION_KEY, serverVersion);
+  // Unknown ≠ stale: a heavy boot whose late probe failed must not leave
+  // the PREVIOUS fingerprint armed — that would re-trigger server-changed
+  // on the next visit forever. Clearing routes the next visit through the
+  // "never seen" branch of pickBootReason instead (review r6#S1).
+  else storage.remove(SERVER_VERSION_KEY);
 }
 
 export function currentBuildId(): string {

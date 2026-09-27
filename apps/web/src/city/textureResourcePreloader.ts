@@ -3,17 +3,20 @@
 // TextureLoader. Per-run failures land in failedUrls so proceduralTexture_
 // library can fall back to canvas textures for THIS session; an aborted pass
 // (watchdog / forced upgrade) is a control path, never a failure.
-const textureModules = import.meta.glob('../assets/textures/**/*.{png,jpg,jpeg,webp,avif}', {
-  eager: true,
-  import: 'default',
-  query: '?url',
-}) as Record<string, string>;
+import { bundledAssets } from '../core/bundledAssets';
+
+// The textures-only URL list derives from the shared glob via its GROUP
+// classification (glob-key based — URLs flatten in production builds), so
+// the list is inlined into the bundle once, not twice (r8 nit).
+const textureUrls = bundledAssets.filter((asset) => asset.group === 'textures').map((asset) => asset.url);
 
 const failedUrls = new Set<string>();
 let ready = false;
 let activeRun: { promise: Promise<void>; controller: AbortController; forced: boolean } | null = null;
 
-async function readTexture(url: string, signal: AbortSignal): Promise<boolean> {
+type TextureReadResult = 'ok' | 'failed' | 'aborted';
+
+async function readTexture(url: string, signal: AbortSignal): Promise<TextureReadResult> {
   try {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Texture request failed: ${response.status}`);
@@ -28,14 +31,16 @@ async function readTexture(url: string, signal: AbortSignal): Promise<boolean> {
     // A successful (re)read repairs an earlier failure — the URL is
     // available to the renderer again this session.
     failedUrls.delete(url);
-    return true;
+    return 'ok';
   } catch {
     // Abort (watchdog / forced upgrade) is a normal control path: keep the
     // URL eligible for a later pass instead of downgrading the texture to
-    // procedural canvas for the whole session.
-    if (signal.aborted) return false;
+    // procedural canvas for the whole session — and do NOT count it as a
+    // failure in progress reporting (r8 nit: the degrade path must not
+    // claim procedural fallbacks for files that were merely cancelled).
+    if (signal.aborted) return 'aborted';
     failedUrls.add(url);
-    return false;
+    return 'failed';
   }
 }
 
@@ -52,7 +57,7 @@ async function runWithConcurrency(
     while (nextIndex < urls.length) {
       if (signal.aborted) return;
       const url = urls[nextIndex++];
-      if (url && !(await readTexture(url, signal))) failedFiles += 1;
+      if (url && (await readTexture(url, signal)) === 'failed') failedFiles += 1;
       loadedFiles += 1;
       onFileDone?.(loadedFiles, failedFiles, urls.length);
     }
@@ -64,12 +69,19 @@ export function isTextureResourceAvailable(url: string): boolean {
   return !failedUrls.has(url);
 }
 
-export function preloadTextureResources(
-  enabled = true,
-  signal?: AbortSignal,
-  force = false,
-  onFileDone?: (loadedFiles: number, failedFiles: number, totalFiles: number) => void,
-): Promise<void> {
+export type TexturePreloadOptions = {
+  /** Will the renderer actually read the HD pack this session? */
+  enabled: boolean;
+  /** Session/watchdog signal — aborts the pass. */
+  signal?: AbortSignal;
+  /** Heavy-boot repair semantics: overrides data-saver gates, not `enabled`. */
+  force?: boolean;
+  /** File-level progress (skipped/aborted files not counted as failures). */
+  onFileDone?: (loadedFiles: number, failedFiles: number, totalFiles: number) => void;
+};
+
+export function preloadTextureResources(options: TexturePreloadOptions): Promise<void> {
+  const { enabled, signal, force = false, onFileDone } = options;
   if (activeRun) {
     if (!force || activeRun.forced) return activeRun.promise;
     // A forced run (heavy boot repair pass) upgrades an in-flight ambient
@@ -94,13 +106,13 @@ export function preloadTextureResources(
   // re-opens it (it may be a repair pass for earlier failures).
   if (ready && !force) return Promise.resolve();
   const controller = new AbortController();
-  // Force runs are primarily bounded by the lifecycle watchdog; this timer
-  // is belt-and-suspenders for the case the boot flow itself stalls before
-  // arming the watchdog.
-  const timeout = setTimeout(() => controller.abort(), force ? 240_000 : 30_000);
+  // Ambient runs bound themselves (30 s); forced runs are bounded by the
+  // lifecycle's 240 s watchdog via the shared signal — no duplicate timer
+  // (r8 nit: one of the two was dead weight).
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  const promise = runWithConcurrency(Object.values(textureModules), 6, controller.signal, onFileDone).then(() => {
+  const promise = runWithConcurrency(textureUrls, 6, controller.signal, onFileDone).then(() => {
     clearTimeout(timeout);
     // Only a COMPLETED pass claims readiness — an aborted one must not
     // short-circuit a later forced re-run.

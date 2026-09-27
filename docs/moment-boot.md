@@ -8,11 +8,11 @@
 |---|---|---|
 | 首次进入（本地无任何标记） | heavy | 旧「正在下载城市资源」页：当前时刻大图 + 底部慢进度条 + GPU 行 |
 | 构建 ID 变化（前端代码更新） | heavy | 同上，提示「检测到小城有更新」 |
-| 服务端版本变化（`/town-api/version`） | heavy | 同上，提示「服务端已更新」 |
+| 服务端版本变化（`/town-api/version`——`RENDER_GIT_COMMIT` 环境变量优先，未设时服务器在 git checkout 里自动解析短哈希，两者皆无才退空） | heavy | 同上，提示「服务端已更新」 |
 | 预编译缓存标记丢失（清了 localStorage） | heavy | 同上，提示「本地预编译缓存缺失」 |
 | 其余日常进入 | light | 单张时刻图 splash，最短停留 2.6s，点击即入 |
 
-构建 ID = `package.json` 版本 + git 短哈希（工作区有未提交改动时附加 `-dirty`，避免本地实验复用过期预编译），构建时由 `vite.config.ts` 注入（`__MINICITY_BUILD_ID__`）。服务端探测只在本地状态健康时进行（4.5s 超时覆盖免费后端冷启动，失败按本地判断放行并在控制台告警，离线不受影响）。端点返回的是 16 位身份指纹（version+commit 的 SHA-256 截断）——客户端只比较相等性，精确部署细节不上网线。重型管线完整走完后写入 `minicityBuildId` + `minicityPrecacheDone` + 本次探测到的服务端版本，下次进入即轻路径；中途关页则服务端版本不落地，下次进入会重新执行本次更新。轻路径 boots 立即落地服务端版本（无事待办）。
+构建 ID = `package.json` 版本 + git 短哈希（工作区有未提交改动时附加 `-dirty`，避免本地实验复用过期预编译），构建时由 `vite.config.ts` 注入（`__MINICITY_BUILD_ID__`）。服务端探测只在本地状态健康时进行（**1.5s 预算**——它坐在每日进入的揭幕关键路径上；冷后端首访可能超时按本地放行，下次进入补上检测，治理内容因并行加载不受影响。失败 console.debug，离线不受影响）。端点返回的是 16 位身份指纹（version+commit 的 SHA-256 截断）——客户端只比较相等性，精确部署细节不上网线。重型管线完整走完后写入 `minicityBuildId` + `minicityPrecacheDone` + 本次探测到的服务端版本，下次进入即轻路径；中途关页则服务端版本不落地，下次进入会重新执行本次更新。轻路径 boots 立即落地服务端版本（无事待办）。
 
 **权衡说明**：服务端单独发版（前端构建 ID 未变）也会触发全员重型管线（45MB 重下 + 重预编译）。当前服务端变更（治理内容等）没有指纹可对到具体资产，宁可多下载一次也不冒「缓存内容过期」的险。另外 `preloadTextureResources(force)` 无视省流（saveData）/慢速网络设置——这是重型管线"一次到位"语义的一部分；若未来要尊重省流，需要弹窗确认而非静默跳过。
 
@@ -42,7 +42,7 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 
 ## 开场 CG 的临时下线与恢复
 
-`apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留。**恢复不是只改一个布尔值**：splash 层 z-index 1000 盖在 CG overlay（700）之上，揭幕只看 cityReady+最短停留，直接改回 `true` 会得到「CG 播了约 2.6s 才被揭开」的画面——恢复时需把 `cgOverlay` 提层到 1001+，或把 `initCG` 的 onFinish 接回启动闸门再揭幕。CG 资源不在 CG 关闭期的重型下载清单里（构建变更即重新预下载）。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
+`apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留。恢复后入场动画不受渲染门影响（r8 起 entrance 由 frameLoop 首帧钩子触发）。**恢复不是只改一个布尔值**：splash 层 z-index 1000 盖在 CG overlay（700）之上，揭幕只看 cityReady+最短停留，直接改回 `true` 会得到「CG 播了约 2.6s 才被揭开」的画面——恢复时需把 `cgOverlay` 提层到 1001+，或把 `initCG` 的 onFinish 接回启动闸门再揭幕。CG 资源不在 CG 关闭期的重型下载清单里（构建变更即重新预下载）。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
 
 ## 本地复现服务端变更
 

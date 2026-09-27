@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { getCityState } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
+import { execSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
@@ -384,7 +385,18 @@ const SERVER_VERSION = (() => {
     return manifest.version ?? '0.0.0';
   } catch { return '0.0.0'; }
 })();
-const SERVER_COMMIT = process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? '';
+const SERVER_COMMIT = (() => {
+  const fromEnv = process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT;
+  if (fromEnv) return fromEnv;
+  // Deployments that build from a git checkout (Render, manual clones)
+  // resolve the commit themselves so server-change detection works without
+  // any operator wiring; env stays the authoritative override (r8#3).
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return '';
+  }
+})();
 // The client boot gate only compares server identities for equality, so the
 // public endpoint returns a short fingerprint instead of the exact version
 // and commit strings (less deployment detail on the wire).

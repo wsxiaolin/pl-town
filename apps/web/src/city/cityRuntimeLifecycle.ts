@@ -58,7 +58,7 @@ export function createCityRuntimeLifecycle(options: {
 
     // The moment still paints synchronously — today's sky greets the visitor
     // while the boot decision (and any heavy pipeline) resolves in background.
-    configureMomentSplash({ reduced: options.reduced });
+    configureMomentSplash({ reduced: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches });
     showMomentSplash();
     const pipeline = createBootPipelineUi();
     const signal = eventController.signal;
@@ -80,7 +80,7 @@ export function createCityRuntimeLifecycle(options: {
       // decision: a heavy boot runs its own forced pass, and an ambient pass
       // started earlier would be aborted and re-fetched from zero — twice
       // the bytes for a cold-cache HD visitor (review r7#1).
-      const texturePreload = preloadTextureResources(readRenderSettings().textureRendering, signal).catch(() => {});
+      const texturePreload = preloadTextureResources({ enabled: readRenderSettings().textureRendering, signal }).catch(() => {});
       // The preload is a pop-in mitigation, not a correctness need —
       // TextureLoader lazily loads anything not cached yet. Bound it so even
       // a fully-evicted HTTP cache can never put 41 MB on the FAST path
@@ -185,11 +185,11 @@ export function createCityRuntimeLifecycle(options: {
       pipeline.setDetail(downloadFailed ? '校验高清材质包（含修复下载）…' : '下载高清材质包…');
       // File-count progress mapped onto the remaining [40%,100%] of the
       // download stage so the bar stays monotonic across the hand-off.
-      await preloadTextureResources(true, bootAbort.signal, true, (loadedFiles, failedFiles, totalFiles) => {
+      await preloadTextureResources({ enabled: true, signal: bootAbort.signal, force: true, onFileDone: (loadedFiles, failedFiles, totalFiles) => {
         pipeline.setStageProgress('download', 0.4 + 0.6 * (loadedFiles / Math.max(1, totalFiles)));
         const fallback = failedFiles > 0 ? ` · ${failedFiles} 个将回退程序化材质` : '';
         pipeline.setDetail(`${reasonTag} · 高清材质包 ${loadedFiles}/${totalFiles}${fallback}`);
-      }).catch(() => {});
+      } }).catch(() => {});
     } else {
       // HD off: nothing to prefetch — the renderer reads procedural textures.
     }

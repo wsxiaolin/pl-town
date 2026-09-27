@@ -31,6 +31,8 @@ export function createBootPipelineUi(): BootPipelineUi {
   const fillEl = document.getElementById('bootPipelineFill');
   const detailEl = document.getElementById('bootPipelineDetail');
   const gpuEl = document.getElementById('bootGpuLine');
+  const liveEl = document.getElementById('bootLiveStatus');
+  let announcedPercent = -1;
   const current: Record<PipelineStage, number> = { download: 0, scene: 0, precompile: 0, ready: 0 };
 
   const publish = () => {
@@ -39,6 +41,12 @@ export function createBootPipelineUi(): BootPipelineUi {
     const percent = Math.min(100, Math.round(total * 100));
     if (fillEl) fillEl.style.transform = `scaleX(${total})`;
     if (percentEl) percentEl.textContent = `${percent}%`;
+    // Screen-reader lane: coarse 10%-step announcements instead of the
+    // ~10x/s visual detail rewrites (r8#5).
+    if (liveEl && percent !== announcedPercent && percent % 10 === 0) {
+      announcedPercent = percent;
+      liveEl.textContent = `加载中 ${percent}%`;
+    }
   };
 
   return {

@@ -8,6 +8,10 @@ import type { SceneInterestPointController } from './sceneInterestPointControlle
 type NpcEntity = Npc;
 
 export type FrameLoopOptions = {
+  /** One-shot callback fired on the first tick after the render gate releases —
+   * the right moment to start entrance animations (buildings still at their
+   * start positions when the first frame becomes visible). */
+  onFirstRender?: () => void;
   getRenderer: () => THREE.WebGLRenderer;
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
@@ -59,12 +63,18 @@ export function createFrameLoop(options: FrameLoopOptions) {
     });
   }
 
+    let firstRenderFired = false;
+
   function loop() {
     animationFrame = requestAnimationFrame(loop);
     const now = performance.now();
     const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
     options.setLastFrameTime(now);
     if (renderHeld) return;
+    if (!firstRenderFired) {
+      firstRenderFired = true;
+      options.onFirstRender?.();
+    }
     const playerController = options.getPlayerController();
     playerController?.updateMovement(delta);
     options.updateWeather?.(delta);

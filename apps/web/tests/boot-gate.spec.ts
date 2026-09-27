@@ -33,7 +33,11 @@ test('light boot shows the current real-world moment still and enters', async ({
   const src = await page.locator('#bootMomentImg').getAttribute('src');
   expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
-  await waitForCityBooted(page);
+  // Skip interaction: clicking the splash reveals early (before the 2.6 s
+  // minimum elapses on a fast boot) — the pointer path AND the sr-only
+  // button both carry it (r8 nit: click-skip had no coverage).
+  await page.locator('#bootScreen').click({ position: { x: 320, y: 240 } });
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 20_000 });
 });
 
 test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ page }) => {
@@ -50,8 +54,24 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   const heavySrc = await page.locator('#bootMomentImg').getAttribute('src');
   expect(heavySrc).toMatch(new RegExp(`moments/(dawn|noon|dusk|night)\\.webp`));
 
+  // Stage sequence coverage (r8 nit): collect the stage label history via
+  // MutationObserver so fast transitions are not missed.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { __bootStages: string[] }).__bootStages = seen;
+    const stage = document.getElementById('bootPipelineStage');
+    if (stage) seen.push(stage.textContent || '');
+    new MutationObserver(() => {
+      const text = document.getElementById('bootPipelineStage')?.textContent || '';
+      if (seen[seen.length - 1] !== text) seen.push(text);
+    }).observe(document.getElementById('bootPipeline')!, { subtree: true, characterData: true, childList: true });
+  });
+
   // Full pipeline: download → scene → precompile → ready → reveal.
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });
+  const stages = await page.evaluate(() => (window as unknown as { __bootStages?: string[] }).__bootStages ?? []);
+  expect(stages.join('>')).toContain('下载城市资源');
+  expect(stages.join('>')).toContain('预编译渲染管线');
   expect(await page.evaluate(() => localStorage.getItem('minicityPrecacheDone'))).toBe('1');
   expect(await page.evaluate(() => localStorage.getItem('minicityBuildId'))).not.toBeNull();
 
