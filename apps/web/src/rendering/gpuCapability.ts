@@ -99,9 +99,11 @@ export function gpuSummaryLine(info: GpuInfo): string {
 }
 
 /**
- * First-run quality seed: capable GPUs get the full HD treatment, software
- * renderers get a lightweight scene. Only applied when the visitor has never
- * saved render settings of their own.
+ * First-run quality seed: capable GPUs get resolution + antialias, software
+ * renderers get the lightweight preset. Only cost knobs — textureRendering/
+ * waterRendering stay opt-in (default off), so the light boot never owes the
+ * 41 MB texture pack. Applied only when the visitor has never saved render
+ * settings of their own.
  */
 export function applyGpuSuggestedRenderSettings(info: GpuInfo): void {
   // Runs inside the heavy boot after the decision — storage may be

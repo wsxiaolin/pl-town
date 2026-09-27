@@ -16,12 +16,6 @@ export type DownloadProgress = {
  * is byte-based via stream readers; individual failures are tolerated (the
  * scene falls back to procedural materials) and reported in the result.
  */
-/**
- * Which asset classes this boot will actually use. The stage-1 set derives
- * from the effective config so a default first visit (HD textures off, CG
- * off) does not push 41 MB of bytes the renderer will never read — the
- * texture/CG toggle flips are covered by build-id changes or lazy loads.
- */
 export type AssetDownloadInclude = { textures: boolean; cg: boolean };
 
 const isTextureUrl = (url: string): boolean => url.includes('/assets/textures/');
@@ -67,10 +61,11 @@ export async function downloadAllAssets(
       }
       progress.loadedFiles += 1;
       emit(true);
-    } catch (error) {
+    } catch {
+      // Failures are tolerated (procedural fallback); aborts are a control
+      // path handled by the worker loop condition.
       if (signal?.aborted) return;
       progress.failedFiles += 1;
-      void error;
       emit(true);
     }
   };

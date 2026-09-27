@@ -9,17 +9,12 @@ import { resolveBootDecision, markBootComplete, type BootDecision } from './boot
 import { refreshServerVersion } from '../core/serverVersionProbe';
 import { createBootPipelineUi, type BootPipelineUi } from '../adapters/ui/bootPipelineUi';
 import { describeDownload, downloadAllAssets, type AssetDownloadInclude } from '../core/assetDownloader';
-import { showMomentHeavy, showMomentSplash, stopMomentPresentation } from '../adapters/ui/momentSplashView';
+import { configureMomentSplash, showMomentHeavy, showMomentSplash, stopMomentPresentation } from '../adapters/ui/momentSplashView';
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
 /** Hard ceiling for the heavy boot's networked + precompile stages. */
 const BOOT_WATCHDOG_MS = 240_000;
-
-// Server probe started concurrently with stage 1 when the decision itself
-// never probed (first-visit / build-changed): awaiting it after the
-// precompile would stall the reveal on a cold backend.
-let lateServerProbe: Promise<string | null> = Promise.resolve(null);
 
 export function createCityRuntimeLifecycle(options: {
   reduced: boolean;
@@ -56,6 +51,7 @@ export function createCityRuntimeLifecycle(options: {
 
     // The moment still paints synchronously — today's sky greets the visitor
     // while the boot decision (and any heavy pipeline) resolves in background.
+    configureMomentSplash({ reduced: options.reduced });
     showMomentSplash();
     const pipeline = createBootPipelineUi();
     const signal = eventController.signal;
@@ -80,11 +76,14 @@ export function createCityRuntimeLifecycle(options: {
       // backgrounded tab (rAF frozen → warm-up frames stalled) cannot seal
       // the visitor behind the splash forever either.
       const lightAbort = new AbortController();
+      const forwardSessionAbort = () => lightAbort.abort();
+      signal.addEventListener('abort', forwardSessionAbort, { once: true });
       const lightWatchdog = window.setTimeout(() => lightAbort.abort(), 30_000);
       try {
-        await bootCity(pipeline, false, undefined, lightAbort.signal);
+        await bootCity(pipeline, false, () => Promise.resolve(null), lightAbort.signal);
       } finally {
         window.clearTimeout(lightWatchdog);
+        signal.removeEventListener('abort', forwardSessionAbort);
       }
       return;
     }
@@ -115,9 +114,12 @@ export function createCityRuntimeLifecycle(options: {
       signal.removeEventListener('abort', forwardSessionAbort);
     };
 
-    lateServerProbe = decision.serverVersion === null
+    // Server probe started concurrently with stage 1 when the decision itself
+    // never probed (first-visit / build-changed): awaiting it after the
+    // precompile would stall the reveal on a cold backend.
+    const lateProbe = decision.serverVersion === null
       ? refreshServerVersion().catch(() => null)
-      : Promise.resolve<string | null>(null);
+      : Promise.resolve<string | null>(decision.serverVersion);
 
     const gpu = probeGpu();
     applyGpuSuggestedRenderSettings(gpu);
@@ -125,29 +127,22 @@ export function createCityRuntimeLifecycle(options: {
     pipeline.show();
     pipeline.setGpu(describeGpuForBoot(gpu));
     pipeline.beginStage('download');
-    pipeline.setDetail(bootReasonDetail(decision));
 
-    // Stage 1 downloads only what THIS boot will use: HD textures only when
-    // the renderer will read them, CG stills only while the CG is enabled.
-    // The repair pass below (and lazy TextureLoader) covers the rest.
-    const include: AssetDownloadInclude = {
-      textures: readRenderSettings().textureRendering,
-      cg: OPENING_CG_ENABLED,
-    };
+    // Stage 1 downloads the NON-texture bundle (models, moments, activities,
+    // CG while enabled). Textures are owned exclusively by the preloader
+    // pass below so the two fetchers never race the same URLs with 6+6
+    // workers (review r5#B1). HD-off boots download ~3 MB, not 41.
+    const texturesEnabled = readRenderSettings().textureRendering;
+    const include: AssetDownloadInclude = { textures: false, cg: OPENING_CG_ENABLED };
+    pipeline.setDetail(`${bootReasonDetail(decision)}${texturesEnabled ? '' : '，高清贴图将按需加载'}`);
+
+    let download: Awaited<ReturnType<typeof downloadAllAssets>> | null = null;
     let downloadFailed = false;
     try {
-      const download = await downloadAllAssets((progress) => {
+      download = await downloadAllAssets((progress) => {
         pipeline.setStageProgress('download', progress.loadedFiles / Math.max(1, progress.totalFiles));
         pipeline.setDetail(describeDownload(progress));
       }, bootAbort.signal, include);
-      if (bootAbort.signal.aborted) {
-        // Watchdog fired mid-download: keep its honest hint on screen and
-        // leave the bar where it stopped — no fake 100%.
-        console.debug('[boot] download aborted by watchdog — degrading');
-      } else {
-        pipeline.setStageProgress('download', 1);
-        pipeline.setDetail(describeDownload(download));
-      }
       downloadFailed = download.failedFiles > 0;
     } catch {
       downloadFailed = true;
@@ -155,27 +150,35 @@ export function createCityRuntimeLifecycle(options: {
     }
     if (!started || signal.aborted) { finish(); return; }
 
-    // Texture preload re-runs with force ONLY when the bulk download left
-    // gaps (failures or an aborted watchdog pass): stage 1 already streamed
-    // every asset through the HTTP cache, so re-running on a clean download
-    // would just sit at 68% re-reading the cache with no progress to show.
-    let sceneStageBegun = false;
-    if (bootAbort.signal.aborted || downloadFailed) {
-      sceneStageBegun = true;
-      pipeline.beginStage('scene');
-      pipeline.setDetail('校验高清材质包…');
-      await texturePreload;
-      await preloadTextureResources(readRenderSettings().textureRendering, bootAbort.signal, true).catch(() => {});
+    // Texture pass, still inside the download stage's budget. The forced
+    // call aborts any ambient run in flight and re-opens the full pass —
+    // textures are fetched exactly once and the 240 s watchdog bounds them
+    // (the degraded branch then skips the completion markers).
+    if (texturesEnabled) {
+      pipeline.setDetail(downloadFailed ? '校验高清材质包（含修复下载）…' : '下载高清材质包…');
+      await preloadTextureResources(true, bootAbort.signal, true).catch(() => {});
     } else {
-      await texturePreload;
+      await texturePreload; // resolves immediately: the ambient pass skipped
+    }
+    if (bootAbort.signal.aborted) {
+      // Watchdog fired mid-pipeline: keep its honest hint, no fake 100%.
+      console.debug('[boot] pipeline aborted by watchdog — degrading');
+    } else if (download) {
+      pipeline.setStageProgress('download', 1);
+      pipeline.setDetail(describeDownload(download));
     }
     if (!started || signal.aborted) { finish(); return; }
 
-    await bootCity(pipeline, true, decision.serverVersion, bootAbort.signal, sceneStageBegun);
+    await bootCity(pipeline, true, () => lateProbe, bootAbort.signal);
     finish();
   }
 
-  async function bootCity(pipeline: BootPipelineUi, heavy: boolean, serverVersion?: string | null, precompileSignal?: AbortSignal, sceneStageBegun = false) {
+  async function bootCity(
+    pipeline: BootPipelineUi,
+    heavy: boolean,
+    resolveServerVersion: () => Promise<string | null>,
+    precompileSignal?: AbortSignal,
+  ) {
     if (!started) return;
     try {
       // The boot watchdog (when provided) bounds governance too — the light
@@ -184,7 +187,7 @@ export function createCityRuntimeLifecycle(options: {
     } catch { /* governance is optional; the city opens without it. */ }
     if (!started) return;
 
-    if (heavy && !sceneStageBegun) {
+    if (heavy) {
       pipeline.beginStage('scene');
       pipeline.setDetail('装配建筑与居民…');
     }
@@ -230,7 +233,7 @@ export function createCityRuntimeLifecycle(options: {
         // here. When the decision never probed (first-visit / build-changed),
         // take a fresh probe now so a build+server double deploy doesn't
         // cost returning visitors a second heavy boot (review r3#4).
-        const consumedServerVersion = serverVersion ?? await lateServerProbe;
+        const consumedServerVersion = await resolveServerVersion();
         markBootComplete(consumedServerVersion);
       }
     }

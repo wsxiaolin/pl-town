@@ -12,10 +12,7 @@ import dawnUrl from '../../assets/moments/dawn.webp';
 import noonUrl from '../../assets/moments/noon.webp';
 import duskUrl from '../../assets/moments/dusk.webp';
 import nightUrl from '../../assets/moments/night.webp';
-import { momentForDate, momentForHour, type MomentName } from '../../core/momentClock';
-
-export { momentForDate, momentForHour };
-export type { MomentName };
+import { momentForHour, type MomentName } from '../../core/momentClock';
 
 type ViewMoment = { name: MomentName; caption: string; url: string };
 
@@ -34,7 +31,10 @@ function viewMoment(hour: number): ViewMoment {
 // ─── boot screen gate state ──────────────────────────────────────────────────
 
 const MIN_SPLASH_MS = 2_600; // Even a cached visit gets a breath of the still.
-const SLIDESHOW_FADE_MS = 1_800;
+const MIN_SPLASH_REDUCED_MS = 1_200; // prefers-reduced-motion: shorter hold.
+const REVEAL_CLEANUP_DELAY_MS = 2_200; // boot fade-out + margin before src drop.
+
+let reducedMotion = false;
 
 let cityReady = false;
 let minimumElapsed = false;
@@ -46,34 +46,26 @@ function bootScreen(): HTMLElement | null {
   return document.getElementById('bootScreen');
 }
 
-function swapToMoment(moment: ViewMoment, instant: boolean): void {
-  const screen = bootScreen();
-  if (!screen) return;
-  const imgA = document.getElementById('bootMomentImgA') as HTMLImageElement | null;
-  const imgB = document.getElementById('bootMomentImgB') as HTMLImageElement | null;
-  if (!imgA || !imgB) return;
-  const showingA = imgA.classList.contains('is-front');
-  const target = showingA ? imgB : imgA;
-  const previous = showingA ? imgA : imgB;
-  target.src = moment.url;
-  const show = () => {
-    target.classList.add('is-front');
-    previous.classList.remove('is-front');
-  };
-  if (instant) show();
-  else window.setTimeout(show, 30); // let the browser decode before fading
+/** Splash behaviour knobs; call once before the first splash paints. */
+export function configureMomentSplash(options: { reduced: boolean }): void {
+  reducedMotion = options.reduced;
+}
+
+function paintMoment(moment: ViewMoment): void {
+  // Single <img>: there is no crossfade target anymore (the day-cycle was
+  // removed), so a two-layer swap buffer is pure dead weight — one image
+  // element, set directly.
+  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
+  if (img) img.src = moment.url;
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {
-    caption.classList.remove('is-visible');
-    window.setTimeout(() => {
-      caption.textContent = moment.caption;
-      caption.classList.add('is-visible');
-    }, instant ? 60 : SLIDESHOW_FADE_MS / 2);
+    caption.textContent = moment.caption;
+    caption.classList.add('is-visible');
   }
 }
 
 function showCurrentMoment(): void {
-  swapToMoment(viewMoment(new Date().getHours()), true);
+  paintMoment(viewMoment(new Date().getHours()));
 }
 
 function bindSkip(): void {
@@ -104,9 +96,12 @@ function checkReveal(): void {
 /** Light visit: single still for the current hour, quiet caption, click skips. */
 export function showMomentSplash(): void {
   const screen = bootScreen();
-  if (!screen) return;
-  screen.classList.add('is-moment', 'is-splash');
-  swapToMoment(viewMoment(new Date().getHours()), true);
+  if (screen) {
+    screen.classList.add('is-moment', 'is-splash');
+    paintMoment(viewMoment(new Date().getHours()));
+  }
+  // Armed OUTSIDE the element guard: a missing #bootScreen must not leave
+  // the reveal gate permanently sealed (review r3#10).
   scheduleMinimumElapsed();
   bindSkip();
 }
@@ -128,7 +123,7 @@ export function showMomentHeavy(): void {
 }
 
 function scheduleMinimumElapsed(): void {
-  window.setTimeout(notifyMinimumElapsed, MIN_SPLASH_MS);
+  window.setTimeout(notifyMinimumElapsed, reducedMotion ? MIN_SPLASH_REDUCED_MS : MIN_SPLASH_MS);
 }
 
 /**
@@ -137,14 +132,12 @@ function scheduleMinimumElapsed(): void {
  * memory from idling on an invisible 60fps transform for the whole session.
  */
 function freezeMomentPresentation(): void {
-  for (const id of ['bootMomentImgA', 'bootMomentImgB']) {
-    const img = document.getElementById(id) as HTMLImageElement | null;
-    if (!img) continue;
-    img.style.animation = 'none';
-    // Clear only after the boot fade has fully finished — clearing earlier
-    // would flash a blank frame during the fade-out.
-    window.setTimeout(() => { img.removeAttribute('src'); }, SLIDESHOW_FADE_MS + 400);
-  }
+  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
+  if (!img) return;
+  img.style.animation = 'none';
+  // Clear only after the boot fade has fully finished — clearing earlier
+  // would flash a blank frame during the fade-out.
+  window.setTimeout(() => { img.removeAttribute('src'); }, REVEAL_CLEANUP_DELAY_MS);
 }
 
 export function stopMomentPresentation(): void {
@@ -188,4 +181,16 @@ export function notifyCityReady(): void {
 export function notifyMinimumElapsed(): void {
   minimumElapsed = true;
   checkReveal();
+}
+
+/**
+ * Last-resort reveal for a boot chain that rejected catastrophically: release
+ * whatever is on screen with a retry hint instead of leaving the visitor
+ * sealed behind a frozen splash. Completion markers stay untouched — the next
+ * visit retries the pipeline.
+ */
+export function forceRevealBootScreen(message: string): void {
+  const detail = document.getElementById('bootPipelineDetail');
+  if (detail) detail.textContent = message;
+  bootScreen()?.classList.add('is-ready');
 }

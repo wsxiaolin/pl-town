@@ -5,7 +5,7 @@ import { seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCa
 // paths end to end (light moment splash vs heavy pipeline) so refactors of
 // bootGate/bootPipeline/momentSplash cannot silently break entry.
 // Retries stay OFF for this file: the heavy pipeline takes minutes, and a
-// flaky retry must not eat the CI job's 15-minute budget (review Blocker 3).
+// flaky retry must not eat the CI job's budget (25 min since review r4).
 test.describe.configure({ retries: 0 });
 test.setTimeout(200_000);
 
@@ -30,7 +30,7 @@ test('light boot shows the current real-world moment still and enters', async ({
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
   // Only the FRONT layer carries a src (the back one is the swap buffer).
-  const src = await page.locator('#bootMomentImgA.is-front, #bootMomentImgB.is-front').first().getAttribute('src');
+  const src = await page.locator('#bootMomentImg').getAttribute('src');
   expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
   await waitForCityBooted(page);
@@ -47,7 +47,7 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootPipeline')).toHaveClass(/is-active/);
   // The still behind the pipeline is the CURRENT moment, not a day cycle.
   // (The caption is display:none in heavy mode — assert what is visible.)
-  const heavySrc = await page.locator('#bootMomentImgA.is-front, #bootMomentImgB.is-front').first().getAttribute('src');
+  const heavySrc = await page.locator('#bootMomentImg').getAttribute('src');
   expect(heavySrc).toMatch(new RegExp(`moments/(dawn|noon|dusk|night)\\.webp`));
 
   // Full pipeline: download → scene → precompile → ready → reveal.
@@ -56,10 +56,16 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   expect(await page.evaluate(() => localStorage.getItem('minicityBuildId'))).not.toBeNull();
 
   // Round trip: the markers the heavy boot wrote must make the NEXT visit
-  // light without any force flag (waitForCityBooted would force light via the
-  // seeded flag, hiding a broken marker invariant).
-  await page.evaluate(() => localStorage.removeItem('minicityForceBoot'));
+  // light with NO force flag. Disabling the init-script seeding first —
+  // otherwise every navigation re-seeds minicityForceBoot='light' and the
+  // assertion would pass even with garbage markers (review r5#B2).
+  await page.evaluate(() => {
+    sessionStorage.setItem('disableBootSeed', '1');
+    localStorage.removeItem('minicityForceBoot');
+  });
   await page.goto('/');
+  // The splash paints before the decision; light mode keeps it (no pipeline).
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
+  await expect(page.locator('#bootScreen')).not.toHaveClass(/is-heavy/);
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
 });

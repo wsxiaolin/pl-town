@@ -77,8 +77,9 @@ export function pickBootReason(input: {
 export async function resolveBootDecision(): Promise<BootDecision> {
   const forced = storedForcedMode();
   if (forced) {
-    const picked = pickBootReason({ forced, knownBuild: null, precacheDone: false, knownServerVersion: null, buildId: currentBuildId(), serverVersion: null });
-    return { ...picked, buildId: currentBuildId(), serverVersion: null };
+    const buildId = currentBuildId();
+    const picked = pickBootReason({ forced, knownBuild: null, precacheDone: false, knownServerVersion: null, buildId, serverVersion: null });
+    return { ...picked, buildId, serverVersion: null };
   }
 
   const buildId = currentBuildId();
@@ -86,8 +87,8 @@ export async function resolveBootDecision(): Promise<BootDecision> {
   const knownServerVersion = safeGet(SERVER_VERSION_KEY);
   const precacheDone = safeGet(PRECACHE_KEY) === '1';
 
-  // The server probe only runs when the local state looks healthy — a first
-  // visit or a stale build already forces the heavy path without it. 4.5 s
+  // The server probe only runs when the local state looks healthy — every
+  // other reason is already heavy regardless of what the server says. 4.5 s
   // covers a cold-starting free-tier backend; AbortSignal.timeout keeps the
   // fetch itself from ever hanging the decision.
   // Probe only when the local state looks healthy — every other reason is
@@ -113,13 +114,6 @@ export async function resolveBootDecision(): Promise<BootDecision> {
   return { mode: reason === 'cached' ? 'light' : 'heavy', reason, buildId, serverVersion };
 }
 
-/**
- * Persist the marker that this device holds a complete precache — the ONLY
- * writer of the build id / precache keys. The server version lands here too:
- * either the one observed when a `server-changed` decision was made, or (for
- * builds that skipped the probe) a fresh probe taken at pipeline completion —
- * so a deploy that changes build AND server never costs two heavy boots.
- */
 /**
  * Persist the marker that this device holds a complete precache — the ONLY
  * writer of the build id / precache keys. The server version lands here too:

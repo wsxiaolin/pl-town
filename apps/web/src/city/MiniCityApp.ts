@@ -65,6 +65,7 @@ import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
 import { createCityRuntimeLifecycle } from './cityRuntimeLifecycle';
 import { warmupFirstFrame } from '../rendering/firstFrameWarmup';
+import { forceRevealBootScreen } from '../adapters/ui/momentSplashView';
 
 const resources = new ResourcePool();
 const MOBILE = () => window.innerWidth <= 680;
@@ -824,8 +825,7 @@ export function startMiniCity() {
     // reveal proceed. Completion markers stay unset — the next visit retries.
     console.error('City boot failed', error);
     frameLoop.releaseRender();
-    document.getElementById('bootPipelineDetail')?.replaceChildren('小城启动遇到问题，请刷新重试');
-    document.getElementById('bootScreen')?.classList.add('is-ready');
+    forceRevealBootScreen('小城启动遇到问题，请刷新重试');
   });
 }
 export function destroyMiniCity() { lifecycle.destroy(); }

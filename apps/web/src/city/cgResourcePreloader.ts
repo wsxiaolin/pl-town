@@ -1,7 +1,5 @@
 import { bundledAssetUrls } from '../core/bundledAssets';
 
-
-
 let preloadScheduled = false;
 
 function appendPreload(url: string): void {
@@ -24,7 +22,7 @@ export function preloadLikelyCGResources(): void {
   if (preloadScheduled) return;
   preloadScheduled = true;
 
-  const preload = () => Object.values(bundledAssetUrls).forEach(appendPreload);
+  const preload = () => bundledAssetUrls.forEach(appendPreload);
   if ('requestIdleCallback' in window) {
     window.requestIdleCallback(preload, { timeout: 1500 });
   } else {

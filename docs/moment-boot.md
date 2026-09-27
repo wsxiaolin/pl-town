@@ -44,6 +44,10 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 
 `apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留，改回 `true` 即恢复（注意：恢复后访客会先看到约 2.6s 的时刻 splash 再进 CG，时刻系统不因 CG 开启而旁路）。CG 资源不在 CG 关闭期的重型下载清单里（构建变更即重新预下载）。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
 
+## 本地复现服务端变更
+
+`/town-api/version` 探针只在配置了 API 基址时工作——本地开发需要 `VITE_SERVER_URL=ws://127.0.0.1:8787 npm run dev`（或 `VITE_API_BASE`），否则每次进入按本地标记直接判定，永远不会出现 server-changed。
+
 ## 调试开关
 
 - URL 参数：`?boot=heavy` / `?boot=light`（单次生效）
