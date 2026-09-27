@@ -74,7 +74,7 @@ test('neighborhood landmarks render their plots and open building details', asyn
   const landmarks = [
     ['television_tower', '电视塔'],
     ['fried_chicken_shop', '炸鸡店'],
-    ['tavern', '酒馆'],
+    ['tavern', '科特维酒馆'],
   ] as const;
 
   for (const [buildingId, title] of landmarks) {
@@ -93,9 +93,19 @@ test('neighborhood landmarks render their plots and open building details', asyn
     expect(result.plotSize).toBeGreaterThan(3.5);
 
     await page.evaluate((id) => (window as any)._mini.openBuildingDialog(id), buildingId);
-    await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
-    await expect(page.locator('#modalTitle')).toHaveText(title);
-    await page.locator('#modalClose').click();
+    if (buildingId === 'tavern') {
+      // The Cotvi tavern greets its guests through the barkeeper dialogue
+      // (dialogTree) rather than the plain info modal.
+      await expect(page.locator('#npcOverlay')).toHaveClass(/open/);
+      await expect(page.locator('#npcName')).toHaveText(title);
+      await expect(page.locator('#npcLine')).toContainText('油灯');
+      await page.locator('#npcClose').click();
+      await expect(page.locator('#npcOverlay')).not.toHaveClass(/open/);
+    } else {
+      await expect(page.locator('#modalOverlay')).toHaveClass(/open/);
+      await expect(page.locator('#modalTitle')).toHaveText(title);
+      await page.locator('#modalClose').click();
+    }
   }
 });
 

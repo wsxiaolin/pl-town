@@ -1,0 +1,56 @@
+/* ===== POPULATION FILTER ===== */
+.pop-filter {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  pointer-events: all;
+}
+.pf-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-light);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+.pf-btn {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #444B55;
+  background: #F7F8FA;
+  border: 1px solid rgba(35,37,43,0.16);
+  border-radius: 20px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+  box-shadow: 0 2px 8px rgba(35,37,43,0.1);
+}
+.pf-btn:hover { color: var(--blue); border-color: var(--blue); }
+.pf-btn.active {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+body.night .pf-btn { background: #272C34; color: #F4F6FA; border-color: rgba(255,255,255,0.22); }
+body.night .pf-btn.active { background: var(--blue); }
+
+@media (max-width: 680px) {
+  .pop-filter {
+    right: 12px;
+    bottom: 12px;
+    gap: 6px;
+    z-index: 100;
+  }
+  .pf-label { display: none; }
+  .pf-btn {
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 8.5px;
+  }
+}

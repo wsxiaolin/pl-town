@@ -45,6 +45,60 @@ jobs:
       - name: Server integration tests
         run: npm run test:server
 
+  # The admin console is plain DOM (no WebGL), so it only needs a headless
+  # Chromium. Runs on PRs too: the shop editor and sidebar assertions in
+  # apps/server/tests/admin-ui.mjs gate the console changes they cover.
+  admin-ui:
+    name: Admin console UI tests
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure npm network retries
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set fetch-retries 3
+          npm config set fetch-retry-mintimeout 1000
+          npm config set fetch-retry-maxtimeout 10000
+          npm config set fetch-timeout 120000
+
+      - run: npm ci --prefer-offline
+
+      - name: Resolve Playwright version
+        id: pw-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test']?.version || 'unknown'")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install-deps chromium && npx playwright install chromium
+
+      - name: Admin console UI tests
+        run: npm run test:admin-ui -w @minicity/server
+        env:
+          CI: 'true'
+
+      - name: Upload admin UI screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-ui-screenshots
+          path: test-results
+          retention-days: 14
+
   # The Playwright suite renders a Three.js city with WebGL, which headless
   # Chromium cannot create. We shard the suite across a matrix and run each
   # shard under Xvfb with the SwiftShader software-GL driver.

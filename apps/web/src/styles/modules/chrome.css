@@ -40,18 +40,6 @@
   pointer-events: all;
 }
 
-.nav-link {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--text-mid);
-  text-decoration: none;
-  text-transform: uppercase;
-  transition: color 0.2s;
-  cursor: pointer;
-}
-.nav-link:hover { color: var(--blue); }
-
 .map-toggle {
   background: rgba(255,255,255,0.72);
   border: 1px solid rgba(0,0,0,0.09);

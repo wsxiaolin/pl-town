@@ -184,7 +184,8 @@
 .activity-panel-hero-copy {
   position: absolute;
   top: 56px;
-  right: 46px;
+  left: 46px;
+  right: auto;
   width: min(460px, 52%);
   text-align: left;
 }
