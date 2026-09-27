@@ -156,6 +156,13 @@ try {
   assert.equal(voted.state.projects.find((entry) => entry.id === project.id).funded, 0);
   assert.deepEqual(voted.votes.projectIds, [project.id]);
   await votingObserver.wait((entry) => entry.type === 'city.updated' && entry.state.revision === voted.state.revision);
+  // Voting must not emit payment receipts or a full catalog broadcast: only
+  // donation/decoration completions refresh the world catalog. Both sockets
+  // below have received the vote broadcast already, so any committed/catalog
+  // message would have been flushed in the same server tick.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(votingResident.messages.filter((entry) => entry.event?.type === 'city.committed').length, 0);
+  assert.equal(votingObserver.messages.filter((entry) => entry.type === 'world.catalog').length, 0);
   assert.equal(votingResident.messages.find((entry) => entry.type === 'hello').progress.currency, 10000);
   const repeatedVote = await post('vote', vote);
   assert.equal(repeatedVote.replayed, true);

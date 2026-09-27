@@ -25,7 +25,12 @@ let votesEpoch: string | null = null;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
-const INPUT_SELECTOR = '[data-city-input],select[aria-label]';
+// Only the donation input is restored from the previous DOM value. Decoration
+// selects are owned by cityGovernanceAreas drafts: during a render the module
+// reconciles drafts to pending receipts or drops options invalidated by a new
+// config. Writing stale DOM values back over those selects could show a value
+// that no longer matches the draft the next submit would use.
+const INPUT_SELECTOR = '[data-city-input]';
 const FOCUS_SELECTOR = '[data-city-focus],[aria-label]';
 const CARD_SELECTOR = '[data-city-project],[data-city-area],[data-city-plot]';
 
@@ -53,6 +58,10 @@ function updateFeedback(): void {
   for (const [selector, message] of [
     ['[data-city-feedback]', operationError],
     ['[data-city-notice]', operationNotice],
+    // Vote failures only make sense on the collective tab; switching away
+    // collapses the alert, and returning reannounces the pending error so the
+    // retry context is not lost. Unlike success (see below), the live region
+    // is intentionally cleared while the failure cannot be acted upon.
     ['[data-city-vote-feedback]', activeTab === 'collective' ? voteError : ''],
     // Tab changes are not new results; retain success without reannouncing it.
     ['[data-city-vote-notice]', voteNotice],
@@ -105,6 +114,10 @@ function renderContents(preferredFocusKey?: string): void {
   const title = document.createElement('h2');
   const activeProject = config?.projects.find((project) => project.buildingId === activeBuilding);
   title.id = 'city-governance-title';
+  // Today only the built-in commons buildings open this panel, and the server
+  // rejects projects whose building is in initialBuiltBuildingIds, so this
+  // branch is unreachable. Keep it defensively titled for independently
+  // deployed configs that may still attach a project to the opened building.
   title.textContent = activeProject ? `众议院 · ${activeProject.name}` : '众议院';
   header.replaceChildren(title, button('关闭', closeCityGovernancePanel, false, 'close'));
   const tabs = root.querySelector<HTMLElement>('.city-governance-tabs')!;
@@ -473,6 +486,11 @@ async function refreshVotes(): Promise<void> {
   votesEpoch = epoch;
   if (myVotes && (myVotes.sessionId !== sessionId || (epoch && myVotes.epoch !== epoch))) myVotes = null;
   if (sessionId === null) { render(); return; }
+  // Reopening the panel within the same session and epoch already holds the
+  // confirmed votes, so skip the redundant private read. Unavailable endpoints
+  // (explicit recheck), failed reads, and session or epoch changes still re-read.
+  if (myVotes && epoch !== null && myVotes.sessionId === sessionId && myVotes.epoch === epoch
+    && votesUnavailableSession !== sessionId) return;
   const feedbackRevision = voteFeedbackRevision;
   const controller = new AbortController();
   const panel = root;

@@ -67,7 +67,6 @@ async function fixture(page: Page, delayPersonalVotes = false, extraProjects = 0
     requests,
     personalRequested: () => personalRequested,
     personalReads: () => personalReads,
-    holdNextRead: () => { delayPersonalVotes = true; personalRequested = false; },
     release: () => { delayPersonalVotes = false; releasePersonalVotes?.(); },
     failNext: () => { failNextVote = 'network'; },
     failNextHtml: () => { failNextVote = 'html'; },
@@ -173,26 +172,25 @@ test('a delayed personal-votes read cannot erase a successful vote and failed vo
   expect(api.requests[1]!.requestId).toBe(api.requests[0]!.requestId);
 });
 
-test('reopening preserves known votes while a read is pending and repeated opening keeps focus', async ({ page }) => {
+test('reopening skips a redundant votes read while votes stay confirmed and repeated opening keeps focus', async ({ page }) => {
   const api = await fixture(page);
   const panel = page.getByRole('dialog', { name: '众议院', exact: true });
   const cafe = panel.locator('[data-building-id="catcafe"]');
   await cafe.getByRole('button', { name: '投票建设' }).click();
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
-  api.holdNextRead();
+  const reads = api.personalReads();
   await panel.getByRole('button', { name: '关闭', exact: true }).click();
   await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
-  await expect.poll(api.personalRequested).toBe(true);
   await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
-  const reads = api.personalReads();
+  // The same session and epoch already hold the confirmed votes, so the
+  // private read must not fire again on reopen.
+  expect(api.personalReads()).toBe(reads);
   await cafe.getByRole('spinbutton').fill('321');
   await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
   await expect(cafe.getByRole('spinbutton')).toBeFocused();
   await expect(cafe.getByRole('spinbutton')).toHaveValue('321');
   expect(api.personalReads()).toBe(reads);
   expect(api.requests).toHaveLength(1);
-  api.release();
-  await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
 });
 
 test('close and unavailable snapshots preserve the last real tab scroll', async ({ page }) => {
