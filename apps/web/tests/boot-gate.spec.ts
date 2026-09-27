@@ -9,12 +9,13 @@ import { seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCa
 test.describe.configure({ retries: 0 });
 test.setTimeout(200_000);
 
-function expectedMomentLabel(): string {
+function expectedMomentCaption(): string {
+  // Substring each caption actually contains ("夜幕下的…" has 夜幕, not 夜晚).
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 11) return '清晨';
   if (hour >= 11 && hour < 17) return '正午';
   if (hour >= 17 && hour < 20) return '黄昏';
-  return '夜晚';
+  return '夜幕';
 }
 
 test('light boot shows the current real-world moment still and enters', async ({ page }) => {
@@ -31,7 +32,7 @@ test('light boot shows the current real-world moment still and enters', async ({
   // Only the FRONT layer carries a src (the back one is the swap buffer).
   const src = await page.locator('#bootMomentImgA.is-front, #bootMomentImgB.is-front').first().getAttribute('src');
   expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
-  await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentLabel());
+  await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
   await waitForCityBooted(page);
 });
 
