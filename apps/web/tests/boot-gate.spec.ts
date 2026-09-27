@@ -69,3 +69,29 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootScreen')).not.toHaveClass(/is-heavy/);
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
 });
+
+test('degraded heavy boot reveals without writing completion markers', async ({ page }) => {
+  // Short-circuit the watchdog BEFORE the module graph loads (the constant
+  // is read at import time), stall every asset request past it, and assert
+  // the visitor still gets in — with the marker invariant intact: no
+  // precacheDone, no buildId, so the next visit retries the full pipeline.
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    (window as unknown as { __MINICITY_TEST_BOOT_WATCHDOG_MS__?: number }).__MINICITY_TEST_BOOT_WATCHDOG_MS__ = 8_000;
+  });
+  await page.route('**/assets/**', async () => {
+    // Never fulfil: the request stalls until the watchdog aborts it.
+    await new Promise(() => {});
+  });
+  stubCityWebSocket(page);
+  stubNewsstandWebSocket(page);
+  stubWorldCatalogWebSocket(page);
+  await seedCityStorage(page);
+  await page.goto('/?boot=heavy');
+
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-heavy/);
+  // Watchdog fires at ~8s: degrade, release, reveal — markers untouched.
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
+  expect(await page.evaluate(() => localStorage.getItem('minicityPrecacheDone'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('minicityBuildId'))).toBeNull();
+});

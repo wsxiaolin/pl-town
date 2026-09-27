@@ -13,8 +13,11 @@ import { configureMomentSplash, showMomentHeavy, showMomentSplash, stopMomentPre
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
-/** Hard ceiling for the heavy boot's networked + precompile stages. */
-const BOOT_WATCHDOG_MS = 240_000;
+/** Hard ceiling for the heavy boot's networked + precompile stages. Tests
+ * shrink it via a global set before the module loads — never in production. */
+const BOOT_WATCHDOG_MS = Number(
+  (globalThis as { __MINICITY_TEST_BOOT_WATCHDOG_MS__?: number }).__MINICITY_TEST_BOOT_WATCHDOG_MS__ ?? 240_000,
+);
 
 export function createCityRuntimeLifecycle(options: {
   reduced: boolean;
@@ -134,14 +137,18 @@ export function createCityRuntimeLifecycle(options: {
     // workers (review r5#B1). HD-off boots download ~3 MB, not 41.
     const texturesEnabled = readRenderSettings().textureRendering;
     const include: AssetDownloadInclude = { textures: false, cg: OPENING_CG_ENABLED };
-    pipeline.setDetail(`${bootReasonDetail(decision)}${texturesEnabled ? '' : '，高清贴图将按需加载'}`);
+    // Stage-1 takes the first 40% of the download bar when a 41 MB texture
+    // pass follows; alone it owns the whole bar.
+    const stage1Share = texturesEnabled ? 0.4 : 1;
+    const reasonTag = bootReasonShort(decision);
+    pipeline.setDetail(`${reasonTag}${texturesEnabled ? '' : ' · 高清贴图将按需加载'}`);
 
     let download: Awaited<ReturnType<typeof downloadAllAssets>> | null = null;
     let downloadFailed = false;
     try {
       download = await downloadAllAssets((progress) => {
-        pipeline.setStageProgress('download', progress.loadedFiles / Math.max(1, progress.totalFiles));
-        pipeline.setDetail(describeDownload(progress));
+        pipeline.setStageProgress('download', stage1Share * (progress.loadedFiles / Math.max(1, progress.totalFiles)));
+        pipeline.setDetail(`${reasonTag} · ${describeDownload(progress)}`);
       }, bootAbort.signal, include);
       downloadFailed = download.failedFiles > 0;
     } catch {
@@ -156,7 +163,12 @@ export function createCityRuntimeLifecycle(options: {
     // (the degraded branch then skips the completion markers).
     if (texturesEnabled) {
       pipeline.setDetail(downloadFailed ? '校验高清材质包（含修复下载）…' : '下载高清材质包…');
-      await preloadTextureResources(true, bootAbort.signal, true).catch(() => {});
+      // File-count progress mapped onto the remaining [40%,100%] of the
+      // download stage so the bar stays monotonic across the hand-off.
+      await preloadTextureResources(true, bootAbort.signal, true, (loadedFiles, totalFiles) => {
+        pipeline.setStageProgress('download', 0.4 + 0.6 * (loadedFiles / Math.max(1, totalFiles)));
+        pipeline.setDetail(`${reasonTag} · 高清材质包 ${loadedFiles}/${totalFiles}`);
+      }).catch(() => {});
     } else {
       await texturePreload; // resolves immediately: the ambient pass skipped
     }
@@ -169,8 +181,11 @@ export function createCityRuntimeLifecycle(options: {
     }
     if (!started || signal.aborted) { finish(); return; }
 
-    await bootCity(pipeline, true, () => lateProbe, bootAbort.signal);
-    finish();
+    try {
+      await bootCity(pipeline, true, () => lateProbe, bootAbort.signal);
+    } finally {
+      finish();
+    }
   }
 
   async function bootCity(
@@ -265,6 +280,18 @@ export function createCityRuntimeLifecycle(options: {
     start,
     destroy,
   };
+}
+
+/** One-word reason tag that survives the download detail's per-chunk rewrite. */
+function bootReasonShort(decision: BootDecision): string {
+  switch (decision.reason) {
+    case 'first-visit': return '首次进入';
+    case 'build-changed': return '小城有更新';
+    case 'server-changed': return '服务端已更新';
+    case 'precache-missing': return '缓存重建';
+    case 'forced': return '手动加载';
+    default: return '资源同步';
+  }
 }
 
 function bootReasonDetail(decision: BootDecision): string {

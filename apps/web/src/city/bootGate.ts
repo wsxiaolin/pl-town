@@ -91,12 +91,11 @@ export async function resolveBootDecision(): Promise<BootDecision> {
   // other reason is already heavy regardless of what the server says. 4.5 s
   // covers a cold-starting free-tier backend; AbortSignal.timeout keeps the
   // fetch itself from ever hanging the decision.
-  // Probe only when the local state looks healthy — every other reason is
-  // already heavy regardless of what the server says.
   let serverVersion: string | null = null;
-  if (safeGet(PRECACHE_KEY) === '1' && knownBuild === buildId) {
+  if (precacheDone && knownBuild === buildId) {
     serverVersion = await probeServerVersion(AbortSignal.timeout(4_500));
-    if (serverVersion === null) console.warn('bootGate: /town-api/version probe failed — deciding locally');
+    // A 429/timeout on a shared NAT is routine — debug, not warn.
+    if (serverVersion === null) console.debug('bootGate: /town-api/version probe failed — deciding locally');
   }
   const { mode, reason } = pickBootReason({ forced: null, knownBuild, precacheDone, knownServerVersion, buildId, serverVersion });
 
@@ -126,6 +125,11 @@ export function markBootComplete(serverVersion?: string | null): void {
     localStorage.setItem(BUILD_KEY, currentBuildId());
     localStorage.setItem(PRECACHE_KEY, '1');
     if (serverVersion) localStorage.setItem(SERVER_VERSION_KEY, serverVersion);
+    // Unknown ≠ stale: a heavy boot whose late probe failed must not leave
+    // the PREVIOUS fingerprint armed — that would re-trigger server-changed
+    // on the next visit forever. Clearing routes the next visit through the
+    // "never seen" branch of pickBootReason instead (review r6#S1).
+    else localStorage.removeItem(SERVER_VERSION_KEY);
   } catch { /* ignore. */ }
 }
 

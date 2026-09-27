@@ -1,7 +1,7 @@
 // Asset downloader — streams every bundled asset through the HTTP cache with
 // file-level progress (~0.1 MB emission steps). Network orchestration lives
 // in core/ per Agents.md; the DOM progress bar is adapters/ui/bootPipelineUi.
-import { bundledAssetUrls } from './bundledAssets';
+import { bundledAssets } from './bundledAssets';
 
 export type DownloadProgress = {
   loadedBytes: number;
@@ -18,15 +18,16 @@ export type DownloadProgress = {
  */
 export type AssetDownloadInclude = { textures: boolean; cg: boolean };
 
-const isTextureUrl = (url: string): boolean => url.includes('/assets/textures/');
-const isCgUrl = (url: string): boolean => url.includes('/assets/cg/');
-
 export async function downloadAllAssets(
   onProgress: (progress: DownloadProgress) => void,
   signal?: AbortSignal,
   include: AssetDownloadInclude = { textures: true, cg: true },
 ): Promise<DownloadProgress> {
-  const assetUrls = bundledAssetUrls.filter((url) => (include.textures || !isTextureUrl(url)) && (include.cg || !isCgUrl(url)));
+  // Filter BY GROUP (glob-key classified), not by URL shape — Vite flattens
+  // emitted URLs, so a URL contains no textures/ segment in production.
+  const assetUrls = bundledAssets
+    .filter((asset) => (include.textures || asset.group !== 'textures') && (include.cg || asset.group !== 'cg'))
+    .map((asset) => asset.url);
   const progress: DownloadProgress = {
     loadedBytes: 0, loadedFiles: 0, totalFiles: assetUrls.length, failedFiles: 0, done: false,
   };

@@ -17,7 +17,7 @@ export type GpuInfo = {
   sampledAt: number;
 };
 
-import { RENDER_SETTINGS_KEY } from './createRenderer';
+import { RENDER_SETTINGS_KEY } from '../core/storageKeys';
 
 const GPU_INFO_KEY = 'minicityGpuInfo';
 

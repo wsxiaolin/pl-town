@@ -1,16 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
-// gpuCapability transitively imports createRenderer, which reads
-// matchMedia at module scope. Plain node has no matchMedia — stub it BEFORE
-// the (dynamic) import so this suite stays node-only per test:domain.
-type ClassifyGpu = (renderer: string) => { tier: string; tierLabel: string };
-
-async function loadClassifyGpu(): Promise<ClassifyGpu> {
-  (globalThis as { matchMedia?: unknown }).matchMedia ??= (query: string) => ({ matches: false, media: query });
-  const module = await import('../../src/rendering/gpuCapability');
-  return module.classifyGpu as ClassifyGpu;
-}
+import { classifyGpu } from '../../src/rendering/gpuCapability';
 
 // Real driver strings as seen in WEBGL_debug_renderer_info across devices.
 const CASES: Array<[string, string]> = [
@@ -37,8 +27,7 @@ const CASES: Array<[string, string]> = [
   ['Some Unknown Renderer', 'unknown'],
 ];
 
-test('classifyGpu maps real driver strings to the right tier', async () => {
-  const classifyGpu = await loadClassifyGpu();
+test('classifyGpu maps real driver strings to the right tier', () => {
   for (const [renderer, expectedTier] of CASES) {
     assert.equal(classifyGpu(renderer).tier, expectedTier, `renderer "${renderer}"`);
   }

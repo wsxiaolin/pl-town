@@ -69,7 +69,7 @@ import { forceRevealBootScreen } from '../adapters/ui/momentSplashView';
 
 const resources = new ResourcePool();
 const MOBILE = () => window.innerWidth <= 680;
-const REDUCED = false;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CONFIG = CITY_CONFIG;
 let renderer: THREE.WebGLRenderer;
 const graphics = createCityGraphics(resources, () => renderer);

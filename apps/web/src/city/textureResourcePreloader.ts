@@ -37,13 +37,21 @@ async function readTexture(url: string, signal: AbortSignal): Promise<void> {
   }
 }
 
-async function runWithConcurrency(urls: string[], limit: number, signal: AbortSignal): Promise<void> {
+async function runWithConcurrency(
+  urls: string[],
+  limit: number,
+  signal: AbortSignal,
+  onFileDone?: (loadedFiles: number, totalFiles: number) => void,
+): Promise<void> {
   let nextIndex = 0;
+  let loadedFiles = 0;
   const worker = async (): Promise<void> => {
     while (nextIndex < urls.length) {
       if (signal.aborted) return;
       const url = urls[nextIndex++];
       if (url) await readTexture(url, signal);
+      loadedFiles += 1;
+      onFileDone?.(loadedFiles, urls.length);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, urls.length) }, worker));
@@ -53,7 +61,12 @@ export function isTextureResourceAvailable(url: string): boolean {
   return !failedUrls.has(url);
 }
 
-export function preloadTextureResources(enabled = true, signal?: AbortSignal, force = false): Promise<void> {
+export function preloadTextureResources(
+  enabled = true,
+  signal?: AbortSignal,
+  force = false,
+  onFileDone?: (loadedFiles: number, totalFiles: number) => void,
+): Promise<void> {
   if (activeRun) {
     if (!force || activeRun.forced) return activeRun.promise;
     // A forced run (heavy boot repair pass) upgrades an in-flight ambient
@@ -78,10 +91,13 @@ export function preloadTextureResources(enabled = true, signal?: AbortSignal, fo
   // re-opens it (it may be a repair pass for earlier failures).
   if (ready && !force) return Promise.resolve();
   const controller = new AbortController();
+  // Force runs are primarily bounded by the lifecycle watchdog; this timer
+  // is belt-and-suspenders for the case the boot flow itself stalls before
+  // arming the watchdog.
   const timeout = setTimeout(() => controller.abort(), force ? 240_000 : 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  const promise = runWithConcurrency(Object.values(textureModules), 6, controller.signal).then(() => {
+  const promise = runWithConcurrency(Object.values(textureModules), 6, controller.signal, onFileDone).then(() => {
     clearTimeout(timeout);
     // Only a COMPLETED pass claims readiness — an aborted one must not
     // short-circuit a later forced re-run.

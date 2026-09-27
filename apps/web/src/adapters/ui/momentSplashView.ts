@@ -77,11 +77,12 @@ function bindSkip(): void {
   screen.dataset.momentSkipBound = 'true';
   const skip = (): void => { skipRequested = true; notifyReveal(); };
   screen.addEventListener('pointerdown', skip, { capture: true });
-  // Keyboard parity for the "点击进入" hint (it is a CSS ::after, invisible
-  // to assistive tech on its own). Works only because #bootScreen carries
-  // tabindex="0" in index.html — the tab stop is the overlay itself.
+  // Keyboard parity for the "点击进入" hint: #bootScreen is a role="button"
+  // tab stop (index.html), so Enter/Space must skip. Escape is deliberately
+  // NOT a skip — an overlay that closes on Escape reads as dismissable UI,
+  // which the splash is not.
   screen.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') skip();
+    if (event.key === 'Enter' || event.key === ' ') skip();
   }, { capture: true });
 }
 
@@ -115,9 +116,6 @@ export function showMomentHeavy(): void {
   // no second timer, no visible swap (the still is the same current moment).
   screen.classList.remove('is-splash');
   screen.classList.add('is-moment', 'is-heavy');
-  // The pipeline rewrites its detail line constantly — stop screen-reader
-  // announcements from churning while it does.
-  screen.setAttribute('aria-live', 'off');
   showCurrentMoment();
   bindSkip();
 }

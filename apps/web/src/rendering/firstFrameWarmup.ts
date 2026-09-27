@@ -25,6 +25,11 @@ export async function warmupFirstFrame(
   const { renderer, scene, camera, frameLoop } = handles;
   try {
     if (!renderer || !scene || !camera) return;
+    // Symmetric with the warm-up loop guard: a pre-aborted signal must not
+    // even START a compile — compileAsync begins GPU work the moment it is
+    // called, and racing the (about-to-be-released) frame loop on the same
+    // renderer is exactly what the gate exists to prevent (review r6 nit).
+    if (signal?.aborted) return;
     onProgress?.(0.15);
     await abortable(renderer.compileAsync(scene, camera), signal);
     onProgress?.(0.7);
