@@ -32,12 +32,18 @@ export type AnimatedWaterConfig = {
   textureHeight?: number;
   /** Optional shoreline wave lap. Displaces vertices near uv.x = 1 (the shore
    *  edge of the ribbon) so the waterline advances and retreats along the
-   *  beach instead of sitting on a fixed line. */
+   *  beach instead of sitting on a fixed line. The fragment stage adds the
+   *  shallow-water gradient: a paler, more translucent band that lets the
+   *  sand show through, plus noise-broken foam that rides the crest. */
   shoreWaves?: {
     /** Cross-shore advance/retreat of the waterline, in local x units. */
     reach?: number;
     /** Crest lift at the waterline, in local y units. */
     lift?: number;
+    /** Hard world-x ceiling for the displaced waterline. Keeps the crest
+     *  from ever lapping over shore-side objects (e.g. the asphalt road),
+     *  which would z-fight with them. */
+    maxAdvanceX?: number;
   };
   side?: THREE.Side;
   renderOrder?: number;
@@ -195,14 +201,24 @@ export function createAnimatedWaterSurface(
     // Lap the water at the shore edge: vertices near uv.x = 1 (the shoreline)
     // swing toward the beach and lift as each crest arrives, then fall back,
     // while the open sea (uv.x near 0) stays still so the mirror stays calm.
+    // The fragment stage then turns the same shore band into a shallow-water
+    // gradient: paler tint, translucent alpha (sand shows through) and
+    // noise-broken foam along the advancing waterline.
     // Frequencies are tuned against the already time-scaled `time` uniform.
     const reach = glslFloat(config.shoreWaves.reach ?? 1.15);
     const lift = glslFloat(config.shoreWaves.lift ?? 0.26);
+    // Hard stop for the waterline. Without it the crest slides under the
+    // asphalt road (road top ~0.085, water base 0.06) and the two surfaces
+    // flicker against each other as the wave rises and falls.
+    const limitX = glslFloat(config.shoreWaves.maxAdvanceX ?? 1e9);
     material.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace(
           'void main() {',
           /* glsl */ `
+          varying float vShore;
+          varying float vCrest;
+          varying float vFoamEdge;
           void main() {
           vec3 shorePos = position;
           {
@@ -210,12 +226,52 @@ export function createAnimatedWaterSurface(
             float lap = sin(time * 2.1 + position.z * 0.35) * 0.62
               + sin(time * 3.4 - position.z * 0.22 + 2.1) * 0.30;
             float roll = sin(time * 1.6 - (1.0 - uv.x) * 48.0 + position.z * 0.55);
+            float crest = pow(max(lap, 0.0), 1.35);
             shorePos.x += shoreEnv * lap * ${reach};
-            shorePos.y += shoreEnv * (pow(max(lap, 0.0), 1.35) * ${lift} + max(roll, 0.0) * ${lift} * 0.3);
+            shorePos.x = min(shorePos.x, ${limitX});
+            // The 0.03 base lift keeps the shallow band riding just above the
+            // sand plane (sand sits 0.01 above the flat water level) so the
+            // translucent sheet never sinks beneath the beach it should cover.
+            shorePos.y += shoreEnv * (0.03 + crest * ${lift} + max(roll, 0.0) * ${lift} * 0.3);
+            vShore = uv.x;
+            vCrest = crest * shoreEnv;
+            vFoamEdge = smoothstep(0.62, 0.98, uv.x) * (0.3 + 0.7 * crest);
           }`,
         )
         .replace(/vec4\( position, 1\.0 \)/g, 'vec4( shorePos, 1.0 )');
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          'void main() {',
+          /* glsl */ `
+          varying float vShore;
+          varying float vCrest;
+          varying float vFoamEdge;
+          void main() {`,
+        )
+        .replace(
+          'gl_FragColor = vec4( outgoingLight, alpha );',
+          /* glsl */ `
+          {
+            // Shallow-water gradient: blend toward a pale aqua as the bed
+            // shallows and let the sand show through the translucent sheet.
+            vec3 shallowTint = mix(waterColor, vec3(0.44, 0.78, 0.74), 0.62);
+            float shallowBand = smoothstep(0.30, 0.92, vShore);
+            outgoingLight = mix(outgoingLight, shallowTint, shallowBand * 0.55);
+            // Foam rides the advancing waterline: noise breaks it into
+            // pockets so it reads as bubbles, and it only shows while a
+            // crest is actually pushing in. Tint with sunColor so night
+            // dims the foam with everything else.
+            float foamNoise = getNoise(worldPosition.xz * 2.6 + time * 0.22).x * 0.5 + 0.5;
+            float foam = vFoamEdge * smoothstep(0.38, 0.72, foamNoise + vCrest * 0.42);
+            outgoingLight = mix(outgoingLight, sunColor * 0.9, foam * 0.8);
+            float shoreAlpha = mix(alpha, alpha * 0.45, smoothstep(0.28, 0.95, vShore));
+            gl_FragColor = vec4( outgoingLight, max(shoreAlpha, foam * 0.9) );
+          }`,
+        );
     };
+    // The shore band must blend over the sand, so the surface renders in the
+    // transparent pass even when the configured deep-water alpha is 1.
+    material.transparent = true;
     // The displacement moves vertices past the geometry's computed bounding
     // sphere, which would let frustum culling pop the shore edge in/out.
     water.frustumCulled = false;

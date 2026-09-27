@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
-import { WEST_BEACH } from '../city/data/cityConfig';
+import { WEST_BEACH, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -149,8 +149,11 @@ export function createWestBeach(options: BeachOptions): {
         distortionScale: 3.7,
         timeScale: SEA_TIME_SCALE,
         // Waves break at the shoreline: the waterline climbs the sand and
-        // pulls back instead of resting on a fixed edge.
-        shoreWaves: { reach: 1.15, lift: 0.26 },
+        // pulls back instead of resting on a fixed edge, and the shallow
+        // band fades to a translucent pale aqua with foam on the crest.
+        // maxAdvanceX stops the crest just short of the asphalt road that
+        // ends at WEST_RING_ROAD_END_X, so wave and road never z-fight.
+        shoreWaves: { reach: 1.15, lift: 0.26, maxAdvanceX: WEST_RING_ROAD_END_X - 0.25 },
       })
     : null;
   const water = waterSurface

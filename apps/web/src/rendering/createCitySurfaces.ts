@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
+import { ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
@@ -140,7 +140,10 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
     addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, -21.1, true, 'asphalt');
     addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, 21.1, true, 'asphalt');
-    addRoadSegment(38.8, MAIN_ROAD_WIDTH, -23.6, 0, true, 'asphalt');
+    // The west arm ends on the dry sand (WEST_RING_ROAD_END_X) instead of
+    // touching the coastline, so shore waves never fight the road surface.
+    const westRoadWidth = -4.2 - WEST_RING_ROAD_END_X;
+    addRoadSegment(westRoadWidth, MAIN_ROAD_WIDTH, WEST_RING_ROAD_END_X + westRoadWidth / 2, 0, true, 'asphalt');
     addRoadSegment(38.8, MAIN_ROAD_WIDTH, 23.6, 0, true, 'asphalt');
     addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -39.0, false, 'pavement');
     addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, 39.0, false, 'pavement');

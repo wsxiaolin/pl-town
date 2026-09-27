@@ -68,6 +68,10 @@ export const WEST_BEACH = Object.freeze({
   minZ: -50,
   maxZ: 50,
 });
+/** West end of the asphalt ring road that runs toward the beach. The road
+ *  stops on the dry sand instead of reaching the coastline, so the lapping
+ *  shore waves can never intersect the road surface. */
+export const WEST_RING_ROAD_END_X = -40.6;
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
 
