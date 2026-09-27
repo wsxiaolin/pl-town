@@ -117,8 +117,12 @@ function imageUrl(id: string, image = 0) {
   return `${STATIC_BASE}/experiments/images/${id.slice(0, 4)}/${id.slice(4, 6)}/${id.slice(6, 8)}/${id.slice(8, 24)}/${image}.jpg`;
 }
 
-async function authenticate() {
-  if (session && session.expiresAt > Date.now()) return session;
+// The Physics Lab client surfaces its announcement feed inside the anonymous
+// login startup package (Data.Activities): the same records the real app
+// shows as in-client announcements (version notes, events, community links).
+// This login is kept separate from the shared works session so a bulletin
+// board visit always reads a freshly issued startup package on cache expiry.
+async function requestAnonymousLogin(): Promise<Record<string, unknown>> {
   const response = await fetchUpstream(`${API_BASE}/Users/Authenticate`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -130,8 +134,75 @@ async function authenticate() {
   if (!response.ok) throw new Error(`Physics Lab authentication failed (${response.status})`);
   const data = await response.json() as Record<string, unknown>;
   if (data.Status !== 200 || !data.AuthCode) throw new Error(`Physics Lab authentication failed: ${typeof data.Message === 'string' ? data.Message : 'unknown response'}`);
+  return data;
+}
+
+async function authenticate() {
+  if (session && session.expiresAt > Date.now()) return session;
+  const data = await requestAnonymousLogin();
   session = { token: typeof data.Token === 'string' ? data.Token : '', authCode: data.AuthCode as string, expiresAt: Date.now() + 30 * 60 * 1000 };
   return session;
+}
+
+export type PublicAnnouncement = {
+  id: string; subject: string; content: string;
+  link: string | null; linkText: string | null;
+  start: string | null; finish: string | null;
+  priority: number; isAttendance: boolean;
+};
+
+// Upstream localizes announcement text as either a plain string or a
+// { Chinese, English, ... } dictionary; the town is Chinese-first.
+const localizedText = (value: unknown): string | null => {
+  if (typeof value === 'string') { const text = value.trim(); return text || null; }
+  if (value && typeof value === 'object') return localizedText((value as { Chinese?: unknown }).Chinese);
+  return null;
+};
+
+// Announcement links may point at client-internal routes (internal://...)
+// which mean nothing in a browser; only pass http(s) URLs through.
+const safeHttpLink = (value: string | null): string | null => {
+  if (!value) return null;
+  try { const url = new URL(value); return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null; }
+  catch { return null; }
+};
+
+let announcementCache: { expiresAt: number; announcements: PublicAnnouncement[] } | null = null;
+
+export async function getAnnouncements() {
+  if (announcementCache && announcementCache.expiresAt > Date.now()) {
+    return { source: 'live' as const, cached: true, announcements: announcementCache.announcements };
+  }
+  const data = await requestAnonymousLogin();
+  const startup = (data.Data as { Activities?: unknown } | null) ?? {};
+  const activitiesRaw = startup.Activities;
+  const activities = Array.isArray(activitiesRaw)
+    ? activitiesRaw
+    : Array.isArray((activitiesRaw as { $values?: unknown[] } | null)?.$values)
+      ? (activitiesRaw as { $values: unknown[] }).$values
+      : [];
+  const now = Date.now();
+  const announcements = activities
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .filter((item) => item.IsDevelopment !== true)
+    .filter((item) => {
+      const finish = typeof item.FinishDate === 'string' ? Date.parse(item.FinishDate) : NaN;
+      return Number.isNaN(finish) || finish > now;
+    })
+    .map((item): PublicAnnouncement => ({
+      id: typeof item.ID === 'string' ? item.ID : '',
+      subject: localizedText(item.Subject) ?? '社区公告',
+      content: localizedText(Array.isArray(item.Contents) ? item.Contents[0] : null) ?? '',
+      link: safeHttpLink(localizedText(item.TargetLink)),
+      linkText: localizedText(item.TargetText),
+      start: typeof item.StartDate === 'string' ? item.StartDate : null,
+      finish: typeof item.FinishDate === 'string' ? item.FinishDate : null,
+      priority: Number(item.Priority) || 0,
+      isAttendance: item.IsAttendance === true,
+    }))
+    .filter((item) => item.subject !== '社区公告' || item.content);
+  announcementCache = { expiresAt: Date.now() + CACHE_TTL, announcements };
+  return { source: 'live' as const, cached: false, announcements };
 }
 
 export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured') {

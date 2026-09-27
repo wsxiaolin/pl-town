@@ -24,13 +24,23 @@ export type BuildingInteractionOptions = {
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
+  /** Resolves the standalone bulletin board page URL（单测可注入，避免依赖 DOM）。 */
+  getBulletinBoardUrl?: () => string;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
-  bulletin: ['inventory'], news: ['inventory'],
+  news: ['inventory'],
   community: ['social', 'profile'], records: ['social', 'mine'],
   tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
 };
+
+// The bulletin board no longer opens the phone: it renders the Physics Lab
+// client's live announcement feed on a dedicated page (bulletin.html), so the
+// city shell stays open in this tab while the notices get their own space.
+// The URL resolver is injectable so node unit tests can route without a DOM;
+// the default resolves against the document base so subpath deployments
+// (GitHub Pages) keep working.
+const defaultBulletinBoardUrl = () => new URL('bulletin.html', document.baseURI).href;
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
   function openGovernanceIfNeeded(building: BuildingEntity): boolean {
@@ -80,6 +90,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'bulletin') {
+      window.open((options.getBulletinBoardUrl ?? defaultBulletinBoardUrl)(), '_blank', 'noopener');
       options.trackInteraction(b.id);
       return;
     }

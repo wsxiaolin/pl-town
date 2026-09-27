@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公告板 · MiniCity</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Noto Serif SC", "Songti SC", SimSun, Georgia, serif;
+      color: #3b2f24; background: #efe6d5;
+      --paper: #fbf6ea; --paper-edge: #e4d8bf; --ink: #3b2f24; --ink-soft: #7a6a55;
+      --accent: #8c5a2b; --pin: #b5442d;
+    }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(ellipse at 50% -10%, #f6efdd, #e7dcc4 70%, #dfd2b4); }
+    main { width: min(720px, calc(100% - 32px)); margin: 0 auto; padding: 44px 0 72px; }
+    .brand { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .3em; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    h1 { margin: 14px 0 8px; font-size: clamp(30px, 6vw, 46px); line-height: 1.15; letter-spacing: .06em; }
+    .intro { max-width: 560px; color: var(--ink-soft); line-height: 1.9; margin: 0 0 6px; }
+    .source { color: var(--ink-soft); font-size: 13px; margin-bottom: 26px; }
+    .source b { color: var(--accent); font-weight: 600; }
+    .board { position: relative; padding: 30px 26px 34px; background: linear-gradient(160deg, #c99e6a, #b3854f 60%, #9c7140); border-radius: 10px; box-shadow: 0 24px 60px rgba(59, 47, 36, .28), inset 0 2px 0 rgba(255, 255, 255, .25); }
+    .board::before { content: ""; position: absolute; inset: 12px; border: 1px dashed rgba(59, 47, 36, .3); border-radius: 6px; pointer-events: none; }
+    .notice { position: relative; margin: 18px 0; padding: 22px 24px 20px; background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 3px; box-shadow: 0 6px 18px rgba(59, 47, 36, .18); transform: rotate(-.4deg); }
+    .notice:nth-child(even) { transform: rotate(.45deg); }
+    .notice::before { content: ""; position: absolute; top: -7px; left: 50%; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #d9694f, var(--pin)); box-shadow: 0 2px 3px rgba(59, 47, 36, .35); }
+    .notice h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.4; color: var(--ink); }
+    .notice-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 12px; color: var(--ink-soft); font-size: 12.5px; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .notice-meta .badge { color: var(--pin); border: 1px solid rgba(181, 68, 45, .45); border-radius: 999px; padding: 1px 9px; }
+    .notice p { margin: 0; white-space: pre-wrap; line-height: 1.95; font-size: 15px; }
+    .notice .notice-actions { margin-top: 14px; }
+    .notice a { display: inline-block; color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(140, 90, 43, .5); padding-bottom: 1px; font-size: 14px; }
+    .notice a:hover { color: var(--pin); border-color: var(--pin); }
+    .state { padding: 40px 24px; text-align: center; color: var(--ink-soft); line-height: 1.9; }
+    .state .spinner { display: inline-block; width: 22px; height: 22px; border: 2.5px solid rgba(59, 47, 36, .2); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .state button { margin-top: 10px; font: inherit; font-size: 14px; color: var(--paper); background: var(--accent); border: none; border-radius: 6px; padding: 8px 22px; cursor: pointer; }
+    .state button:hover { background: #734620; }
+    .back { display: inline-block; margin-top: 30px; color: var(--ink-soft); text-decoration: none; font-size: 14px; letter-spacing: .08em; }
+    .back:hover { color: var(--accent); }
+    @media (max-width: 480px) { .board { padding: 22px 14px 26px; } .notice { padding: 18px 16px 16px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="brand">MINICITY · BULLETIN</p>
+    <h1>公告板</h1>
+    <p class="intro">纸页都有些发黄了，不过还牢牢粘在上面。凑近看看——这里的每一条公告，都来自「物理实验室」社区的实时通告。</p>
+    <p class="source">数据来源：<b>物理实验室 AR 客户端公告</b>（实时获取）</p>
+    <section class="board" id="board" aria-live="polite">
+      <div class="state" id="state"><span class="spinner"></span><br />正在从社区取回公告……</div>
+    </section>
+    <a class="back" href="./index.html">← 回到小城</a>
+  </main>
+  <script type="module" src="/src/bulletin.ts"></script>
+</body>
+</html>

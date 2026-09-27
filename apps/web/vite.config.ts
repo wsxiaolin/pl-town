@@ -31,11 +31,13 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Multi-page application: the city game shell and the standalone NPC
-      // edit-request page are built as separate HTML entries from one source.
+      // Multi-page application: the city game shell, the standalone NPC
+      // edit-request page, and the bulletin board page are built as separate
+      // HTML entries from one source.
       input: {
         main: resolve(webRoot, 'index.html'),
         'npc-edit-request': resolve(webRoot, 'npc-edit-request.html'),
+        bulletin: resolve(webRoot, 'bulletin.html'),
       },
       output: {
         manualChunks: {

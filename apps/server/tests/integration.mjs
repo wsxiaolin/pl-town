@@ -165,8 +165,35 @@ const physicsLabServer = createServer(async (request, response) => {
   if (request.url === '/Users/Authenticate') {
     // Anonymous session (Login/Password null) is what the server uses for
     // public nickname lookups; it must return usable Token/AuthCode headers.
+    // The startup package carries the client's announcement feed, including
+    // records that the bulletin route must map or drop (dev-only, expired,
+    // client-internal links).
     if (body.Login == null && body.Password == null) {
-      return reply(200, { Status: 200, Message: '', Token: 'stub-token', AuthCode: 'stub-auth-code', Data: null });
+      const startupActivities = [
+        {
+          ID: 'ann-1', Subject: { Chinese: '版本更新 2.5.3' }, Contents: [{ Chinese: '修复了一些问题，详见更新说明。' }],
+          TargetLink: { Chinese: 'https://example.com/release-notes' }, TargetText: { Chinese: '查看详情' },
+          StartDate: '2026-07-01T00:00:00+00:00', FinishDate: '2030-12-31T00:00:00+00:00',
+          Priority: 1, IsDevelopment: false, IsAttendance: false,
+        },
+        {
+          ID: 'ann-2', Subject: { Chinese: '内部跳转公告' }, Contents: [{ Chinese: '这条公告只带客户端内部链接。' }],
+          TargetLink: { Chinese: 'internal://exchange' }, TargetText: { Chinese: '前往兑换处' },
+          StartDate: '2026-01-01T00:00:00+00:00', FinishDate: null,
+          Priority: 0, IsDevelopment: false, IsAttendance: false,
+        },
+        {
+          ID: 'ann-3', Subject: { Chinese: '开发中活动' }, Contents: [{ Chinese: '不应出现。' }],
+          StartDate: '2026-01-01T00:00:00+00:00', FinishDate: null,
+          Priority: 0, IsDevelopment: true, IsAttendance: false,
+        },
+        {
+          ID: 'ann-4', Subject: { Chinese: '已过期活动' }, Contents: [{ Chinese: '不应出现。' }],
+          StartDate: '2020-01-01T00:00:00+00:00', FinishDate: '2020-02-01T00:00:00+00:00',
+          Priority: 0, IsDevelopment: false, IsAttendance: false,
+        },
+      ];
+      return reply(200, { Status: 200, Message: '', Token: 'stub-token', AuthCode: 'stub-auth-code', Data: { Activities: startupActivities } });
     }
     const accounts = {
       'owner@example.com': { password: 'pl-owner-password', user: { ID: 'pl-owner-1', Nickname: 'TakenPlResident' } },
@@ -359,6 +386,21 @@ try {
     method: 'POST', headers: { origin: adminOrigin }, body: '{}',
   });
   if (invalidJsonRequest.status !== 415) throw new Error('JSON proxy endpoints must enforce Content-Type');
+
+  // Bulletin board feed: mapped from the anonymous login startup package,
+  // filtered for browser-safe records (no dev-only or expired notices, no
+  // client-internal links).
+  const announcementsRequest = await fetch(`${adminOrigin}/town-api/announcements`);
+  const announcementsPayload = await announcementsRequest.json();
+  if (!announcementsRequest.ok || announcementsPayload.source !== 'live') throw new Error('Bulletin board announcements must load from the anonymous upstream session');
+  const bulletinNotices = announcementsPayload.announcements ?? [];
+  if (bulletinNotices.length !== 2) throw new Error(`Announcement mapping must keep only the two browser-safe notices; got ${JSON.stringify(bulletinNotices.map((notice) => notice.id))}`);
+  const versionNotice = bulletinNotices.find((notice) => notice.id === 'ann-1');
+  if (!versionNotice || versionNotice.subject !== '版本更新 2.5.3' || !versionNotice.content.includes('更新说明') || versionNotice.link !== 'https://example.com/release-notes' || versionNotice.linkText !== '查看详情') throw new Error('Announcement mapping must localize subject, content, link, and link text');
+  if (versionNotice.start !== '2026-07-01T00:00:00+00:00' || versionNotice.finish !== '2030-12-31T00:00:00+00:00' || versionNotice.priority !== 1 || versionNotice.isAttendance !== false) throw new Error('Announcement mapping must pass through dates, priority, and attendance flag');
+  const internalLinkNotice = bulletinNotices.find((notice) => notice.id === 'ann-2');
+  if (!internalLinkNotice || internalLinkNotice.link !== null) throw new Error('Client-internal links must be dropped from the mapped announcements');
+  if (bulletinNotices.some((notice) => notice.id === 'ann-3' || notice.id === 'ann-4')) throw new Error('Development-only and finished announcements must be filtered out');
 
   alice = await connect('Alice');
   bob = await connect('Bob');

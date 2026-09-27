@@ -15,7 +15,7 @@ import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
-import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
+import { authenticateAccount, getAnnouncements, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
@@ -543,6 +543,13 @@ const http = createServer(async (request, response) => {
   if (request.method === 'POST' && request.url === '/town-api/works/query') {
     try { const body=await readJson(request); response.writeHead(200,headers); response.end(JSON.stringify(await queryPublicWorks(body.query))); }
     catch(error){ if (respondHttpBodyError(response, error)) return; logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
+    return;
+  }
+  // The town's bulletin board renders the Physics Lab client's announcement
+  // feed on a standalone page; anonymous upstream login, no session required.
+  if (request.method === 'GET' && request.url === '/town-api/announcements') {
+    try { response.writeHead(200, headers); response.end(JSON.stringify(await getAnnouncements())); }
+    catch(error){ logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/pl/login') {
