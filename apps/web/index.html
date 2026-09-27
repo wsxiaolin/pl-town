@@ -256,26 +256,18 @@
   </aside>
 
   <!-- Library works search: community projects archive (projects-ai-summary) -->
-  <aside class="works-panel library-panel" id="librarySearchPanel" role="dialog" aria-modal="false" aria-labelledby="librarySearchTitle">
+  <aside class="works-panel library-panel" id="librarySearchPanel" role="dialog" aria-modal="false" aria-label="图书馆作品检索">
     <header class="works-head">
       <div>
         <span class="works-kicker">CITY LIBRARY · 藏书检索</span>
-        <h2 id="librarySearchTitle">图书馆 · 作品检索</h2>
-        <p id="librarySearchMeta">物实社区作品档案</p>
       </div>
       <button class="works-close" id="librarySearchClose" type="button" aria-label="关闭图书馆检索">&times;</button>
     </header>
     <div class="library-toolbar">
       <form id="librarySearchForm" class="library-form" role="search">
         <input id="libraryKeywords" type="search" placeholder="搜索标题、作者、关键词…" aria-label="搜索作品关键词" autocomplete="off" maxlength="60" />
-        <input id="libraryAuthor" type="search" placeholder="作者" aria-label="按作者筛选" autocomplete="off" maxlength="30" />
-        <select id="libraryYear" aria-label="按年份筛选">
-          <option value="">全部年份</option>
-        </select>
         <button type="submit" class="library-submit">检索</button>
-        <button type="button" id="libraryReset" class="library-reset">清空</button>
       </form>
-      <div class="library-chips" id="libraryHotTerms" hidden></div>
     </div>
     <div class="library-body" id="libraryResults">
       <p class="library-hint">输入关键词开始检索社区作品档案。</p>

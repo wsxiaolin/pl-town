@@ -2,19 +2,14 @@
 // community projects archive (projects-ai-summary) and renders result cards.
 import {
   LIBRARY_SEARCH_API_BASE,
-  LIBRARY_SEARCH_YEARS,
   buildLibrarySearchUrl,
-  libraryArchiveMetaUrl,
-  libraryHotTermsUrl,
+  libraryWorkArchiveUrl,
   libraryWorkMetaLine,
   libraryWorkTags,
-  libraryWorkUrls,
   type LibrarySearchResponse,
   type LibrarySearchParams,
   type LibraryWorkRecord,
 } from '../../city/data/libraryWorksSearch';
-
-const HOT_TERMS_LIMIT = 8;
 
 export interface LibrarySearchControllerOptions {
   document: Document;
@@ -40,32 +35,15 @@ function fmtCount(value: number): string {
 export function createLibrarySearchController(options: LibrarySearchControllerOptions): LibrarySearchController {
   const { document, signal } = options;
   const panel = getElement<HTMLDivElement>(document, 'librarySearchPanel');
-  const metaLine = getElement<HTMLParagraphElement>(document, 'librarySearchMeta');
   const form = getElement<HTMLFormElement>(document, 'librarySearchForm');
   const keywordsInput = getElement<HTMLInputElement>(document, 'libraryKeywords');
-  const authorInput = getElement<HTMLInputElement>(document, 'libraryAuthor');
-  const yearSelect = getElement<HTMLSelectElement>(document, 'libraryYear');
-  const hotTermsRow = getElement<HTMLDivElement>(document, 'libraryHotTerms');
   const results = getElement<HTMLDivElement>(document, 'libraryResults');
 
-  for (const year of LIBRARY_SEARCH_YEARS) {
-    const option = document.createElement('option');
-    option.value = String(year);
-    option.textContent = `${year} 年`;
-    yearSelect.appendChild(option);
-  }
-
-  let opened = false;
   let lastSearch: LibrarySearchParams | null = null;
   let searchToken = 0;
 
   function currentParams(): LibrarySearchParams {
-    const year = Number(yearSelect.value);
-    return {
-      keywords: keywordsInput.value,
-      author: authorInput.value,
-      year: yearSelect.value && Number.isFinite(year) ? year : null,
-    };
+    return { keywords: keywordsInput.value };
   }
 
   function search(params: LibrarySearchParams): void {
@@ -94,8 +72,7 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
     results.replaceChildren();
     const heading = document.createElement('p');
     heading.className = 'library-count';
-    const described = [params.keywords.trim(), params.author.trim(), params.year !== null ? `${params.year} 年` : '']
-      .filter(Boolean).join(' · ');
+    const described = params.keywords.trim();
     if (records.length) {
       heading.textContent = `${described ? `「${described}」` : '全部馆藏'}找到 ${fmtCount(records.length)} 件作品`;
       results.appendChild(heading);
@@ -112,23 +89,19 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
   }
 
   function renderCard(record: LibraryWorkRecord): HTMLElement {
-    const urls = libraryWorkUrls(LIBRARY_SEARCH_API_BASE, record.id);
     const article = document.createElement('article');
     article.className = 'library-work';
-
     const meta = document.createElement('p');
     meta.className = 'library-work-meta';
     meta.textContent = libraryWorkMetaLine(record);
     article.appendChild(meta);
-
     const title = document.createElement('a');
     title.className = 'library-work-title';
-    title.href = urls.archive;
+    title.href = libraryWorkArchiveUrl(LIBRARY_SEARCH_API_BASE, record.id);
     title.target = '_blank';
     title.rel = 'noopener';
-    title.textContent = String(record.name || '未命名作品');
+    title.textContent = record.name || '未命名作品';
     article.appendChild(title);
-
     const summary = String(record.summary || '').trim();
     if (summary) {
       const paragraph = document.createElement('p');
@@ -136,7 +109,6 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
       paragraph.textContent = summary;
       article.appendChild(paragraph);
     }
-
     const tags = libraryWorkTags(record);
     if (tags.length) {
       const tagRow = document.createElement('div');
@@ -146,35 +118,15 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
         chip.type = 'button';
         chip.className = 'library-tag';
         chip.textContent = tag;
-        chip.title = `检索「${tag}」`;
         chip.addEventListener('click', () => {
           keywordsInput.value = tag;
-          authorInput.value = '';
-          yearSelect.value = '';
-          search({ keywords: tag, author: '', year: null });
+          search({ keywords: tag });
           results.scrollTop = 0;
         });
         tagRow.appendChild(chip);
       }
       article.appendChild(tagRow);
     }
-
-    const links = document.createElement('div');
-    links.className = 'library-work-links';
-    for (const [label, href, hint] of [
-      ['以实验打开', urls.experiment, '在物理实验室中打开'],
-      ['以讨论打开', urls.discussion, '在物理实验室讨论区打开'],
-    ] as const) {
-      const link = document.createElement('a');
-      link.className = 'library-open-link';
-      link.href = href;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      link.title = hint;
-      link.textContent = label;
-      links.appendChild(link);
-    }
-    article.appendChild(links);
     return article;
   }
 
@@ -194,63 +146,6 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
     results.appendChild(retry);
   }
 
-  function loadArchiveMeta(): void {
-    void (async () => {
-      try {
-        const response = await fetch(libraryArchiveMetaUrl(LIBRARY_SEARCH_API_BASE));
-        if (!response.ok) return;
-        const payload = (await response.json()) as { totalRecords?: number };
-        const total = Number(payload.totalRecords);
-        if (Number.isFinite(total) && total > 0) {
-          metaLine.textContent = `物实社区作品档案 · 馆藏 ${fmtCount(total)} 件`;
-        }
-      } catch {
-        // Keep the static copy when the archive is unreachable.
-      }
-    })();
-  }
-
-  function loadHotTerms(): void {
-    void (async () => {
-      try {
-        const response = await fetch(libraryHotTermsUrl(LIBRARY_SEARCH_API_BASE));
-        if (!response.ok) return;
-        const payload = (await response.json()) as { terms?: { term: string }[] };
-        const terms = (payload.terms ?? []).map((item) => String(item.term || '').trim()).filter(Boolean).slice(0, HOT_TERMS_LIMIT);
-        if (!terms.length) return;
-        hotTermsRow.replaceChildren();
-        const label = document.createElement('span');
-        label.className = 'library-chips-label';
-        label.textContent = '大家都在搜';
-        hotTermsRow.appendChild(label);
-        for (const term of terms) {
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'library-chip';
-          chip.textContent = term;
-          chip.addEventListener('click', () => {
-            keywordsInput.value = term;
-            search({ keywords: term, author: authorInput.value, year: currentParams().year });
-            results.scrollTop = 0;
-          });
-          hotTermsRow.appendChild(chip);
-        }
-        hotTermsRow.hidden = false;
-      } catch {
-        // Hot terms are a bonus; stay hidden when unreachable.
-      }
-    })();
-  }
-
-  function resetFilters(): void {
-    keywordsInput.value = '';
-    authorInput.value = '';
-    yearSelect.value = '';
-  }
-
-  const resetButton = document.getElementById('libraryReset');
-  resetButton?.addEventListener('click', resetFilters, { signal });
-
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     search(currentParams());
@@ -259,11 +154,6 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
 
   function open(): void {
     panel.classList.add('open');
-    if (!opened) {
-      opened = true;
-      loadArchiveMeta();
-      loadHotTerms();
-    }
     keywordsInput.focus();
   }
 

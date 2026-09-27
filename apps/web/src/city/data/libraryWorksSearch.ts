@@ -9,10 +9,6 @@ export const LIBRARY_SEARCH_API_BASE = 'https://s.pltown.online';
 // so a single request per search keeps behaviour honest and simple.
 export const LIBRARY_SEARCH_PAGE_SIZE = 24;
 
-// The archive holds a handful of pre-2020 records (3 in total); they stay
-// reachable via the unfiltered listing instead of a dedicated option.
-export const LIBRARY_SEARCH_YEARS: readonly number[] = [2026, 2025, 2024, 2023, 2022, 2021, 2020];
-
 export interface LibraryWorkRecord {
   id: string;
   name: string;
@@ -32,8 +28,6 @@ export interface LibraryWorkRecord {
 
 export interface LibrarySearchParams {
   keywords: string;
-  author: string;
-  year: number | null;
 }
 
 export interface LibrarySearchResponse {
@@ -45,16 +39,6 @@ export interface LibrarySearchResponse {
   records?: LibraryWorkRecord[];
 }
 
-export interface LibraryArchiveMeta {
-  totalRecords?: number;
-  generatedAt?: string;
-}
-
-export interface LibraryHotTermsResponse {
-  type?: string;
-  terms?: { term: string; count: number }[];
-}
-
 export function buildLibrarySearchUrl(
   base: string,
   params: LibrarySearchParams,
@@ -62,35 +46,16 @@ export function buildLibrarySearchUrl(
 ): string {
   const query = new URLSearchParams();
   const keywords = params.keywords.trim();
-  const author = params.author.trim();
   if (keywords) query.set('keywords', keywords);
-  if (author) query.set('author', author);
-  if (params.year !== null && Number.isFinite(params.year)) query.set('year', String(params.year));
   query.set('limit', String(limit));
   return `${base.replace(/\/+$/, '')}/api/search?${query.toString()}`;
 }
 
-export function libraryArchiveMetaUrl(base: string): string {
-  return `${base.replace(/\/+$/, '')}/api/meta`;
-}
-
-export function libraryHotTermsUrl(base: string): string {
-  // The stats endpoint returns a fixed TOP-50 listing; the caller slices it.
-  return `${base.replace(/\/+$/, '')}/api/stats?type=terms`;
-}
-
-// Deep links, matching the archive's own work page (seo.mjs plUrls).
-export function libraryWorkUrls(
-  base: string,
-  id: string,
-): { archive: string; experiment: string; discussion: string } {
+// Deep link to the archive's own work page (seo.mjs), which carries the
+// AI summary, keywords and the routes back into the Physics Lab.
+export function libraryWorkArchiveUrl(base: string, id: string): string {
   const encoded = encodeURIComponent(String(id || '').trim().toLowerCase());
-  const origin = base.replace(/\/+$/, '');
-  return {
-    archive: `${origin}/w/${encoded}`,
-    experiment: `https://plweb.turtlesim.com/#/p/Experiment/${encoded}`,
-    discussion: `https://plweb.turtlesim.com/#/p/Discussion/${encoded}`,
-  };
+  return `${base.replace(/\/+$/, '')}/w/${encoded}`;
 }
 
 function asList(value: unknown): string[] {
