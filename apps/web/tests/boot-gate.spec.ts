@@ -72,22 +72,27 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
 
 test('degraded heavy boot reveals without writing completion markers', async ({ page }) => {
   // Short-circuit the watchdog BEFORE the module graph loads (the constant
-  // is read at import time), stall every asset request past it, and assert
-  // the visitor still gets in — with the marker invariant intact: no
+  // is read at import time), stall every raw asset request past it, and
+  // assert the visitor still gets in — with the marker invariant intact: no
   // precacheDone, no buildId, so the next visit retries the full pipeline.
   test.setTimeout(120_000);
   await page.addInitScript(() => {
     (window as unknown as { __MINICITY_TEST_BOOT_WATCHDOG_MS__?: number }).__MINICITY_TEST_BOOT_WATCHDOG_MS__ = 8_000;
   });
-  await page.route('**/assets/**', async () => {
-    // Never fulfil: the request stalls until the watchdog aborts it.
-    await new Promise(() => {});
+  await page.route('**/assets/**', async (route) => {
+    // Vite dev serves the module graph under /src/assets/…?import / …?url —
+    // those MUST pass or the app never boots and even `load` never fires.
+    // Raw asset fetches (downloadAllAssets) carry no query: stall those.
+    if (route.request().url().includes('?')) await route.continue();
+    else await new Promise(() => { /* never fulfil — watchdog aborts */ });
   });
   stubCityWebSocket(page);
   stubNewsstandWebSocket(page);
   stubWorldCatalogWebSocket(page);
   await seedCityStorage(page);
-  await page.goto('/?boot=heavy');
+  // domcontentloaded, not load: the stalled splash image would otherwise
+  // hold the load event hostage past every timeout.
+  await page.goto('/?boot=heavy', { waitUntil: 'domcontentloaded' });
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-heavy/);
   // Watchdog fires at ~8s: degrade, release, reveal — markers untouched.
