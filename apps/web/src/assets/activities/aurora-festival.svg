@@ -5,8 +5,9 @@
       <stop offset="0.55" stop-color="#182257"/>
       <stop offset="1" stop-color="#2c3d7a"/>
     </linearGradient>
-    <!-- 极光带：径向渐变椭圆软斑，边缘透明度恒为 0（构造性无硬边，
-       不依赖 SVG filter 与渲染尺度）。勿改回路径+线性渐变组合。 -->
+    <!-- 极光带：径向渐变椭圆软斑。边缘透明度由渐变末站 stop-opacity=0
+       构造性保证（任何渲染尺度下都无硬边，filter 失效也不影响）；
+       feGaussianBlur 仅作锦上添花的软化。勿改回路径+线性渐变组合。 -->
     <radialGradient id="auroraA" cx="0.5" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#54ffd0" stop-opacity="0.6"/>
       <stop offset="0.55" stop-color="#54ffd0" stop-opacity="0.36"/>

@@ -85,6 +85,9 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  /* 紧凑布局按面板自身宽度切换（container query），与视口解耦：
+     比例锁下视口断点会让同宽面板在临界高度跳变布局。 */
+  container-type: inline-size;
 }
 
 /* Left: activity list */
@@ -235,9 +238,9 @@
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55), 0 0 26px rgba(0, 0, 0, 0.35);
 }
 
-/* 紧凑布局除窄视口外，也覆盖「宽而矮」的组合（如 PC 端显示模式、分屏窗口）：
-   面板被高度约束压窄后，桌面版 292px 列表会挤占 hero 导致文案被裁。 */
-@media (max-width: 960px), (max-height: 480px) {
+/* 紧凑布局：面板宽度 ≤760px 时切换（窄手机 / 宽而矮的 PC 端显示模式 /
+   分屏窗口——比例锁把面板压窄后，桌面版 292px 列表会挤占 hero 文案带）。 */
+@container (max-width: 760px) {
   .activity-panel-list {
     width: 200px;
     padding: 12px 10px;
