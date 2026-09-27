@@ -40,7 +40,9 @@
 
 .activity-panel-shell {
   position: relative;
-  width: min(1180px, calc(100vw - 48px));
+  /* 宽度同时受可用高度约束（1180/680 ≈ 1.735）：视口扁平时保持设计比例，
+     避免面板被拉成近全屏的扁平块、背景图 cover 裁切过狠。 */
+  width: min(1180px, calc(100vw - 48px), calc((100dvh - 48px) * 1.735));
   height: min(680px, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
