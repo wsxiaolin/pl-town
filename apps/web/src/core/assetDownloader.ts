@@ -1,7 +1,7 @@
 // Asset downloader — streams every bundled asset through the HTTP cache with
 // file-level progress (~0.1 MB emission steps). Network orchestration lives
 // in core/ per Agents.md; the DOM progress bar is adapters/ui/bootPipelineUi.
-import { bundledAssetUrls as assetUrls } from './bundledAssets';
+import { bundledAssetUrls } from './bundledAssets';
 
 export type DownloadProgress = {
   loadedBytes: number;
@@ -16,10 +16,23 @@ export type DownloadProgress = {
  * is byte-based via stream readers; individual failures are tolerated (the
  * scene falls back to procedural materials) and reported in the result.
  */
+/**
+ * Which asset classes this boot will actually use. The stage-1 set derives
+ * from the effective config so a default first visit (HD textures off, CG
+ * off) does not push 41 MB of bytes the renderer will never read — the
+ * texture/CG toggle flips are covered by build-id changes or lazy loads.
+ */
+export type AssetDownloadInclude = { textures: boolean; cg: boolean };
+
+const isTextureUrl = (url: string): boolean => url.includes('/assets/textures/');
+const isCgUrl = (url: string): boolean => url.includes('/assets/cg/');
+
 export async function downloadAllAssets(
   onProgress: (progress: DownloadProgress) => void,
   signal?: AbortSignal,
+  include: AssetDownloadInclude = { textures: true, cg: true },
 ): Promise<DownloadProgress> {
+  const assetUrls = bundledAssetUrls.filter((url) => (include.textures || !isTextureUrl(url)) && (include.cg || !isCgUrl(url)));
   const progress: DownloadProgress = {
     loadedBytes: 0, loadedFiles: 0, totalFiles: assetUrls.length, failedFiles: 0, done: false,
   };

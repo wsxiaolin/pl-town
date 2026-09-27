@@ -83,6 +83,8 @@
 .boot-screen:not(.is-heavy) .boot-content { display: none; }
 
 /* Bottom progress pipeline — one slow honest bar for the whole heavy boot. */
+.boot-screen:focus { outline: none; }
+.boot-screen:focus-visible { outline: 2px solid rgba(120, 168, 255, 0.8); outline-offset: -2px; }
 .boot-pipeline {
   position: absolute;
   left: 0;
@@ -126,7 +128,9 @@
 .boot-pipeline-detail { margin-top: 9px; color: rgba(157, 183, 222, 0.85); font-size: 10px; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
 .boot-gpu-line { margin-top: 5px; color: rgba(122, 142, 174, 0.85); font-size: 10px; letter-spacing: 0.06em; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.boot-screen:not(.is-heavy) .boot-pipeline { display: none; }
+.boot-screen:not(.is-heavy) .boot-screen:focus { outline: none; }
+.boot-screen:focus-visible { outline: 2px solid rgba(120, 168, 255, 0.8); outline-offset: -2px; }
+.boot-pipeline { display: none; }
 
 @keyframes boot-moment-drift {
   from { transform: scale(1.06) translateX(-0.6%); }
@@ -145,5 +149,7 @@
   .boot-moment-caption { left: 20px; bottom: 20px; font-size: 11px; }
   .boot-screen.is-splash::after { right: 20px; bottom: 20px; }
   .boot-screen.is-heavy .boot-content { top: 22px; left: 22px; }
-  .boot-pipeline { padding: 16px 22px 18px; }
+  .boot-screen:focus { outline: none; }
+.boot-screen:focus-visible { outline: 2px solid rgba(120, 168, 255, 0.8); outline-offset: -2px; }
+.boot-pipeline { padding: 16px 22px 18px; }
 }

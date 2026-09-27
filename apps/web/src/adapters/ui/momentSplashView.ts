@@ -86,7 +86,8 @@ function bindSkip(): void {
   const skip = (): void => { skipRequested = true; notifyReveal(); };
   screen.addEventListener('pointerdown', skip, { capture: true });
   // Keyboard parity for the "点击进入" hint (it is a CSS ::after, invisible
-  // to assistive tech on its own).
+  // to assistive tech on its own). Works only because #bootScreen carries
+  // tabindex="0" in index.html — the tab stop is the overlay itself.
   screen.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') skip();
   }, { capture: true });
@@ -147,6 +148,9 @@ function freezeMomentPresentation(): void {
 }
 
 export function stopMomentPresentation(): void {
+  // No re-boot path exists today (Vite HMR full-reloads the page). If one
+  // ever appears, reset presentationStopped = false and resolve any pending
+  // revealListeners here instead of dropping them.
   presentationStopped = true;
   freezeMomentPresentation();
   // Defensive reset so a same-document re-boot cannot inherit stale gate

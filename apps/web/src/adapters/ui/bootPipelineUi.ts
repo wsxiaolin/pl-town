@@ -32,6 +32,9 @@ export function createBootPipelineUi(): BootPipelineUi {
   const detailEl = document.getElementById('bootPipelineDetail');
   const gpuEl = document.getElementById('bootGpuLine');
   const current: Record<PipelineStage, number> = { download: 0, scene: 0, precompile: 0, ready: 0 };
+  // beginStage can pass a custom label; remember it so setStageProgress
+  // (called per progress tick) does not overwrite it with the default.
+  const stageLabels: Partial<Record<PipelineStage, string>> = {};
 
   const publish = () => {
     const total = (Object.keys(current) as PipelineStage[])
@@ -44,12 +47,13 @@ export function createBootPipelineUi(): BootPipelineUi {
   return {
     beginStage(stage, label) {
       current[stage] = 0;
-      if (stageEl) stageEl.textContent = label || STAGE_LABELS[stage];
+      stageLabels[stage] = label || STAGE_LABELS[stage];
+      if (stageEl) stageEl.textContent = stageLabels[stage];
       publish();
     },
     setStageProgress(stage, fraction) {
       current[stage] = Math.max(0, Math.min(1, fraction));
-      if (stageEl) stageEl.textContent = STAGE_LABELS[stage];
+      if (stageEl) stageEl.textContent = stageLabels[stage] ?? STAGE_LABELS[stage];
       publish();
     },
     setDetail(text) { if (detailEl) detailEl.textContent = text; },

@@ -20,7 +20,7 @@
 
 ## 重型管线四阶段（加权进度条）
 
-1. **下载城市资源**（68%）——`import.meta.glob` 枚举全部打包资产（41MB 材质包、CG 图、GLB 模型、活动图、时刻图），6 并发逐字节读取；`preloadTextureResources(force=true)` 无视省流模式与贴图设置强制全量，超时放宽到 240s。单个失败可容忍（城市回退程序化材质）。
+1. **下载城市资源**（68%）——`core/bundledAssets` 枚举打包资产，**按生效配置过滤**：HD 贴图关闭时不下 41MB 材质包、CG 关闭时不下 CG 图（对应开关启用属于构建变更，会触发重新预下载）；其余（GLB 模型、活动图、时刻图）6 并发流式读取。`preloadTextureResources(force=true)` 只越过省流模式，不越过「本 boot 用不上」；超时 240s。单个失败可容忍（城市回退程序化材质）。
 2. **构建小城场景**（6%）——正常 `initCity()`。
 3. **预编译渲染管线**（22%）——`renderer.compileAsync(scene, camera)` 链接全部着色器程序，再渲染 3 帧预热（强制镜面水面/天空/光照等惰性程序就位），首帧不再卡顿。
 4. **即将进入小城**（4%）——写缓存标记，揭幕。
@@ -42,7 +42,7 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 
 ## 开场 CG 的临时下线与恢复
 
-`apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留，改回 `true` 即恢复。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
+`apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留，改回 `true` 即恢复（注意：恢复后访客会先看到约 2.6s 的时刻 splash 再进 CG，时刻系统不因 CG 开启而旁路）。CG 资源不在 CG 关闭期的重型下载清单里（构建变更即重新预下载）。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
 
 ## 调试开关
 

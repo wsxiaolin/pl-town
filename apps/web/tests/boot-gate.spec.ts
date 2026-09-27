@@ -53,5 +53,12 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });
   expect(await page.evaluate(() => localStorage.getItem('minicityPrecacheDone'))).toBe('1');
   expect(await page.evaluate(() => localStorage.getItem('minicityBuildId'))).not.toBeNull();
-  await waitForCityBooted(page);
+
+  // Round trip: the markers the heavy boot wrote must make the NEXT visit
+  // light without any force flag (waitForCityBooted would force light via the
+  // seeded flag, hiding a broken marker invariant).
+  await page.evaluate(() => localStorage.removeItem('minicityForceBoot'));
+  await page.goto('/');
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
 });

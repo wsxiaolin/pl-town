@@ -21,10 +21,11 @@ import { RENDER_SETTINGS_KEY } from './createRenderer';
 
 const GPU_INFO_KEY = 'minicityGpuInfo';
 
-const DISCRETE_HINTS = [/nvidia/i, /geforce/i, /quadro/i, /radeon(?!\s+(?:hd|r[5-7]\d\d)\b)/i, /amd\s+radeon\s+(?:rx|pro|v)/i, /arc\s+[ab]\d/i, /dg1/i];
+const DISCRETE_HINTS = [/nvidia/i, /geforce/i, /quadro/i, /radeon(?!\s*(?:\(tm\)\s*)?(?:hd|r[5-7]\d\d|[6-9]\d\dm|graphics|vega)\b)/i, /amd\s+radeon\s+(?:rx|pro|v)/i, /arc(?:\s*\(tm\))?\s*[ab]\d/i, /dg1/i];
 const SOFTWARE_HINTS = [/swiftshader/i, /llvmpipe/i, /softpipe/i, /software/i, /basic render/i];
-const INTEGRATED_HINTS = [/intel(?!.*(?:arc|dg1))/i, /uhd graphics/i, /hd graphics/i, /iris/i, /mali/i, /adreno\s*[1-6]\d\d/i, /videocore/i, /powervr/i];
-const APPLE_HINT = /apple\s*m\d/i;
+const INTEGRATED_HINTS = [/intel(?!.*(?:arc|dg1))/i, /uhd graphics/i, /hd graphics/i, /iris/i, /mali/i, /adreno\s*(?:\(tm\))?\s*[1-6]\d\d/i, /videocore/i, /powervr/i, /radeon\s*(?:\(tm\))?\s*(?:graphics|vega|hd\b|[6-9]\d\dm)\b/i];
+// "Apple GPU" (Safari reports no M-series suffix) is still the Apple tier.
+const APPLE_HINT = /apple\s*(?:m\d|gpu)/i;
 
 export function classifyGpu(renderer: string): { tier: GpuTier; tierLabel: string } {
   if (SOFTWARE_HINTS.some((re) => re.test(renderer))) return { tier: 'software', tierLabel: '软件渲染（无 GPU 加速）' };

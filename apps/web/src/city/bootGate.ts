@@ -10,7 +10,7 @@
 
 declare const __MINICITY_BUILD_ID__: string;
 
-import { townApiUrl } from '../core/townApi';
+import { probeServerVersion, refreshServerVersion } from '../core/serverVersionProbe';
 
 export type BootMode = 'heavy' | 'light';
 export type BootReason = 'first-visit' | 'build-changed' | 'server-changed' | 'precache-missing' | 'forced' | 'cached';
@@ -43,18 +43,6 @@ function storedForcedMode(): BootMode | null {
   const fromQuery = new URLSearchParams(window.location.search).get('boot');
   const value = fromQuery ?? fromStorage;
   return value === 'heavy' || value === 'light' ? value : null;
-}
-
-async function probeServerVersion(signal: AbortSignal): Promise<string | null> {
-  try {
-    const response = await fetch(townApiUrl('/town-api/version'), { cache: 'no-store', signal });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as { fingerprint?: unknown };
-    if (typeof payload.fingerprint !== 'string' || !payload.fingerprint) return null;
-    return payload.fingerprint;
-  } catch {
-    return null; // Offline / static deploy: fall back to the local judgement.
-  }
 }
 
 /**
@@ -132,9 +120,13 @@ export async function resolveBootDecision(): Promise<BootDecision> {
  * builds that skipped the probe) a fresh probe taken at pipeline completion —
  * so a deploy that changes build AND server never costs two heavy boots.
  */
-export async function refreshServerVersion(): Promise<string | null> {
-  return probeServerVersion(AbortSignal.timeout(4_500));
-}
+/**
+ * Persist the marker that this device holds a complete precache — the ONLY
+ * writer of the build id / precache keys. The server version lands here too:
+ * either the one observed when a `server-changed` decision was made, or (for
+ * builds that skipped the probe) a fresh probe taken at pipeline completion —
+ * so a deploy that changes build AND server never costs two heavy boots.
+ */
 export function markBootComplete(serverVersion?: string | null): void {
   try {
     localStorage.setItem(BUILD_KEY, currentBuildId());

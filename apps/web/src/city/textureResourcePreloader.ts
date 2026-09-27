@@ -1,3 +1,8 @@
+// Texture precache — warms the HTTP cache for the HD texture pack so city
+// load never blocks on the network. Fetches only; decoding happens lazily in
+// TextureLoader. Per-run failures land in failedUrls so proceduralTexture_
+// library can fall back to canvas textures for THIS session; an aborted pass
+// (watchdog / forced upgrade) is a control path, never a failure.
 const textureModules = import.meta.glob('../assets/textures/**/*.{png,jpg,jpeg,webp,avif}', {
   eager: true,
   import: 'default',
@@ -12,13 +17,22 @@ async function readTexture(url: string, signal: AbortSignal): Promise<void> {
   try {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Texture request failed: ${response.status}`);
-    if (!response.body) return;
-    const reader = response.body.getReader();
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-          }
+    if (response.body) {
+      // Drain the stream: reading the bytes is what lands them in the cache.
+      const reader = response.body.getReader();
+      for (;;) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    }
+    // A successful (re)read repairs an earlier failure — the URL is
+    // available to the renderer again this session.
+    failedUrls.delete(url);
   } catch {
+    // Abort (watchdog / forced upgrade) is a normal control path: keep the
+    // URL eligible for a later pass instead of downgrading the texture to
+    // procedural canvas for the whole session.
+    if (signal.aborted) return;
     failedUrls.add(url);
   }
 }
@@ -27,40 +41,41 @@ async function runWithConcurrency(urls: string[], limit: number, signal: AbortSi
   let nextIndex = 0;
   const worker = async (): Promise<void> => {
     while (nextIndex < urls.length) {
-      const url = urls[nextIndex++];
       if (signal.aborted) return;
+      const url = urls[nextIndex++];
       if (url) await readTexture(url, signal);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, urls.length) }, worker));
 }
 
-
 export function isTextureResourceAvailable(url: string): boolean {
   return !failedUrls.has(url);
 }
 
-
 export function preloadTextureResources(enabled = true, signal?: AbortSignal, force = false): Promise<void> {
   if (activeRun) {
     if (!force || activeRun.forced) return activeRun.promise;
-    // A forced run (heavy boot) upgrades an in-flight ambient pass: the
-    // precache must use the full-URL, long-timeout semantics, so cancel the
-    // ambient pass and restart with force semantics.
+    // A forced run (heavy boot repair pass) upgrades an in-flight ambient
+    // pass: cancel it and restart with the long-timeout semantics.
     activeRun.controller.abort();
     void activeRun.promise.catch(() => {});
     activeRun = null;
   }
-  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  // force (heavy boot) ignores the texture setting and data-saver modes: the
-  // precache must land in full so city load never waits on the network.
-  if (!force && (!enabled || connection?.saveData || connection?.effectiveType === 'slow-2g')) {
+  // `enabled` = the renderer will actually read these textures. When false
+  // there is nothing to precache — force cannot override that (force only
+  // overrides network-frugality gates: saveData / slow-2g).
+  if (!enabled) {
     ready = true;
     return Promise.resolve();
   }
-  // An ambient run already completed — re-running would only re-read the
-  // HTTP cache; a forced run re-opens the pass even after an ambient skip so
-  // the first visit still lands a complete precache.
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (!force && (connection?.saveData || connection?.effectiveType === 'slow-2g')) {
+    ready = true;
+    return Promise.resolve();
+  }
+  // A completed ambient pass already warmed the cache; a forced run still
+  // re-opens it (it may be a repair pass for earlier failures).
   if (ready && !force) return Promise.resolve();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), force ? 240_000 : 30_000);
