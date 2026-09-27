@@ -77,13 +77,11 @@ function bindSkip(): void {
   screen.dataset.momentSkipBound = 'true';
   const skip = (): void => { skipRequested = true; notifyReveal(); };
   screen.addEventListener('pointerdown', skip, { capture: true });
-  // Keyboard parity for the "点击进入" hint: #bootScreen is a role="button"
-  // tab stop (index.html), so Enter/Space must skip. Escape is deliberately
-  // NOT a skip — an overlay that closes on Escape reads as dismissable UI,
-  // which the splash is not.
-  screen.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') skip();
-  }, { capture: true });
+  // Keyboard access goes through the sr-only #bootSkipButton (a real
+  // <button>: native focus, Enter/Space semantics, announced by screen
+  // readers) — the container itself stays a polite live region for boot
+  // progress (review r7#5).
+  document.getElementById('bootSkipButton')?.addEventListener('click', skip);
 }
 
 function notifyReveal(): void {
@@ -176,7 +174,7 @@ export function notifyCityReady(): void {
 }
 
 /** Called once the minimum splash display time has elapsed. */
-export function notifyMinimumElapsed(): void {
+function notifyMinimumElapsed(): void {
   minimumElapsed = true;
   checkReveal();
 }

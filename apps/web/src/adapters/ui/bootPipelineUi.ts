@@ -9,7 +9,7 @@
 export type PipelineStage = 'download' | 'scene' | 'precompile' | 'ready';
 
 export type BootPipelineUi = {
-  beginStage: (stage: PipelineStage, label?: string) => void;
+  beginStage: (stage: PipelineStage) => void;
   setStageProgress: (stage: PipelineStage, fraction: number) => void;
   setDetail: (text: string) => void;
   setGpu: (text: string) => void;
@@ -32,9 +32,6 @@ export function createBootPipelineUi(): BootPipelineUi {
   const detailEl = document.getElementById('bootPipelineDetail');
   const gpuEl = document.getElementById('bootGpuLine');
   const current: Record<PipelineStage, number> = { download: 0, scene: 0, precompile: 0, ready: 0 };
-  // beginStage can pass a custom label; remember it so setStageProgress
-  // (called per progress tick) does not overwrite it with the default.
-  const stageLabels: Partial<Record<PipelineStage, string>> = {};
 
   const publish = () => {
     const total = (Object.keys(current) as PipelineStage[])
@@ -45,15 +42,13 @@ export function createBootPipelineUi(): BootPipelineUi {
   };
 
   return {
-    beginStage(stage, label) {
+    beginStage(stage) {
       current[stage] = 0;
-      stageLabels[stage] = label || STAGE_LABELS[stage];
-      if (stageEl) stageEl.textContent = stageLabels[stage];
+      if (stageEl) stageEl.textContent = STAGE_LABELS[stage];
       publish();
     },
     setStageProgress(stage, fraction) {
       current[stage] = Math.max(0, Math.min(1, fraction));
-      if (stageEl) stageEl.textContent = stageLabels[stage] ?? STAGE_LABELS[stage];
       publish();
     },
     setDetail(text) { if (detailEl) detailEl.textContent = text; },

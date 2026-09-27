@@ -93,7 +93,7 @@ export function describeGpuForBoot(info: GpuInfo): string {
   return `图形处理器：${gpuSummaryLine(info)}`;
 }
 
-export function gpuSummaryLine(info: GpuInfo): string {
+function gpuSummaryLine(info: GpuInfo): string {
   const accel = info.webgpu ? ' · WebGPU 可用' : '';
   return `${info.renderer}（${info.tierLabel}${accel}）`;
 }

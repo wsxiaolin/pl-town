@@ -42,7 +42,7 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 
 ## 开场 CG 的临时下线与恢复
 
-`apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留，改回 `true` 即恢复（注意：恢复后访客会先看到约 2.6s 的时刻 splash 再进 CG，时刻系统不因 CG 开启而旁路）。CG 资源不在 CG 关闭期的重型下载清单里（构建变更即重新预下载）。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
+`apps/web/src/city/cg.ts` 中 `OPENING_CG_ENABLED = false`。五幕 CG 代码（`cg.ts`/`invasionCg.ts`/`musterCg.ts`/`lanYuPreludeCG.ts`）全部保留。**恢复不是只改一个布尔值**：splash 层 z-index 1000 盖在 CG overlay（700）之上，揭幕只看 cityReady+最短停留，直接改回 `true` 会得到「CG 播了约 2.6s 才被揭开」的画面——恢复时需把 `cgOverlay` 提层到 1001+，或把 `initCG` 的 onFinish 接回启动闸门再揭幕。CG 资源不在 CG 关闭期的重型下载清单里（构建变更即重新预下载）。**注意**：时刻画面时代删掉了 CG 破解后的「居民证解锁」toast（`showUnlockToast`）——恢复 CG 时若需要该提示，需在 CG 完成回调处补回（toast.ts 仍在）。
 
 ## 本地复现服务端变更
 

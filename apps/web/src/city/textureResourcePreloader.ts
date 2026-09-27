@@ -13,7 +13,7 @@ const failedUrls = new Set<string>();
 let ready = false;
 let activeRun: { promise: Promise<void>; controller: AbortController; forced: boolean } | null = null;
 
-async function readTexture(url: string, signal: AbortSignal): Promise<void> {
+async function readTexture(url: string, signal: AbortSignal): Promise<boolean> {
   try {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Texture request failed: ${response.status}`);
@@ -28,12 +28,14 @@ async function readTexture(url: string, signal: AbortSignal): Promise<void> {
     // A successful (re)read repairs an earlier failure — the URL is
     // available to the renderer again this session.
     failedUrls.delete(url);
+    return true;
   } catch {
     // Abort (watchdog / forced upgrade) is a normal control path: keep the
     // URL eligible for a later pass instead of downgrading the texture to
     // procedural canvas for the whole session.
-    if (signal.aborted) return;
+    if (signal.aborted) return false;
     failedUrls.add(url);
+    return false;
   }
 }
 
@@ -41,17 +43,18 @@ async function runWithConcurrency(
   urls: string[],
   limit: number,
   signal: AbortSignal,
-  onFileDone?: (loadedFiles: number, totalFiles: number) => void,
+  onFileDone?: (loadedFiles: number, failedFiles: number, totalFiles: number) => void,
 ): Promise<void> {
   let nextIndex = 0;
   let loadedFiles = 0;
+  let failedFiles = 0;
   const worker = async (): Promise<void> => {
     while (nextIndex < urls.length) {
       if (signal.aborted) return;
       const url = urls[nextIndex++];
-      if (url) await readTexture(url, signal);
+      if (url && !(await readTexture(url, signal))) failedFiles += 1;
       loadedFiles += 1;
-      onFileDone?.(loadedFiles, urls.length);
+      onFileDone?.(loadedFiles, failedFiles, urls.length);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, urls.length) }, worker));
@@ -65,7 +68,7 @@ export function preloadTextureResources(
   enabled = true,
   signal?: AbortSignal,
   force = false,
-  onFileDone?: (loadedFiles: number, totalFiles: number) => void,
+  onFileDone?: (loadedFiles: number, failedFiles: number, totalFiles: number) => void,
 ): Promise<void> {
   if (activeRun) {
     if (!force || activeRun.forced) return activeRun.promise;

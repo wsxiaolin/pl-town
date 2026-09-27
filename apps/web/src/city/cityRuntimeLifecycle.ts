@@ -13,6 +13,10 @@ import { configureMomentSplash, showMomentHeavy, showMomentSplash, stopMomentPre
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
+// Governance fetch started before the boot decision (mode-independent,
+// 8 s self-timeout) so the light path never serializes behind the probe.
+let governanceReady: Promise<void> = Promise.resolve();
+
 /** Hard ceiling for the heavy boot's networked + precompile stages. Tests
  * shrink it via a global set before the module loads — never in production. */
 const BOOT_WATCHDOG_MS = Number(
@@ -58,7 +62,10 @@ export function createCityRuntimeLifecycle(options: {
     showMomentSplash();
     const pipeline = createBootPipelineUi();
     const signal = eventController.signal;
-    const texturePreload = preloadTextureResources(readRenderSettings().textureRendering, signal).catch(() => {});
+    // Governance is mode-independent (8 s self-timeout) and network-bound —
+    // start it BEFORE the decision so the light path never idles behind the
+    // 4.5 s probe first (review r7#2).
+    governanceReady = loadCityGovernance(signal).catch(() => { /* optional */ });
 
     let decision: BootDecision;
     try {
@@ -69,11 +76,24 @@ export function createCityRuntimeLifecycle(options: {
     if (!started || signal.aborted) return;
 
     if (decision.mode === 'light') {
-      // The texture preload is a pop-in mitigation, not a correctness need —
+      // Ambient texture prefetch starts ONLY on the light path, AFTER the
+      // decision: a heavy boot runs its own forced pass, and an ambient pass
+      // started earlier would be aborted and re-fetched from zero — twice
+      // the bytes for a cold-cache HD visitor (review r7#1).
+      const texturePreload = preloadTextureResources(readRenderSettings().textureRendering, signal).catch(() => {});
+      // The preload is a pop-in mitigation, not a correctness need —
       // TextureLoader lazily loads anything not cached yet. Bound it so even
       // a fully-evicted HTTP cache can never put 41 MB on the FAST path
       // (review r3#1); the preloader keeps streaming in the background.
-      await Promise.race([texturePreload, new Promise((resolve) => window.setTimeout(resolve, 2_500))]);
+      let raceTimer: number | undefined;
+      try {
+        await Promise.race([
+          texturePreload,
+          new Promise<void>((resolve) => { raceTimer = window.setTimeout(resolve, 2_500); }),
+        ]);
+      } finally {
+        window.clearTimeout(raceTimer);
+      }
       if (!started || signal.aborted) return;
       // The light path is the DEFAULT path — give it its own watchdog so a
       // backgrounded tab (rAF frozen → warm-up frames stalled) cannot seal
@@ -91,7 +111,7 @@ export function createCityRuntimeLifecycle(options: {
       return;
     }
 
-    await runHeavyBoot(decision, pipeline, signal, texturePreload);
+    await runHeavyBoot(decision, pipeline, signal);
   }
 
   /**
@@ -104,7 +124,7 @@ export function createCityRuntimeLifecycle(options: {
    * splash forever. A degraded boot does NOT write the completion markers —
    * the next visit re-runs the heavy pipeline for the missing parts.
    */
-  async function runHeavyBoot(decision: BootDecision, pipeline: BootPipelineUi, signal: AbortSignal, texturePreload: Promise<void>) {
+  async function runHeavyBoot(decision: BootDecision, pipeline: BootPipelineUi, signal: AbortSignal) {
     const bootAbort = new AbortController();
     const forwardSessionAbort = () => bootAbort.abort();
     signal.addEventListener('abort', forwardSessionAbort, { once: true });
@@ -165,12 +185,13 @@ export function createCityRuntimeLifecycle(options: {
       pipeline.setDetail(downloadFailed ? '校验高清材质包（含修复下载）…' : '下载高清材质包…');
       // File-count progress mapped onto the remaining [40%,100%] of the
       // download stage so the bar stays monotonic across the hand-off.
-      await preloadTextureResources(true, bootAbort.signal, true, (loadedFiles, totalFiles) => {
+      await preloadTextureResources(true, bootAbort.signal, true, (loadedFiles, failedFiles, totalFiles) => {
         pipeline.setStageProgress('download', 0.4 + 0.6 * (loadedFiles / Math.max(1, totalFiles)));
-        pipeline.setDetail(`${reasonTag} · 高清材质包 ${loadedFiles}/${totalFiles}`);
+        const fallback = failedFiles > 0 ? ` · ${failedFiles} 个将回退程序化材质` : '';
+        pipeline.setDetail(`${reasonTag} · 高清材质包 ${loadedFiles}/${totalFiles}${fallback}`);
       }).catch(() => {});
     } else {
-      await texturePreload; // resolves immediately: the ambient pass skipped
+      // HD off: nothing to prefetch — the renderer reads procedural textures.
     }
     if (bootAbort.signal.aborted) {
       // Watchdog fired mid-pipeline: keep its honest hint, no fake 100%.
@@ -195,10 +216,11 @@ export function createCityRuntimeLifecycle(options: {
     precompileSignal?: AbortSignal,
   ) {
     if (!started) return;
+    // Governance started before the decision (parallel with the probe); it
+    // carries its own 8 s timeout, so awaiting here is already resolved (or
+    // nearly so) on the light path.
     try {
-      // The boot watchdog (when provided) bounds governance too — the light
-      // path's 30 s budget must actually cover the whole critical path.
-      await loadCityGovernance(precompileSignal ?? eventController.signal);
+      await governanceReady;
     } catch { /* governance is optional; the city opens without it. */ }
     if (!started) return;
 
@@ -212,6 +234,7 @@ export function createCityRuntimeLifecycle(options: {
       console.error('City initialization failed', error);
     }
     if (!started) return;
+    if (heavy) pipeline.setStageProgress('scene', 1); // claim the 6% once built
 
     // Precompile runs on BOTH paths: the frame loop is held until the
     // programs are linked and the warm-up frames uploaded textures, so the
@@ -294,13 +317,3 @@ function bootReasonShort(decision: BootDecision): string {
   }
 }
 
-function bootReasonDetail(decision: BootDecision): string {
-  switch (decision.reason) {
-    case 'first-visit': return '首次进入小城，需要下载完整资源包';
-    case 'build-changed': return '检测到小城有更新，正在同步最新资源';
-    case 'server-changed': return '服务端已更新，正在同步最新资源';
-    case 'precache-missing': return '本地预编译缓存缺失，正在重建';
-    case 'forced': return '已手动要求完整加载';
-    default: return '正在准备资源';
-  }
-}

@@ -41,7 +41,9 @@ function storedForcedMode(): BootMode | null {
     fromStorage = localStorage.getItem(FORCE_KEY);
   } catch { /* private mode etc. */ }
   const fromQuery = new URLSearchParams(window.location.search).get('boot');
-  const value = fromQuery ?? fromStorage;
+  // An EMPTY ?boot= must not shadow a legitimate stored override — `||`
+  // falls through to storage on '' (review r7 nit).
+  const value = fromQuery || fromStorage;
   return value === 'heavy' || value === 'light' ? value : null;
 }
 
