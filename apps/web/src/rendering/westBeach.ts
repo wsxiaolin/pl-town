@@ -148,6 +148,9 @@ export function createWestBeach(options: BeachOptions): {
         sunColorNight: NIGHT_SUN_COLOR,
         distortionScale: 3.7,
         timeScale: SEA_TIME_SCALE,
+        // Waves break at the shoreline: the waterline climbs the sand and
+        // pulls back instead of resting on a fixed edge.
+        shoreWaves: { reach: 1.15, lift: 0.26 },
       })
     : null;
   const water = waterSurface

@@ -30,6 +30,15 @@ export type AnimatedWaterConfig = {
   /** Mirror render-target resolution; small surfaces can use a tiny target. */
   textureWidth?: number;
   textureHeight?: number;
+  /** Optional shoreline wave lap. Displaces vertices near uv.x = 1 (the shore
+   *  edge of the ribbon) so the waterline advances and retreats along the
+   *  beach instead of sitting on a fixed line. */
+  shoreWaves?: {
+    /** Cross-shore advance/retreat of the waterline, in local x units. */
+    reach?: number;
+    /** Crest lift at the waterline, in local y units. */
+    lift?: number;
+  };
   side?: THREE.Side;
   renderOrder?: number;
 };
@@ -182,6 +191,35 @@ export function createAnimatedWaterSurface(
       `vec3( ${glslFloat(config.reflectionBase ?? 0.08)} ) + reflectionSample * ${glslFloat(config.reflectionWeight ?? 0.45)} + reflectionSample * specularLight * ${glslFloat(config.specularScale ?? 1)}`,
     );
   material.needsUpdate = true;
+  if (config.shoreWaves) {
+    // Lap the water at the shore edge: vertices near uv.x = 1 (the shoreline)
+    // swing toward the beach and lift as each crest arrives, then fall back,
+    // while the open sea (uv.x near 0) stays still so the mirror stays calm.
+    // Frequencies are tuned against the already time-scaled `time` uniform.
+    const reach = glslFloat(config.shoreWaves.reach ?? 1.15);
+    const lift = glslFloat(config.shoreWaves.lift ?? 0.26);
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          'void main() {',
+          /* glsl */ `
+          void main() {
+          vec3 shorePos = position;
+          {
+            float shoreEnv = smoothstep(0.42, 0.96, uv.x);
+            float lap = sin(time * 2.1 + position.z * 0.35) * 0.62
+              + sin(time * 3.4 - position.z * 0.22 + 2.1) * 0.30;
+            float roll = sin(time * 1.6 - (1.0 - uv.x) * 48.0 + position.z * 0.55);
+            shorePos.x += shoreEnv * lap * ${reach};
+            shorePos.y += shoreEnv * (pow(max(lap, 0.0), 1.35) * ${lift} + max(roll, 0.0) * ${lift} * 0.3);
+          }`,
+        )
+        .replace(/vec4\( position, 1\.0 \)/g, 'vec4( shorePos, 1.0 )');
+    };
+    // The displacement moves vertices past the geometry's computed bounding
+    // sphere, which would let frustum culling pop the shore edge in/out.
+    water.frustumCulled = false;
+  }
   // Keep the marker the scene-interest-points dispose pass looks for.
   water.userData.dynamicMaterial = material;
 
