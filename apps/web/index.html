@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://pl-town.onrender.com blob: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://pl-town.onrender.com https://s.pltown.online blob: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2378a8ff'/%3E%3Cpath d='M8 24V13h5v11h6V8h5v16z' fill='white'/%3E%3C/svg%3E" />
   <title>物实小城 — MiniCity</title>
   <style id="bootCritical">
@@ -253,6 +253,33 @@
       <button class="works-close" id="worksClose" type="button" aria-label="Close">&times;</button>
     </header>
     <div class="works-list" id="worksList"></div>
+  </aside>
+
+  <!-- Library works search: community projects archive (projects-ai-summary) -->
+  <aside class="works-panel library-panel" id="librarySearchPanel" role="dialog" aria-modal="false" aria-labelledby="librarySearchTitle">
+    <header class="works-head">
+      <div>
+        <span class="works-kicker">CITY LIBRARY · 藏书检索</span>
+        <h2 id="librarySearchTitle">图书馆 · 作品检索</h2>
+        <p id="librarySearchMeta">物实社区作品档案</p>
+      </div>
+      <button class="works-close" id="librarySearchClose" type="button" aria-label="关闭图书馆检索">&times;</button>
+    </header>
+    <div class="library-toolbar">
+      <form id="librarySearchForm" class="library-form" role="search">
+        <input id="libraryKeywords" type="search" placeholder="搜索标题、作者、关键词…" aria-label="搜索作品关键词" autocomplete="off" maxlength="60" />
+        <input id="libraryAuthor" type="search" placeholder="作者" aria-label="按作者筛选" autocomplete="off" maxlength="30" />
+        <select id="libraryYear" aria-label="按年份筛选">
+          <option value="">全部年份</option>
+        </select>
+        <button type="submit" class="library-submit">检索</button>
+        <button type="button" id="libraryReset" class="library-reset">清空</button>
+      </form>
+      <div class="library-chips" id="libraryHotTerms" hidden></div>
+    </div>
+    <div class="library-body" id="libraryResults">
+      <p class="library-hint">输入关键词开始检索社区作品档案。</p>
+    </div>
   </aside>
 
   <!-- Writer catalog: opened by the culture hall -->

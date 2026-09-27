@@ -22,6 +22,7 @@ export type EventBindingsOptions = {
   getWriterCatalogController: () => { open: () => void; close: () => void } | null;
   getAcademyController: () => { close: () => void; closeReader: () => void } | null;
   getMutualAidController?: () => { close: () => void } | null;
+  getLibrarySearchController?: () => { close: () => void } | null;
   toggleMapMode: () => void;
   closeModal: () => void;
   closeNpcDialog: () => void;
@@ -108,6 +109,7 @@ export function createEventBindings(options: EventBindingsOptions) {
       closeAcademy: () => options.getAcademyController()?.close(),
       closeAcademyReader: () => options.getAcademyController()?.closeReader(),
       closeMutualAid: () => options.getMutualAidController?.()?.close(),
+      closeLibrarySearch: () => options.getLibrarySearchController?.()?.close(),
       closeWorkDetail: () => communityPanels?.closeWorkDetail(),
       toggleWorkStar: () => communityPanels?.toggleWorkStar(),
       loadWorkComments: () => communityPanels?.loadWorkComments(),
