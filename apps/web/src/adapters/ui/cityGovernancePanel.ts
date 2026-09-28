@@ -1,5 +1,5 @@
 import { donateCity, getCityConfig, getCityState, isCityGovernanceLoading, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject, type CityState } from '../../city/cityGovernanceClient';
-import { clearCityConstructionDrafts, renderCityPersonalAreas } from './cityGovernanceAreas';
+import { clearCityConstructionDrafts, renderCityPersonalBlocks } from './cityGovernanceAreas';
 import { actionButton as button, card, money, trackPendingActionFocus, withPanelFocusRestoration } from './cityGovernanceDom';
 import { getCityVotingSessionId, loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
@@ -25,20 +25,18 @@ let votesEpoch: string | null = null;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
-// Only the donation input is restored from the previous DOM value. Decoration
-// selects are owned by cityGovernanceAreas drafts: during a render the module
-// reconciles drafts to pending receipts or drops options invalidated by a new
-// config. Writing stale DOM values back over those selects could show a value
-// that no longer matches the draft the next submit would use.
+// Only the donation input is restored from the previous DOM value. Block cards
+// have no free inputs: one card is one immutable purchase, and rerenders keep
+// their pending state from the retained receipt keys instead of DOM values.
 const INPUT_SELECTOR = '[data-city-input]';
 const FOCUS_SELECTOR = '[data-city-focus],[aria-label]';
-const CARD_SELECTOR = '[data-city-project],[data-city-area],[data-city-plot]';
+const CARD_SELECTOR = '[data-city-project],[data-city-block]';
 
 export function isCityGovernancePanelOpen(): boolean { return root?.open ?? false; }
 
 function focusedCardKey(element: HTMLElement | null): string | undefined {
   const card = element?.closest<HTMLElement>(CARD_SELECTOR);
-  return card?.dataset.cityProject ?? card?.dataset.cityArea ?? card?.dataset.cityPlot;
+  return card?.dataset.cityProject ?? card?.dataset.cityBlock;
 }
 
 function handleLoginRequired(): void {
@@ -46,8 +44,8 @@ function handleLoginRequired(): void {
   closeCityGovernancePanel();
 }
 
-function focusAction(dataKey: 'projectId' | 'cityPlot' | 'cityArea', id: string): void {
-  const prefix = dataKey === 'projectId' ? 'donate' : dataKey === 'cityArea' ? 'area-build' : 'plot-build';
+function focusAction(dataKey: 'projectId' | 'cityBlock', id: string): void {
+  const prefix = dataKey === 'projectId' ? 'donate' : 'block-build';
   const action = [...root?.querySelectorAll<HTMLButtonElement>('button[data-city-focus]') ?? []]
     .find((element) => element.dataset.cityFocus === `${prefix}:${id}` && !element.disabled);
   const fallback = root?.querySelector<HTMLButtonElement>('.city-governance-tabs button.active');
@@ -353,7 +351,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
 }
 
 function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
-  renderCityPersonalAreas(list, config, state, {
+  renderCityPersonalBlocks(list, config, state, {
     rerender: () => { if (root?.open) render(); },
     reportError: (message, actionKey) => {
       if (message || errorActionKey === actionKey) {

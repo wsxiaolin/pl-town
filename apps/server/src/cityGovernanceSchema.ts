@@ -88,6 +88,28 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (!unique(areas.map((area) => area.id)) || !unique(areaPlots)
     || areas.some((area) => !validId(area.id) || !area.plotIds.length || area.plotIds.length > 100)
     || areaPlots.some((id) => !config.personalPlots.some((plot) => plot.id === id))) throw new Error('Invalid city construction areas');
+  // Personal construction sells whole pre-designed blocks: every plot joins
+  // exactly one block, each block carries the sum of its decoration prices.
+  const blocks = config.personalBlocks ?? [];
+  const plotArea = new Map<string, string>();
+  for (const area of areas) for (const id of area.plotIds) plotArea.set(id, area.id);
+  const coveredPlots = new Set<string>();
+  if (!blocks.length || !unique(blocks.map((block) => block.id)) || !blocks.every((block) => validId(block.id))) throw new Error('Invalid city construction blocks');
+  for (const block of blocks) {
+    if (!block.placements || block.placements.length < 2 || !Number.isSafeInteger(block.cost) || block.cost <= 0) throw new Error(`Invalid city construction block: ${block.id}`);
+    let total = 0;
+    for (const placement of block.placements) {
+      const plot = config.personalPlots.find((entry) => entry.id === placement.plotId);
+      const decoration = config.decorations.find((entry) => entry.id === placement.decorationId);
+      if (!plot || !decoration || !plot.options.includes(placement.decorationId)) throw new Error(`Invalid city construction block placement: ${block.id}`);
+      if (coveredPlots.has(placement.plotId)) throw new Error(`City construction blocks overlap: ${block.id}`);
+      if ((plotArea.get(placement.plotId) ?? null) !== block.areaId) throw new Error(`Invalid city construction block area membership: ${block.id}`);
+      coveredPlots.add(placement.plotId);
+      total += decoration.cost;
+    }
+    if (total !== block.cost) throw new Error(`Invalid city construction block cost: ${block.id}`);
+  }
+  if (config.personalPlots.some((plot) => !coveredPlots.has(plot.id))) throw new Error('City construction blocks must cover every personal plot');
   const decorations = db.prepare('SELECT plot_id, decoration_id FROM city_decorations').all() as Array<{ plot_id: string; decoration_id: string }>;
   if (decorations.some((entry) => !config.personalPlots.find((plot) => plot.id === entry.plot_id)?.options.includes(entry.decoration_id))) throw new Error('Persisted city decoration does not match config');
   if (previousConfig) {

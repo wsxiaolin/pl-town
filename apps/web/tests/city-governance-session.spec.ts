@@ -15,6 +15,12 @@ async function openGovernance(
       id: `session-plot-${index}`, name: `会话花园 ${index + 1}`, x: 28 + index * 2, z: -40, options: ['flowers', 'pine'],
     })), { id: 'garden', name: '测试花园', x: 30, z: -44, options: ['flowers', 'pine'] }],
     personalAreas: [{ id: 'session-garden', name: '会话花园', plotIds: Array.from({ length: 4 }, (_, index) => `session-plot-${index}`) }],
+    personalBlocks: [
+      { id: 'session-block', name: '会话小区块', areaId: 'session-garden', description: '四方花坛一次投建。', cost: 320,
+        placements: [0, 1, 2, 3].map((index) => ({ plotId: `session-plot-${index}`, decorationId: 'flowers' })) },
+      { id: 'garden-block', name: '测试花园', areaId: null, description: '独享小花园，一次投建。', cost: 80,
+        placements: [{ plotId: 'garden', decorationId: 'flowers' }] },
+    ],
     decorations: [
       { id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 },
       { id: 'pine', name: '松树', kind: 'pine', cost: 120 },
@@ -113,34 +119,26 @@ test('a late failed donation leaves another card draft and focus in place', asyn
   expect(fixture.errors).toEqual([]);
 });
 
-for (const kind of ['area', 'plot'] as const) {
-  test(`a late failed ${kind} construction leaves the other construction draft and focus in place`, async ({ page }) => {
-    let pending: Route | undefined;
-    const fixture = await openGovernance(page, (route) => { pending = route; });
-    const panel = page.locator('.city-governance-panel');
-    await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const area = panel.locator('[data-city-area="session-garden"]');
-    const plot = panel.locator('[data-city-plot="garden"]');
-    const action = kind === 'area'
-      ? area.getByRole('button', { name: '批量建设', exact: true })
-      : plot.getByRole('button', { name: '建设', exact: true });
-    const otherInput = kind === 'area' ? plot.getByRole('combobox') : area.getByRole('spinbutton');
-    await action.click();
-    await expect.poll(() => Boolean(pending)).toBe(true);
-    if (kind === 'area') {
-      await otherInput.focus();
-      await otherInput.selectOption('pine');
-    } else await otherInput.fill('2');
-    const scrollTop = await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop);
-    await pending!.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
-    await expect(panel.getByRole('alert')).toContainText('金币不足');
-    await expect(action).toBeEnabled();
-    await expect(otherInput).toBeFocused();
-    await expect(otherInput).toHaveValue(kind === 'area' ? 'pine' : '2');
-    expect(await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop)).toBe(scrollTop);
-    expect(fixture.errors).toEqual([]);
-  });
-}
+test('a late failed block construction leaves the other block action and focus in place', async ({ page }) => {
+  let pending: Route | undefined;
+  const fixture = await openGovernance(page, (route) => { pending = route; });
+  const panel = page.locator('.city-governance-panel');
+  await panel.getByRole('button', { name: '个人建设', exact: true }).click();
+  const block = panel.locator('[data-city-block="session-block"]');
+  const other = panel.locator('[data-city-block="garden-block"]');
+  const action = block.getByRole('button', { name: '投建这片', exact: true });
+  const otherAction = other.getByRole('button', { name: '投建这片', exact: true });
+  await action.click();
+  await expect.poll(() => Boolean(pending)).toBe(true);
+  await otherAction.focus();
+  const scrollTop = await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop);
+  await pending!.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
+  await expect(panel.getByRole('alert')).toContainText('金币不足');
+  await expect(action).toBeEnabled();
+  await expect(otherAction).toBeFocused();
+  expect(await panel.locator('.city-governance-body').evaluate((body) => body.scrollTop)).toBe(scrollTop);
+  expect(fixture.errors).toEqual([]);
+});
 
 test('concurrent submissions restore their own focus without interrupting another card', async ({ page }) => {
   const pending: Route[] = [];
@@ -212,7 +210,7 @@ test('concurrent submissions restore their own focus without interrupting anothe
   expect(fixture.errors).toEqual([]);
 });
 
-test('construction and donation preserve errors from other targets and restore the area action', async ({ page }) => {
+test('construction and donation preserve errors from other targets and restore the block action', async ({ page }) => {
   const pending: Route[] = [];
   const fixture = await openGovernance(page, (route) => { pending.push(route); });
   const panel = page.locator('.city-governance-panel');
@@ -222,50 +220,32 @@ test('construction and donation preserve errors from other targets and restore t
   await expect(panel.getByRole('alert')).toContainText('金币不足');
 
   await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-  const area = panel.locator('[data-city-area="session-garden"]');
-  const areaButton = area.getByRole('button', { name: '批量建设', exact: true });
-  await area.getByRole('spinbutton').fill('1');
-  await areaButton.click();
+  const block = panel.locator('[data-city-block="session-block"]');
+  const blockButton = block.getByRole('button', { name: '投建这片', exact: true });
+  await blockButton.click();
   await expect.poll(() => pending.length).toBe(2);
   await expect(panel.getByRole('alert')).toContainText('金币不足');
-  fixture.state = { ...fixture.state, revision: 1, decorations: [
-    { plotId: 'session-plot-0', decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester' },
-  ] };
+  fixture.state = { ...fixture.state, revision: 1, decorations: [0, 1, 2, 3].map((index) => ({
+    plotId: `session-plot-${index}`, decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester',
+  })) };
   await pending[1]!.fulfill({ json: { state: fixture.state } });
-  await expect(areaButton).toBeEnabled();
-  // Partial success leaves a reusable action, so leave the temporary tab fallback.
-  await expect(areaButton).toBeFocused();
+  await expect(block).toContainText('已由 session-tester 投建');
+  // A completed block is no longer actionable; focus falls back to the active tab.
+  await expect(blockButton).toBeDisabled();
+  await expect(panel.getByRole('button', { name: '个人建设', exact: true })).toBeFocused();
   await expect(panel.getByRole('alert')).toContainText('金币不足');
 
-  await areaButton.click();
+  const garden = panel.locator('[data-city-block="garden-block"]');
+  const gardenButton = garden.getByRole('button', { name: '投建这片', exact: true });
+  await gardenButton.click();
   await expect.poll(() => pending.length).toBe(3);
-  await pending[2]!.fulfill({ status: 409, json: { error: 'Not enough available plots in this area' } });
-  await expect(panel.getByRole('alert')).toContainText('该区域空地不足');
-  await expect(areaButton).toBeFocused();
-
-  await panel.locator('[data-city-plot="garden"]').getByRole('button', { name: '建设', exact: true }).click();
-  await expect.poll(() => pending.length).toBe(4);
-  await expect(panel.getByRole('alert')).toContainText('该区域空地不足');
-  fixture.state = { ...fixture.state, revision: 2, decorations: [...fixture.state.decorations,
-    { plotId: 'garden', decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester' },
-  ] };
-  await pending[3]!.fulfill({ json: { state: fixture.state } });
-  await expect(panel.locator('[data-city-plot="garden"]')).toContainText('已由 session-tester 建设');
-  await expect(panel.getByRole('alert')).toContainText('该区域空地不足');
-
-  await areaButton.click();
-  await expect.poll(() => pending.length).toBe(5);
-  await expect(panel.getByRole('alert')).toHaveCount(0);
-  fixture.state = { ...fixture.state, revision: 3, decorations: [...fixture.state.decorations,
-    { plotId: 'session-plot-1', decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester' },
-  ] };
-  await pending[4]!.fulfill({ json: { state: fixture.state } });
-  await expect(areaButton).toBeEnabled();
-  await expect(areaButton).toBeFocused();
+  await pending[2]!.fulfill({ status: 409, json: { error: 'Block plot already occupied' } });
+  await expect(panel.getByRole('alert')).toContainText('无法整块投建');
+  await expect(gardenButton).toBeFocused();
   expect(fixture.errors).toEqual([]);
 });
 
-for (const completion of ['full-area', 'built-project', 'resident-moved'] as const) {
+for (const completion of ['full-block', 'built-project', 'resident-moved'] as const) {
   test(`successful construction keeps safe focus after ${completion}`, async ({ page }) => {
     let pending: Route | undefined;
     const fixture = await openGovernance(page, (route) => { pending = route; });
@@ -273,31 +253,28 @@ for (const completion of ['full-area', 'built-project', 'resident-moved'] as con
     const personal = completion !== 'built-project';
     const activeTab = panel.getByRole('button', { name: personal ? '个人建设' : '城市集体建设', exact: true });
     if (personal) await activeTab.click();
-    const area = panel.locator('[data-city-area="session-garden"]');
+    const block = panel.locator('[data-city-block="session-block"]');
     const project = panel.locator('[data-city-project="build-catcafe"]');
-    const action = personal ? area.getByRole('button', { name: '批量建设', exact: true })
+    const action = personal ? block.getByRole('button', { name: '投建这片', exact: true })
       : project.getByRole('button', { name: '捐款', exact: true });
-    if (personal) await area.getByRole('spinbutton').fill(completion === 'full-area' ? '4' : '1');
-    else await project.getByRole('spinbutton').fill('3000');
+    if (!personal) await project.getByRole('spinbutton').fill('3000');
     await action.click();
     await expect.poll(() => Boolean(pending)).toBe(true);
-    const otherInput = panel.locator('[data-city-plot="garden"]').getByRole('combobox');
-    if (completion === 'resident-moved') {
-      await otherInput.focus();
-      await otherInput.selectOption('pine');
-    }
+    const otherAction = panel.locator('[data-city-block="garden-block"]').getByRole('button', { name: '投建这片', exact: true });
+    if (completion === 'resident-moved') await otherAction.focus();
     fixture.state = { ...fixture.state, revision: 1,
       projects: fixture.state.projects.map((entry) => !personal && entry.id === 'build-catcafe'
         ? { ...entry, funded: 3000, built: true } : entry),
-      decorations: personal ? Array.from({ length: completion === 'full-area' ? 4 : 1 }, (_, index) => ({
+      decorations: personal ? Array.from({ length: completion === 'full-block' ? 4 : 1 }, (_, index) => ({
         plotId: `session-plot-${index}`, decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester',
       })) : [],
     };
     await pending!.fulfill({ json: { state: fixture.state } });
     if (completion === 'resident-moved') {
-      await expect(action).toBeEnabled();
-      await expect(otherInput).toBeFocused();
-      await expect(otherInput).toHaveValue('pine');
+      // A partially filled block can no longer be bought; focus stays where
+      // the resident moved it instead of returning to the completed action.
+      await expect(action).toBeDisabled();
+      await expect(otherAction).toBeFocused();
     } else {
       if (personal) await expect(action).toBeDisabled();
       else await expect(action).toHaveCount(0);
@@ -308,7 +285,7 @@ for (const completion of ['full-area', 'built-project', 'resident-moved'] as con
 }
 
 for (const action of ['donate', 'decorate'] as const) {
-  test(`${action} requires confirming an uncertain target before changing its payment parameters`, async ({ page }) => {
+  test(`${action} ${action === 'donate' ? 'requires confirming an uncertain target before changing its payment parameters' : 'replays the retained block request after an uncertain outcome'}`, async ({ page }) => {
     const requests: Array<Record<string, unknown>> = [];
     const committed = new Map<string, Record<string, unknown>>();
     const outerFailures = [
@@ -330,7 +307,7 @@ for (const action of ['donate', 'decorate'] as const) {
           projects: fixture.state.projects.map((project) => project.id === body.projectId
             ? { ...project, funded: project.funded + Number(body.amount) } : project),
           decorations: action === 'decorate'
-            ? [{ plotId: 'garden', decorationId: String(body.decorationId), ownerId: 'stub-user', ownerNickname: 'session-tester' }]
+            ? [{ plotId: 'garden', decorationId: 'flowers', ownerId: 'stub-user', ownerNickname: 'session-tester' }]
             : fixture.state.decorations };
       }
       if (requests.length === 1) return route.abort('connectionreset');
@@ -338,24 +315,33 @@ for (const action of ['donate', 'decorate'] as const) {
     });
     const panel = page.locator('.city-governance-panel');
     if (action === 'decorate') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const card = panel.locator(action === 'donate' ? '[data-city-project="build-catcafe"]' : '[data-city-plot="garden"]');
-    const input = card.getByRole(action === 'donate' ? 'spinbutton' : 'combobox');
-    const original = action === 'donate' ? '500' : 'pine';
-    const changed = action === 'donate' ? '600' : 'flowers';
-    const setValue = (value: string) => action === 'donate' ? input.fill(value) : input.selectOption(value);
-    const button = card.getByRole('button', { name: action === 'donate' ? '捐款' : '建设', exact: true });
-    await setValue(original);
+    const card = panel.locator(action === 'donate' ? '[data-city-project="build-catcafe"]' : '[data-city-block="garden-block"]');
+    const input = card.getByRole(action === 'donate' ? 'spinbutton' : 'button');
+    const original = '500';
+    const setValue = (value: string) => action === 'donate' ? input.fill(value) : Promise.resolve();
+    const button = card.getByRole('button', { name: action === 'donate' ? '捐款' : '投建这片', exact: true });
+    if (action === 'donate') await setValue(original);
     await button.click();
     await expect(panel.getByRole('alert')).toContainText('网络连接异常');
-    await setValue(changed);
-    await button.click();
-    await expect(panel.getByRole('alert')).toContainText('结果尚未确认');
-    await expect(panel.getByRole('alert')).toContainText(action === 'donate' ? '500' : '松树');
-    await expect(panel.getByRole('alert')).toContainText(action === 'donate' ? '猫猫咖啡厅' : '测试花园');
-    await expect(input).toHaveValue(changed);
-    expect(requests).toHaveLength(1);
-    expect(committed.size).toBe(1);
-    await setValue(original);
+    if (action === 'donate') {
+      await input.fill('600');
+      await button.click();
+      await expect(panel.getByRole('alert')).toContainText('结果尚未确认');
+      await expect(panel.getByRole('alert')).toContainText('500');
+      await expect(panel.getByRole('alert')).toContainText('猫猫咖啡厅');
+      await expect(input).toHaveValue('600');
+      expect(requests).toHaveLength(1);
+      expect(committed.size).toBe(1);
+      await setValue(original);
+    } else {
+      // A block purchase has no free parameters: the retry replays the exact
+      // retained body, so the uncertain receipt is confirmed, never replaced.
+      // The fixture recorded the first (aborted) request as committed, like a
+      // server whose response was lost after the write.
+      await expect(card.locator('[data-city-block-total]')).toContainText('结果待确认');
+      expect(requests).toHaveLength(1);
+      expect(committed.size).toBe(1);
+    }
     for (const failure of outerFailures) {
       await button.click();
       await expect(panel.getByRole('alert')).toContainText(failure.message);
@@ -407,22 +393,18 @@ test('receipt retries release definite 400 and 404 rejections but retain uncerta
   expect(fixture.errors).toEqual([]);
 });
 
-for (const kind of ['donation', 'area'] as const) {
+for (const kind of ['donation', 'block'] as const) {
 test(`${kind} login sessions keep separate receipts and ignore previous session responses`, async ({ page }) => {
   const pending: Route[] = [];
-  const requests: Array<{ requestId: string; decorationId?: string; quantity?: number }> = [];
+  const requests: Array<{ requestId: string; blockId?: string }> = [];
   const fixture = await openGovernance(page, (route) => {
     requests.push(route.request().postDataJSON() as { requestId: string });
     pending.push(route);
   });
   const panel = page.locator('.city-governance-panel');
-  if (kind === 'area') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-  const target = panel.locator(kind === 'area' ? '[data-city-area="session-garden"]' : '[data-city-project="build-catcafe"]');
-  const button = target.getByRole('button', { name: kind === 'area' ? '批量建设' : '捐款', exact: true });
-  if (kind === 'area') {
-    await target.getByRole('spinbutton').fill('2');
-    await target.getByRole('combobox').selectOption('pine');
-  }
+  if (kind === 'block') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
+  const target = panel.locator(kind === 'block' ? '[data-city-block="session-block"]' : '[data-city-project="build-catcafe"]');
+  const button = target.getByRole('button', { name: kind === 'block' ? '投建这片' : '捐款', exact: true });
   const switchSession = (token: string) => page.evaluate(async (nextToken) => {
     const modulePath = '/src/city/cityGovernanceClient.ts';
     const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
@@ -435,11 +417,6 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   await expect.poll(() => pending.length).toBe(1);
   await switchSession('second-test-session');
   await expect(button).toBeEnabled();
-  if (kind === 'area') {
-    await expect(target.getByRole('spinbutton')).toHaveValue('4');
-    await expect(target.getByRole('combobox')).toHaveValue('flowers');
-    await target.getByRole('spinbutton').fill('3');
-  }
   await button.click();
   await expect.poll(() => pending.length).toBe(2);
   expect(requests[1]!.requestId).not.toBe(requests[0]!.requestId);
@@ -447,10 +424,6 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   // The old 401 must neither reopen login nor clear the new session's pending action.
   await pending[0]!.fulfill({ status: 401, json: { error: 'Please sign in' } });
   await expect(button).toBeDisabled();
-  if (kind === 'area') {
-    await expect(target.getByRole('spinbutton')).toHaveValue('3');
-    await expect(target.getByRole('combobox')).toHaveValue('flowers');
-  }
   await expect(page.locator('#loginOverlay')).not.toBeVisible();
   await expect(panel.getByRole('alert')).toHaveCount(0);
   await pending[1]!.abort('connectionreset');
@@ -461,19 +434,14 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
 
   // Returning to the original still-valid token retains its uncertain receipt.
   await switchSession('stub-token');
-  if (kind === 'area') {
-    await expect(target.getByRole('spinbutton')).toHaveValue('2');
-    await expect(target.getByRole('combobox')).toHaveValue('pine');
-    await expect(target.getByRole('spinbutton')).toBeDisabled();
-  }
   await button.click();
   await expect.poll(() => pending.length).toBe(4);
   expect(requests[3]!.requestId).toBe(requests[0]!.requestId);
-  if (kind === 'area') {
-    expect(requests[0]).toMatchObject({ decorationId: 'pine', quantity: 2 });
-    expect(requests[1]).toMatchObject({ decorationId: 'flowers', quantity: 3 });
-    expect(requests[2]).toMatchObject({ decorationId: 'flowers', quantity: 3 });
-    expect(requests[3]).toMatchObject({ decorationId: 'pine', quantity: 2 });
+  if (kind === 'block') {
+    expect(requests[0]).toMatchObject({ blockId: 'session-block' });
+    expect(requests[1]).toMatchObject({ blockId: 'session-block' });
+    expect(requests[2]).toMatchObject({ blockId: 'session-block' });
+    expect(requests[3]).toMatchObject({ blockId: 'session-block' });
   }
   await pending[2]!.fulfill({ json: { state: { ...fixture.state, epoch: 'old-session', revision: 900 }, replayed: true } });
   await expect(button).toBeDisabled();
@@ -489,22 +457,21 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
 });
 }
 
-test('personal construction refreshes cross-tab sessions before rendering area drafts', async ({ page, context }) => {
-  const requests: Array<{ quantity: number; decorationId: string }> = [];
+test('personal construction refreshes cross-tab sessions before rendering block cards', async ({ page, context }) => {
+  const requests: Array<{ blockId: string }> = [];
   const fixture = await openGovernance(page, async (route) => {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
   });
   const panel = page.locator('.city-governance-panel');
   const personalTab = panel.getByRole('button', { name: '个人建设', exact: true });
-  const area = panel.locator('[data-city-area="session-garden"]');
+  const block = panel.locator('[data-city-block="session-block"]');
   await personalTab.click();
-  await area.getByRole('spinbutton').fill('2');
-  await area.getByRole('combobox').selectOption('pine');
+  await expect(block.locator('.city-area-cell')).toHaveCount(4);
   await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
 
   // A second tab changes storage without calling this page's client helpers.
-  // The next ordinary panel render must detect that change before using drafts.
+  // The next ordinary panel render must detect that change before any action.
   const otherTab = await context.newPage();
   try {
     await otherTab.route('**/session-source', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Session source</title>' }));
@@ -514,43 +481,36 @@ test('personal construction refreshes cross-tab sessions before rendering area d
 
   await personalTab.click();
   await expect(panel.locator('.city-governance-list')).toHaveCount(1);
-  await expect(area).toHaveCount(1);
-  await expect(area.getByRole('spinbutton')).toHaveValue('4');
-  await expect(area.getByRole('combobox')).toHaveValue('flowers');
-  await area.getByRole('spinbutton').fill('3');
-  await area.getByRole('button', { name: '批量建设', exact: true }).click();
+  await expect(block).toHaveCount(1);
+  await block.getByRole('button', { name: '投建这片', exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
-  expect(requests[0]).toMatchObject({ quantity: 3, decorationId: 'flowers' });
+  expect(requests[0]).toMatchObject({ blockId: 'session-block' });
   await expect(panel.getByRole('alert')).toContainText('金币不足');
   await expect(panel.locator('.city-governance-list')).toHaveCount(1);
-  await expect(area.getByRole('spinbutton')).toHaveValue('3');
   expect(fixture.errors).toEqual([]);
 });
 
-test('area availability explains decoration limits and scales narrow previews', async ({ page }) => {
+test('block cards explain partial occupancy and scale narrow previews', async ({ page }) => {
   const fixture = await openGovernance(page, (route) => route.fulfill({ status: 409, json: { error: 'Insufficient currency' } }), (config) => {
-    config.personalPlots.forEach((plot, index) => { plot.options = index < 2 ? ['pine'] : ['flowers']; });
     const narrowPlots = Array.from({ length: 2 }, (_, index) => ({
       id: `narrow-${index}`, name: `窄花园 ${index + 1}`, x: 38, z: -40 + index * 2, options: ['flowers'],
     }));
     config.personalPlots.push(...narrowPlots);
-    config.personalAreas!.push({ id: 'narrow-garden', name: '窄花园', plotIds: narrowPlots.map(({ id }) => id) });
+    config.personalBlocks!.push({ id: 'narrow-block', name: '窄花园小区块', areaId: null, description: '两处竖排花坛一次投建。', cost: 160,
+      placements: narrowPlots.map(({ id }) => ({ plotId: id, decorationId: 'flowers' })) });
   });
   fixture.state = { ...fixture.state, revision: 1, decorations: [0, 1].map((index) => ({
-    plotId: `session-plot-${index}`, decorationId: 'pine', ownerId: 'another-resident', ownerNickname: '其他居民',
+    plotId: `session-plot-${index}`, decorationId: 'flowers', ownerId: 'another-resident', ownerNickname: '其他居民',
   })) };
   await publishState(page, fixture.state);
   const panel = page.locator('.city-governance-panel');
   await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-  const area = panel.locator('[data-city-area="session-garden"]');
-  await area.getByRole('combobox').selectOption('pine');
-  await expect(area.locator('[data-city-area-total]')).toHaveText('该区域没有适合松树的空地，请选择其他装饰。');
-  await expect(area.getByRole('button', { name: '批量建设', exact: true })).toBeDisabled();
-  await area.getByRole('combobox').selectOption('flowers');
-  await area.getByRole('spinbutton').fill('2');
-  await expect(area.getByRole('button', { name: '批量建设', exact: true })).toBeEnabled();
-  const widePreview = await area.locator('.city-area-preview').boundingBox();
-  const narrowPreview = await panel.locator('[data-city-area="narrow-garden"] .city-area-preview').boundingBox();
+  const block = panel.locator('[data-city-block="session-block"]');
+  // Two plots are owned by another resident: the whole block locks.
+  await expect(block.locator('[data-city-block-total]')).toHaveText('部分地块已有装饰（其他居民），暂不能整块投建。');
+  await expect(block.getByRole('button', { name: '投建这片', exact: true })).toBeDisabled();
+  const widePreview = await block.locator('.city-area-preview').boundingBox();
+  const narrowPreview = await panel.locator('[data-city-block="narrow-block"] .city-area-preview').boundingBox();
   expect(widePreview!.width).toBeGreaterThan(narrowPreview!.width * 3);
   expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 
@@ -558,6 +518,6 @@ test('area availability explains decoration limits and scales narrow previews', 
     plotId: `session-plot-${index}`, decorationId: 'flowers', ownerId: 'another-resident', ownerNickname: '其他居民',
   }))] };
   await publishState(page, fixture.state);
-  await expect(area.locator('[data-city-area-total]')).toHaveText('该区域已无可用地块');
+  await expect(block.locator('[data-city-block-total]')).toHaveText('已由 其他居民 投建 · 花坛 ×4');
   expect(fixture.errors).toEqual([]);
 });

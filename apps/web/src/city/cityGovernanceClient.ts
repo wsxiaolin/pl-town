@@ -6,10 +6,15 @@ export type CityProject = {
   placements?: Array<{ kind: CityDecoration['kind']; x: number; z: number }>;
   road?: { x: number; z: number; width: number; depth: number };
 };
+export type CityPersonalBlock = {
+  id: string; name: string; areaId: string | null; description: string; cost: number;
+  placements: Array<{ plotId: string; decorationId: string }>;
+};
 export type CityConfig = {
   schemaVersion: number; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
   personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
+  personalBlocks?: CityPersonalBlock[];
   decorations: CityDecoration[]; initialBuiltBuildingIds: string[];
 };
 export type CityState = {
@@ -245,7 +250,7 @@ export function disposeCityGovernance(): void {
 }
 
 function cityOperationKey(path: string, body: Record<string, unknown>): string {
-  const target = body.areaId !== undefined ? ['areaId', body.areaId]
+  const target = body.blockId !== undefined ? ['blockId', body.blockId]
     : body.projectId !== undefined ? ['projectId', body.projectId] : ['plotId', body.plotId];
   return `${path}:${JSON.stringify(target)}`;
 }
@@ -264,18 +269,15 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   // after an uncertain outcome, even if the current catalog changes before retry.
   const retained = pendingRequestIds.get(operationKey);
   if (retained && JSON.stringify(retained.body) !== JSON.stringify(body)) {
-    // A changed amount/decoration is a new payment, not a retry. Resolve the
-    // target's uncertain operation before accepting another set of parameters.
-    if (retained.body.areaId !== undefined) {
-      throw new Error('该区域上一笔建设结果仍待确认，请先按原装饰和数量重试。');
-    }
+    // A changed amount is a new payment, not a retry. Resolve the target's
+    // uncertain operation before accepting another set of parameters.
+    // Block purchases have no free parameters: same block, same body.
     if (retained.body.projectId !== undefined) {
       const project = config.projects.find((entry) => entry.id === retained.body.projectId);
       throw new Error(`${project ? `「${project.name}」` : '该项目'}上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
     }
-    const plot = config.personalPlots.find((entry) => entry.id === retained.body.plotId);
-    const decoration = config.decorations.find((entry) => entry.id === retained.body.decorationId);
-    throw new Error(`${plot ? `「${plot.name}」` : '这块地'}上一笔「${decoration?.name ?? retained.body.decorationId}」建设结果尚未确认，请恢复原装饰重试，确认结果后再修改。`);
+    const block = config.personalBlocks?.find((entry) => entry.id === retained.body.blockId);
+    throw new Error(`${block ? `「${block.name}」` : '该小区块'}上一笔投建结果尚未确认，请先重试确认后再继续。`);
   }
   const operation = retained
     ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
@@ -319,22 +321,15 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
 // These keys are the city HttpBodyError contract. Keep them aligned with
 // cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
 const cityOperationMessages: Record<string, string> = {
-  'Unknown construction area': '建设区域不存在，请刷新后重试。',
-  'No available plots in this area': '该区域已全部建设，请选择其他区域。',
-  'Not enough available plots in this area': '该区域空地不足，请减少数量或选择其他区域。',
-  'Quantity must be an integer between 1 and 100; choose one area': '请选择一个区域，并输入 1–100 之间的整数数量。',
-  'Quantity requires an area': '请先选择批量建设区域。',
-  'Invalid decoration total': '建设总价无效，请重新选择数量。',
+  'Unknown construction block': '该小区块不存在，请刷新后重试。',
+  'Block plot already occupied': '该小区块的部分地块已有装饰，暂时无法整块投建。',
+  'Personal decorations are sold as complete blocks': '个人装饰以小区块整体投建，请在小区块列表中选择一片。',
   'Invalid requestId': '建设请求无效，请刷新页面后重试。',
   'Invalid configVersion': '建设配置无效，请刷新页面后重试。',
-  'Invalid target': '建设目标无效，请重新选择项目或地块。',
-  'Invalid decorationId': '装饰类型无效，请重新选择后重试。',
+  'Invalid target': '建设目标无效，请重新选择项目或小区块。',
   'requestId already used with different parameters': '这次建设请求参数已变化，请重新提交当前内容。',
-  'Decoration is not allowed on this plot': '这块地不支持当前装饰，请选择其他装饰。',
   'Unknown project': '建设项目不存在，请刷新页面后重试。',
-  'Unknown plot or decoration': '地块或装饰不存在，请刷新页面后重试。',
   'Insufficient currency': '金币不足，无法完成建设或捐款。请获得更多金币后重试。',
-  'Plot already occupied': '这块地已被建设，请选择其他空地。',
   'Project already built': '该项目已建成，请选择其他建设项目。',
   'City config changed; reload config': '建设配置已更新，请确认最新信息后重试。',
   'Amount must be a positive safe integer': '请输入大于 0 的整数捐款金额。',
@@ -371,13 +366,8 @@ export function makeRequestId() {
   return `city-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
 }
 export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
-export function decorateCity(plotId: string, decorationId: string) { return mutate('/town-api/city/decorate', { plotId, decorationId }); }
-export function decorateCityArea(areaId: string, decorationId: string, quantity: number) { return mutate('/town-api/city/decorate', { areaId, decorationId, quantity }); }
-export function getPendingCityAreaOperation(areaId: string): { decorationId: string; quantity: number } | null {
+export function decorateCityBlock(blockId: string) { return mutate('/town-api/city/decorate', { blockId }); }
+export function getPendingCityBlockOperation(blockId: string): boolean {
   refreshCityGovernanceSession();
-  const operation = mutationSession?.requests.get(cityOperationKey('/town-api/city/decorate', { areaId }));
-  if (operation && typeof operation.body.decorationId === 'string' && typeof operation.body.quantity === 'number') {
-    return { decorationId: operation.body.decorationId, quantity: operation.body.quantity };
-  }
-  return null;
+  return mutationSession?.requests.has(cityOperationKey('/town-api/city/decorate', { blockId })) ?? false;
 }

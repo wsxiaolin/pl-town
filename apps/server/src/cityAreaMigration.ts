@@ -1,5 +1,5 @@
 import type { CityConstructionConfig } from './data/cityConstructionConfig.js';
-import { AREA_PLOTS, PERSONAL_AREAS } from './data/cityConstructionAreas.js';
+import { AREA_PLOTS, PERSONAL_AREAS, PERSONAL_BLOCKS } from './data/cityConstructionAreas.js';
 import { isLegacyAreaPlotRelocation } from './cityAreaLayoutMigration.js';
 
 /** Explicit additive reconciliation for the area catalog, used on startup and restore.
@@ -53,5 +53,24 @@ export function reconcileAreaCatalog(previous: CityConstructionConfig, next: Cit
   }
   if (nextAreas.filter((entry) => !previousAreas.some((old) => old.id === entry.id)).some((entry) => !areaAdditionAllowed(entry))) {
     throw new Error('City area migration requires explicit reconciliation: personal area addition is not in the area catalog');
+  }
+  // Block-aware catalogs: a persisted block keeps its identity through the
+  // purchase contract (id, area, price, placements); names and descriptions
+  // are presentation-only and may be edited. Additions must come from the manifest.
+  const blockLedger = ({ areaId, cost, placements }: NonNullable<CityConstructionConfig['personalBlocks']>[number]) =>
+    JSON.stringify([areaId, cost, placements]);
+  const blockLedgerUnchanged = (entry: NonNullable<CityConstructionConfig['personalBlocks']>[number]) => {
+    const candidate = next.personalBlocks?.find((block) => block.id === entry.id);
+    return Boolean(candidate && blockLedger(candidate) === blockLedger(entry));
+  };
+  const blockAdditionAllowed = (entry: NonNullable<CityConstructionConfig['personalBlocks']>[number]) =>
+    PERSONAL_BLOCKS.some((candidate) => candidate.id === entry.id && blockLedger(candidate) === blockLedger(entry));
+  const previousBlocks = previous.personalBlocks ?? [];
+  const nextBlocks = next.personalBlocks ?? [];
+  if (previousBlocks.some((entry) => !blockLedgerUnchanged(entry))) {
+    throw new Error('City area migration requires explicit reconciliation: personal block ledger changed');
+  }
+  if (nextBlocks.filter((entry) => !previousBlocks.some((old) => old.id === entry.id)).some((entry) => !blockAdditionAllowed(entry))) {
+    throw new Error('City area migration requires explicit reconciliation: personal block addition is not in the area catalog');
   }
 }

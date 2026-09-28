@@ -77,6 +77,8 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
     schemaVersion: 1, version: 'capability-fixture', initialBuiltBuildingIds: ['commons'],
     projects: [{ id: 'library', buildingId: 'library', name: '图书馆', description: '共同建设', kind: 'building', cost: 3000 }],
     personalAreas: [{ id: 'garden', name: '小花园', plotIds: ['plot-1', 'plot-2'] }],
+    personalBlocks: [{ id: 'garden-block', name: '小花园小区块', areaId: 'garden', description: '两处花坛连成一片，一次投建。', cost: 160,
+      placements: [{ plotId: 'plot-1', decorationId: 'flowers' }, { plotId: 'plot-2', decorationId: 'flowers' }] }],
     personalPlots: [1, 2].map((index) => ({ id: `plot-${index}`, name: `花园 ${index}`, x: 30 + index * 2, z: -40, options: ['flowers'] })),
     decorations: [{ id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 }],
   };
@@ -103,8 +105,9 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
     if (path.endsWith('/city/decorate')) {
       api.decorations += 1;
       const request = route.request().postDataJSON();
-      state = { ...state, revision: state.revision + 1, decorations: config.personalPlots.slice(0, request.quantity)
-        .map(({ id }) => ({ plotId: id, decorationId: request.decorationId, ownerId: 'compat-resident', ownerNickname: 'compat-resident' })) };
+      const block = config.personalBlocks!.find((entry) => entry.id === request.blockId);
+      state = { ...state, revision: state.revision + 1, decorations: (block?.placements ?? [])
+        .map(({ plotId, decorationId }) => ({ plotId, decorationId, ownerId: 'compat-resident', ownerNickname: 'compat-resident' })) };
       return route.fulfill({ json: { state } });
     }
     if (path.endsWith('/city/vote')) {
@@ -133,10 +136,10 @@ for (const status of [404, 405] as const) {
     await expect(project).toContainText('100 金币');
     expect(api.donations).toBe(1);
     await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const garden = panel.locator('[data-city-area="garden"]');
-    await garden.getByRole('spinbutton').fill('2');
-    await garden.getByRole('button', { name: '批量建设', exact: true }).click();
-    await expect(garden).toContainText('已建 2 / 2 处');
+    const gardenBlock = panel.locator('[data-city-block="garden-block"]');
+    await expect(gardenBlock.locator('.city-area-cell')).toHaveCount(2);
+    await gardenBlock.getByRole('button', { name: '投建这片', exact: true }).click();
+    await expect(gardenBlock).toContainText('已由 compat-resident 投建');
     expect(api.decorations).toBe(1);
     await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
     await expect(unavailable).toBeVisible();

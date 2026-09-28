@@ -217,10 +217,19 @@ try {
   await stop();
   await start();
   const plot = config.personalPlots[0];
-  const decorate = { token: 'city-token-a', requestId: 'plot', plotId: plot.id, decorationId: plot.options[0] };
-  await post('decorate', { ...decorate, decorationId: 'pine' }, 400);
+  const firstBlock = config.personalBlocks.find((entry) => entry.placements.some((placement) => placement.plotId === plot.id));
+  const decorate = { token: 'city-token-a', requestId: 'plot', blockId: firstBlock.id };
+  await post('decorate', { ...decorate, blockId: 'missing' }, 404);
+  // Personal decorations are only sold as pre-designed blocks now.
+  await post('decorate', { ...decorate, plotId: plot.id, decorationId: plot.options[0] }, 400);
+  await post('decorate', { ...decorate, areaId: 'north-meadow', decorationId: 'flowers', quantity: 3 }, 400);
+  await post('decorate', { ...decorate, decorationId: 'flowers' }, 400);
+  await post('decorate', { token: 'city-token-a', requestId: 'no-block' }, 400);
   const decorated = await post('decorate', decorate);
-  assert.equal(decorated.state.decorations[0].ownerId, hello.user.id);
+  assert.equal(decorated.acceptedAmount, firstBlock.cost);
+  assert.equal(decorated.state.decorations.length, firstBlock.placements.length);
+  assert.ok(decorated.state.decorations.every((entry) => firstBlock.placements.some((placement) => placement.plotId === entry.plotId
+    && placement.decorationId === entry.decorationId) && entry.ownerId === hello.user.id));
   assert.equal((await post('decorate', decorate)).replayed, true);
   await post('decorate', { ...decorate, token: 'city-token-b' }, 409);
   await post('decorate', { ...decorate, requestId: 'first' }, 409);
@@ -244,31 +253,31 @@ try {
   assert.equal(replayLatest.operationRevision, first.operationRevision);
   assert.ok(replayLatest.state.revision > first.operationRevision);
   assert.equal(replayLatest.replayed, true);
-  const competitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'plot-race', plotId: config.personalPlots[2].id, decorationId: 'flowers' })));
+  const competitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'plot-race', blockId: 'east-park-a' })));
   assert.deepEqual(competitors.map((entry) => entry.status).sort(), [200, 409]);
-  assert.equal(competitors.find((entry) => entry.status === 200).body.acceptedAmount, 80);
+  assert.equal(competitors.find((entry) => entry.status === 200).body.acceptedAmount, 580);
   await stop();
   await start();
-  const areaBody = { token: 'city-token-a', requestId: 'area-build', areaId: 'north-meadow', decorationId: 'flowers', quantity: 5 };
-  for (const quantity of [0, -1, 1.5, '2', null, 101, Number.MAX_SAFE_INTEGER + 1]) await post('decorate', { ...areaBody, quantity }, 400);
-  await post('decorate', { ...areaBody, areaId: 'missing' }, 404);
-  await post('decorate', { ...areaBody, plotId: plot.id }, 400);
-  await post('decorate', { ...areaBody, quantity: 21 }, 409);
-  const areaBuilt = await post('decorate', areaBody);
-  assert.equal(areaBuilt.acceptedAmount, 400);
-  assert.equal(areaBuilt.state.decorations.filter((entry) => entry.plotId.startsWith('north-meadow-')).length, 5);
-  const areaReplay = await post('decorate', areaBody);
+  const blockBody = { token: 'city-token-a', requestId: 'area-build', blockId: 'west-park-d' };
+  await post('decorate', { ...blockBody, blockId: 'missing' }, 404);
+  await post('decorate', { ...blockBody, quantity: 3 }, 400);
+  await post('decorate', { ...blockBody, decorationId: 'flowers' }, 400);
+  await post('decorate', { ...blockBody, plotId: plot.id }, 400);
+  const areaBuilt = await post('decorate', blockBody);
+  assert.equal(areaBuilt.acceptedAmount, 1020);
+  assert.equal(areaBuilt.state.decorations.filter((entry) => entry.plotId.startsWith('west-park-')).length, 6);
+  const areaReplay = await post('decorate', blockBody);
   assert.equal(areaReplay.replayed, true);
   assert.equal(areaReplay.state.revision, areaBuilt.state.revision);
   assert.equal(areaReplay.progress.currency, areaBuilt.progress.currency);
-  await post('decorate', { ...areaBody, quantity: 4 }, 409);
-  const areaCompetitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'area-race', areaId: 'east-park', decorationId: 'flowers', quantity: 24 })));
+  await post('decorate', { ...blockBody, token: 'city-token-b' }, 409);
+  const areaCompetitors = await Promise.all(['city-token-a', 'city-token-b'].map((token) => competingDecoration({ token, requestId: 'area-race', blockId: 'west-park-e' })));
   assert.deepEqual(areaCompetitors.map((entry) => entry.status).sort(), [200, 409]);
   const areaWinner = areaCompetitors.find((entry) => entry.status === 200).body;
-  assert.equal(areaWinner.acceptedAmount, 24 * 80);
-  assert.equal(areaWinner.state.decorations.filter((entry) => entry.plotId.startsWith('east-park-')).length, 24);
+  assert.equal(areaWinner.acceptedAmount, 640);
+  assert.equal(areaWinner.state.decorations.filter((entry) => entry.plotId.startsWith('west-park-')).length, 10);
   assert.equal(areaWinner.state.revision, areaBuilt.state.revision + 1);
-  const duplicateBatch = await Promise.all([1, 2].map(() => post('decorate', { ...areaBody, token: 'city-token-b', requestId: 'area-duplicate', areaId: 'south-meadow', quantity: 3 })));
+  const duplicateBatch = await Promise.all([1, 2].map(() => post('decorate', { token: 'city-token-b', requestId: 'area-duplicate', blockId: 'south-meadow-b' })));
   assert.equal(duplicateBatch.filter((entry) => entry.replayed).length, 1);
   assert.equal(duplicateBatch[0].progress.currency, duplicateBatch[1].progress.currency);
   const publicArea = await post('donate', { token: 'city-token-b', requestId: 'area-public', projectId: 'north-community-garden', amount: 640 });
@@ -316,12 +325,10 @@ try {
     const before = getCityState();
     assert.throws(() => mutateCity(user, 'donate', { configVersion: config.version, requestId: 'poor', projectId: 'greenbelt-trees', amount: 1 }), /Insufficient/);
     assert.deepEqual(getCityState(), before);
-    assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-plot', plotId: config.personalPlots[1].id, decorationId: 'oak' }), /Insufficient/);
-    assert.deepEqual(getCityState(), before);
-    assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-area', areaId: 'west-park', decorationId: 'flowers', quantity: 20 }), /Insufficient/);
+    assert.throws(() => mutateCity(user, 'decorate', { configVersion: config.version, requestId: 'poor-block', blockId: 'west-park-f' }), /Insufficient/);
     assert.deepEqual(getCityState(), before);
     assert.equal(db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency, 0);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM city_operations WHERE request_id IN ('poor', 'poor-plot', 'poor-area')").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM city_operations WHERE request_id IN ('poor', 'poor-block')").get().n, 0);
     assert.throws(() => purchaseBuilding(user.id, 'academy', 0), /not built/);
     assert.throws(() => recordBuildingVisit(user.id, 'academy'), /not built/);
     const { setBuildingOverrides, resetWorldConfig } = await import('./dist/worldConfig.js');
@@ -409,13 +416,14 @@ try {
       && (!project.buildingId || legacyBuildingIds.includes(project.buildingId)));
     oldConfig.initialBuiltBuildingIds = ['commons', ...config.projects.filter((project) => project.buildingId && project.buildingId !== 'photostudio' && !legacyBuildingIds.includes(project.buildingId)).map((project) => project.buildingId)];
     delete oldConfig.personalAreas;
+    delete oldConfig.personalBlocks;
     oldConfig.version = '2026-09-19.1';
     preArea.prepare('INSERT INTO city_configs VALUES (?, ?)').run(oldConfig.version, JSON.stringify(oldConfig));
     preArea.prepare('UPDATE city_meta SET config_version = ? WHERE id = 1').run(oldConfig.version);
     preArea.prepare('DELETE FROM city_configs WHERE version = ?').run(config.version);
     for (const id of newPlotIds) preArea.prepare('DELETE FROM city_decorations WHERE plot_id = ?').run(id);
     for (const project of config.projects.filter((project) => !oldConfig.projects.some((old) => old.id === project.id))) preArea.prepare('DELETE FROM city_projects WHERE id = ?').run(project.id);
-    preArea.prepare("DELETE FROM city_operations WHERE request_id LIKE 'area-%'").run();
+    preArea.prepare("DELETE FROM city_operations WHERE request_id LIKE 'area-%' OR fingerprint LIKE '%decorate-block%'").run();
     for (const operation of preArea.prepare('SELECT user_id, request_id, fingerprint FROM city_operations').all()) {
       const fingerprint = JSON.parse(operation.fingerprint);
       assert(Array.isArray(fingerprint) && fingerprint.length === 4
@@ -424,12 +432,12 @@ try {
       fingerprint[3] = oldConfig.version;
       preArea.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
     }
-    // Keep one area receipt from the historical catalog so restoring the
-    // backup proves a decorate-area retry can replay across config versions.
-    const legacyAreaRequest = 'legacy-area-replay';
-    const legacyAreaFingerprint = JSON.stringify(['decorate-area', 'north-meadow', 'flowers', 1, oldConfig.version]);
+    // Keep one block receipt from the historical catalog so restoring the
+    // backup proves a decorate-block retry can replay across config versions.
+    const legacyBlockRequest = 'legacy-block-replay';
+    const legacyBlockFingerprint = JSON.stringify(['decorate-block', 'north-meadow-a', oldConfig.version]);
     preArea.prepare('INSERT INTO city_operations (user_id, request_id, fingerprint, accepted_amount, revision) VALUES (?, ?, ?, ?, ?)')
-      .run(user.id, legacyAreaRequest, legacyAreaFingerprint, 80, before.revision);
+      .run(user.id, legacyBlockRequest, legacyBlockFingerprint, 500, before.revision);
     const oldDecorations = preArea.prepare('SELECT * FROM city_decorations ORDER BY plot_id').all();
     const oldReceipts = preArea.prepare('SELECT * FROM city_operations ORDER BY user_id, request_id').all();
     const oldBalance = preArea.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(user.id).currency;
@@ -442,13 +450,12 @@ try {
     const oldReplay = mutateCity(user, 'donate', { configVersion: oldConfig.version, requestId: 'first', projectId: 'build-catcafe', amount: 100 });
     assert.equal(oldReplay.replayed, true);
     assert.equal(oldReplay.progress.currency, oldBalance);
-    const legacyAreaReplay = mutateCity(user, 'decorate', {
-      configVersion: oldConfig.version, requestId: legacyAreaRequest,
-      areaId: 'north-meadow', decorationId: 'flowers', quantity: 1,
+    const legacyBlockReplay = mutateCity(user, 'decorate', {
+      configVersion: oldConfig.version, requestId: legacyBlockRequest, blockId: 'north-meadow-a',
     });
-    assert.equal(legacyAreaReplay.replayed, true);
-    assert.equal(legacyAreaReplay.acceptedAmount, 80);
-    assert.equal(legacyAreaReplay.progress.currency, oldBalance);
+    assert.equal(legacyBlockReplay.replayed, true);
+    assert.equal(legacyBlockReplay.acceptedAmount, 500);
+    assert.equal(legacyBlockReplay.progress.currency, oldBalance);
     assert.ok(getCityState().projects.filter((project) => ['north-community-garden', 'south-community-grove'].includes(project.id)).every((project) => project.funded === 0 && !project.built));
     restoreFromBackupFile(path);
     // Restore the original area layout with real purchased plots and receipts.
@@ -472,7 +479,8 @@ try {
       const fingerprint = JSON.parse(operation.fingerprint);
       assert(Array.isArray(fingerprint) && fingerprint.at(-1) === config.version
         && ((fingerprint.length === 4 && ['donate', 'decorate'].includes(fingerprint[0]))
-          || (fingerprint.length === 5 && fingerprint[0] === 'decorate-area')));
+          || (fingerprint.length === 5 && fingerprint[0] === 'decorate-area')
+          || (fingerprint.length === 3 && fingerprint[0] === 'decorate-block')));
       fingerprint[fingerprint.length - 1] = oldLayout.version;
       oldLayoutDb.prepare('UPDATE city_operations SET fingerprint = ? WHERE user_id = ? AND request_id = ?').run(JSON.stringify(fingerprint), operation.user_id, operation.request_id);
     }
@@ -499,12 +507,12 @@ try {
     assert.equal(layoutFunding.find((entry) => entry.id === 'north-community-garden').built, 1);
     assert.equal(layoutFunding.find((entry) => entry.id === 'south-community-grove').funded, 10);
     assert.equal(mutateCity(user, 'donate', { configVersion: oldLayout.version, requestId: 'layout-donation', projectId: 'south-community-grove', amount: 10 }).replayed, true);
-    const purchasedAreaReceipt = layoutReceipts.find((entry) => JSON.parse(entry.fingerprint)[0] === 'decorate-area');
-    assert(purchasedAreaReceipt, 'The old-layout fixture must contain a real paid area operation');
-    const [, purchasedAreaId, purchasedDecorationId, purchasedQuantity, purchasedVersion] = JSON.parse(purchasedAreaReceipt.fingerprint);
-    assert.equal(mutateCity(getUser(purchasedAreaReceipt.user_id), 'decorate', {
-      configVersion: purchasedVersion, requestId: purchasedAreaReceipt.request_id,
-      areaId: purchasedAreaId, decorationId: purchasedDecorationId, quantity: purchasedQuantity,
+    const purchasedBlockReceipt = layoutReceipts.find((entry) => JSON.parse(entry.fingerprint)[0] === 'decorate-block');
+    assert(purchasedBlockReceipt, 'The old-layout fixture must contain a real paid block operation');
+    const [, purchasedBlockId, purchasedVersion] = JSON.parse(purchasedBlockReceipt.fingerprint);
+    assert.equal(mutateCity(getUser(purchasedBlockReceipt.user_id), 'decorate', {
+      configVersion: purchasedVersion, requestId: purchasedBlockReceipt.request_id,
+      blockId: purchasedBlockId,
     }).replayed, true);
     const beforeLayoutFailure = getCityState();
     const constructionLedger = () => Object.fromEntries(['city_configs', 'city_meta', 'city_projects', 'city_decorations', 'city_operations', 'city_votes', 'city_vote_operations', 'player_progress']
@@ -566,8 +574,27 @@ try {
     const { reconcileAreaCatalog } = await import('./dist/cityAreaMigration.js');
     const renamedArea = structuredClone(config);
     renamedArea.personalAreas[0].name += '（新名称）';
+    renamedArea.personalBlocks[0].name += '（新名称）';
+    renamedArea.personalBlocks[0].description += '（新描述）';
     renamedArea.decorations[0].cost += 1;
     assert.doesNotThrow(() => reconcileAreaCatalog(config, renamedArea));
+    // Block prices and placements are part of the purchase contract.
+    const changedBlock = structuredClone(config);
+    changedBlock.personalBlocks[0].cost += 1;
+    assert.throws(() => reconcileAreaCatalog(config, changedBlock), /personal block ledger changed/);
+    const movedBlock = structuredClone(config);
+    movedBlock.personalBlocks[0].placements = [...movedBlock.personalBlocks[0].placements].reverse();
+    assert.throws(() => reconcileAreaCatalog(config, movedBlock), /personal block ledger changed/);
+    // Upgrading a block-unaware catalog may add manifest blocks.
+    const blocklessPrevious = structuredClone(config);
+    delete blocklessPrevious.personalBlocks;
+    assert.doesNotThrow(() => reconcileAreaCatalog(blocklessPrevious, config));
+    // Blocks unknown to the manifest are never valid additions.
+    const foreignAddition = structuredClone(config);
+    foreignAddition.personalBlocks = [...foreignAddition.personalBlocks,
+      { id: 'foreign-block', name: '外来小区块', areaId: null, description: 'x', cost: 420,
+        placements: [{ plotId: 'north-garden-1', decorationId: 'cherry' }, { plotId: 'north-garden-2', decorationId: 'oak' }] }];
+    assert.throws(() => reconcileAreaCatalog(config, foreignAddition), /personal block addition/);
     const unlistedAreaPrevious = structuredClone(config);
     unlistedAreaPrevious.personalAreas = [{ id: 'future-area', name: '未来区域', plotIds: [] }];
     const unlistedAreaNext = structuredClone(unlistedAreaPrevious);
@@ -579,6 +606,20 @@ try {
     delete noAreaNext.personalAreas;
     noAreaNext.personalPlots[0].x += 0.1;
     assert.throws(() => reconcileAreaCatalog(noAreaPrevious, noAreaNext), /personal plot ledger changed/);
+    // Startup validation: blocks must cover every plot, price and options exactly.
+    const originalBlockCost = config.personalBlocks[0].cost;
+    config.version = 'test-upgrade-blocks';
+    config.personalBlocks[0].cost += 1;
+    assert.throws(() => db.transaction(() => initializeCityGovernance(db))(), /Invalid city construction block cost/);
+    config.personalBlocks[0].cost = originalBlockCost;
+    const removedBlock = config.personalBlocks.pop();
+    assert.throws(() => db.transaction(() => initializeCityGovernance(db))(), /must cover every personal plot/);
+    config.personalBlocks.push(removedBlock);
+    const originalPlacement = config.personalBlocks[0].placements[0].decorationId;
+    config.personalBlocks[0].placements[0].decorationId = 'nonexistent-decoration';
+    assert.throws(() => db.transaction(() => initializeCityGovernance(db))(), /Invalid city construction block placement/);
+    config.personalBlocks[0].placements[0].decorationId = originalPlacement;
+    config.version = originalVersion;
     // A pre-city backup seeds clean construction state and operations.
     // Restore an actual previous ledger policy: standing core buildings become
     // completed projects, while paid progress and request replay records survive.
