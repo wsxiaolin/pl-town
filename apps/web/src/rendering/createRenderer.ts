@@ -10,7 +10,9 @@ export type RenderSettings = {
   waterRendering: boolean;
 };
 
-export const RENDER_SETTINGS_KEY = 'minicityRenderSettings';
+import { RENDER_SETTINGS_KEY } from '../core/storageKeys';
+
+export { RENDER_SETTINGS_KEY };
 export const MAX_RENDER_RESOLUTION = 4;
 
 const DEFAULT_RENDER_SETTINGS: RenderSettings = {

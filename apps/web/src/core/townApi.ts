@@ -18,6 +18,8 @@ const apiBase = (): string => {
   return '';
 };
 
+export const hasTownApiBase = (): boolean => apiBase().length > 0;
+
 export const townApiUrl = (path: string): string => `${apiBase()}${path}`;
 
 export const townApiFetch = (path: string, init?: RequestInit): Promise<Response> => fetch(townApiUrl(path), init);
