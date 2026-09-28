@@ -20,6 +20,7 @@ export type BuildingInteractionOptions = {
   getNewsstandController: () => { open: () => void; close: () => void } | null;
   getAcademyController?: () => { open: () => void; close: () => void; closeReader: () => void } | null;
   getMutualAidController?: () => { open: () => void; close: () => void } | null;
+  getLibrarySearchController?: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
@@ -101,6 +102,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'academy_library') {
       options.getAcademyController?.()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'library') {
+      options.getLibrarySearchController?.()?.open();
       options.trackInteraction(b.id);
       return;
     }
