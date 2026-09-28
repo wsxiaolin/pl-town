@@ -21,6 +21,7 @@ import { applyShopCatalog, resolveBuildingUnlockStates } from './progression.js'
 import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, type WeatherConfig } from './worldConfig.js';
 import { missingStoryReferencedItems, SHOP_NAME_MAX, SHOP_PRICE_MAX, SHOP_PRODUCT_MAX } from './shopCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
+import { sanitizeHouseName, validateNickname } from './textLimits.js';
 import type { Weather } from './types.js';
 
 const isWeather = (value: string): value is Weather => ['clear', 'rain', 'snow', 'snow-deep'].includes(value);
@@ -251,8 +252,8 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const body = await readJson(request, 4_096);
     const userId = userEdit[1]!;
     if (typeof body.nickname === 'string') {
-      const trimmed = body.nickname.trim();
-      if (trimmed.length < 2 || trimmed.length > 40 || !/^[\p{L}\p{N}]+$/u.test(trimmed)) { error(response, 400, 'INVALID_NICKNAME', '昵称仅允许 2-40 位字母或数字'); return true; }
+      const trimmed = body.nickname.normalize('NFKC').trim();
+      if (validateNickname(trimmed)) { error(response, 400, 'INVALID_NICKNAME', '昵称仅允许 2-40 位字母或数字'); return true; }
       const result = db.updateAdminUserNickname(userId, trimmed);
       if (!result.ok) { error(response, 400, 'NICKNAME_TAKEN', result.reason ?? '昵称更新失败'); return true; }
       db.recordAdminAudit(principal.actor, 'user.rename', userId, { nickname: trimmed });
@@ -273,7 +274,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'PATCH' && houseRoute) {
     const body = await readJson(request, 4_096);
     const buildingId = decodeURIComponent(houseRoute[1]!);
-    if (typeof body.name === 'string') { const trimmed = body.name.trim().slice(0, 80); if (!trimmed) { error(response, 400, 'INVALID_BODY', '住房名称不能为空'); return true; } db.renameHouse(buildingId, trimmed); }
+    if (typeof body.name === 'string') { const trimmed = sanitizeHouseName(body.name); if (!trimmed) { error(response, 400, 'INVALID_BODY', '住房名称不能为空或包含无效字符'); return true; } db.renameHouse(buildingId, trimmed); }
     if (Array.isArray(body.memberIds)) {
       if (!body.memberIds.every((id: unknown) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) { error(response, 400, 'INVALID_BODY', '成员列表无效'); return true; }
       const result = db.setHouseRoster(buildingId, body.memberIds as string[]);
