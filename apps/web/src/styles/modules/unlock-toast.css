@@ -31,4 +31,44 @@
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
+/* Bulletin board popup-blocker fallback: a self-owned link bar, separate
+   from the shared unlock toast so achievement / event toasts (which reuse
+   #unlockToast) can never hide the escape link. */
+.bulletin-fallback {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0,0,0,0.07);
+  border-radius: 30px;
+  padding: 10px 20px;
+  z-index: 300;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dark);
+  letter-spacing: 0.04em;
+}
+.bulletin-fallback a {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.bulletin-fallback::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex-shrink: 0;
+}
+body.night .bulletin-fallback { background: rgba(220,219,216,0.95); }
 body.night .unlock-toast { background: rgba(220,219,216,0.95); }

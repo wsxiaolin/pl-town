@@ -9,7 +9,7 @@ type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' |
 
 export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
-  getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
+  getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => boolean; openShop: () => void } } | null;
   getCityDialogs: () => CityDialogController | null;
   getEchoStoryController?: () => { interactBuilding: (id: string, dialogs: CityDialogController) => boolean } | null;
   /** 剧情入口统一路由（含互斥判定与被拦提示）。 */
@@ -24,8 +24,13 @@ export type BuildingInteractionOptions = {
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
-  /** Resolves the standalone bulletin board page URL（单测可注入，避免依赖 DOM）。 */
-  getBulletinBoardUrl?: () => string;
+  /**
+   * Opens the standalone bulletin page. Injected from adapters/ui so this
+   * module stays DOM-free; returns whether the tab actually opened (a
+   * walk-up arrival has no user activation left, in which case the opener
+   * itself falls back to a clickable toast).
+   */
+  openBulletinBoard?: () => boolean;
 };
 
 const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
@@ -37,10 +42,6 @@ const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityP
 // The bulletin board no longer opens the phone: it renders the Physics Lab
 // client's live announcement feed on a dedicated page (bulletin.html), so the
 // city shell stays open in this tab while the notices get their own space.
-// The URL resolver is injectable so node unit tests can route without a DOM;
-// the default resolves against the document base so subpath deployments
-// (GitHub Pages) keep working.
-const defaultBulletinBoardUrl = () => new URL('bulletin.html', document.baseURI).href;
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
   function openGovernanceIfNeeded(building: BuildingEntity): boolean {
@@ -94,8 +95,10 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       return;
     }
     if (b.id === 'bulletin') {
-      window.open((options.getBulletinBoardUrl ?? defaultBulletinBoardUrl)(), '_blank', 'noopener');
-      options.trackInteraction(b.id);
+      // Handled in navigateTo: the page (or the popup-blocker fallback toast)
+      // already opened on the click's activation window. Nothing to do on
+      // visit completion — falling through would re-open or show the generic
+      // building dialog.
       return;
     }
     const phoneEntry = PHONE_BUILDINGS[b.id];
@@ -132,7 +135,19 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
   function navigateTo(b: BuildingEntity) {
     if (openGovernanceIfNeeded(b)) return;
     if (options.isBuildingUnavailable(b)) return;
-    options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
+    const interactionAccepted = options.getMultiplayerHousing()?.progression.interactBuilding(b.id, () => navigateUnlocked(b));
+    // The bulletin board is outbound navigation, not an in-city panel: open
+    // the page while the click's user-activation window is still live instead
+    // of waiting for the visit round trip — a WS round trip (or the walk up
+    // to a distant board) outlives that window and hands window.open to the
+    // popup blocker. When the walk-up arrival has no activation left, the
+    // opener falls back to a clickable toast; when the round trip itself was
+    // rejected (offline, a pending interaction), skip the open so a repeat
+    // click cannot stack a second tab.
+    if (b.id === 'bulletin' && interactionAccepted !== false) {
+      options.openBulletinBoard?.();
+      options.trackInteraction(b.id);
+    }
   }
 
   return { navigateTo, navigateUnlocked, openModal, closeModal };

@@ -37,8 +37,8 @@ const FEED: Notice[] = [
   },
 ];
 
-async function mockFeed(page: Page): Promise<void> {
-  await page.route('**/town-api/announcements', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ source: 'live', cached: false, announcements: FEED }) }));
+async function mockFeed(page: Page, announcements: Notice[] = FEED): Promise<void> {
+  await page.route('**/town-api/announcements', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ source: 'live', cached: false, announcements }) }));
 }
 
 test('the bulletin board page lists live community announcements', async ({ page }) => {
@@ -55,9 +55,28 @@ test('the bulletin board page lists live community announcements', async ({ page
   await expect(link).toHaveText('查看详情');
   await expect(link).toHaveAttribute('href', 'https://example.com/release-notes');
   await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  // Notice ids travel to the DOM so the board entries are addressable.
+  await expect(first).toHaveAttribute('data-notice-id', 'ann-1');
 
   // A notice without a link renders no action row.
   await expect(page.locator('.notice').nth(1).locator('.notice-actions')).toHaveCount(0);
+});
+
+test('pinned announcements rise to the top and carry their type tag', async ({ page }) => {
+  await mockFeed(page, [
+    { ...FEED[1], priority: 0 },
+    { ...FEED[0], id: 'ann-pin', subject: '每日签到', content: '每天来实验室转一圈。', priority: 5, isAttendance: true },
+    { ...FEED[1], id: 'ann-low', subject: '又一条普通公告', content: '按社区发布顺序靠后。', priority: 0 },
+  ]);
+  await page.goto('/bulletin.html');
+
+  await expect(page.locator('.notice')).toHaveCount(3);
+  const subjects = page.locator('.notice-subject');
+  await expect(subjects.first()).toHaveText('每日签到');
+  // Equal priorities keep the upstream order (stable sort).
+  await expect(subjects.nth(1)).toHaveText('物理实验室讨论群');
+  await expect(subjects.nth(2)).toHaveText('又一条普通公告');
+  await expect(page.locator('.notice').first().locator('.badge')).toHaveText('签到活动');
 });
 
 test('the bulletin board page renders external copy as inert text', async ({ page }) => {

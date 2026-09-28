@@ -152,7 +152,12 @@ await new Promise((resolve, reject) => {
 // Stub of the Physics Lab community API: GetUser answers existence (Status
 // 200 with the owner or Status 404), Authenticate answers credential checks.
 // Only 'TakenPlResident' exists upstream, owned by owner@example.com.
+// The anonymous branch also serves the bulletin feed's startup package and
+// counts logins so the integration flow can assert in-flight dedupe and the
+// stale-feed fallback.
 const physicsLabPort = 8794;
+let anonymousLoginCount = 0;
+let anonymousLoginFails = false;
 const physicsLabServer = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
@@ -167,8 +172,11 @@ const physicsLabServer = createServer(async (request, response) => {
     // public nickname lookups; it must return usable Token/AuthCode headers.
     // The startup package carries the client's announcement feed, including
     // records that the bulletin route must map or drop (dev-only, expired,
-    // client-internal links).
+    // client-internal links), plus numeric-date and multi-Contents records
+    // the mapping must normalize and join.
     if (body.Login == null && body.Password == null) {
+      anonymousLoginCount += 1;
+      if (anonymousLoginFails) return reply(500, { Status: 500, Message: 'upstream unavailable', Data: null });
       const startupActivities = [
         {
           ID: 'ann-1', Subject: { Chinese: '版本更新 2.5.3' }, Contents: [{ Chinese: '修复了一些问题，详见更新说明。' }],
@@ -177,9 +185,11 @@ const physicsLabServer = createServer(async (request, response) => {
           Priority: 1, IsDevelopment: false, IsAttendance: false,
         },
         {
-          ID: 'ann-2', Subject: { Chinese: '内部跳转公告' }, Contents: [{ Chinese: '这条公告只带客户端内部链接。' }],
+          // Numeric timestamps (unix seconds) and several content blocks:
+          // the route must normalize dates to ISO and join the paragraphs.
+          ID: 'ann-2', Subject: { Chinese: '内部跳转公告' }, Contents: [{ Chinese: '这条公告只带客户端内部链接。' }, { Chinese: '第二段说明也应保留。' }],
           TargetLink: { Chinese: 'internal://exchange' }, TargetText: { Chinese: '前往兑换处' },
-          StartDate: '2026-01-01T00:00:00+00:00', FinishDate: null,
+          StartDate: 1767225600, FinishDate: null,
           Priority: 0, IsDevelopment: false, IsAttendance: false,
         },
         {
@@ -188,8 +198,9 @@ const physicsLabServer = createServer(async (request, response) => {
           Priority: 0, IsDevelopment: true, IsAttendance: false,
         },
         {
+          // Numeric finish date in the past must be filtered like an ISO one.
           ID: 'ann-4', Subject: { Chinese: '已过期活动' }, Contents: [{ Chinese: '不应出现。' }],
-          StartDate: '2020-01-01T00:00:00+00:00', FinishDate: '2020-02-01T00:00:00+00:00',
+          StartDate: 1577836800, FinishDate: 1580515200,
           Priority: 0, IsDevelopment: false, IsAttendance: false,
         },
       ];
@@ -389,10 +400,24 @@ try {
 
   // Bulletin board feed: mapped from the anonymous login startup package,
   // filtered for browser-safe records (no dev-only or expired notices, no
-  // client-internal links).
-  const announcementsRequest = await fetch(`${adminOrigin}/town-api/announcements`);
-  const announcementsPayload = await announcementsRequest.json();
-  if (!announcementsRequest.ok || announcementsPayload.source !== 'live') throw new Error('Bulletin board announcements must load from the anonymous upstream session');
+  // client-internal links). A cold upstream failure stays honest (502, no
+  // last-good feed to serve); two parallel cold requests share one upstream
+  // login (in-flight dedupe); and once the feed has loaded, an upstream
+  // outage serves the last good data instead of a dead board.
+  anonymousLoginFails = true;
+  const coldFailure = await fetch(`${adminOrigin}/town-api/announcements`);
+  if (coldFailure.status !== 502) throw new Error(`A cold upstream failure with no last-good feed must surface a 502; got ${coldFailure.status}`);
+  anonymousLoginFails = false;
+
+  const loginsBeforeFeed = anonymousLoginCount;
+  const [firstAnnouncements, secondAnnouncements] = await Promise.all([
+    fetch(`${adminOrigin}/town-api/announcements`),
+    fetch(`${adminOrigin}/town-api/announcements`),
+  ]);
+  if (!firstAnnouncements.ok || !secondAnnouncements.ok) throw new Error('Bulletin board announcements must load from the anonymous upstream session');
+  if (anonymousLoginCount - loginsBeforeFeed !== 1) throw new Error(`Concurrent bulletin requests must share one upstream login; got ${anonymousLoginCount - loginsBeforeFeed}`);
+  const announcementsPayload = await firstAnnouncements.json();
+  if (announcementsPayload.source !== 'live') throw new Error('Bulletin board announcements must report a live source');
   const bulletinNotices = announcementsPayload.announcements ?? [];
   if (bulletinNotices.length !== 2) throw new Error(`Announcement mapping must keep only the two browser-safe notices; got ${JSON.stringify(bulletinNotices.map((notice) => notice.id))}`);
   const versionNotice = bulletinNotices.find((notice) => notice.id === 'ann-1');
@@ -400,7 +425,17 @@ try {
   if (versionNotice.start !== '2026-07-01T00:00:00+00:00' || versionNotice.finish !== '2030-12-31T00:00:00+00:00' || versionNotice.priority !== 1 || versionNotice.isAttendance !== false) throw new Error('Announcement mapping must pass through dates, priority, and attendance flag');
   const internalLinkNotice = bulletinNotices.find((notice) => notice.id === 'ann-2');
   if (!internalLinkNotice || internalLinkNotice.link !== null) throw new Error('Client-internal links must be dropped from the mapped announcements');
-  if (bulletinNotices.some((notice) => notice.id === 'ann-3' || notice.id === 'ann-4')) throw new Error('Development-only and finished announcements must be filtered out');
+  if (internalLinkNotice.start !== '2026-01-01T00:00:00.000Z') throw new Error(`Numeric (unix-second) start dates must normalize to ISO; got ${JSON.stringify(internalLinkNotice.start)}`);
+  if (!internalLinkNotice.content.includes('第二段说明也应保留') || !internalLinkNotice.content.includes('客户端内部链接')) throw new Error(`Every content block must be joined into the announcement body; got ${JSON.stringify(internalLinkNotice.content)}`);
+  if (bulletinNotices.some((notice) => notice.id === 'ann-3' || notice.id === 'ann-4')) throw new Error('Development-only and finished announcements (including numeric past finish dates) must be filtered out');
+  // Once the board has loaded, an upstream outage must degrade to the stale
+  // feed instead of a 502 board; with no last-good feed the route stays
+  // honest and surfaces the failure.
+  anonymousLoginFails = true;
+  const staleRequest = await fetch(`${adminOrigin}/town-api/announcements`);
+  const stalePayload = await staleRequest.json();
+  if (!staleRequest.ok || stalePayload.cached !== true || (stalePayload.announcements ?? []).length !== 2) throw new Error(`An upstream failure after a good feed must serve the stale notices; got ${staleRequest.status} ${JSON.stringify(stalePayload)}`);
+  anonymousLoginFails = false;
 
   alice = await connect('Alice');
   bob = await connect('Bob');

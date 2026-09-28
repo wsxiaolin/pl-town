@@ -159,6 +159,21 @@ const localizedText = (value: unknown): string | null => {
   return null;
 };
 
+// Upstream announcement dates arrive either as ISO strings or as Unix
+// timestamps (seconds or .NET-style millisecond ticks). Normalizing here —
+// rather than at the consumer — keeps the route contract a plain ISO string
+// and makes the expiry filter numeric-aware too.
+const announcementDate = (value: unknown): string | null => {
+  if (typeof value === 'string' && value.trim()) return value;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    // Heuristic: seconds for values below ~2001-09-09 in ms, ms above.
+    const millis = value < 1e12 ? value * 1000 : value;
+    const date = new Date(millis);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  return null;
+};
+
 // Announcement links may point at client-internal routes (internal://...)
 // which mean nothing in a browser; only pass http(s) URLs through.
 const safeHttpLink = (value: string | null): string | null => {
@@ -168,41 +183,72 @@ const safeHttpLink = (value: string | null): string | null => {
 };
 
 let announcementCache: { expiresAt: number; announcements: PublicAnnouncement[] } | null = null;
+// Concurrent callers share one in-flight anonymous login so a burst of
+// board visits costs one upstream round trip, not one per visitor.
+let announcementsInFlight: Promise<{ source: 'live'; cached: boolean; announcements: PublicAnnouncement[] }> | null = null;
+// Last good feed: when upstream fails after the board has loaded once, the
+// route serves the stale notices instead of a dead board (502 only on the
+// very first failure).
+let lastGoodAnnouncements: PublicAnnouncement[] | null = null;
 
 export async function getAnnouncements() {
   if (announcementCache && announcementCache.expiresAt > Date.now()) {
     return { source: 'live' as const, cached: true, announcements: announcementCache.announcements };
   }
-  const data = await requestAnonymousLogin();
-  const startup = (data.Data as { Activities?: unknown } | null) ?? {};
-  const activitiesRaw = startup.Activities;
-  const activities = Array.isArray(activitiesRaw)
-    ? activitiesRaw
-    : Array.isArray((activitiesRaw as { $values?: unknown[] } | null)?.$values)
-      ? (activitiesRaw as { $values: unknown[] }).$values
-      : [];
-  const now = Date.now();
-  const announcements = activities
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    .filter((item) => item.IsDevelopment !== true)
-    .filter((item) => {
-      const finish = typeof item.FinishDate === 'string' ? Date.parse(item.FinishDate) : NaN;
-      return Number.isNaN(finish) || finish > now;
-    })
-    .map((item): PublicAnnouncement => ({
-      id: typeof item.ID === 'string' ? item.ID : '',
-      subject: localizedText(item.Subject) ?? '社区公告',
-      content: localizedText(Array.isArray(item.Contents) ? item.Contents[0] : null) ?? '',
-      link: safeHttpLink(localizedText(item.TargetLink)),
-      linkText: localizedText(item.TargetText),
-      start: typeof item.StartDate === 'string' ? item.StartDate : null,
-      finish: typeof item.FinishDate === 'string' ? item.FinishDate : null,
-      priority: Number(item.Priority) || 0,
-      isAttendance: item.IsAttendance === true,
-    }))
-    .filter((item) => item.subject !== '社区公告' || item.content);
-  announcementCache = { expiresAt: Date.now() + CACHE_TTL, announcements };
-  return { source: 'live' as const, cached: false, announcements };
+  if (announcementsInFlight) return announcementsInFlight;
+  announcementsInFlight = (async () => {
+    try {
+      const data = await requestAnonymousLogin();
+      const startup = (data.Data as { Activities?: unknown } | null) ?? {};
+      const activitiesRaw = startup.Activities;
+      const activities = Array.isArray(activitiesRaw)
+        ? activitiesRaw
+        : Array.isArray((activitiesRaw as { $values?: unknown[] } | null)?.$values)
+          ? (activitiesRaw as { $values: unknown[] }).$values
+          : [];
+      const now = Date.now();
+      const announcements = activities
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+        .filter((item) => item.IsDevelopment !== true)
+        .filter((item) => {
+          const finish = announcementDate(item.FinishDate);
+          const finishMs = finish ? Date.parse(finish) : NaN;
+          return Number.isNaN(finishMs) || finishMs > now;
+        })
+        .map((item): PublicAnnouncement | null => {
+          const subject = localizedText(item.Subject);
+          // A record with neither subject nor content is board noise; drop it
+          // here rather than publishing it under a placeholder subject.
+          if (!subject && !localizedText(item.Contents)) return null;
+          const contents = Array.isArray(item.Contents) ? item.Contents : [];
+          return {
+            id: typeof item.ID === 'string' ? item.ID : '',
+            subject: subject ?? '社区公告',
+            // Upstream can carry several content blocks per announcement;
+            // the board shows all of them, joined as separate paragraphs.
+            content: contents.map(localizedText).filter((text): text is string => Boolean(text)).join('\n\n'),
+            link: safeHttpLink(localizedText(item.TargetLink)),
+            linkText: localizedText(item.TargetText),
+            start: announcementDate(item.StartDate),
+            finish: announcementDate(item.FinishDate),
+            priority: Number(item.Priority) || 0,
+            isAttendance: item.IsAttendance === true,
+          };
+        })
+        .filter((item): item is PublicAnnouncement => item !== null);
+      announcementCache = { expiresAt: Date.now() + CACHE_TTL, announcements };
+      lastGoodAnnouncements = announcements;
+      return { source: 'live' as const, cached: false, announcements };
+    } catch (error) {
+      if (lastGoodAnnouncements) {
+        return { source: 'live' as const, cached: true, announcements: lastGoodAnnouncements };
+      }
+      throw error;
+    } finally {
+      announcementsInFlight = null;
+    }
+  })();
+  return announcementsInFlight;
 }
 
 export async function getPublicWorks(scope: 'knowledge' | 'senate' | 'all' | 'discussion' | 'featured') {

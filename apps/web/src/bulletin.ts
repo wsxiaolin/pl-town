@@ -5,6 +5,8 @@ import { townApiFetch } from './core/townApi';
 // links). All copy arrives from the upstream API, so every string is written
 // through textContent — never innerHTML — to keep third-party text inert.
 
+// Mirrors PublicAnnouncement from apps/server/src/physicsLab.ts — keep the
+// two in sync when the route contract changes.
 type Announcement = {
   id: string;
   subject: string;
@@ -54,6 +56,7 @@ function showState(kind: 'loading' | 'error' | 'empty', message: string): void {
 function renderNotice(announcement: Announcement): HTMLElement {
   const notice = document.createElement('article');
   notice.className = 'notice';
+  notice.dataset.noticeId = announcement.id;
 
   const title = document.createElement('h2');
   title.className = 'notice-subject';
@@ -75,9 +78,11 @@ function renderNotice(announcement: Announcement): HTMLElement {
     meta.append(span);
   }
   if (announcement.isAttendance) {
+    // A descriptive type tag (this notice carries a check-in activity), not a
+    // call to action: the board itself is read-only.
     const badge = document.createElement('span');
     badge.className = 'badge';
-    badge.textContent = '可签到';
+    badge.textContent = '签到活动';
     meta.append(badge);
   }
   if (meta.childNodes.length > 0) notice.append(meta);
@@ -117,7 +122,10 @@ async function load(): Promise<void> {
       return;
     }
     state.hidden = true;
-    for (const announcement of feed.announcements) board.append(renderNotice(announcement));
+    // The feed's priority flag finally earns its keep: pinned notices rise to
+    // the top while equal priorities keep the upstream order (stable sort).
+    const ordered = [...feed.announcements].sort((a, b) => b.priority - a.priority);
+    for (const announcement of ordered) board.append(renderNotice(announcement));
   } catch (error) {
     showState('error', error instanceof Error ? error.message : '公告加载失败，请稍后再试。');
   }

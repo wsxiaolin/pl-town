@@ -7,7 +7,7 @@
 - 昵称归属校验：新居民签署昵称时，服务端调用物实社区 `Users/GetUser` 查重。昵称已被物实账号占用的，必须提供该物实账号的凭据，经 `Users/Authenticate` 验证昵称与用户 ID 双重匹配后才能入城；验证通过后记录 `pl_user_id`。查重接口异常时 fail-closed，拒绝注册而不是跳过校验。物实验证尝试与 `/town-api/pl/login` 共享每 IP 与全局限流，防止服务端被当作撞库中继。登录（已注册昵称）不经过该查重，保持原有路径。
 - 管理后台使用 HttpOnly、Secure、SameSite=Strict Cookie，写操作同时校验 Origin 和 CSRF；不存在静态管理员 Bearer Token 或任意 SQL 接口。
 - WebSocket 限制握手 Origin、消息大小、每秒消息数、聊天/住房写入频率、连接总数和单 IP 连接数；所有异步消息处理都有异常兜底。
-- HTTP JSON 请求限制 Content-Type、Content-Length 和实际读取字节；公共代理具有每 IP、全局频率限制和上游并发上限。
+- HTTP JSON 请求限制 Content-Type、Content-Length 和实际读取字节；公共代理具有每 IP、全局频率限制和上游并发上限。公告板公开路由 `GET /town-api/announcements` 无需居民会话，匿名上游会话带 5 分钟缓存与并发去重（同一时刻只发一次上游登录），消耗的是与其它公共 GET 相同的通用限流预算，而非 `/town-api/pl/login` 的专用物实登录配额。
 - SQLite 迁移在单一事务中执行，并用 `application_id`、`user_version` 标记；运行时锁禁止两个服务或恢复进程同时打开同一数据目录。
 - 自动备份使用 SQLite Online Backup API，不直接复制 WAL 数据库；独立 worker 执行完整 `integrity_check`、外键检查和流式 SHA-256，并为每份备份持久化不可变 sidecar manifest。
 - 日志文件和数据目录使用最小权限；文件日志失效时降级到 stderr，不因未处理的流错误终止进程。

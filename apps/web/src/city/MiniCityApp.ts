@@ -30,6 +30,7 @@ import { createProgressionController } from './progression/progressionController
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
+import { openBulletinBoardTab } from '../adapters/ui/bulletinBoard';
 import { createOnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
@@ -325,6 +326,9 @@ const buildingInteraction = createBuildingInteraction({
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
   interactWithFeature: buildingFeatureRegistry.interact,
+  // The bulletin opener lives in adapters/ui (DOM + popup-blocker fallback
+  // toast); the interaction module only decides *when* to call it.
+  openBulletinBoard: openBulletinBoardTab,
 });
 
 const eventBindings = createEventBindings({

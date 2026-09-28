@@ -13,6 +13,9 @@
       --accent: #8c5a2b; --pin: #b5442d;
     }
     * { box-sizing: border-box; }
+    /* Defensive: state toggling relies on the hidden attribute, so make the
+       intent explicit instead of leaning on the UA default alone. */
+    [hidden] { display: none !important; }
     body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(ellipse at 50% -10%, #f6efdd, #e7dcc4 70%, #dfd2b4); }
     main { width: min(720px, calc(100% - 32px)); margin: 0 auto; padding: 44px 0 72px; }
     .brand { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .3em; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; }
@@ -23,7 +26,9 @@
     .board { position: relative; padding: 30px 26px 34px; background: linear-gradient(160deg, #c99e6a, #b3854f 60%, #9c7140); border-radius: 10px; box-shadow: 0 24px 60px rgba(59, 47, 36, .28), inset 0 2px 0 rgba(255, 255, 255, .25); }
     .board::before { content: ""; position: absolute; inset: 12px; border: 1px dashed rgba(59, 47, 36, .3); border-radius: 6px; pointer-events: none; }
     .notice { position: relative; margin: 18px 0; padding: 22px 24px 20px; background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 3px; box-shadow: 0 6px 18px rgba(59, 47, 36, .18); transform: rotate(-.4deg); }
-    .notice:nth-child(even) { transform: rotate(.45deg); }
+    /* nth-of-type (not nth-child): #state is a div and must not offset the
+       alternating paper tilt. */
+    .notice:nth-of-type(even) { transform: rotate(.45deg); }
     .notice::before { content: ""; position: absolute; top: -7px; left: 50%; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #d9694f, var(--pin)); box-shadow: 0 2px 3px rgba(59, 47, 36, .35); }
     .notice h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.4; color: var(--ink); }
     .notice-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 12px; color: var(--ink-soft); font-size: 12.5px; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; }

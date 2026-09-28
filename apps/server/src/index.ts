@@ -548,7 +548,10 @@ const http = createServer(async (request, response) => {
   // The town's bulletin board renders the Physics Lab client's announcement
   // feed on a standalone page; anonymous upstream login, no session required.
   if (request.method === 'GET' && request.url === '/town-api/announcements') {
-    try { response.writeHead(200, headers); response.end(JSON.stringify(await getAnnouncements())); }
+    // Serialize before writing any status: the upstream may fail (and the
+    // last-good fallback may be exhausted), and headers already sent cannot
+    // be replaced with the 502.
+    try { const body = JSON.stringify(await getAnnouncements()); response.writeHead(200, headers); response.end(body); }
     catch(error){ logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
     return;
   }

@@ -9,6 +9,7 @@ import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
 import { createBuildingSceneController } from './buildingSceneController';
 import { createBuildingLabelController } from '../adapters/ui/buildingLabelController';
+import { externalBulletinLabelHref } from '../adapters/ui/bulletinBoard';
 import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
 import { createNpcSystem, type Npc } from './npcSystem';
 import { NPC_PROFILES } from './data/npcs';
@@ -159,6 +160,9 @@ export function assembleCityWorld(options: {
     getBuildings: () => options.buildings,
     isStoryLocked: options.isBuildingUnavailable,
     interact: options.interactOrWalk,
+    // The bulletin label is a real outbound link: the browser owns the
+    // navigation, so popup-blocker activation windows never apply to it.
+    getExternalHref: externalBulletinLabelHref,
   });
   buildingLabelController.addLabels();
   buildingLabelController.applyRenames();

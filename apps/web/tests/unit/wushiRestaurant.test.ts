@@ -92,7 +92,7 @@ test('wild mushroom restaurant uses the standard unlock flow', () => {
   const interaction = createBuildingInteraction({
     isBuildingUnavailable: () => false,
     getMultiplayerHousing: () => ({ progression: {
-      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); return true; },
       openShop: () => {},
     } }),
     getCityDialogs: () => stubDialogs(() => { modalOpened = true; }),
@@ -119,7 +119,7 @@ test('wild mushroom restaurant falls back to the building modal once exhausted',
   const interaction = createBuildingInteraction({
     isBuildingUnavailable: () => false,
     getMultiplayerHousing: () => ({ progression: {
-      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); return true; },
       openShop: () => {},
     } }),
     getCityDialogs: () => stubDialogs(() => { modalOpened = true; }),
@@ -143,7 +143,7 @@ test('wild mushroom restaurant falls back to the building modal when dialogs are
   const interaction = createBuildingInteraction({
     isBuildingUnavailable: () => false,
     getMultiplayerHousing: () => ({ progression: {
-      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); },
+      interactBuilding: (_id: string, onUnlock: () => void) => { onUnlock(); return true; },
       openShop: () => {},
     } }),
     getCityDialogs: () => stubDialogs(() => { modalOpened = true; }),
