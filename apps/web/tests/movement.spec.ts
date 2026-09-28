@@ -266,12 +266,20 @@ test('city renders twelve residence models and the modeled west beach', async ({
   expect(sceneContent.surf!.missing).toBe(false);
   expect(sceneContent.surf!.transparent).toBe(true);
   expect(sceneContent.surf!.columns).toBeGreaterThan(9000);
-  // …and the wave phase must actually advance between frames.
-  const surfTimeLater = await page.evaluate(() => {
-    const mesh = (window as any)._mini.scene.getObjectByName('shore-surf');
-    return mesh?.material.uniforms.time.value ?? -1;
-  });
-  expect(surfTimeLater).toBeGreaterThan(sceneContent.surf!.time);
+  // …and the wave phase must actually advance between frames. The CI's
+  // software renderer can spend longer on one frame than an evaluate
+  // round-trip, so two point samples may land inside the same frame — poll
+  // until the uniform moves past the value captured above.
+  const surfTime = sceneContent.surf!.time;
+  await expect
+    .poll(
+      () => page.evaluate(() => {
+        const mesh = (window as any)._mini.scene.getObjectByName('shore-surf');
+        return mesh?.material.uniforms.time.value ?? -1;
+      }),
+      { timeout: 10_000, intervals: [100, 250, 500] },
+    )
+    .toBeGreaterThan(surfTime);
 });
 
 test('repeated clicks keep an active automatic route', async ({ page }) => {

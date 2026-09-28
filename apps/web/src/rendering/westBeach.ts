@@ -40,7 +40,15 @@ const SURF_VERT = /* glsl */ `
     float roll = sin(time * 1.6 - (1.0 - uv.x) * 10.0 + position.z * 0.55);
     float crest = pow(max(lap, 0.0), 1.35);
     p.x += root * lap * reach;
-    p.x = min(p.x, limitX);
+    // Soft clamp into limitX: a hard min() folds every crest column past
+    // the bound onto the same x, which flashes a straight seam across the
+    // beach when a z-window's wobble and the lap crest coincide. Ease the
+    // overshoot into the last 0.2 units instead — monotonic (no two
+    // columns ever collapse) and asymptotic to limitX (the waterline can
+    // still never reach the west road arm).
+    float band = 0.2;
+    float over = max(p.x - (limitX - band), 0.0);
+    p.x = min(p.x, limitX - band) + band * over / (over + band);
     // Sits 0.005 above the sea sheet so the underwater root covers the join;
     // the crest climbs the sand from there.
     p.y = 0.065 + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3);
