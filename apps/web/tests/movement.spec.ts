@@ -238,6 +238,20 @@ test('city renders twelve residence models and the modeled west beach', async ({
       seaGod: Boolean(mini.scene.getObjectByName('yihang-sea-god')),
       ships: ['bismarck-model', 'hipper-model'].every((name) => Boolean(mini.scene.getObjectByName(name))),
       waterSize: new mini.THREE.Box3().setFromObject(mini.scene.getObjectByName('west-beach')).getSize(new mini.THREE.Vector3()).toArray(),
+      surf: (() => {
+        const mesh = mini.scene.getObjectByName('shore-surf');
+        if (!mesh) {
+          const names: string[] = [];
+          mini.scene.getObjectByName('west-beach')?.traverse((o: any) => { if (o.name) names.push(o.name); });
+          return { missing: true, names };
+        }
+        return {
+          missing: false,
+          transparent: mesh.material.transparent === true,
+          columns: mesh.geometry.getAttribute('position').count,
+          time: mesh.material.uniforms.time.value,
+        };
+      })(),
     };
   });
   expect(sceneContent.styles.every((style) => style >= 0 && style <= 11)).toBe(true);
@@ -247,6 +261,17 @@ test('city renders twelve residence models and the modeled west beach', async ({
   expect(sceneContent.beach && sceneContent.seaGod && sceneContent.ships).toBe(true);
   expect(sceneContent.waterSize[0]).toBeGreaterThan(55);
   expect(sceneContent.waterSize[2]).toBeGreaterThan(80);
+  // The lapping surf strip must exist as its own fine, translucent ribbon.
+  expect(sceneContent.surf, `west-beach children: ${sceneContent.surf?.names ?? 'none'}`).not.toBeNull();
+  expect(sceneContent.surf!.missing).toBe(false);
+  expect(sceneContent.surf!.transparent).toBe(true);
+  expect(sceneContent.surf!.columns).toBeGreaterThan(9000);
+  // …and the wave phase must actually advance between frames.
+  const surfTimeLater = await page.evaluate(() => {
+    const mesh = (window as any)._mini.scene.getObjectByName('shore-surf');
+    return mesh?.material.uniforms.time.value ?? -1;
+  });
+  expect(surfTimeLater).toBeGreaterThan(sceneContent.surf!.time);
 });
 
 test('repeated clicks keep an active automatic route', async ({ page }) => {

@@ -68,10 +68,21 @@ export const WEST_BEACH = Object.freeze({
   minZ: -50,
   maxZ: 50,
 });
-/** West end of the asphalt ring road that runs toward the beach. The road
- *  stops on the dry sand instead of reaching the coastline, so the lapping
- *  shore waves can never intersect the road surface. */
-export const WEST_RING_ROAD_END_X = -40.6;
+/** Furthest the lapping waterline can ever reach, given the shore-wave
+ *  reach. The coastline formula wobbles ±1.2 units along z, so the worst
+ *  case is the most landward coastline plus the full crest advance. */
+export function westBeachWaterlineMaxX(reach: number): number {
+  return WEST_BEACH.coastlineX + 1.2 + reach;
+}
+/** West end of the asphalt ring road that runs toward the beach. It stops
+ *  at the ring walkway's outer edge (39, see the plaza ring in
+ *  createCitySurfaces) instead of overhanging past it, and stays clear of
+ *  the furthest shore-wave advance (westBeachWaterlineMaxX), so the surf
+ *  can never lap over the asphalt. */
+export const WEST_RING_ROAD_END_X = -39;
+/** Inner end of the east/west ring-road arms, shared by both so they stay
+ *  symmetric around the plaza when one arm is lengthened or shortened. */
+export const RING_ARM_INNER_X = 4.2;
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
 

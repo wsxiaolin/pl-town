@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
-import { WEST_BEACH, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
+import { WEST_BEACH, westBeachWaterlineMaxX } from '../city/data/cityConfig';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -11,6 +11,140 @@ const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 // The sea used to drift at full shader speed, which read as choppy; scale the
 // time uniform down so the swell rolls visibly slower.
 const SEA_TIME_SCALE = 0.55;
+// How far the surf strip may push the waterline up the beach. The value feeds
+// westBeachWaterlineMaxX, which stays clear of WEST_RING_ROAD_END_X.
+const SURF_REACH = 1.15;
+// Crest lift at the waterline, in world y units.
+const SURF_LIFT = 0.26;
+
+// Surf strip: a narrow, finely subdivided ribbon laid over the seam between
+// the sea sheet and the sand. It alone carries the lapping waterline (vertex
+// advance/retreat + crest lift), the foam and the translucency — the big sea
+// sheet stays opaque, unmoved and cheap. Frequencies are tuned against the
+// already time-scaled `time` uniform shared with the sea.
+const SURF_VERT = /* glsl */ `
+  uniform float time;
+  uniform float reach;
+  uniform float lift;
+  uniform float limitX;
+  varying float vCrest;
+  varying float vFront;
+  varying vec2 vWorldXZ;
+  void main() {
+    vec3 p = position;
+    // uv.x 0 → 1 runs from open water to the wet sand; the first ~1 unit
+    // fades the strip into the sea sheet so no seam shows.
+    float root = smoothstep(0.0, 0.35, uv.x);
+    float lap = sin(time * 2.1 + position.z * 0.35) * 0.62
+      + sin(time * 3.4 - position.z * 0.22 + 2.1) * 0.30;
+    float roll = sin(time * 1.6 - (1.0 - uv.x) * 10.0 + position.z * 0.55);
+    float crest = pow(max(lap, 0.0), 1.35);
+    p.x += root * lap * reach;
+    p.x = min(p.x, limitX);
+    // Sits 0.005 above the sea sheet so the underwater root covers the join;
+    // the crest climbs the sand from there.
+    p.y = 0.065 + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3);
+    vCrest = root * crest;
+    vFront = uv.x;
+    vWorldXZ = p.xz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+
+const SURF_FRAG = /* glsl */ `
+  uniform float time;
+  uniform float daylight;
+  uniform vec3 shallowDay;
+  uniform vec3 shallowNight;
+  uniform vec3 foamDay;
+  uniform vec3 foamNight;
+  varying float vCrest;
+  varying float vFront;
+  varying vec2 vWorldXZ;
+  float hash(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 q) {
+    vec2 i = floor(q), f = fract(q);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i), b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+  void main() {
+    vec3 shallow = mix(shallowNight, shallowDay, daylight);
+    vec3 foamColor = mix(foamNight, foamDay, daylight);
+    // Translucency: mostly see-through over the sea sheet, more solid near
+    // the running edge, then feathered to zero so the waterline dissolves
+    // into wet sand instead of ending on a hard rim.
+    float alpha = mix(0.55, 0.85, smoothstep(0.0, 0.7, vFront));
+    alpha *= smoothstep(0.0, 0.25, vFront);
+    alpha = mix(alpha, 0.0, smoothstep(0.75, 1.0, vFront));
+    // Foam rides the crest: value noise breaks it into pockets and it only
+    // shows while a wave is actually pushing in.
+    float n = vnoise(vWorldXZ * 3.0 + vec2(time * 0.25, -time * 0.2));
+    float foamBand = smoothstep(0.45, 0.95, vFront) * (0.25 + 0.75 * vCrest);
+    float foam = foamBand * smoothstep(0.35, 0.75, n + vCrest * 0.38);
+    vec3 color = mix(shallow, foamColor, foam);
+    alpha = max(alpha, foam * 0.9);
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+type ShoreSurf = {
+  mesh: THREE.Mesh;
+  update(elapsedSeconds: number): void;
+  setDaylight(value: number, instant?: boolean): void;
+};
+
+export function createShoreSurf(
+  innerX: (z: number) => number,
+  outerX: (z: number) => number,
+  minZ: number,
+  maxZ: number,
+): ShoreSurf {
+  // 44 columns across a ~5-unit band ≈ 0.11 units per quad — fine enough
+  // for a crisp 1-2 unit waterline without touching the heavy sea sheet.
+  const geometry = createShoreRibbonGeometry(innerX, outerX, minZ, maxZ, 44, 220);
+  geometry.computeBoundingSphere();
+  // The vertex displacement pushes past the computed bounds; widen it so
+  // frustum culling keeps working on honest data instead of being disabled.
+  geometry.boundingSphere!.radius += SURF_REACH + 0.5;
+  const material = new THREE.ShaderMaterial({
+    vertexShader: SURF_VERT,
+    fragmentShader: SURF_FRAG,
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      time: { value: 0 },
+      daylight: { value: 1 },
+      reach: { value: SURF_REACH },
+      lift: { value: SURF_LIFT },
+      limitX: { value: westBeachWaterlineMaxX(SURF_REACH) },
+      shallowDay: { value: new THREE.Color(0x6ab5b0) },
+      shallowNight: { value: new THREE.Color(0x123642) },
+      foamDay: { value: new THREE.Color(0xdce9e6) },
+      foamNight: { value: new THREE.Color(0x2c3a4a) },
+    },
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'shore-surf';
+  mesh.renderOrder = 4;
+  // Same disposal contract as the sea sheet (sceneInterestPoints dispose pass).
+  mesh.userData.dynamicMaterial = material;
+  let daylightTarget = 1;
+  let daylight = 1;
+  return {
+    mesh,
+    update(elapsedSeconds) {
+      material.uniforms.time!.value = elapsedSeconds * SEA_TIME_SCALE;
+      daylight += (daylightTarget - daylight) * 0.04;
+      material.uniforms.daylight!.value = daylight;
+    },
+    setDaylight(value, instant = false) {
+      daylightTarget = value;
+      if (instant) daylight = value;
+    },
+  };
+}
 
 type BeachOptions = {
   scene: THREE.Scene;
@@ -78,13 +212,13 @@ function createSeaGod(options: BeachOptions): THREE.Group {
   return god;
 }
 
-function shorelineX(z: number): number {
+export function shorelineX(z: number): number {
   // Amplitude stays below the gap between coastlineX and deepWaterX so the
   // walkable-sand / deep-water gameplay bounds still match the visible shore.
   return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * 0.85 + Math.sin(z * 0.47 + 1.4) * 0.35;
 }
 
-function createShoreRibbonGeometry(
+export function createShoreRibbonGeometry(
   innerX: (z: number) => number,
   outerX: (z: number) => number,
   minZ: number,
@@ -148,12 +282,11 @@ export function createWestBeach(options: BeachOptions): {
         sunColorNight: NIGHT_SUN_COLOR,
         distortionScale: 3.7,
         timeScale: SEA_TIME_SCALE,
-        // Waves break at the shoreline: the waterline climbs the sand and
-        // pulls back instead of resting on a fixed edge, and the shallow
-        // band fades to a translucent pale aqua with foam on the crest.
-        // maxAdvanceX stops the crest just short of the asphalt road that
-        // ends at WEST_RING_ROAD_END_X, so wave and road never z-fight.
-        shoreWaves: { reach: 1.15, lift: 0.26, maxAdvanceX: WEST_RING_ROAD_END_X - 0.25 },
+        // The sea sheet only takes the near-shore tint: the open water stays
+        // deep and opaque, and the pale band is a few world units wide (not
+        // a fraction of the 96-unit ribbon) so the far horizon stays solid.
+        // Lapping, foam and translucency live on the surf strip below.
+        shoreBlend: { ribbonDepth: 96, width: 12 },
       })
     : null;
   const water = waterSurface
@@ -165,6 +298,12 @@ export function createWestBeach(options: BeachOptions): {
     water.renderOrder = 3;
   }
   object.add(water);
+  // The lapping waterline rides on its own fine strip: underwater it blends
+  // into the sea sheet, on land it climbs the sand and feathers away.
+  const shoreSurf = options.waterRendering
+    ? createShoreSurf((z) => shorelineX(z) - 3, (z) => shorelineX(z) + 2.2, waterMinZ, waterMaxZ)
+    : null;
+  if (shoreSurf) object.add(shoreSurf.mesh);
   const palms = [-1, 1].map((side) => {
     const palm = new THREE.Group();
     addMesh(palm, options, new THREE.CylinderGeometry(0.09, 0.14, 1.8, 9), { color: 0x765139, roughness: 0.9, tex: 'wood', rx: 1, ry: 2 }, [0, 0.9, 0]);
@@ -217,6 +356,7 @@ export function createWestBeach(options: BeachOptions): {
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       }
       if (waterSurface) waterSurface.update(elapsedSeconds);
+      if (shoreSurf) shoreSurf.update(elapsedSeconds);
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
         rewardCard.rotation.y = elapsedSeconds * 0.8;
@@ -230,6 +370,7 @@ export function createWestBeach(options: BeachOptions): {
     },
     setDaylight(value, instant = false) {
       waterSurface?.setDaylight(value, instant);
+      shoreSurf?.setDaylight(value, instant);
     },
   };
 }
