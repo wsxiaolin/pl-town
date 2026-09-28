@@ -28,10 +28,6 @@ function getElement<T extends HTMLElement>(document: Document, id: string): T {
   return element as T;
 }
 
-function fmtCount(value: number): string {
-  return value.toLocaleString('en-US');
-}
-
 export function createLibrarySearchController(options: LibrarySearchControllerOptions): LibrarySearchController {
   const { document, signal } = options;
   const panel = getElement<HTMLDivElement>(document, 'librarySearchPanel');
@@ -70,18 +66,13 @@ export function createLibrarySearchController(options: LibrarySearchControllerOp
 
   function renderResults(params: LibrarySearchParams, records: LibraryWorkRecord[]): void {
     results.replaceChildren();
-    const heading = document.createElement('p');
-    heading.className = 'library-count';
-    const described = params.keywords.trim();
-    if (records.length) {
-      heading.textContent = `${described ? `「${described}」` : '全部馆藏'}找到 ${fmtCount(records.length)} 件作品`;
-      results.appendChild(heading);
-    } else {
-      heading.textContent = described ? `没有找到与「${described}」相关的馆藏` : '馆藏暂时没有可展示的作品';
-      results.appendChild(heading);
+    if (!records.length) {
       const empty = document.createElement('p');
       empty.className = 'library-hint';
-      empty.textContent = '换个关键词试试——支持标题、作者、关键词与学科检索。';
+      const described = params.keywords.trim();
+      empty.textContent = described
+        ? `没有找到与「${described}」相关的馆藏，换个关键词试试——支持标题、作者、关键词与学科检索。`
+        : '馆藏暂时没有可展示的作品。';
       results.appendChild(empty);
       return;
     }
