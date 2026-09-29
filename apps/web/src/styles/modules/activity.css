@@ -22,9 +22,10 @@
   position: fixed;
   inset: 0;
   z-index: 240;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(8px, 2.4vmin, 24px);
   background: radial-gradient(120% 120% at 20% 0%, rgba(28, 42, 78, 0.72), rgba(6, 10, 20, 0.88));
   backdrop-filter: blur(4px);
   opacity: 0;
@@ -40,13 +41,14 @@
 
 .activity-panel-shell {
   position: relative;
-  width: min(1180px, calc(100vw - 48px));
-  height: min(680px, calc(100dvh - 48px));
+  container: activity-panel / size;
+  width: min(1180px, 100%);
+  height: min(680px, 100%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(140, 174, 255, 0.16);
-  border-radius: 18px;
+  border-radius: clamp(12px, 1.6cqi, 18px);
   background: #0c1322;
   box-shadow: 0 40px 110px rgba(4, 8, 18, 0.62);
   transform: translateY(12px) scale(0.985);
@@ -58,8 +60,8 @@
 
 .activity-panel-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: clamp(8px, 2cqh, 14px);
+  right: clamp(8px, 1.6cqi, 14px);
   z-index: 5;
   flex: none;
   width: 34px;
@@ -81,8 +83,10 @@
 
 .activity-panel-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
+  flex-direction: row;
 }
 
 /* Left: activity list */
@@ -93,13 +97,16 @@
   flex-direction: column;
   gap: 8px;
   padding: 16px;
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid rgba(140, 174, 255, 0.12);
   background: #0a1020;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(170, 195, 255, 0.35) transparent;
 }
 .activity-panel-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -165,6 +172,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   background: #0a0f1c;
 }
@@ -178,16 +186,20 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(8, 12, 24, 0.8) 0%, rgba(8, 12, 24, 0.12) 42%, rgba(8, 12, 24, 0) 60%),
-    linear-gradient(0deg, rgba(8, 12, 24, 0.72) 0%, rgba(8, 12, 24, 0) 46%);
+    linear-gradient(90deg, rgba(8, 12, 24, 0.84) 0%, rgba(8, 12, 24, 0.42) 38%, rgba(8, 12, 24, 0) 66%),
+    linear-gradient(0deg, rgba(8, 12, 24, 0.78) 0%, rgba(8, 12, 24, 0.18) 40%, rgba(8, 12, 24, 0) 62%);
 }
 .activity-panel-hero-copy {
   position: absolute;
-  top: 56px;
-  left: 46px;
-  right: auto;
-  width: min(460px, 52%);
+  top: clamp(16px, 8cqh, 56px);
+  left: clamp(16px, 4.2cqi, 46px);
+  width: min(460px, calc(100% - 88px));
+  max-height: calc(100% - clamp(16px, 8cqh, 56px) - 12px);
+  overflow-x: hidden;
+  overflow-y: auto;
   text-align: left;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(170, 195, 255, 0.35) transparent;
 }
 .activity-panel-badge {
   display: inline-block;
@@ -206,14 +218,14 @@
   display: block;
   margin-top: 16px;
   color: #7fb0ff;
-  font-size: 12px;
+  font-size: clamp(11px, 1.15cqi, 12px);
   font-weight: 700;
   letter-spacing: 0.2em;
 }
 .activity-panel-title {
   margin-top: 10px;
   color: #ffffff;
-  font-size: clamp(24px, 2.9vw, 40px);
+  font-size: clamp(22px, 3.4cqi, 40px);
   font-weight: 800;
   line-height: 1.22;
   letter-spacing: 0.02em;
@@ -222,20 +234,21 @@
 .activity-panel-subtitle {
   margin-top: 12px;
   color: #bcd0f5;
-  font-size: 14px;
+  font-size: clamp(12px, 1.3cqi, 14px);
   letter-spacing: 0.04em;
 }
 .activity-panel-description {
   margin-top: 16px;
   color: #dbe6ff;
-  font-size: 14px;
-  line-height: 1.85;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+  font-size: clamp(12px, 1.3cqi, 14px);
+  line-height: 1.7;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55), 0 0 26px rgba(0, 0, 0, 0.35);
 }
 
-@media (max-width: 960px) {
+/* Mid-width: keep the split, slim the list so the hero still has room. */
+@container activity-panel (max-width: 960px) {
   .activity-panel-list {
-    width: 200px;
+    width: 232px;
     padding: 12px 10px;
   }
   .activity-panel-item {
@@ -252,21 +265,159 @@
     padding: 2px 6px;
     font-size: 9px;
   }
-  .activity-panel-hero-copy {
-    top: 18px;
-    right: auto;
-    left: 22px;
-    width: calc(100% - 44px);
+}
+
+/* Narrow panel: list becomes a horizontal strip; copy docks to the hero bottom. */
+@container activity-panel (max-width: 720px) {
+  .activity-panel-body {
+    flex-direction: column;
   }
-  .activity-panel-kicker { margin-top: 12px; }
+  .activity-panel-list {
+    width: 100%;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 52px 10px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid rgba(140, 174, 255, 0.12);
+  }
+  .activity-panel-item {
+    flex: 0 0 auto;
+    width: 210px;
+    transform: none;
+  }
+  .activity-panel-item:hover {
+    transform: none;
+  }
+  .activity-panel-hero-copy {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: min(72%, calc(100% - 8px));
+    padding: 18px 16px 16px;
+  }
+  .activity-panel-kicker { margin-top: 10px; }
   .activity-panel-title {
-    margin-top: 7px;
-    font-size: clamp(28px, 4vw, 38px);
+    margin-top: 6px;
+    font-size: clamp(20px, 6.2cqi, 32px);
   }
   .activity-panel-subtitle { margin-top: 8px; }
   .activity-panel-description {
-    max-width: 620px;
     margin-top: 10px;
-    line-height: 1.65;
+    line-height: 1.6;
+  }
+}
+
+/* Short panel: tighten chrome; keep the split when the panel is still wide. */
+@container activity-panel (max-height: 420px) {
+  .activity-panel-close {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+  }
+  .activity-panel-list {
+    padding: 10px 8px;
+    gap: 6px;
+  }
+  .activity-panel-thumb {
+    width: 56px;
+    height: 36px;
+  }
+  .activity-panel-hero-copy {
+    top: 12px;
+    left: 16px;
+    width: min(460px, calc(100% - 64px));
+    max-height: calc(100% - 24px);
+  }
+  .activity-panel-kicker { margin-top: 8px; letter-spacing: 0.14em; }
+  .activity-panel-title {
+    margin-top: 6px;
+    font-size: clamp(18px, 3cqi, 28px);
+  }
+  .activity-panel-subtitle { margin-top: 6px; }
+  .activity-panel-description {
+    margin-top: 8px;
+    line-height: 1.55;
+  }
+}
+
+@container activity-panel (max-width: 720px) and (max-height: 420px) {
+  .activity-panel-list {
+    padding: 8px 48px 8px 8px;
+  }
+  .activity-panel-item {
+    width: 188px;
+  }
+  .activity-panel-hero-copy {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 12px 14px 12px;
+  }
+}
+
+/* Viewport fallbacks for browsers without size container queries. */
+@media (max-width: 960px) {
+  .activity-panel-list {
+    width: 232px;
+    padding: 12px 10px;
+  }
+  .activity-panel-item {
+    gap: 9px;
+    padding: 7px 7px 7px 6px;
+  }
+  .activity-panel-thumb {
+    width: 56px;
+    height: 40px;
+  }
+  .activity-panel-item-copy strong { font-size: 13px; }
+  .activity-panel-item-copy small { font-size: 10px; }
+}
+@media (max-width: 720px) {
+  .activity-panel-overlay { padding: 8px; }
+  .activity-panel-body { flex-direction: column; }
+  .activity-panel-list {
+    width: 100%;
+    flex-direction: row;
+    padding: 10px 52px 10px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid rgba(140, 174, 255, 0.12);
+  }
+  .activity-panel-item {
+    flex: 0 0 auto;
+    width: 210px;
+    transform: none;
+  }
+  .activity-panel-item:hover { transform: none; }
+  .activity-panel-hero-copy {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: min(72%, calc(100% - 8px));
+    padding: 18px 16px 16px;
+  }
+  .activity-panel-title { font-size: clamp(20px, 6vw, 32px); }
+}
+@media (max-height: 440px) {
+  .activity-panel-overlay { padding: 8px; }
+  .activity-panel-hero-copy {
+    top: 12px;
+    max-height: calc(100% - 24px);
+  }
+  .activity-panel-title { font-size: clamp(18px, 3vw, 28px); }
+}
+@media (max-width: 720px) and (max-height: 440px) {
+  .activity-panel-hero-copy {
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    padding: 12px 14px;
   }
 }
