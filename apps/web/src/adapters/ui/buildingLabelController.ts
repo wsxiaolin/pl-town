@@ -23,9 +23,7 @@ export function createBuildingLabelController(options: {
     const externalHref = options.getExternalHref?.(building) ?? null;
     if (externalHref) {
       // A real link with real semantics: the native click carries the user
-      // activation, so the popup blocker stays out of the way. The rename
-      // binding below stays attached but is unreachable for these labels —
-      // the first click already navigates away.
+      // activation, so the popup blocker stays out of the way.
       element.href = externalHref;
       element.target = '_blank';
       element.rel = 'noopener noreferrer';
@@ -33,7 +31,10 @@ export function createBuildingLabelController(options: {
       element.addEventListener('click', (event) => { event.preventDefault(); options.interact(building); });
       element.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); options.interact(building); } });
     }
-    if (!building.isStats) element.querySelector('.bl-name')?.addEventListener('dblclick', (event) => { event.preventDefault(); event.stopPropagation(); startRename(building, element.querySelector('.bl-name') as HTMLElement); });
+    // Renaming stays on city-internal labels only: a dblclick on an outbound
+    // anchor would first fire two native navigations (one per click, each
+    // opening a tab) before the rename input could ever help.
+    if (!building.isStats && !externalHref) element.querySelector('.bl-name')?.addEventListener('dblclick', (event) => { event.preventDefault(); event.stopPropagation(); startRename(building, element.querySelector('.bl-name') as HTMLElement); });
     wrap.appendChild(element); building.labelEl = element;
   }
 

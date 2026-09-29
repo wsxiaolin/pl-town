@@ -7,6 +7,11 @@ const API_VERSION = 2502;
 // authenticated endpoints use the current API version above.
 const ACCOUNT_LOGIN_VERSION = 2411;
 const CACHE_TTL = 5 * 60 * 1000;
+// The announcement feed keeps its own TTL so the integration suite can
+// expire it on demand: without the override, the "stale feed" check would
+// hit the warm cache and never exercise the last-good fallback.
+const announcementTtlOverride = Number(process.env.ANNOUNCEMENT_CACHE_TTL_MS);
+const ANNOUNCEMENT_CACHE_TTL = announcementTtlOverride > 0 ? announcementTtlOverride : CACHE_TTL;
 const VOLUNTEER_ROLES = new Set(['Volunteer', 'Junior', 'Emeritus', 'Editor', 'Administrator']);
 
 type ApiSession = { token: string; authCode: string; expiresAt: number };
@@ -236,7 +241,7 @@ export async function getAnnouncements() {
           };
         })
         .filter((item): item is PublicAnnouncement => item !== null);
-      announcementCache = { expiresAt: Date.now() + CACHE_TTL, announcements };
+      announcementCache = { expiresAt: Date.now() + ANNOUNCEMENT_CACHE_TTL, announcements };
       lastGoodAnnouncements = announcements;
       return { source: 'live' as const, cached: false, announcements };
     } catch (error) {

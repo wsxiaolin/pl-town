@@ -230,6 +230,9 @@ const server = spawn(process.execPath, ['dist/index.js'], {
     // The suite signs up more residents than the production per-IP default.
     MAX_REGISTRATIONS_PER_IP: '12',
     PHYSICS_LAB_API_BASE: `http://127.0.0.1:${physicsLabPort}`,
+    // Expire the announcement cache in a blink so the stale-feed check below
+    // genuinely misses the cache and exercises the last-good fallback.
+    ANNOUNCEMENT_CACHE_TTL_MS: '100',
     BIGMODEL_API_KEY: 'integration-api-key', BIGMODEL_MODERATION_URL: `http://127.0.0.1:${moderationPort}/moderations`,
   },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -430,11 +433,17 @@ try {
   if (bulletinNotices.some((notice) => notice.id === 'ann-3' || notice.id === 'ann-4')) throw new Error('Development-only and finished announcements (including numeric past finish dates) must be filtered out');
   // Once the board has loaded, an upstream outage must degrade to the stale
   // feed instead of a 502 board; with no last-good feed the route stays
-  // honest and surfaces the failure.
+  // honest and surfaces the failure. The short ANNOUNCEMENT_CACHE_TTL_MS makes
+  // this request genuinely miss the cache and consult the (failing) upstream,
+  // so the login counter proves the stale payload came from the last-good
+  // fallback rather than a warm cache hit.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const loginsBeforeStale = anonymousLoginCount;
   anonymousLoginFails = true;
   const staleRequest = await fetch(`${adminOrigin}/town-api/announcements`);
   const stalePayload = await staleRequest.json();
   if (!staleRequest.ok || stalePayload.cached !== true || (stalePayload.announcements ?? []).length !== 2) throw new Error(`An upstream failure after a good feed must serve the stale notices; got ${staleRequest.status} ${JSON.stringify(stalePayload)}`);
+  if (anonymousLoginCount - loginsBeforeStale !== 1) throw new Error(`The stale-feed request must miss the warm cache and reach the failed upstream exactly once; got ${anonymousLoginCount - loginsBeforeStale}`);
   anonymousLoginFails = false;
 
   alice = await connect('Alice');
