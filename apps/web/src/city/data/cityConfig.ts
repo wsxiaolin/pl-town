@@ -61,25 +61,52 @@ export function clipPlotToMainRoad(x: number, z: number, halfWidth: number, half
     halfDepth: Math.min(halfDepth, maxHalfZ),
   };
 }
+// Coastline wobble: the waterline's landward/seaward drift along z. The
+// amplitudes feed both shorelineX (the visible coast) and the worst-case
+// budget westBeachWaterlineMaxX uses, so they can never drift apart.
+const COAST_WOBBLE_A = 0.85;
+const COAST_WOBBLE_B = 0.35;
+const COAST_WOBBLE = COAST_WOBBLE_A + COAST_WOBBLE_B;
 export const WEST_BEACH = Object.freeze({
   coastlineX: -43.2,
   deepWaterX: -44.5,
-  safeReturnX: -42.2,
+  // How far the lapping waterline may push up the beach, in world units.
+  // Drives westBeachWaterlineMaxX (the road-clearance invariant) and the
+  // surf strip's crest amplitude in westBeach.ts.
+  surfReach: 1.15,
   minZ: -50,
   maxZ: 50,
+  // Derived, not hardcoded: landward of the furthest lapping waterline so
+  // the swim pushback never drops the player in the surf, but still seaward
+  // of the west road arm.
+  get safeReturnX() { return westBeachWaterlineMaxX() + 0.25; },
 });
-/** Furthest the lapping waterline can ever reach, given the shore-wave
- *  reach. The coastline formula wobbles ±1.2 units along z, so the worst
- *  case is the most landward coastline plus the full crest advance. */
-export function westBeachWaterlineMaxX(reach: number): number {
-  return WEST_BEACH.coastlineX + 1.2 + reach;
+/** The visible west-beach coastline: wobbles ±COAST_WOBBLE along z. The
+ *  amplitude stays inside the coastlineX→deepWaterX gap so the walkable-sand
+ *  / deep-water gameplay bounds still match the visible shore. */
+export function shorelineX(z: number): number {
+  return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * COAST_WOBBLE_A + Math.sin(z * 0.47 + 1.4) * COAST_WOBBLE_B;
 }
-/** West end of the asphalt ring road that runs toward the beach. It stops
- *  at the ring walkway's outer edge (39, see the plaza ring in
- *  createCitySurfaces) instead of overhanging past it, and stays clear of
- *  the furthest shore-wave advance (westBeachWaterlineMaxX), so the surf
- *  can never lap over the asphalt. */
-export const WEST_RING_ROAD_END_X = -39;
+/** Furthest the lapping waterline can ever reach, given the shore-wave
+ *  reach. The worst case is the most landward coastline wobble plus the
+ *  full crest advance. */
+export function westBeachWaterlineMaxX(reach: number = WEST_BEACH.surfReach): number {
+  return WEST_BEACH.coastlineX + COAST_WOBBLE + reach;
+}
+/** Plaza ring-road radii: the asphalt ring and everything that meets its
+ *  outer edge (the centre-line marking, the pavement spokes, the west arm
+ *  end below) is derived from these two numbers. */
+export const RING_ROAD_RADII = Object.freeze({ inner: 37, outer: 39 });
+/** West end of the asphalt ring-road arm that runs toward the beach. It
+ *  stops at the ring walkway's outer edge (RING_ROAD_RADII.outer) instead
+ *  of overhanging past it, and stays clear of the furthest shore-wave
+ *  advance (westBeachWaterlineMaxX), so the surf can never lap over the
+ *  asphalt. */
+export const WEST_RING_ROAD_END_X = -RING_ROAD_RADII.outer;
+/** East end of the ring-road arm — it keeps the full run past the ring to
+ *  the far city edge. Co-located with the west end so the pair stays in
+ *  sync when either arm is lengthened. */
+export const EAST_RING_ROAD_END_X = 43;
 /** Inner end of the east/west ring-road arms, shared by both so they stay
  *  symmetric around the plaza when one arm is lengthened or shortened. */
 export const RING_ARM_INNER_X = 4.2;

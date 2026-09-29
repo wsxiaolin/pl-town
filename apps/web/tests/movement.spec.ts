@@ -238,20 +238,15 @@ test('city renders twelve residence models and the modeled west beach', async ({
       seaGod: Boolean(mini.scene.getObjectByName('yihang-sea-god')),
       ships: ['bismarck-model', 'hipper-model'].every((name) => Boolean(mini.scene.getObjectByName(name))),
       waterSize: new mini.THREE.Box3().setFromObject(mini.scene.getObjectByName('west-beach')).getSize(new mini.THREE.Vector3()).toArray(),
-      surf: (() => {
-        const mesh = mini.scene.getObjectByName('shore-surf');
-        if (!mesh) {
-          const names: string[] = [];
-          mini.scene.getObjectByName('west-beach')?.traverse((o: any) => { if (o.name) names.push(o.name); });
-          return { missing: true, names };
-        }
-        return {
-          missing: false,
-          transparent: mesh.material.transparent === true,
-          columns: mesh.geometry.getAttribute('position').count,
-          time: mesh.material.uniforms.time.value,
-        };
-      })(),
+      // Flat fields (no nested union to walk): these specs are stripped by
+      // esbuild without typechecking, so the page-side expression must stay
+      // simple enough that a missing mesh degrades to a falsy value instead
+      // of throwing on property access.
+      surfMissing: !mini.scene.getObjectByName('shore-surf'),
+      surfChildren: mini.scene.getObjectByName('west-beach')?.children.map((o: any) => o.name).join(',') ?? '',
+      surfTransparent: mini.scene.getObjectByName('shore-surf')?.material?.transparent === true,
+      surfColumns: mini.scene.getObjectByName('shore-surf')?.geometry?.getAttribute('position')?.count ?? 0,
+      surfTime: mini.scene.getObjectByName('shore-surf')?.material?.uniforms?.time?.value ?? -1,
     };
   });
   expect(sceneContent.styles.every((style) => style >= 0 && style <= 11)).toBe(true);
@@ -262,15 +257,14 @@ test('city renders twelve residence models and the modeled west beach', async ({
   expect(sceneContent.waterSize[0]).toBeGreaterThan(55);
   expect(sceneContent.waterSize[2]).toBeGreaterThan(80);
   // The lapping surf strip must exist as its own fine, translucent ribbon.
-  expect(sceneContent.surf, `west-beach children: ${sceneContent.surf?.names ?? 'none'}`).not.toBeNull();
-  expect(sceneContent.surf!.missing).toBe(false);
-  expect(sceneContent.surf!.transparent).toBe(true);
-  expect(sceneContent.surf!.columns).toBeGreaterThan(9000);
+  expect(sceneContent.surfMissing, `west-beach children: ${sceneContent.surfChildren || 'none'}`).toBe(false);
+  expect(sceneContent.surfTransparent).toBe(true);
+  expect(sceneContent.surfColumns).toBeGreaterThan(9000);
   // …and the wave phase must actually advance between frames. The CI's
   // software renderer can spend longer on one frame than an evaluate
   // round-trip, so two point samples may land inside the same frame — poll
   // until the uniform moves past the value captured above.
-  const surfTime = sceneContent.surf!.time;
+  const surfTime = sceneContent.surfTime;
   await expect
     .poll(
       () => page.evaluate(() => {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, RING_ARM_INNER_X, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
+import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
@@ -141,18 +141,19 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, -21.1, true, 'asphalt');
     addRoadSegment(MAIN_ROAD_WIDTH, 35.8, 0, 21.1, true, 'asphalt');
     // Both arms share RING_ARM_INNER_X so they stay symmetric at the plaza.
-    // The west arm ends at WEST_RING_ROAD_END_X on dry sand, clear of the
-    // shore surf (see cityConfig); the east arm keeps its full run to the
-    // city edge.
+    // Both ends (WEST/EAST_RING_ROAD_END_X) live in cityConfig next to the
+    // ring radii they meet; the west arm ends on dry sand, clear of the
+    // shore surf (see cityConfig), and the east arm keeps its full run to
+    // the city edge.
     const westRoadWidth = -RING_ARM_INNER_X - WEST_RING_ROAD_END_X;
     addRoadSegment(westRoadWidth, MAIN_ROAD_WIDTH, WEST_RING_ROAD_END_X + westRoadWidth / 2, 0, true, 'asphalt');
-    const EAST_RING_ROAD_END_X = 43;
     const eastRoadWidth = EAST_RING_ROAD_END_X - RING_ARM_INNER_X;
     addRoadSegment(eastRoadWidth, MAIN_ROAD_WIDTH, RING_ARM_INNER_X + eastRoadWidth / 2, 0, true, 'asphalt');
-    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -39.0, false, 'pavement');
-    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, 39.0, false, 'pavement');
-    addRoadSegment(2.0, MAIN_ROAD_WIDTH, -39.0, 0, false, 'pavement');
-    addRoadSegment(2.0, MAIN_ROAD_WIDTH, 39.0, 0, false, 'pavement');
+    // The pavement spokes stop at the ring's outer edge.
+    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, -RING_ROAD_RADII.outer, false, 'pavement');
+    addRoadSegment(MAIN_ROAD_WIDTH, 2.0, 0, RING_ROAD_RADII.outer, false, 'pavement');
+    addRoadSegment(2.0, MAIN_ROAD_WIDTH, -RING_ROAD_RADII.outer, 0, false, 'pavement');
+    addRoadSegment(2.0, MAIN_ROAD_WIDTH, RING_ROAD_RADII.outer, 0, false, 'pavement');
 
     ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
@@ -185,11 +186,12 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
     const ringMat = createLayerMaterial({ color: 0xb8b5ae, roughness: 0.95, tex: 'pavement', rx: 8, ry: 8 });
     trackPathMaterial(ringMat);
-    addRing(37, 39, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
+    addRing(RING_ROAD_RADII.inner, RING_ROAD_RADII.outer, ringMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
 
     const ringLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     trackPathMaterial(ringLineMat);
-    addRing(37.96, 38.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking);
+    const ringMid = (RING_ROAD_RADII.inner + RING_ROAD_RADII.outer) / 2;
+    addRing(ringMid - 0.04, ringMid + 0.04, ringLineMat, SURFACE_Y.roadMarking, RENDER_ORDER.roadMarking);
 
     const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);

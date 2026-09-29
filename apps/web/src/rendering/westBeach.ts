@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
-import { WEST_BEACH, westBeachWaterlineMaxX } from '../city/data/cityConfig';
+import { WEST_BEACH, shorelineX, westBeachWaterlineMaxX } from '../city/data/cityConfig';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -11,11 +11,19 @@ const SUN_DIRECTION = new THREE.Vector3(0.5, 0.8, 0.35).normalize();
 // The sea used to drift at full shader speed, which read as choppy; scale the
 // time uniform down so the swell rolls visibly slower.
 const SEA_TIME_SCALE = 0.55;
-// How far the surf strip may push the waterline up the beach. The value feeds
-// westBeachWaterlineMaxX, which stays clear of WEST_RING_ROAD_END_X.
-const SURF_REACH = 1.15;
+// How far the surf strip may push the waterline up the beach. Owned by
+// cityConfig (WEST_BEACH.surfReach) because it feeds westBeachWaterlineMaxX,
+// which the unit tests lock clear of WEST_RING_ROAD_END_X.
+const SURF_REACH = WEST_BEACH.surfReach;
 // Crest lift at the waterline, in world y units.
 const SURF_LIFT = 0.26;
+// Surf strip extents, in world units from the coastline: how far it reaches
+// under the sea sheet (the root fade covers the strip/sea join; the sea's
+// own shoreBlend band in animatedWater.ts is wider than this, so the join
+// always happens over tinted water) and how far up the sand its landward
+// edge sits before the geometry cap below trims it.
+const SURF_SEAWARD = 3;
+const SURF_LANDWARD = 2.2;
 
 // Surf strip: a narrow, finely subdivided ribbon laid over the seam between
 // the sea sheet and the sand. It alone carries the lapping waterline (vertex
@@ -40,12 +48,12 @@ const SURF_VERT = /* glsl */ `
     float roll = sin(time * 1.6 - (1.0 - uv.x) * 10.0 + position.z * 0.55);
     float crest = pow(max(lap, 0.0), 1.35);
     p.x += root * lap * reach;
-    // Soft clamp into limitX: a hard min() folds every crest column past
-    // the bound onto the same x, which flashes a straight seam across the
-    // beach when a z-window's wobble and the lap crest coincide. Ease the
-    // overshoot into the last 0.2 units instead — monotonic (no two
-    // columns ever collapse) and asymptotic to limitX (the waterline can
-    // still never reach the west road arm).
+    // Soft clamp into limitX: the geometry is already capped at limitX - 0.4
+    // (see createShoreSurf), so this only ever eases the crest displacement's
+    // overshoot — a hard min() would fold every crest column past the bound
+    // onto the same x and flash a straight seam across the beach. Eased, the
+    // clamp is monotonic (no two columns ever collapse) and asymptotic to
+    // limitX, so the waterline can still never reach the west road arm.
     float band = 0.2;
     float over = max(p.x - (limitX - band), 0.0);
     p.x = min(p.x, limitX - band) + band * over / (over + band);
@@ -87,13 +95,18 @@ const SURF_FRAG = /* glsl */ `
     alpha *= smoothstep(0.0, 0.25, vFront);
     alpha = mix(alpha, 0.0, smoothstep(0.75, 1.0, vFront));
     // Foam rides the crest: value noise breaks it into pockets and it only
-    // shows while a wave is actually pushing in.
+    // shows while a wave is actually pushing in (vCrest → 0 between waves,
+    // so the resting waterline carries no residual foam veil).
     float n = vnoise(vWorldXZ * 3.0 + vec2(time * 0.25, -time * 0.2));
-    float foamBand = smoothstep(0.45, 0.95, vFront) * (0.25 + 0.75 * vCrest);
+    float foamBand = smoothstep(0.45, 0.95, vFront) * vCrest;
     float foam = foamBand * smoothstep(0.35, 0.75, n + vCrest * 0.38);
     vec3 color = mix(shallow, foamColor, foam);
     alpha = max(alpha, foam * 0.9);
     gl_FragColor = vec4(color, alpha);
+    // Same output chain as the sea sheet's Water shader, so the strip and
+    // the water it sits on agree under every tone-mapping exposure.
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -103,7 +116,7 @@ type ShoreSurf = {
   setDaylight(value: number, instant?: boolean): void;
 };
 
-export function createShoreSurf(
+function createShoreSurf(
   innerX: (z: number) => number,
   outerX: (z: number) => number,
   minZ: number,
@@ -140,11 +153,16 @@ export function createShoreSurf(
   mesh.userData.dynamicMaterial = material;
   let daylightTarget = 1;
   let daylight = 1;
+  let lastElapsed = 0;
   return {
     mesh,
     update(elapsedSeconds) {
+      // Per-second easing, matching the pond/sea surfaces: a fixed
+      // per-frame step makes the transition speed depend on the frame rate.
+      const dt = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
+      lastElapsed = elapsedSeconds;
+      daylight += (daylightTarget - daylight) * Math.min(1, dt * 2.5);
       material.uniforms.time!.value = elapsedSeconds * SEA_TIME_SCALE;
-      daylight += (daylightTarget - daylight) * 0.04;
       material.uniforms.daylight!.value = daylight;
     },
     setDaylight(value, instant = false) {
@@ -220,13 +238,7 @@ function createSeaGod(options: BeachOptions): THREE.Group {
   return god;
 }
 
-export function shorelineX(z: number): number {
-  // Amplitude stays below the gap between coastlineX and deepWaterX so the
-  // walkable-sand / deep-water gameplay bounds still match the visible shore.
-  return WEST_BEACH.coastlineX + Math.sin(z * 0.19) * 0.85 + Math.sin(z * 0.47 + 1.4) * 0.35;
-}
-
-export function createShoreRibbonGeometry(
+function createShoreRibbonGeometry(
   innerX: (z: number) => number,
   outerX: (z: number) => number,
   minZ: number,
@@ -308,8 +320,19 @@ export function createWestBeach(options: BeachOptions): {
   object.add(water);
   // The lapping waterline rides on its own fine strip: underwater it blends
   // into the sea sheet, on land it climbs the sand and feathers away.
+  // The landward edge is capped at the geometry level, NOT in the shader:
+  // uv.x drives alpha/foam, so a world-space shader clamp would squeeze the
+  // front band non-uniformly wherever the coast wobbles landward. Capping
+  // the geometry keeps the uv→x mapping linear per row; the eased clamp in
+  // SURF_VERT remains as a backstop for the crest displacement overshoot.
+  const surfLimitX = westBeachWaterlineMaxX(SURF_REACH);
   const shoreSurf = options.waterRendering
-    ? createShoreSurf((z) => shorelineX(z) - 3, (z) => shorelineX(z) + 2.2, waterMinZ, waterMaxZ)
+    ? createShoreSurf(
+        (z) => shorelineX(z) - SURF_SEAWARD,
+        (z) => Math.min(shorelineX(z) + SURF_LANDWARD, surfLimitX - 0.4),
+        waterMinZ,
+        waterMaxZ,
+      )
     : null;
   if (shoreSurf) object.add(shoreSurf.mesh);
   const palms = [-1, 1].map((side) => {
