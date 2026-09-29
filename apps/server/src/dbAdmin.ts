@@ -14,7 +14,7 @@ const parseStoryFlags = (json: string): Record<string, StoryFlagValue> => {
 };
 
 export type AdminSummary = { users: number; disabledUsers: number; houses: number; housingRequests: number; inventoryRows: number; storyRows: number; storyParticipants: number; chatMessages: number; hiddenChatMessages: number; databaseBytes: number };
-export type AdminUser = { id: string; nickname: string; email: string | null; disabled: boolean; createdAt: string; updatedAt: string; sessionExpiresAt: string | null; houseId: string | null };
+export type AdminUser = { id: string; nickname: string; email: string | null; disabled: boolean; createdAt: string; updatedAt: string; sessionExpiresAt: string | null; houseId: string | null; plUserId: string | null; plNickname: string | null };
 export type AdminAuditEntry = { id: number; actor: string; action: string; target: string | null; details: Record<string, unknown>; createdAt: string };
 
 export function getAdminSummary(databaseBytes = 0): AdminSummary {
@@ -33,12 +33,12 @@ export function getAdminSummary(databaseBytes = 0): AdminSummary {
 export function listAdminUsers(input: { query?: string; limit: number; offset: number }): { items: AdminUser[]; total: number } {
   const query = input.query?.trim() ?? '';
   const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
-  const where = query ? "WHERE u.nickname LIKE ? ESCAPE '\\' OR u.id LIKE ? ESCAPE '\\'" : '';
-  const params = query ? [pattern, pattern] : [];
+  const where = query ? "WHERE u.nickname LIKE ? ESCAPE '\\' OR u.id LIKE ? ESCAPE '\\' OR IFNULL(u.pl_nickname, '') LIKE ? ESCAPE '\\'" : '';
+  const params = query ? [pattern, pattern, pattern] : [];
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM users u ${where}`).get(...params) as { count: number }).count;
-  const rows = db.prepare(`SELECT u.id, u.nickname, u.email, u.disabled_at, u.created_at, u.updated_at, u.session_expires_at, hm.building_id AS house_id
+  const rows = db.prepare(`SELECT u.id, u.nickname, u.email, u.pl_user_id, u.pl_nickname, u.disabled_at, u.created_at, u.updated_at, u.session_expires_at, hm.building_id AS house_id
     FROM users u LEFT JOIN house_members hm ON hm.user_id = u.id ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as AdminUserRow[];
-  return { total, items: rows.map((row) => ({ id: row.id, nickname: row.nickname, email: row.email, disabled: Boolean(row.disabled_at), createdAt: row.created_at, updatedAt: row.updated_at, sessionExpiresAt: row.session_expires_at, houseId: row.house_id ?? null })) };
+  return { total, items: rows.map((row) => ({ id: row.id, nickname: row.nickname, email: row.email, disabled: Boolean(row.disabled_at), createdAt: row.created_at, updatedAt: row.updated_at, sessionExpiresAt: row.session_expires_at, houseId: row.house_id ?? null, plUserId: row.pl_user_id, plNickname: row.pl_nickname })) };
 }
 
 export function setUserDisabled(userId: string, disabled: boolean): boolean {

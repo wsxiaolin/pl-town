@@ -1,3 +1,5 @@
+import { getDeviceFingerprint } from './core/deviceFingerprint';
+
 type Npc = { id: string; name: string; role: string; npcType: string };
 type Session = { token: string; user: { nickname: string } };
 
@@ -37,16 +39,18 @@ function showRequestPage(): void {
 }
 
 async function requestSession(body: { token: string } | { nickname: string; password: string; pl?: { login: string; password: string } }): Promise<Session> {
+  const fingerprint = await getDeviceFingerprint();
+  const payload = fingerprint ? { ...body, fingerprint } : body;
   let response: Response;
   try {
-    response = await fetch('/town-api/npc-edit-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    response = await fetch('/town-api/npc-edit-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   } catch {
     throw Object.assign(new Error('无法连接服务器，请稍后重试'), { status: 0 });
   }
-  const payload = await response.json().catch(() => ({})) as { error?: string; code?: string; token?: string; user?: { nickname: string } };
-  if (payload.code === 'pl-verification-required') $('plVerification').hidden = false;
-  if (!response.ok || !payload.token || !payload.user) throw Object.assign(new Error(payload.error || '登录失败'), { status: response.status });
-  return { token: payload.token, user: payload.user };
+  const result = await response.json().catch(() => ({})) as { error?: string; code?: string; token?: string; user?: { nickname: string } };
+  if (result.code === 'pl-verification-required') $('plVerification').hidden = false;
+  if (!response.ok || !result.token || !result.user) throw Object.assign(new Error(result.error || '登录失败'), { status: response.status });
+  return { token: result.token, user: result.user };
 }
 
 async function restoreSession(): Promise<void> {

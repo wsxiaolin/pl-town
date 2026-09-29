@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { db, fingerprintBlocksUnverifiedHousing } from './db.js';
 import type { HouseRow, HousingRequestRow } from './dbRows.js';
 
 export type House = { buildingId: string; name: string | null; ownerId: string; ownerNickname: string; members: Array<{ userId: string; nickname: string; verified: boolean }> };
@@ -13,9 +13,21 @@ export function listHouses(): House[] {
   return rows.map((row) => ({ buildingId: row.building_id, name: row.name, ownerId: row.owner_id, ownerNickname: row.owner_nickname, members: members.get(row.building_id) ?? [] }));
 }
 export function getHouse(buildingId: string): House | null { return listHouses().find((house) => house.buildingId === buildingId) ?? null; }
-export function claimHouse(buildingId: string, ownerId: string, name?: string): void {
+export class HousingLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HousingLimitError';
+  }
+}
+
+export function claimHouse(buildingId: string, ownerId: string, name?: string, fingerprint: string | null = null): void {
   const timestamp = now();
-  db.transaction(() => { if (db.prepare('SELECT 1 FROM house_members WHERE user_id = ?').get(ownerId)) throw new Error('User already lives in a house'); db.prepare('INSERT INTO houses (building_id, name, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(buildingId, name?.trim() || null, ownerId, timestamp, timestamp); db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, ownerId, timestamp); })();
+  db.transaction(() => {
+    if (db.prepare('SELECT 1 FROM house_members WHERE user_id = ?').get(ownerId)) throw new HousingLimitError('每个账号最多认领一套住宅');
+    if (fingerprintBlocksUnverifiedHousing(ownerId, fingerprint)) throw new HousingLimitError('该设备已认领两套住宅，请先绑定物实账号');
+    db.prepare('INSERT INTO houses (building_id, name, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(buildingId, name?.trim() || null, ownerId, timestamp, timestamp);
+    db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, ownerId, timestamp);
+  })();
 }
 export function renameHouse(buildingId: string, name: string): void { db.prepare('UPDATE houses SET name = ?, updated_at = ? WHERE building_id = ?').run(name.trim(), now(), buildingId); }
 export function addMember(buildingId: string, userId: string): void { db.prepare('INSERT INTO house_members (building_id, user_id, joined_at) VALUES (?, ?, ?)').run(buildingId, userId, now()); }

@@ -190,7 +190,7 @@ const server = spawn(process.execPath, ['dist/index.js'], {
     ADMIN_ACCOUNTS_JSON: JSON.stringify({ reviewer: 'integration-reviewer-password' }),
     AUTO_BACKUP_ENABLED: 'false', ALLOWED_ORIGINS: `http://127.0.0.1:${port}`,
     // The suite signs up more residents than the production per-IP default.
-    MAX_REGISTRATIONS_PER_IP: '12',
+    MAX_REGISTRATIONS_PER_IP: '16',
     PHYSICS_LAB_API_BASE: `http://127.0.0.1:${physicsLabPort}`,
     BIGMODEL_API_KEY: 'integration-api-key', BIGMODEL_MODERATION_URL: `http://127.0.0.1:${moderationPort}/moderations`,
   },
@@ -201,7 +201,7 @@ server.stdout.on('data', (chunk) => {
   serverStartupOutput = `${serverStartupOutput}${chunk}`.slice(-16_384);
 });
 
-const connect = (nickname, password = 'resident-secret', pl) => new Promise((resolve, reject) => {
+const connect = (nickname, password = 'resident-secret', pl, fingerprint) => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages = [];
   let ready = false;
@@ -215,7 +215,7 @@ const connect = (nickname, password = 'resident-secret', pl) => new Promise((res
     else if (message.type === 'error' && !ready) { clearTimeout(timeout); socket.terminate(); reject(new Error(`Unexpected auth error for ${nickname}: ${message.message}`)); }
   });
   socket.on('error', (event) => { clearTimeout(timeout); reject(event); });
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password, ...(pl ? { pl } : {}) })));
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password, ...(pl ? { pl } : {}), ...(fingerprint ? { fingerprint } : {}) })));
 });
 
 const connectExpectingError = (nickname, password = 'resident-secret', pl) => new Promise((resolve, reject) => {
@@ -651,11 +651,13 @@ try {
   const plOwner = await connect('TakenPlResident', 'resident-secret', { login: 'owner@example.com', password: 'pl-owner-password' });
   if (!plOwner.hello.user?.nickname) throw new Error('Proving Physics Lab ownership must grant the claimed nickname');
   if (plOwner.hello.user.verified !== true) throw new Error('A Physics Lab verified resident must be marked verified');
-  plOwner.socket.close();
   const plFreeName = await connect('UnclaimedPlName');
   if (!plFreeName.hello.user?.nickname) throw new Error('A nickname absent from Physics Lab must register without verification');
   if (plFreeName.hello.user.verified !== false) throw new Error('An unverified resident must not be marked verified');
   plFreeName.socket.close();
+  const adminUsers = await fetch(`${adminBase}/users?limit=100`, { headers: { cookie } }).then((response) => response.json());
+  const plAdminUser = adminUsers.items.find((user) => user.nickname === 'TakenPlResident');
+  if (!plAdminUser?.plUserId || plAdminUser.plNickname !== 'TakenPlResident') throw new Error('Admin user list must expose the bound Physics Lab username');
 
   const buildingId = 'residence:3.00:4.00';
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
@@ -709,6 +711,20 @@ try {
   await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => house.buildingId === adminDeletedBuildingId));
   const housesAfterAdminDelete = await fetch(`${adminBase}/houses`, { headers: { cookie } }).then((response) => response.json());
   if (housesAfterAdminDelete.items.some((house) => house.buildingId === adminDeletedBuildingId)) throw new Error('Deleted houses must be removed from the admin housing list');
+
+  const sharedFingerprint = 'a'.repeat(64);
+  const fpOne = await connect('FPOne', 'resident-secret', undefined, sharedFingerprint);
+  send(fpOne, { type: 'housing.claim', buildingId: 'residence:10.00:4.00', name: 'Fingerprint Home 1' });
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === 'residence:10.00:4.00'));
+  const fpTwo = await connect('FPTwo', 'resident-secret', undefined, sharedFingerprint);
+  send(fpTwo, { type: 'housing.claim', buildingId: 'residence:11.00:4.00', name: 'Fingerprint Home 2' });
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === 'residence:11.00:4.00'));
+  const fpThree = await connect('FPThree', 'resident-secret', undefined, sharedFingerprint);
+  send(fpThree, { type: 'housing.claim', buildingId: 'residence:12.00:4.00', name: 'Fingerprint Home 3' });
+  await waitFor(fpThree, 'error', (message) => message.message === '该设备已认领两套住宅，请先绑定物实账号');
+  send(plOwner, { type: 'housing.claim', buildingId: 'residence:12.00:4.00', name: 'Verified Fingerprint Home' });
+  await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === 'residence:12.00:4.00' && house.ownerId === plOwner.hello.user.id));
+  fpOne.socket.close(); fpTwo.socket.close(); fpThree.socket.close(); plOwner.socket.close();
 
   // 相同昵称+正确密码登录返回同一个全局唯一 ID
   const aliceAgain = await connect('Alice');

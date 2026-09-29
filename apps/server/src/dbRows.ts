@@ -7,6 +7,7 @@ export type UserRow = {
   nickname: string;
   email: string | null;
   pl_user_id: string | null;
+  pl_nickname: string | null;
   password_hash: string | null;
   position_x: number;
   position_y: number;
@@ -91,6 +92,8 @@ export type AdminUserRow = {
   id: string;
   nickname: string;
   email: string | null;
+  pl_user_id: string | null;
+  pl_nickname: string | null;
   disabled_at: string | null;
   created_at: string;
   updated_at: string;

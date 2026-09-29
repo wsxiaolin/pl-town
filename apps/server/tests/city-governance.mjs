@@ -277,7 +277,7 @@ try {
     closeDatabase();
   `);
   const backup = new Database(join(dataDir, 'city-backup.sqlite'), { readonly: true });
-  assert.equal(backup.pragma('user_version', { simple: true }), 6);
+  assert.equal(backup.pragma('user_version', { simple: true }), 7);
   assert.equal(backup.pragma('foreign_key_check').length, 0);
   backup.close();
   console.log('City governance integration passed');

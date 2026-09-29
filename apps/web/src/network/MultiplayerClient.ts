@@ -1,3 +1,4 @@
+import { getDeviceFingerprint } from '../core/deviceFingerprint';
 import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
 import { isWeather, type Weather } from '../city/weather';
 import { applyCityState } from '../city/cityGovernanceClient';
@@ -109,7 +110,7 @@ export class MultiplayerClient {
     try { this.socket = new WebSocket(serverUrl()); } catch { this.scheduleReconnect(); return; }
     this.socket.addEventListener('open', () => {
       const token = localStorage.getItem(TOKEN_KEY) ?? undefined;
-      this.send({ type: 'hello', token, nickname, password: token ? undefined : password, pl: token ? undefined : pl });
+      void this.sendHello(token, nickname, password, pl);
     });
     this.socket.addEventListener('message', (event) => this.handle(event.data));
     this.socket.addEventListener('close', () => { this.socket = null; this.callbacks.connection?.('disconnected'); if (!this.closed) this.scheduleReconnect(); });
@@ -143,6 +144,11 @@ export class MultiplayerClient {
         this.socket = null;
       } else this.callbacks.error?.(errorMessage);
     }
+  }
+  private async sendHello(token: string | undefined, nickname: string, password?: string, pl?: { login: string; password: string }): Promise<void> {
+    const fingerprint = await getDeviceFingerprint();
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.send({ type: 'hello', token, nickname, password: token ? undefined : password, pl: token ? undefined : pl, ...(fingerprint ? { fingerprint } : {}) });
   }
   send(message: object): boolean { trackClientMessage(message as Record<string, unknown>); if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(JSON.stringify(message)); return true; }
   position(position: NetPosition) { this.send({ type: 'position', position }); }

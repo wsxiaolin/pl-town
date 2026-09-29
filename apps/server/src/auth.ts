@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { AsyncGate } from './asyncGate.js';
 import { SESSION_TTL_DAYS } from './config.js';
-import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
+import { createUser, getUserByNickname, getUserByToken, normalizeFingerprint, recordDeviceFingerprint, registerUserAtomic, updateUserToken } from './db.js';
 import { authenticateAccount, findPhysicsLabUser } from './physicsLab.js';
 import type { User } from './types.js';
 
@@ -57,11 +57,15 @@ export function validateNickname(nickname: string): string | null {
   return null;
 }
 
-export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number }; pl?: PhysicsLabCredentials; plVerifyGuard?: () => void }): Promise<{ user: User; token: string; registered: boolean }> {
+export async function authenticate(input: { token?: string; nickname?: string; password?: string; fingerprint?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number }; pl?: PhysicsLabCredentials; plVerifyGuard?: () => void }): Promise<{ user: User; token: string; registered: boolean }> {
+  const fingerprint = normalizeFingerprint(input.fingerprint);
   if (input.token) {
     if (input.token.length > 128) throw new Error('会话无效');
     const user = getUserByToken(hash(input.token));
-    if (user) return { user, token: input.token, registered: false };
+    if (user) {
+      recordDeviceFingerprint(user.id, fingerprint);
+      return { user, token: input.token, registered: false };
+    }
     throw new Error('会话已过期，请重新登录');
   }
 
@@ -79,13 +83,16 @@ export async function authenticate(input: { token?: string; nickname?: string; p
     }
     const newToken = randomBytes(32).toString('base64url');
     updateUserToken(existing.id, hash(newToken), sessionExpiry());
-    return { user: getUserByToken(hash(newToken))!, token: newToken, registered: false };
+    const user = getUserByToken(hash(newToken))!;
+    recordDeviceFingerprint(user.id, fingerprint);
+    return { user, token: newToken, registered: false };
   }
   if (password.length < 10) throw new Error('新密码至少需要 10 个字符');
 
   // Nickname ownership: a name that already belongs to a Physics Lab account
   // can only be signed by that account's owner. Fail closed on lookup errors.
   let plUserId: string | null = null;
+  let plNickname: string | null = null;
   const plLookup = await findPhysicsLabUser(nickname).catch(() => {
     throw new Error('暂时无法确认物实昵称，请稍后再试');
   });
@@ -96,15 +103,16 @@ export async function authenticate(input: { token?: string; nickname?: string; p
     const plSession = await authenticateAccount(pl.login, pl.password).catch(() => {
       throw new Error('物实账号或密码不正确');
     });
-    const plNickname = String(plSession.user?.Nickname ?? '').trim();
+    const claimedNickname = String(plSession.user?.Nickname ?? '').trim();
     const plId = String(plSession.user?.ID ?? '').trim();
-    if (!plNickname || plNickname.toLowerCase() !== nickname.toLowerCase()) {
+    if (!claimedNickname || claimedNickname.toLowerCase() !== nickname.toLowerCase()) {
       throw new Error('物实账号与该昵称不一致');
     }
     if (plLookup.userId && plId && plLookup.userId !== plId) {
       throw new Error('请使用持有该昵称的物实账号');
     }
     plUserId = plId || plLookup.userId;
+    plNickname = claimedNickname;
   }
 
   const newToken = randomBytes(32).toString('base64url');
@@ -114,10 +122,12 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   const userId = randomUUID();
   if (input.ip && input.registrationLimit) {
     const { sinceIso, max } = input.registrationLimit;
-    const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max, plUserId);
+    const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max, plUserId, plNickname);
     if (!result.allowed) throw new RegistrationLimitError();
   } else {
-    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
+    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId, plNickname);
   }
-  return { user: getUserByToken(tokenHash)!, token: newToken, registered: true };
+  const user = getUserByToken(tokenHash)!;
+  recordDeviceFingerprint(user.id, fingerprint);
+  return { user, token: newToken, registered: true };
 }

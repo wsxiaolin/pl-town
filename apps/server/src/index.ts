@@ -24,7 +24,7 @@ import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
 
-type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
+type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean; fingerprint: string | null };
 const clients = new Map<string, Client>();
 const sockets = new Set<WebSocket>();
 const connectionsByIp = new Map<string, number>();
@@ -33,7 +33,7 @@ const authAttempts = new Map<string, { count: number; startedAt: number }>();
 const physicsLoginAttempts = new Map<string, { count: number; startedAt: number }>();
 const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
 const chatWindows = new Map<string, { startedAt: number; count: number }>();
-const physicsSessions = new Map<string, { token: string; authCode: string; user: Omit<User, 'plUserId'>; expiresAt: number }>();
+const physicsSessions = new Map<string, { token: string; authCode: string; user: Omit<User, 'plUserId' | 'plNickname'>; expiresAt: number }>();
 const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGES_PER_SECOND = 60;
 const MAX_CHAT_MESSAGES_PER_TEN_SECONDS = 5;
@@ -158,6 +158,7 @@ async function handle(client: Client, raw: string) {
     if ((message.token !== undefined && typeof message.token !== 'string')
       || (message.nickname !== undefined && typeof message.nickname !== 'string')
       || (message.password !== undefined && typeof message.password !== 'string')
+      || (message.fingerprint !== undefined && typeof message.fingerprint !== 'string')
       || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string' || message.pl.login.length > 160 || message.pl.password.length > 256))) return fail(client.socket, 'Invalid authentication message');
     client.authInProgress = true;
     const address = client.ip;
@@ -169,7 +170,7 @@ async function handle(client: Client, raw: string) {
     try {
       const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
       result = await authenticate({
-        token: message.token, nickname: message.nickname, password: message.password, ip: address,
+        token: message.token, nickname: message.nickname, password: message.password, fingerprint: message.fingerprint, ip: address,
         registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP },
         pl: message.pl,
         // Physics Lab ownership verification relays a credential check to the
@@ -193,7 +194,7 @@ async function handle(client: Client, raw: string) {
     if (client.socket.readyState !== WebSocket.OPEN) { client.authInProgress = false; return; }
     const previous = clients.get(result.user.id);
     if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
-    client.user = result.user; client.ready = true; clients.set(client.user.id, client);
+    client.user = result.user; client.ready = true; client.fingerprint = db.normalizeFingerprint(message.fingerprint); clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
     send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
     send(client.socket, { type: 'city.updated', state: getCityState() });
@@ -341,7 +342,18 @@ async function handle(client: Client, raw: string) {
     }
     if (!('buildingId' in message) || !validId(message.buildingId)) return fail(client.socket, 'Invalid building ID');
     const house = db.getHouse(message.buildingId);
-    if (message.type === 'housing.claim') { if (!validResidenceId(message.buildingId)) return fail(client.socket, 'Invalid residence ID'); if (house) return fail(client.socket, 'House is already claimed'); try { db.claimHouse(message.buildingId, userId, typeof message.name === 'string' ? message.name.slice(0, 80) : undefined); db.deleteHousingRequestsForUser(userId); broadcastHousingState(); } catch { fail(client.socket, 'Could not claim house; the user may already live elsewhere'); } return; }
+    if (message.type === 'housing.claim') {
+      if (!validResidenceId(message.buildingId)) return fail(client.socket, 'Invalid residence ID');
+      if (house) return fail(client.socket, 'House is already claimed');
+      try {
+        db.claimHouse(message.buildingId, userId, typeof message.name === 'string' ? message.name.slice(0, 80) : undefined, client.fingerprint);
+        db.deleteHousingRequestsForUser(userId);
+        broadcastHousingState();
+      } catch (error) {
+        fail(client.socket, error instanceof db.HousingLimitError ? error.message : 'Could not claim house; the user may already live elsewhere');
+      }
+      return;
+    }
     if (!house) return fail(client.socket, 'House not found');
     if (message.type === 'housing.rename') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can rename'); if (typeof message.name !== 'string' || !message.name.trim()) return fail(client.socket, 'Invalid house name'); db.renameHouse(message.buildingId, message.name.trim().slice(0, 80)); }
     else if (message.type === 'housing.invite') {
@@ -489,11 +501,13 @@ const http = createServer(async (request, response) => {
       if (plBody && (typeof plBody.login !== 'string' || typeof plBody.password !== 'string' || plBody.login.length > 160 || plBody.password.length > 256)) {
         throw new HttpBodyError('物实账号信息格式不正确', 400);
       }
+      const fingerprint = typeof body.fingerprint === 'string' ? body.fingerprint : undefined;
       const result = isRestore
-        ? await authenticate({ token: body.token as string })
+        ? await authenticate({ token: body.token as string, fingerprint })
         : await authenticate({
             nickname: typeof body.nickname === 'string' ? body.nickname : '',
             password: typeof body.password === 'string' ? body.password : '',
+            fingerprint,
             ip: requestIp,
             registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
             pl: typeof plBody?.login === 'string' && typeof plBody.password === 'string'
@@ -679,7 +693,7 @@ const wss = new WebSocketServer({
 });
 wss.on('connection', (socket, request) => {
   const ip = clientIp(request);
-  const client: Client = { socket, user: null as unknown as User, ready: false, ip, authInProgress: false, alive: true };
+  const client: Client = { socket, user: null as unknown as User, ready: false, ip, authInProgress: false, alive: true, fingerprint: null };
   sockets.add(socket); connectionsByIp.set(ip, (connectionsByIp.get(ip) ?? 0) + 1);
   bumpMetric('wsConnects');
   const authTimeout = setTimeout(() => { if (!client.ready) socket.close(4008, 'Authentication timeout'); }, 10_000);

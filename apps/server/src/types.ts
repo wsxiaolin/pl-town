@@ -6,6 +6,7 @@ export type User = {
   nickname: string;
   email: string | null;
   plUserId: string | null;
+  plNickname: string | null;
   position: Position;
 };
 
@@ -55,7 +56,7 @@ export type ChatMessage = {
 };
 
 export type ClientMessage =
-  | { type: 'hello'; token?: string; nickname?: string; password?: string; pl?: { login: string; password: string } }
+  | { type: 'hello'; token?: string; nickname?: string; password?: string; fingerprint?: string; pl?: { login: string; password: string } }
   | { type: 'position'; position: Position }
   | { type: 'chat'; text: string }
   | { type: 'chat.history' }

@@ -168,6 +168,14 @@ db.exec(`
     PRIMARY KEY (ip, user_id)
   );
   CREATE INDEX IF NOT EXISTS account_registrations_ip_idx ON account_registrations(ip, created_at DESC);
+  CREATE TABLE IF NOT EXISTS device_fingerprints (
+    hash TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_seen_at TEXT NOT NULL,
+    PRIMARY KEY (hash, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS device_fingerprints_user_idx ON device_fingerprints(user_id);
+  CREATE INDEX IF NOT EXISTS device_fingerprints_hash_idx ON device_fingerprints(hash);
   CREATE TABLE IF NOT EXISTS npc_change_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     requester_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -198,6 +206,7 @@ db.exec(`
   // Physics Lab account link: set when a resident proved ownership of a
   // nickname that already exists in the Physics Lab community.
   if (!columns.some((column) => column.name === 'pl_user_id')) db.exec('ALTER TABLE users ADD COLUMN pl_user_id TEXT');
+  if (!columns.some((column) => column.name === 'pl_nickname')) db.exec('ALTER TABLE users ADD COLUMN pl_nickname TEXT');
   if (!columns.some((column) => column.name === 'disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
 }
 {
@@ -257,11 +266,11 @@ const cityBuildingBuilt = (buildingId: string): boolean => {
   return !project || Boolean((db.prepare('SELECT built FROM city_projects WHERE id = ?').get(project.id) as { built: number } | undefined)?.built);
 };
 
-const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, plUserId: row.pl_user_id, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
+const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, plUserId: row.pl_user_id, plNickname: row.pl_nickname, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
-export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string, plUserId: string | null = null): User {
+export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string, plUserId: string | null = null, plNickname: string | null = null): User {
   const timestamp = now();
-  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, session_expires_at, pl_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, sessionExpiresAt, plUserId, timestamp, timestamp);
+  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, session_expires_at, pl_user_id, pl_nickname, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, sessionExpiresAt, plUserId, plNickname, timestamp, timestamp);
   return getUser(id)!;
 }
 export function getUserByToken(tokenHash: string): User | null {
@@ -522,10 +531,11 @@ export function registerUserAtomic(
   sinceIso: string,
   max: number,
   plUserId: string | null = null,
+  plNickname: string | null = null,
 ): { allowed: boolean } {
   return db.transaction(() => {
     if (countRegistrationsForIp(ip, sinceIso) >= max) return { allowed: false };
-    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
+    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId, plNickname);
     db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
     return { allowed: true };
   })();
@@ -533,6 +543,42 @@ export function registerUserAtomic(
 
 export function recordRegistration(ip: string, userId: string): void {
   db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
+}
+
+const FINGERPRINT_HASH = /^[a-f0-9]{64}$/;
+export const MAX_HOUSES_PER_FINGERPRINT = 2;
+
+export function normalizeFingerprint(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const hash = value.trim().toLowerCase();
+  return FINGERPRINT_HASH.test(hash) ? hash : null;
+}
+
+export function recordDeviceFingerprint(userId: string, fingerprint: string | null): void {
+  if (!fingerprint) return;
+  const timestamp = now();
+  db.prepare(`INSERT INTO device_fingerprints (hash, user_id, last_seen_at) VALUES (?, ?, ?)
+    ON CONFLICT(hash, user_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`).run(fingerprint, userId, timestamp);
+}
+
+export function countHousesForFingerprint(fingerprint: string): number {
+  return (db.prepare(`SELECT COUNT(DISTINCT hm.building_id) AS count
+    FROM device_fingerprints df
+    JOIN house_members hm ON hm.user_id = df.user_id
+    WHERE df.hash = ?`).get(fingerprint) as { count: number }).count;
+}
+
+export function latestFingerprintForUser(userId: string): string | null {
+  const row = db.prepare('SELECT hash FROM device_fingerprints WHERE user_id = ? ORDER BY last_seen_at DESC LIMIT 1').get(userId) as { hash: string } | undefined;
+  return row?.hash ?? null;
+}
+
+export function fingerprintBlocksUnverifiedHousing(userId: string, fingerprint: string | null): boolean {
+  const user = getUser(userId);
+  if (!user || user.plUserId) return false;
+  const hash = fingerprint ?? latestFingerprintForUser(userId);
+  if (!hash) return false;
+  return countHousesForFingerprint(hash) >= MAX_HOUSES_PER_FINGERPRINT;
 }
 
 // ── In-process backup restore ──────────────────────────────────────

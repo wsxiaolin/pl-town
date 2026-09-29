@@ -91,15 +91,18 @@ async function loadUsers() {
     const row = node('tr');
     const identity = node('td'); const name = node('strong', user.nickname); name.title = user.nickname; identity.append(name, node('small', user.id));
     const status = node('td', user.disabled ? '已停用' : '正常');
+    const plBound = user.plNickname || (user.plUserId ? user.nickname : '');
+    const plCell = node('td', plBound || '未绑定');
+    if (plBound) plCell.title = plBound;
     const houseName = user.houseId ? (state.houses.find((house) => house.buildingId === user.houseId)?.name || user.houseId) : '未入住';
     const actions = node('td', undefined, 'align-right'); const group = node('div', undefined, 'row-actions');
     const edit = node('button', '编辑'); edit.type = 'button'; edit.addEventListener('click', () => openUserEditor(user));
     const revoke = node('button', '撤销会话'); revoke.type = 'button'; revoke.addEventListener('click', () => confirmAction('撤销登录会话', `将强制 ${user.nickname} 重新登录。`, () => mutateUser(user.id, 'revoke-session', {})));
     const toggle = node('button', user.disabled ? '启用' : '停用', user.disabled ? '' : 'warning'); toggle.type = 'button'; toggle.addEventListener('click', () => confirmAction(user.disabled ? '启用居民' : '停用居民', `确认${user.disabled ? '启用' : '停用'} ${user.nickname}？`, () => mutateUser(user.id, 'status', { disabled: !user.disabled }, 'PATCH')));
     group.append(edit, revoke, toggle); actions.append(group);
-    row.append(identity, status, node('td', houseName), node('td', formatDate(user.updatedAt)), actions); return row;
+    row.append(identity, status, plCell, node('td', houseName), node('td', formatDate(user.updatedAt)), actions); return row;
   });
-  $('#userRows').replaceChildren(...(rows.length ? rows : [emptyRow(5, '没有找到居民')]));
+  $('#userRows').replaceChildren(...(rows.length ? rows : [emptyRow(6, '没有找到居民')]));
 }
 async function mutateUser(id, action, body, method = 'POST') {
   await api(`/users/${id}/${action}`, { method, body: JSON.stringify(body) }); showNotice('居民状态已更新', true); await loadUsers();
