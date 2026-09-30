@@ -589,6 +589,10 @@ try {
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
 
+  send(alice, { type: 'chat', text: 'a'.repeat(501) });
+  await waitFor(alice, 'error', (message) => message.message === 'Invalid chat message');
+  send(alice, { type: 'chat', text: 'clean\u0000chat' });
+  await waitFor(bob, 'chat', (message) => message.text === 'cleanchat');
   send(alice, { type: 'chat', text: 'integration-chat' });
   const approvedChat = await waitFor(bob, 'chat', (message) => message.text === 'integration-chat');
   if (!Number.isInteger(approvedChat.messageId)) throw new Error('Chat broadcasts must include a persisted message id');
@@ -636,8 +640,18 @@ try {
   if (!oneChar) throw new Error('One-character nickname should be rejected');
   const specialChars = await connectExpectingError('小明!');
   if (!specialChars) throw new Error('Special characters should be rejected');
+  const tooLongNickname = await connectExpectingError('A'.repeat(41));
+  if (!tooLongNickname) throw new Error('Nicknames longer than 40 characters should be rejected');
+  const controlNickname = await connectExpectingError('小明\u0000');
+  if (!controlNickname) throw new Error('Control characters in nicknames should be rejected');
   const noPassword = await connectExpectingError('小王', '');
   if (!noPassword) throw new Error('Missing password should be rejected');
+  const shortPassword = await connectExpectingError('短密码居民', 'short');
+  if (!shortPassword) throw new Error('Passwords shorter than 10 characters should be rejected');
+  const controlPassword = await connectExpectingError('控制符密码', 'secret\npassword');
+  if (!controlPassword) throw new Error('Control characters in passwords should be rejected');
+  const tooLongPassword = await connectExpectingError('超长密码居民', 'x'.repeat(129));
+  if (!tooLongPassword) throw new Error('Passwords longer than 128 characters should be rejected');
   const wrongPassword = await connectExpectingError('Alice', 'wrong-pass');
   if (!wrongPassword) throw new Error('Wrong password should be rejected');
 
@@ -658,12 +672,25 @@ try {
   plFreeName.socket.close();
 
   const buildingId = 'residence:3.00:4.00';
+  bob.messages.length = 0;
+  send(bob, { type: 'housing.claim', buildingId, name: '<script>alert(1)</script>' });
+  await waitFor(bob, 'error', (message) => message.message === 'Invalid house name');
+  bob.messages.length = 0;
+  send(bob, { type: 'housing.claim', buildingId, name: 'A'.repeat(25) });
+  await waitFor(bob, 'error', (message) => message.message === 'Invalid house name');
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
   send(alice, { type: 'housing.kick', buildingId, userId: {} });
   await waitFor(alice, 'error', (message) => message.message === 'Invalid member');
   const healthAfterMaliciousMessage = await fetch(`${adminOrigin}/healthz`);
   if (!healthAfterMaliciousMessage.ok) throw new Error('Malformed housing messages must not terminate the server');
+
+  const versionResponse = await fetch(`${adminOrigin}/town-api/version`);
+  if (!versionResponse.ok) throw new Error('/town-api/version must respond 200');
+  if (versionResponse.headers.get('cache-control') !== 'no-store') throw new Error('/town-api/version must be no-store (the client boot gate probes it every visit)');
+  const versionBody = await versionResponse.json();
+  if (typeof versionBody.fingerprint !== 'string' || versionBody.fingerprint.length !== 16) throw new Error('/town-api/version must expose a 16-char identity fingerprint');
+  if ('version' in versionBody || 'commit' in versionBody || 'startedAt' in versionBody) throw new Error('/town-api/version must not disclose exact version, commit, or the server boot wall-clock');
   send(bob, { type: 'housing.apply', buildingId });
   const application = await waitFor(alice, 'housing.requests', (message) => message.requests.some((request) => request.kind === 'application' && request.requesterId === bob.hello.user.id));
   send(alice, { type: 'housing.accept', requestId: application.requests.find((request) => request.kind === 'application').id });

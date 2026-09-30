@@ -64,9 +64,15 @@ import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
 import { createCityRuntimeLifecycle } from './cityRuntimeLifecycle';
+import { warmupFirstFrame } from '../rendering/firstFrameWarmup';
+import { forceRevealBootScreen } from '../adapters/ui/momentSplashView';
 
 const resources = new ResourcePool();
 const MOBILE = () => window.innerWidth <= 680;
+// Deliberately NOT prefers-reduced-motion: this flag feeds world assembly
+// and the burn effect, whose reduced-motion behavior was never reviewed or
+// tested. The boot splash reads the media query itself (momentSplashView);
+// wiring the CITY-wide flag is a separate, deliberate change (review r8#7).
 const REDUCED = false;
 const CONFIG = CITY_CONFIG;
 let renderer: THREE.WebGLRenderer;
@@ -129,6 +135,7 @@ let writerCatalogController: CityHudPanels['writerCatalog'];
 let newsstandController: CityHudPanels['newsstand'];
 let academyController: CityHudPanels['academy'];
 let mutualAidController: CityHudPanels['mutualAid'];
+let librarySearchController: CityHudPanels['librarySearch'];
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
@@ -246,6 +253,7 @@ const sceneAnimations = createSceneAnimations({
 });
 
 const frameLoop = createFrameLoop({
+  onFirstRender: () => flushPendingEntrance(),
   getRenderer: () => renderer,
   getScene: () => scene,
   getCamera: () => camera,
@@ -321,6 +329,7 @@ const buildingInteraction = createBuildingInteraction({
   getNewsstandController: () => newsstandController,
   getAcademyController: () => academyController,
   getMutualAidController: () => mutualAidController,
+  getLibrarySearchController: () => librarySearchController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
@@ -348,6 +357,7 @@ const eventBindings = createEventBindings({
   getWriterCatalogController: () => writerCatalogController,
   getAcademyController: () => academyController,
   getMutualAidController: () => mutualAidController,
+  getLibrarySearchController: () => librarySearchController,
   toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
@@ -481,6 +491,7 @@ function init() {
   newsstandController = hud.newsstand;
   academyController = hud.academy;
   mutualAidController = hud.mutualAid;
+  librarySearchController = hud.librarySearch;
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
@@ -726,9 +737,29 @@ function init() {
   themeSync.syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
+  // Rendering is withheld until the boot precompile finished (see
+  // prepareFirstFrame) so the first visible frame is never a freeze.
+  frameLoop.holdRender();
   loginController.checkLogin();
   multiplayerHousing.setupUI();
 }
+
+  // The entrance animation must START when the render gate releases, not
+  // when the login resolves: the gate is held through the shader precompile,
+  // and starting the growth earlier means the first visible frame already
+  // shows the buildings settled (review r8#1). runEntrance defers until the
+  // first rendered frame (frameLoop onFirstRender), then runs immediately.
+  let pendingEntrance: (() => void) | null = null;
+  let entranceGateOpen = false;
+  function runEntrance(entrance: () => void): void {
+    if (entranceGateOpen) entrance();
+    else pendingEntrance = entrance;
+  }
+  function flushPendingEntrance(): void {
+    entranceGateOpen = true;
+    pendingEntrance?.();
+    pendingEntrance = null;
+  }
 
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
   const entrance = () => {
@@ -738,8 +769,8 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
     localStorage.removeItem('minicityPassword');
   };
   // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
-  if (password === undefined && pl === undefined) entrance();
-  else loginController?.holdCityEntrance(entrance);
+  if (password === undefined && pl === undefined) runEntrance(entrance);
+  else loginController?.holdCityEntrance(() => runEntrance(entrance));
   multiplayerHousing.connect(nickname, password, pl);
   checkAchievements();
 }
@@ -773,10 +804,22 @@ function disposeSession() {
   stories?.dispose();
 }
 
+/**
+ * Compiles the scene's GPU programs and renders warm-up frames BEFORE the
+ * first visible frame. The heavy lifting lives in
+ * `rendering/firstFrameWarmup.ts` — this adapter only binds the live
+ * renderer/scene/camera handles (module lets assigned by init()), keeping
+ * MiniCityApp a composition root per Agents.md.
+ */
+function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
+  return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);
+}
+
 const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
+  prepareFirstFrame,
   startTutorial: () => onboardingTutorial?.start(),
   proceedToCity,
   showLogin: () => loginController?.showLogin(),
@@ -801,5 +844,14 @@ export function restoreResidence(residenceId: string): boolean {
 export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
-export function startMiniCity() { lifecycle.start(); }
+export function startMiniCity() {
+  lifecycle.start().catch((error: unknown) => {
+    // A rejected boot chain must never leave the visitor sealed behind the
+    // splash: release the render gate, surface the failure, and let the
+    // reveal proceed. Completion markers stay unset — the next visit retries.
+    console.error('City boot failed', error);
+    frameLoop.releaseRender();
+    forceRevealBootScreen('小城启动遇到问题，请刷新重试');
+  });
+}
 export function destroyMiniCity() { lifecycle.destroy(); }

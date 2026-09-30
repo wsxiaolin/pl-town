@@ -35,7 +35,14 @@ export function destroyCG(): void {
   options = { onFinish: () => {} };
 }
 
+/**
+ * 时刻画面系统（momentSplash）上线后，五幕开场 CG 临时下线。
+ * 需要恢复开场动画时把这格改回 true 即可，其余逻辑全部保留。
+ */
+export const OPENING_CG_ENABLED = false;
+
 export function shouldShowCG(): boolean {
+  if (!OPENING_CG_ENABLED) return false;
   const isCloudflarePages = window.location.hostname.toLowerCase().endsWith('.pages.dev');
   return !__CF_PAGES__ && !isCloudflarePages && !localStorage.getItem(SEEN_KEY);
 }

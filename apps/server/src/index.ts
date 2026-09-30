@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { getCityState } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
-import { randomUUID } from 'node:crypto';
+import { execSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
 import { authenticate, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
@@ -21,6 +23,7 @@ import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldCon
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
+import { CHAT_MAX_LENGTH, NICKNAME_MAX_LENGTH, PASSWORD_MAX_LENGTH, sanitizeChatText, sanitizeHouseName } from './textLimits.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
 const clients = new Map<string, Client>();
@@ -154,8 +157,8 @@ async function handle(client: Client, raw: string) {
   if (message.type === 'hello') {
     if (client.ready || client.authInProgress) { fail(client.socket, 'Already authenticating'); return; }
     if ((message.token !== undefined && typeof message.token !== 'string')
-      || (message.nickname !== undefined && typeof message.nickname !== 'string')
-      || (message.password !== undefined && typeof message.password !== 'string')
+      || (message.nickname !== undefined && (typeof message.nickname !== 'string' || message.nickname.length > NICKNAME_MAX_LENGTH))
+      || (message.password !== undefined && (typeof message.password !== 'string' || message.password.length > PASSWORD_MAX_LENGTH))
       || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string' || message.pl.login.length > 160 || message.pl.password.length > 256))) return fail(client.socket, 'Invalid authentication message');
     client.authInProgress = true;
     const address = client.ip;
@@ -205,12 +208,12 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'position') { if (!validPosition(message.position)) return fail(client.socket, 'Invalid position'); pendingPositions.set(userId, message.position); client.user.position = message.position; broadcast({ type: 'player.moved', playerId: userId, position: message.position }, userId); return; }
     if (message.type === 'chat') {
-      if (typeof message.text !== 'string' || message.text.length > 500) return fail(client.socket, 'Invalid chat message');
+      if (typeof message.text !== 'string' || message.text.length > CHAT_MAX_LENGTH) return fail(client.socket, 'Invalid chat message');
       const window = chatWindows.get(userId) ?? { startedAt: now, count: 0 };
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim().slice(0, 500);
+      const text = sanitizeChatText(message.text);
       if (text) {
         const messageId = db.recordChatMessage(userId, client.user.nickname, text, chatModeration.enabled);
         bumpMetric('chatMessages');
@@ -339,9 +342,9 @@ async function handle(client: Client, raw: string) {
     }
     if (!('buildingId' in message) || !validId(message.buildingId)) return fail(client.socket, 'Invalid building ID');
     const house = db.getHouse(message.buildingId);
-    if (message.type === 'housing.claim') { if (!validResidenceId(message.buildingId)) return fail(client.socket, 'Invalid residence ID'); if (house) return fail(client.socket, 'House is already claimed'); try { db.claimHouse(message.buildingId, userId, typeof message.name === 'string' ? message.name.slice(0, 80) : undefined); db.deleteHousingRequestsForUser(userId); broadcastHousingState(); } catch { fail(client.socket, 'Could not claim house; the user may already live elsewhere'); } return; }
+    if (message.type === 'housing.claim') { if (!validResidenceId(message.buildingId)) return fail(client.socket, 'Invalid residence ID'); if (house) return fail(client.socket, 'House is already claimed'); const claimedName = typeof message.name === 'string' ? sanitizeHouseName(message.name) : undefined; if (typeof message.name === 'string' && !claimedName) return fail(client.socket, 'Invalid house name'); try { db.claimHouse(message.buildingId, userId, claimedName ?? undefined); db.deleteHousingRequestsForUser(userId); broadcastHousingState(); } catch { fail(client.socket, 'Could not claim house; the user may already live elsewhere'); } return; }
     if (!house) return fail(client.socket, 'House not found');
-    if (message.type === 'housing.rename') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can rename'); if (typeof message.name !== 'string' || !message.name.trim()) return fail(client.socket, 'Invalid house name'); db.renameHouse(message.buildingId, message.name.trim().slice(0, 80)); }
+    if (message.type === 'housing.rename') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can rename'); const renamed = typeof message.name === 'string' ? sanitizeHouseName(message.name) : null; if (!renamed) return fail(client.socket, 'Invalid house name'); db.renameHouse(message.buildingId, renamed); }
     else if (message.type === 'housing.invite') {
       if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can invite');
       if (!validUserId(message.userId) || message.userId === userId) return fail(client.socket, 'Invalid invite target');
@@ -375,6 +378,30 @@ const respondHttpBodyError = (response: import('node:http').ServerResponse, erro
   return true;
 };
 const startedAt = Date.now();
+// Boot-gate identity: the web client probes this once per visit and re-runs
+// its heavy precache whenever the deployed server version changed.
+const SERVER_VERSION = (() => {
+  try {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string };
+    return manifest.version ?? '0.0.0';
+  } catch { return '0.0.0'; }
+})();
+const SERVER_COMMIT = (() => {
+  const fromEnv = process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT;
+  if (fromEnv) return fromEnv;
+  // Deployments that build from a git checkout (Render, manual clones)
+  // resolve the commit themselves so server-change detection works without
+  // any operator wiring; env stays the authoritative override (r8#3).
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return '';
+  }
+})();
+// The client boot gate only compares server identities for equality, so the
+// public endpoint returns a short fingerprint instead of the exact version
+// and commit strings (less deployment detail on the wire).
+const SERVER_FINGERPRINT = createHash('sha256').update(`${SERVER_VERSION}:${SERVER_COMMIT}`).digest('hex').slice(0, 16);
 const http = createServer(async (request, response) => {
   const requestStartedAt = Date.now();
   const requestIp = clientIp(request);
@@ -439,6 +466,11 @@ const http = createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
     response.end(JSON.stringify({ items: npcEditCatalogItems }));
+    return;
+  }
+  if (request.method === 'GET' && request.url === '/town-api/version') {
+    response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ fingerprint: SERVER_FINGERPRINT }));
     return;
   }
   if (request.method === 'POST' && request.url === '/town-api/npc-edit-login') {
