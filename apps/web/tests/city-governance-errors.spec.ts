@@ -131,8 +131,11 @@ for (const [action, failure] of scenarios) {
     // Block purchases have no free parameters: the retained receipt is the draft.
     const input = action === 'donate' ? targetCard.getByRole('spinbutton') : null;
     if (input) await input.fill('500');
-    // One button per card; its label follows the receipt state (捐款/投建这片/确认投建结果).
-    const actionButton = targetCard.getByRole('button');
+    // Project cards carry both 投票建设 and 捐款 buttons; block cards have exactly
+    // one action button whose label follows the receipt state (投建这片/确认投建结果).
+    const actionButton = action === 'donate'
+      ? targetCard.getByRole('button', { name: '捐款', exact: true })
+      : targetCard.getByRole('button');
     await actionButton.click();
     await expect.poll(() => attempts).toBe(1);
     await expect(actionButton).toBeDisabled();
