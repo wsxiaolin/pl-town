@@ -3,12 +3,10 @@
 // The off-site restore path refuses to boot when the persisted city_configs
 // row for the current version no longer matches the config JSON — the
 // "City config changed without a version bump" guard in
-// cityGovernanceSchema.ts. That invariant can only hold if every content
-// change ships with a version bump, but nothing used to compare the two at
-// review time, so a bad row could reach production and crash-loop the
-// deploy. This test pins the serialized config: changing the content
-// requires bumping CITY_CONSTRUCTION_CONFIG.version and regenerating the
-// golden snapshot in one go.
+// cityGovernanceSchema.ts. The serialized config embeds building catalog
+// labels (#181's tavern relabel drifted it on main), so any content change
+// must ship with a version bump. This test pins the serialized config and
+// fails at review time when the content drifts without one.
 //
 //   node tests/city-config-snapshot.mjs --update
 //
@@ -18,30 +16,64 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const goldenPath = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'city-construction-config.golden.json');
-const { CITY_CONSTRUCTION_CONFIG } = await import('../dist/data/cityConstructionConfig.js');
-const current = JSON.stringify(CITY_CONSTRUCTION_CONFIG);
+const { CITY_CONSTRUCTION_CONFIG: config } = await import('../dist/data/cityConstructionConfig.js');
+const canonical = JSON.stringify(config);
+
+function projectDrift(currentConfig, goldenConfig) {
+  const notes = [];
+  const currentProjects = new Map(currentConfig.projects.map((project) => [project.id, project]));
+  const goldenProjects = new Map(goldenConfig.projects.map((project) => [project.id, project]));
+  for (const id of currentProjects.keys()) if (!goldenProjects.has(id)) notes.push(`project added: ${id}`);
+  for (const id of goldenProjects.keys()) if (!currentProjects.has(id)) notes.push(`project removed: ${id}`);
+  for (const [id, project] of currentProjects) {
+    const goldenProject = goldenProjects.get(id);
+    if (!goldenProject) continue;
+    for (const field of new Set([...Object.keys(project), ...Object.keys(goldenProject)])) {
+      if (JSON.stringify(project[field]) !== JSON.stringify(goldenProject[field])) {
+        notes.push(`project ${id}: ${field} changed (${JSON.stringify(goldenProject[field])} -> ${JSON.stringify(project[field])})`);
+      }
+    }
+  }
+  for (const [label, currentIds, goldenIds] of [
+    ['decoration', (currentConfig.decorations ?? []).map((entry) => entry.id), (goldenConfig.decorations ?? []).map((entry) => entry.id)],
+    ['plot', (currentConfig.personalPlots ?? []).map((entry) => entry.id), (goldenConfig.personalPlots ?? []).map((entry) => entry.id)],
+    ['initialBuiltBuildingIds', currentConfig.initialBuiltBuildingIds ?? [], goldenConfig.initialBuiltBuildingIds ?? []],
+  ]) {
+    const currentSet = new Set(currentIds);
+    const goldenSet = new Set(goldenIds);
+    for (const id of currentSet) if (!goldenSet.has(id)) notes.push(`${label} added: ${id}`);
+    for (const id of goldenSet) if (!currentSet.has(id)) notes.push(`${label} removed: ${id}`);
+  }
+  return notes;
+}
 
 if (process.argv.includes('--update')) {
+  if (process.env.CI) {
+    console.error('city-config-snapshot: --update is for local regeneration only; commit the regenerated golden deliberately.');
+    process.exit(1);
+  }
   mkdirSync(dirname(goldenPath), { recursive: true });
-  writeFileSync(goldenPath, `${current}\n`, 'utf8');
-  console.log(`city-config-snapshot: wrote golden for version ${CITY_CONSTRUCTION_CONFIG.version}`);
+  writeFileSync(goldenPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  console.log(`city-config-snapshot: wrote golden for version ${config.version}`);
   process.exit(0);
 }
 
 const golden = readFileSync(goldenPath, 'utf8').trim();
 assert.ok(golden, 'city-config-snapshot: golden snapshot is missing; run `node tests/city-config-snapshot.mjs --update`');
-const goldenVersion = JSON.parse(golden).version;
-if (goldenVersion !== CITY_CONSTRUCTION_CONFIG.version) {
+const goldenConfig = JSON.parse(golden);
+if (goldenConfig.version !== config.version) {
   assert.fail(
-    `city-config-snapshot: config version is ${CITY_CONSTRUCTION_CONFIG.version} but the golden snapshot pins ${goldenVersion}; `
-    + 'regenerate it with `node tests/city-config-snapshot.mjs --update`',
+    `city-config-snapshot: config version is ${config.version} but the golden snapshot pins ${goldenConfig.version}; `
+    + 'bump CITY_CONSTRUCTION_CONFIG.version and regenerate with `node tests/city-config-snapshot.mjs --update`',
   );
 }
-assert.equal(
-  current,
-  golden,
-  'city-config-snapshot: city construction config content changed without a version bump — '
-    + 'bump CITY_CONSTRUCTION_CONFIG.version and regenerate the golden snapshot '
-    + '(`node tests/city-config-snapshot.mjs --update`)',
-);
-console.log(`city-config-snapshot: config matches golden (version ${CITY_CONSTRUCTION_CONFIG.version})`);
+if (canonical !== JSON.stringify(goldenConfig)) {
+  const notes = projectDrift(config, goldenConfig);
+  assert.fail(
+    'city-config-snapshot: city construction config content changed without a version bump — '
+      + 'bump CITY_CONSTRUCTION_CONFIG.version and regenerate the golden snapshot '
+      + '(`node tests/city-config-snapshot.mjs --update`). Drift:\n'
+      + (notes.length ? notes.map((note) => `  - ${note}`).join('\n') : '  (field-level diff unavailable; compare the golden manually)'),
+  );
+}
+console.log(`city-config-snapshot: config matches golden (version ${config.version})`);

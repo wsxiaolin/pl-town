@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { CITY_CONSTRUCTION_CONFIG as config } from './data/cityConstructionConfig.js';
+import { CITY_CONSTRUCTION_CONFIG as config, type CityProject } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 
 // Called inside both the schema migration and the in-process restore transaction.
@@ -52,8 +52,21 @@ export function initializeCityGovernance(db: Database.Database): void {
     if (project.buildingId && config.initialBuiltBuildingIds.includes(project.buildingId)) throw new Error('Construction overlaps core buildings');
     const old = db.prepare('SELECT definition_json FROM city_projects WHERE id = ?').get(project.id) as { definition_json: string } | undefined;
     // Paid projects keep immutable targets and geometry across deployments.
-    if (old && old.definition_json !== JSON.stringify(project)) throw new Error(`City project changed: ${project.id}; use a new project ID`);
-    db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
+    // Display copy (name/description) is derived from the building catalog
+    // label, so a rename such as #181's tavern relabel drifts the serialized
+    // definition after the ledger already baked the old strings in. Those
+    // two fields heal in place — funded/built progress carries through —
+    // while any semantic field change still requires a new project ID.
+    if (old && old.definition_json !== JSON.stringify(project)) {
+      const previous = JSON.parse(old.definition_json) as CityProject;
+      const semanticFields: Array<keyof CityProject> = ['id', 'buildingId', 'cost', 'kind', 'road', 'placements'];
+      if (semanticFields.some((field) => JSON.stringify(previous[field]) !== JSON.stringify(project[field]))) {
+        throw new Error(`City project changed: ${project.id}; use a new project ID`);
+      }
+      db.prepare('UPDATE city_projects SET definition_json = ? WHERE id = ?').run(JSON.stringify(project), project.id);
+    } else {
+      db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
+    }
     const progress = db.prepare('SELECT funded, built FROM city_projects WHERE id = ?').get(project.id) as { funded: number; built: number };
     if (!Number.isSafeInteger(progress.funded) || progress.funded > project.cost || Boolean(progress.built) !== (progress.funded === project.cost)) throw new Error(`Invalid city project progress: ${project.id}`);
     // Preserve buildings unlocked before city governance existed. Their project

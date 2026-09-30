@@ -250,6 +250,31 @@ try {
     assert.throws(() => db.transaction(() => initializeCityGovernance(db))(), /explicit reconciliation/);
     config.personalPlots[0].x = originalPlotX;
     config.version = originalVersion;
+    // #181 relabeled the tavern after the ledger had baked the old strings
+    // in: a restored lineage carrying the pre-relabel config row and project
+    // definition must still boot — the version re-anchor skips the stale
+    // config row, and the display-only drift heals in place with progress.
+    const relabelPath = ${JSON.stringify(join(dataDir, 'city-relabel.sqlite'))};
+    const currentVersion = config.version;
+    const tavern = config.projects.find((project) => project.id === 'build-tavern');
+    const originalTavernName = tavern.name;
+    const originalTavernDescription = tavern.description;
+    config.version = '2026-09-19.1';
+    tavern.name = '酒馆';
+    tavern.description = '共同筹建酒馆';
+    db.prepare('INSERT INTO city_configs VALUES (?, ?)').run(config.version, JSON.stringify(config));
+    db.prepare('UPDATE city_meta SET config_version = ?').run(config.version);
+    db.prepare('DELETE FROM city_configs WHERE version = ?').run(currentVersion);
+    db.prepare('UPDATE city_projects SET funded = 1500, built = 0, definition_json = ? WHERE id = ?').run(JSON.stringify(tavern), 'build-tavern');
+    await backupDatabase(relabelPath);
+    tavern.name = originalTavernName;
+    tavern.description = originalTavernDescription;
+    config.version = currentVersion;
+    restoreFromBackupFile(relabelPath);
+    assert.equal(db.prepare('SELECT definition_json FROM city_projects WHERE id = ?').get('build-tavern').definition_json, JSON.stringify(tavern));
+    assert.deepEqual(db.prepare('SELECT funded, built FROM city_projects WHERE id = ?').get('build-tavern'), { funded: 1500, built: 0 });
+    assert.equal(db.prepare('SELECT config_version FROM city_meta WHERE id = 1').get().config_version, currentVersion);
+    assert.ok(db.prepare('SELECT 1 FROM city_configs WHERE version = ?').get(currentVersion));
     // A pre-city backup seeds clean construction state and operations.
     const legacyPath = ${JSON.stringify(join(dataDir, 'city-legacy.sqlite'))};
     await backupDatabase(legacyPath);
