@@ -32,7 +32,13 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  version: '2026-09-19.1',
+  // 2026-09-29.1: content is identical to 2026-09-19.1. The version is
+  // re-anchored because the production off-site backup lineage carries a
+  // city_configs row at 2026-09-19.1 whose JSON no longer matches the code,
+  // so the restore guard ("City config changed without a version bump")
+  // rejects every boot. tests/city-config-snapshot.mjs now fails at review
+  // time when the config content changes without a matching version bump.
+  version: '2026-09-29.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     { id: 'greenbelt-path', name: '北侧绿道', description: '公共步行绿道', cost: 800, kind: 'road', road: { x: 22, z: -40, width: 8, depth: 1 } },
