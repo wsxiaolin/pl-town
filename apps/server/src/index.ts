@@ -23,6 +23,7 @@ import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldCon
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
+import { CHAT_MAX_LENGTH, NICKNAME_MAX_LENGTH, PASSWORD_MAX_LENGTH, sanitizeChatText, sanitizeHouseName } from './textLimits.js';
 
 type Client = { socket: WebSocket; user: User; ready: boolean; ip: string; authInProgress: boolean; alive: boolean };
 const clients = new Map<string, Client>();
@@ -156,8 +157,8 @@ async function handle(client: Client, raw: string) {
   if (message.type === 'hello') {
     if (client.ready || client.authInProgress) { fail(client.socket, 'Already authenticating'); return; }
     if ((message.token !== undefined && typeof message.token !== 'string')
-      || (message.nickname !== undefined && typeof message.nickname !== 'string')
-      || (message.password !== undefined && typeof message.password !== 'string')
+      || (message.nickname !== undefined && (typeof message.nickname !== 'string' || message.nickname.length > NICKNAME_MAX_LENGTH))
+      || (message.password !== undefined && (typeof message.password !== 'string' || message.password.length > PASSWORD_MAX_LENGTH))
       || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string' || message.pl.login.length > 160 || message.pl.password.length > 256))) return fail(client.socket, 'Invalid authentication message');
     client.authInProgress = true;
     const address = client.ip;
@@ -207,12 +208,12 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'position') { if (!validPosition(message.position)) return fail(client.socket, 'Invalid position'); pendingPositions.set(userId, message.position); client.user.position = message.position; broadcast({ type: 'player.moved', playerId: userId, position: message.position }, userId); return; }
     if (message.type === 'chat') {
-      if (typeof message.text !== 'string' || message.text.length > 500) return fail(client.socket, 'Invalid chat message');
+      if (typeof message.text !== 'string' || message.text.length > CHAT_MAX_LENGTH) return fail(client.socket, 'Invalid chat message');
       const window = chatWindows.get(userId) ?? { startedAt: now, count: 0 };
       if (now - window.startedAt >= 10_000) { window.startedAt = now; window.count = 0; }
       if (++window.count > MAX_CHAT_MESSAGES_PER_TEN_SECONDS) { chatWindows.set(userId, window); return fail(client.socket, 'Chat rate limit exceeded'); }
       chatWindows.set(userId, window);
-      const text = message.text.trim().slice(0, 500);
+      const text = sanitizeChatText(message.text);
       if (text) {
         const messageId = db.recordChatMessage(userId, client.user.nickname, text, chatModeration.enabled);
         bumpMetric('chatMessages');
@@ -341,9 +342,9 @@ async function handle(client: Client, raw: string) {
     }
     if (!('buildingId' in message) || !validId(message.buildingId)) return fail(client.socket, 'Invalid building ID');
     const house = db.getHouse(message.buildingId);
-    if (message.type === 'housing.claim') { if (!validResidenceId(message.buildingId)) return fail(client.socket, 'Invalid residence ID'); if (house) return fail(client.socket, 'House is already claimed'); try { db.claimHouse(message.buildingId, userId, typeof message.name === 'string' ? message.name.slice(0, 80) : undefined); db.deleteHousingRequestsForUser(userId); broadcastHousingState(); } catch { fail(client.socket, 'Could not claim house; the user may already live elsewhere'); } return; }
+    if (message.type === 'housing.claim') { if (!validResidenceId(message.buildingId)) return fail(client.socket, 'Invalid residence ID'); if (house) return fail(client.socket, 'House is already claimed'); const claimedName = typeof message.name === 'string' ? sanitizeHouseName(message.name) : undefined; if (typeof message.name === 'string' && !claimedName) return fail(client.socket, 'Invalid house name'); try { db.claimHouse(message.buildingId, userId, claimedName ?? undefined); db.deleteHousingRequestsForUser(userId); broadcastHousingState(); } catch { fail(client.socket, 'Could not claim house; the user may already live elsewhere'); } return; }
     if (!house) return fail(client.socket, 'House not found');
-    if (message.type === 'housing.rename') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can rename'); if (typeof message.name !== 'string' || !message.name.trim()) return fail(client.socket, 'Invalid house name'); db.renameHouse(message.buildingId, message.name.trim().slice(0, 80)); }
+    if (message.type === 'housing.rename') { if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can rename'); const renamed = typeof message.name === 'string' ? sanitizeHouseName(message.name) : null; if (!renamed) return fail(client.socket, 'Invalid house name'); db.renameHouse(message.buildingId, renamed); }
     else if (message.type === 'housing.invite') {
       if (house.ownerId !== userId) return fail(client.socket, 'Only the owner can invite');
       if (!validUserId(message.userId) || message.userId === userId) return fail(client.socket, 'Invalid invite target');
