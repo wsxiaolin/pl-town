@@ -17,7 +17,7 @@ jobs:
   verify:
     name: Typecheck, build, unit & server tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -47,17 +47,20 @@ jobs:
 
   # The Playwright suite renders a Three.js city with WebGL, which headless
   # Chromium cannot create. We shard the suite across a matrix and run each
-  # shard under Xvfb with the SwiftShader software-GL driver.
+  # shard under Xvfb with the SwiftShader software-GL driver. Every test pays
+  # a ~40s WebGL cold boot, and the contiguous governance-session block alone
+  # needs ~10 minutes: keep eight shards so the heaviest shard stays well
+  # under the job limit, and allow 20 minutes for slow runner days.
   web:
     name: Web (Playwright) shard ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
-        total: [6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        total: [8]
     steps:
       - uses: actions/checkout@v4
 
