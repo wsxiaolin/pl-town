@@ -4,6 +4,7 @@ import { createNewsstandController } from '../adapters/ui/newsstandController';
 import { createAcademyController } from '../adapters/ui/academyController';
 import { createMutualAidPanelController } from '../adapters/ui/mutualAidPanelController';
 import { createActivityPanelController } from '../adapters/ui/activityPanelController';
+import { createLibrarySearchController } from '../adapters/ui/librarySearchController';
 import { showUnlockToast } from './toast';
 
 export function createCityHudPanels(document: Document, signal: AbortSignal, setPhoneOpen: (open: boolean) => void) {
@@ -14,6 +15,7 @@ export function createCityHudPanels(document: Document, signal: AbortSignal, set
     academy: createAcademyController(document),
     mutualAid: createMutualAidPanelController(document),
     activity: createActivityPanelController({ document, signal }),
+    librarySearch: createLibrarySearchController({ document, signal }),
   };
 }
 

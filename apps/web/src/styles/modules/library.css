@@ -1,0 +1,30 @@
+/* Library works search drawer (town library → community projects archive) */
+.library-panel { z-index: 216; }
+.library-toolbar { flex: none; display: grid; gap: 10px; padding: 16px 30px 14px; border-bottom: 1px solid #dfe0dc; }
+.library-kicker { color: #3b6fe0; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.library-form { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; }
+.library-form input[type="search"] { min-width: 0; flex: 1 1 auto; height: 36px; padding: 0 11px; border: 1px solid #d5d8d3; background: #fff; color: #20242a; outline: 0; font-size: 12px; }
+.library-form input[type="search"]::placeholder { color: #9ba09a; }
+.library-form input[type="search"]:focus-visible { border-color: #3b6fe0; }
+.library-submit { flex: 0 0 auto; height: 36px; padding: 0 18px; border: 0; background: #30363d; color: #fff; font-size: 12px; cursor: pointer; }
+.library-submit:hover { background: #3b434c; }
+.library-close { flex: 0 0 auto; width: 26px; height: 26px; padding: 0; border: 0; background: transparent; color: #9ba09a; font-size: 14px; line-height: 1; cursor: pointer; }
+.library-close:hover { color: #20242a; }
+.library-body { flex: 1; min-height: 0; overflow: auto; padding: 4px 30px 28px; overscroll-behavior: contain; }
+.library-hint { padding: 42px 0; color: #8a8e89; text-align: center; font-size: 12px; }
+.library-error { padding: 42px 0 10px; color: #a2541f; text-align: center; font-size: 12px; line-height: 1.6; }
+.library-retry { display: block; margin: 0 auto; padding: 7px 22px; border: 1px solid #d5d8d3; background: #fff; color: #30363c; font-size: 11px; cursor: pointer; }
+.library-retry:hover { border-color: #3b6fe0; color: #315bb6; }
+.library-work { padding: 18px 0 20px; border-top: 1px solid #dedfda; }
+.library-work:first-of-type { border-top: 0; }
+.library-work-meta { color: #858984; font-size: 10px; letter-spacing: .02em; }
+.library-work-title { display: inline-block; margin-top: 8px; color: #315bb6; font-size: 16px; font-weight: 650; line-height: 1.4; text-decoration: none; overflow-wrap: anywhere; }
+.library-work-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.library-work-summary { margin-top: 8px; color: #646964; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.library-work-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.library-tag { padding: 3px 8px; border: 1px solid #d7d9d5; background: #fff; color: #737873; font-size: 10px; cursor: pointer; }
+.library-tag:hover { border-color: #3b6fe0; color: #315bb6; }
+@media (max-width: 680px) {
+  .library-toolbar { padding: 12px 20px 11px; gap: 8px; }
+  .library-body { padding: 4px 20px 22px; }
+}

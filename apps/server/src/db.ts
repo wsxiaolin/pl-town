@@ -208,6 +208,7 @@ db.exec(`
   if (!columns.some((column) => column.name === 'pl_user_id')) db.exec('ALTER TABLE users ADD COLUMN pl_user_id TEXT');
   if (!columns.some((column) => column.name === 'pl_nickname')) db.exec('ALTER TABLE users ADD COLUMN pl_nickname TEXT');
   if (!columns.some((column) => column.name === 'disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
+  db.exec("UPDATE users SET pl_nickname = nickname WHERE pl_user_id IS NOT NULL AND pl_nickname IS NULL");
 }
 {
   const columns = db.prepare('PRAGMA table_info(story_progress)').all() as Array<{ name: string }>;
@@ -547,6 +548,7 @@ export function recordRegistration(ip: string, userId: string): void {
 
 const FINGERPRINT_HASH = /^[a-f0-9]{64}$/;
 export const MAX_HOUSES_PER_FINGERPRINT = 2;
+const MAX_FINGERPRINTS_PER_USER = 8;
 
 export function normalizeFingerprint(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -557,15 +559,20 @@ export function normalizeFingerprint(value: unknown): string | null {
 export function recordDeviceFingerprint(userId: string, fingerprint: string | null): void {
   if (!fingerprint) return;
   const timestamp = now();
-  db.prepare(`INSERT INTO device_fingerprints (hash, user_id, last_seen_at) VALUES (?, ?, ?)
-    ON CONFLICT(hash, user_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`).run(fingerprint, userId, timestamp);
+  db.transaction(() => {
+    db.prepare(`INSERT INTO device_fingerprints (hash, user_id, last_seen_at) VALUES (?, ?, ?)
+      ON CONFLICT(hash, user_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`).run(fingerprint, userId, timestamp);
+    const extra = db.prepare('SELECT hash FROM device_fingerprints WHERE user_id = ? ORDER BY last_seen_at DESC LIMIT -1 OFFSET ?').all(userId, MAX_FINGERPRINTS_PER_USER) as Array<{ hash: string }>;
+    for (const row of extra) db.prepare('DELETE FROM device_fingerprints WHERE user_id = ? AND hash = ?').run(userId, row.hash);
+  })();
 }
 
 export function countHousesForFingerprint(fingerprint: string): number {
-  return (db.prepare(`SELECT COUNT(DISTINCT hm.building_id) AS count
+  return (db.prepare(`SELECT COUNT(DISTINCT h.building_id) AS count
     FROM device_fingerprints df
-    JOIN house_members hm ON hm.user_id = df.user_id
-    WHERE df.hash = ?`).get(fingerprint) as { count: number }).count;
+    JOIN houses h ON h.owner_id = df.user_id
+    JOIN users u ON u.id = df.user_id
+    WHERE df.hash = ? AND u.pl_user_id IS NULL`).get(fingerprint) as { count: number }).count;
 }
 
 export function latestFingerprintForUser(userId: string): string | null {

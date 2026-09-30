@@ -135,6 +135,7 @@ let writerCatalogController: CityHudPanels['writerCatalog'];
 let newsstandController: CityHudPanels['newsstand'];
 let academyController: CityHudPanels['academy'];
 let mutualAidController: CityHudPanels['mutualAid'];
+let librarySearchController: CityHudPanels['librarySearch'];
 let multiplayerHousing: ReturnType<typeof createMultiplayerHousingController>;
 let worldDecorations: ReturnType<typeof assembleCityWorld>['worldDecorations'];
 let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
@@ -328,6 +329,7 @@ const buildingInteraction = createBuildingInteraction({
   getNewsstandController: () => newsstandController,
   getAcademyController: () => academyController,
   getMutualAidController: () => mutualAidController,
+  getLibrarySearchController: () => librarySearchController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
@@ -355,6 +357,7 @@ const eventBindings = createEventBindings({
   getWriterCatalogController: () => writerCatalogController,
   getAcademyController: () => academyController,
   getMutualAidController: () => mutualAidController,
+  getLibrarySearchController: () => librarySearchController,
   toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
@@ -488,6 +491,7 @@ function init() {
   newsstandController = hud.newsstand;
   academyController = hud.academy;
   mutualAidController = hud.mutualAid;
+  librarySearchController = hud.librarySearch;
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,

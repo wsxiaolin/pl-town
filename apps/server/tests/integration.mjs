@@ -360,10 +360,11 @@ try {
   });
   if (invalidJsonRequest.status !== 415) throw new Error('JSON proxy endpoints must enforce Content-Type');
 
-  alice = await connect('Alice');
-  bob = await connect('Bob');
+  const sharedFingerprint = 'a'.repeat(64);
+  alice = await connect('Alice', 'resident-secret', undefined, sharedFingerprint);
+  bob = await connect('Bob', 'resident-secret', undefined, sharedFingerprint);
   await waitFor(alice, 'player.joined', (message) => message.player.id === bob.hello.user.id);
-  charlie = await connect('Charlie');
+  charlie = await connect('Charlie', 'resident-secret', undefined, sharedFingerprint);
   await waitFor(alice, 'player.joined', (message) => message.player.id === charlie.hello.user.id);
 
   if (alice.hello.weather !== 'clear') throw new Error(`New residents must receive the current server weather, got ${alice.hello.weather}`);
@@ -589,6 +590,10 @@ try {
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
 
+  send(alice, { type: 'chat', text: 'a'.repeat(501) });
+  await waitFor(alice, 'error', (message) => message.message === 'Invalid chat message');
+  send(alice, { type: 'chat', text: 'clean\u0000chat' });
+  await waitFor(bob, 'chat', (message) => message.text === 'cleanchat');
   send(alice, { type: 'chat', text: 'integration-chat' });
   const approvedChat = await waitFor(bob, 'chat', (message) => message.text === 'integration-chat');
   if (!Number.isInteger(approvedChat.messageId)) throw new Error('Chat broadcasts must include a persisted message id');
@@ -636,8 +641,18 @@ try {
   if (!oneChar) throw new Error('One-character nickname should be rejected');
   const specialChars = await connectExpectingError('小明!');
   if (!specialChars) throw new Error('Special characters should be rejected');
+  const tooLongNickname = await connectExpectingError('A'.repeat(41));
+  if (!tooLongNickname) throw new Error('Nicknames longer than 40 characters should be rejected');
+  const controlNickname = await connectExpectingError('小明\u0000');
+  if (!controlNickname) throw new Error('Control characters in nicknames should be rejected');
   const noPassword = await connectExpectingError('小王', '');
   if (!noPassword) throw new Error('Missing password should be rejected');
+  const shortPassword = await connectExpectingError('短密码居民', 'short');
+  if (!shortPassword) throw new Error('Passwords shorter than 10 characters should be rejected');
+  const controlPassword = await connectExpectingError('控制符密码', 'secret\npassword');
+  if (!controlPassword) throw new Error('Control characters in passwords should be rejected');
+  const tooLongPassword = await connectExpectingError('超长密码居民', 'x'.repeat(129));
+  if (!tooLongPassword) throw new Error('Passwords longer than 128 characters should be rejected');
   const wrongPassword = await connectExpectingError('Alice', 'wrong-pass');
   if (!wrongPassword) throw new Error('Wrong password should be rejected');
 
@@ -660,6 +675,12 @@ try {
   if (!plAdminUser?.plUserId || plAdminUser.plNickname !== 'TakenPlResident') throw new Error('Admin user list must expose the bound Physics Lab username');
 
   const buildingId = 'residence:3.00:4.00';
+  bob.messages.length = 0;
+  send(bob, { type: 'housing.claim', buildingId, name: '<script>alert(1)</script>' });
+  await waitFor(bob, 'error', (message) => message.message === 'Invalid house name');
+  bob.messages.length = 0;
+  send(bob, { type: 'housing.claim', buildingId, name: 'A'.repeat(25) });
+  await waitFor(bob, 'error', (message) => message.message === 'Invalid house name');
   send(alice, { type: 'housing.claim', buildingId, name: 'Integration Home' });
   await waitFor(bob, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === buildingId));
   send(alice, { type: 'housing.kick', buildingId, userId: {} });
@@ -712,19 +733,23 @@ try {
   const housesAfterAdminDelete = await fetch(`${adminBase}/houses`, { headers: { cookie } }).then((response) => response.json());
   if (housesAfterAdminDelete.items.some((house) => house.buildingId === adminDeletedBuildingId)) throw new Error('Deleted houses must be removed from the admin housing list');
 
-  const sharedFingerprint = 'a'.repeat(64);
-  const fpOne = await connect('FPOne', 'resident-secret', undefined, sharedFingerprint);
-  send(fpOne, { type: 'housing.claim', buildingId: 'residence:10.00:4.00', name: 'Fingerprint Home 1' });
+  // Alice/Bob already spent the 6-per-10s housing mutation budget on the
+  // earlier claim/invite/transfer/release flow; wait for that window to lapse.
+  await new Promise((resolve) => setTimeout(resolve, 10_500));
+  send(alice, { type: 'housing.claim', buildingId: 'residence:10.00:4.00', name: 'Fingerprint Home 1' });
   await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === 'residence:10.00:4.00'));
-  const fpTwo = await connect('FPTwo', 'resident-secret', undefined, sharedFingerprint);
-  send(fpTwo, { type: 'housing.claim', buildingId: 'residence:11.00:4.00', name: 'Fingerprint Home 2' });
+  send(bob, { type: 'housing.claim', buildingId: 'residence:11.00:4.00', name: 'Fingerprint Home 2' });
   await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === 'residence:11.00:4.00'));
-  const fpThree = await connect('FPThree', 'resident-secret', undefined, sharedFingerprint);
-  send(fpThree, { type: 'housing.claim', buildingId: 'residence:12.00:4.00', name: 'Fingerprint Home 3' });
-  await waitFor(fpThree, 'error', (message) => message.message === '该设备已认领两套住宅，请先绑定物实账号');
-  send(plOwner, { type: 'housing.claim', buildingId: 'residence:12.00:4.00', name: 'Verified Fingerprint Home' });
+  charlie.messages.length = 0;
+  send(charlie, { type: 'housing.claim', buildingId: 'residence:12.00:4.00', name: 'Fingerprint Home 3' });
+  await waitFor(charlie, 'error', (message) => message.message === '该设备已认领两套住宅，请先绑定物实账号');
+  send(plOwner, { type: 'housing.claim', buildingId: 'residence:12.00:4.00', name: 'Verified FP Home' });
   await waitFor(alice, 'housing.updated', (message) => message.houses.some((house) => house.buildingId === 'residence:12.00:4.00' && house.ownerId === plOwner.hello.user.id));
-  fpOne.socket.close(); fpTwo.socket.close(); fpThree.socket.close(); plOwner.socket.close();
+  send(alice, { type: 'housing.release', buildingId: 'residence:10.00:4.00' });
+  send(bob, { type: 'housing.release', buildingId: 'residence:11.00:4.00' });
+  send(plOwner, { type: 'housing.release', buildingId: 'residence:12.00:4.00' });
+  await waitFor(alice, 'housing.updated', (message) => !message.houses.some((house) => ['residence:10.00:4.00', 'residence:11.00:4.00', 'residence:12.00:4.00'].includes(house.buildingId)));
+  plOwner.socket.close();
 
   // 相同昵称+正确密码登录返回同一个全局唯一 ID
   const aliceAgain = await connect('Alice');

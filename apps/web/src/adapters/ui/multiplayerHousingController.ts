@@ -5,6 +5,7 @@ import { createCloudProgressionController } from './cloudProgressionController';
 import { createCommunityPanelController, type SocialKind } from './communityPanelController';
 import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
+import { CHAT_MAX_LENGTH, HOUSE_NAME_MAX_LENGTH, sanitizeChatText, sanitizeHouseName } from '../../core/textLimits';
 import { renderVerifiedName } from './verifiedBadge';
 
 interface RemotePlayer {
@@ -113,9 +114,9 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     }, { signal: signal });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      const text = chatInput.value.trim();
+      const text = sanitizeChatText(chatInput.value);
       if (!text) return;
-      multiplayer?.chat(text);
+      multiplayer?.chat(text.slice(0, CHAT_MAX_LENGTH));
       chatInput.value = '';
     }, { signal: signal });
     document.querySelectorAll('[data-online-tab]').forEach((tab) => tab.addEventListener('click', () => {
@@ -141,8 +142,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     claimCancel?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimSubmit?.addEventListener('click', () => {
       if (!residenceClaimId) return;
-      const name = (claimInput as HTMLInputElement | null)?.value.trim() || '';
-      if (!name) { claimInput?.focus(); return; }
+      const name = sanitizeHouseName((claimInput as HTMLInputElement | null)?.value ?? '') || '';
+      if (!name) { claimInput?.focus(); showUnlockToast('住宅名称只能用文字、数字和少量标点'); return; }
       if (multiplayer?.user) {
         claimSubmit.setAttribute('disabled', 'true');
         multiplayer.housing('claim', { buildingId: residenceClaimId, name });
@@ -565,11 +566,11 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     if (mode === 'rename') {
       const form = document.createElement('div'); form.className = 'hc-form';
       const input = document.createElement('input');
-      input.value = house.name || ''; input.maxLength = 24; input.placeholder = '输入新的住宅名称';
+      input.value = house.name || ''; input.maxLength = HOUSE_NAME_MAX_LENGTH; input.placeholder = '输入新的住宅名称';
       input.setAttribute('aria-label', '住宅名称');
       const save = houseActionButton('保存', false, () => {
-        const name = input.value.trim();
-        if (!name) { input.focus(); return; }
+        const name = sanitizeHouseName(input.value);
+        if (!name) { input.focus(); showUnlockToast('住宅名称只能用文字、数字和少量标点'); return; }
         housePanelState = { houseId: null, mode: null };
         multiplayer?.housing('rename', { buildingId: house.buildingId, name });
       }, 'primary');

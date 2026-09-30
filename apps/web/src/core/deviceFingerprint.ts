@@ -1,4 +1,4 @@
-const FINGERPRINT_KEY = 'minicityDeviceFingerprint';
+const FINGERPRINT_KEY = 'minicityDeviceFingerprint.v2';
 
 const hex = (buffer: ArrayBuffer): string => [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 
@@ -17,13 +17,32 @@ const collectSignals = (): string => {
   ].join('|');
 };
 
+const randomSalt = (): string => {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return hex(bytes.buffer);
+};
+
+type StoredFingerprint = { salt: string; hash: string };
+
+const readStored = (): StoredFingerprint | null => {
+  try {
+    const raw = localStorage.getItem(FINGERPRINT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredFingerprint;
+    if (parsed && /^[a-f0-9]{32}$/.test(parsed.salt) && /^[a-f0-9]{64}$/.test(parsed.hash)) return parsed;
+  } catch { /* private mode or corrupt cache */ }
+  return null;
+};
+
 export async function getDeviceFingerprint(): Promise<string | null> {
   try {
-    const cached = localStorage.getItem(FINGERPRINT_KEY);
-    if (cached && /^[a-f0-9]{64}$/.test(cached)) return cached;
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(collectSignals()));
+    const cached = readStored();
+    if (cached) return cached.hash;
+    const salt = randomSalt();
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}|${collectSignals()}`));
     const hash = hex(digest);
-    try { localStorage.setItem(FINGERPRINT_KEY, hash); } catch { /* private mode */ }
+    try { localStorage.setItem(FINGERPRINT_KEY, JSON.stringify({ salt, hash })); } catch { /* private mode */ }
     return hash;
   } catch {
     return null;

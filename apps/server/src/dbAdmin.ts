@@ -33,8 +33,8 @@ export function getAdminSummary(databaseBytes = 0): AdminSummary {
 export function listAdminUsers(input: { query?: string; limit: number; offset: number }): { items: AdminUser[]; total: number } {
   const query = input.query?.trim() ?? '';
   const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
-  const where = query ? "WHERE u.nickname LIKE ? ESCAPE '\\' OR u.id LIKE ? ESCAPE '\\' OR IFNULL(u.pl_nickname, '') LIKE ? ESCAPE '\\'" : '';
-  const params = query ? [pattern, pattern, pattern] : [];
+  const where = query ? "WHERE u.nickname LIKE ? ESCAPE '\\' OR u.id LIKE ? ESCAPE '\\' OR IFNULL(u.pl_nickname, '') LIKE ? ESCAPE '\\' OR IFNULL(u.pl_user_id, '') LIKE ? ESCAPE '\\'" : '';
+  const params = query ? [pattern, pattern, pattern, pattern] : [];
   const total = (db.prepare(`SELECT COUNT(*) AS count FROM users u ${where}`).get(...params) as { count: number }).count;
   const rows = db.prepare(`SELECT u.id, u.nickname, u.email, u.pl_user_id, u.pl_nickname, u.disabled_at, u.created_at, u.updated_at, u.session_expires_at, hm.building_id AS house_id
     FROM users u LEFT JOIN house_members hm ON hm.user_id = u.id ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`).all(...params, input.limit, input.offset) as AdminUserRow[];
