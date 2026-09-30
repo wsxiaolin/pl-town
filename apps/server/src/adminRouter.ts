@@ -17,8 +17,9 @@ import { logger } from './logger.js';
 import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './requestSecurity.js';
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
-import { resolveBuildingUnlockStates } from './progression.js';
-import { sanitizeOverrides, setBuildingOverrides, type WeatherConfig } from './worldConfig.js';
+import { applyShopCatalog, resolveBuildingUnlockStates } from './progression.js';
+import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, type WeatherConfig } from './worldConfig.js';
+import { missingStoryReferencedItems, SHOP_NAME_MAX, SHOP_PRICE_MAX, SHOP_PRODUCT_MAX } from './shopCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 import type { Weather } from './types.js';
 
@@ -51,11 +52,21 @@ const readAsset = (relative: string) => readFileSync(fileURLToPath(new URL(relat
 const staticAssets: ReadonlyArray<[string, AdminAsset]> = [
   ['/admin/styles.css', { type: 'text/css; charset=utf-8', body: readAsset('../admin/styles.css') }],
   ['/admin/app.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/app.js') }],
+  ['/admin/shop-editor.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/shop-editor.js') }],
   ['/admin/story-topology.js', { type: 'text/javascript; charset=utf-8', body: readAsset('../admin/story-topology.js') }],
   ['/admin/story-topology.css', { type: 'text/css; charset=utf-8', body: readAsset('../admin/story-topology.css') }],
 ];
+// app.js imports shop-editor.js by absolute URL, which would otherwise be
+// cached without a version tag. Rewrite the reference to the fingerprinted URL
+// and fingerprint app.js on the rewritten bytes, so the module import always
+// resolves to the build that shipped with the app.js that requests it.
+const appJs = readAsset('../admin/app.js')
+  .toString('utf8')
+  .replace('/admin/shop-editor.js', `/admin/shop-editor.js?v=${fingerprint(readAsset('../admin/shop-editor.js'))}`);
 const assetVersions = new Map(staticAssets.map(([path, asset]) => [path, fingerprint(asset.body)]));
+assetVersions.set('/admin/app.js', fingerprint(Buffer.from(appJs, 'utf8')));
 const assets = new Map<string, AdminAsset>(staticAssets);
+assets.set('/admin/app.js', { type: 'text/javascript; charset=utf-8', body: Buffer.from(appJs, 'utf8') });
 const adminHtml = readAsset('../admin/index.html')
   .toString('utf8')
   .replace('/admin/styles.css', `/admin/styles.css?v=${assetVersions.get('/admin/styles.css')}`)
@@ -160,7 +171,27 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     respond(response, 200, {
       weather: context.getWeatherConfig(),
       states: resolveBuildingUnlockStates(),
+      shop: getShopProducts(),
+      shopLimits: { nameMax: SHOP_NAME_MAX, priceMax: SHOP_PRICE_MAX, productMax: SHOP_PRODUCT_MAX },
     });
+    return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/world/shop') {
+    const body = await readJson(request, 64 * 1_024);
+    const products = sanitizeShopProducts(body);
+    if (!products) { error(response, 400, 'INVALID_SHOP', '商品配置无效'); return true; }
+    // Read the previous catalog before writing: the warning is about the ids
+    // this change removes, not about ones that were already gone.
+    const previous = getShopProducts();
+    const saved = setShopProducts(products);
+    // Story-referenced items are warned about, not blocked: existing owners
+    // keep consuming them, but new residents could never obtain a dropped
+    // story item, so the operator sees it in the notice.
+    const droppedStoryItems = missingStoryReferencedItems(previous, saved);
+    applyShopCatalog(saved);
+    db.recordAdminAudit(principal.actor, 'world.shop.update', undefined, { products: saved, warnings: droppedStoryItems });
+    context.broadcastWorldCatalog();
+    respond(response, 200, { ok: true, products: saved, warnings: droppedStoryItems });
     return true;
   }
   if (request.method === 'POST' && path === '/admin/api/world/weather') {

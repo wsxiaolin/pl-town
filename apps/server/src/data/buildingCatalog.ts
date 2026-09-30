@@ -439,7 +439,7 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
   },
   {
     id: "tavern",
-    label: "酒馆",
+    label: "科特维酒馆",
     num: "52",
     x: 33,
     z: 3,

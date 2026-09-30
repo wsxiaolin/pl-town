@@ -187,8 +187,13 @@ test('Ice sanctum disposes owned hit resources without disposing pooled characte
 test('Ice cinematic starts immediately when the player enters the sanctum', () => {
   const bodyClasses = new Set<string>();
   const overlays: unknown[] = [];
+  // writable: true everywhere below — these globals outlive each test, and
+  // other unit files plain-assign them when Playwright's discovery worker
+  // loads every unit test into ONE process (e.g. labelController sets
+  // globalThis.window). Non-writable descriptors made that throw.
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
+    writable: true,
     value: {
       body: {
         classList: {
@@ -241,6 +246,7 @@ test('a failed Ice reward claim leaves the ending unlocked for a retry', async (
   const callbacks: Array<() => void> = [];
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
+    writable: true,
     value: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value); },
@@ -248,6 +254,7 @@ test('a failed Ice reward claim leaves the ending unlocked for a retry', async (
   });
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
+    writable: true,
     value: {
       setTimeout: (callback: () => void) => { callbacks.push(callback); return callbacks.length; },
       clearTimeout: () => undefined,
@@ -255,6 +262,7 @@ test('a failed Ice reward claim leaves the ending unlocked for a retry', async (
   });
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
+    writable: true,
     value: {
       body: {
         classList: {
@@ -408,6 +416,7 @@ test('the resident named ice can re-enter after completing the sanctum story', (
   ]);
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
+    writable: true,
     value: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value); },
@@ -415,6 +424,7 @@ test('the resident named ice can re-enter after completing the sanctum story', (
   });
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
+    writable: true,
     value: {
       body: {
         classList: {
@@ -460,6 +470,7 @@ test('the resident named ice can re-enter after completing the sanctum story', (
 test('clicking Ice walks to the desk and opens the dialog on arrival', () => {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
+    writable: true,
     value: { innerWidth: 100, innerHeight: 100 },
   });
   const cursor = new THREE.Group();
