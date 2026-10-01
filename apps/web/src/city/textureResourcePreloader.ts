@@ -1,115 +1,124 @@
-const textureModules = import.meta.glob('../assets/textures/**/*.{png,jpg,jpeg,webp,avif}', {
-  eager: true,
-  import: 'default',
-  query: '?url',
-}) as Record<string, string>;
+// Texture precache — warms the HTTP cache for the HD texture pack so city
+// load never blocks on the network. Fetches only; decoding happens lazily in
+// TextureLoader. Per-run failures land in failedUrls so proceduralTexture_
+// library can fall back to canvas textures for THIS session; an aborted pass
+// (watchdog / forced upgrade) is a control path, never a failure.
+import { bundledAssets } from '../core/bundledAssets';
 
-export type TextureProgress = {
-  loadedBytes: number;
-  totalBytes: number;
-  loadedFiles: number;
-  totalFiles: number;
-  failedFiles: number;
-};
+// The textures-only URL list derives from the shared glob via its GROUP
+// classification (glob-key based — URLs flatten in production builds), so
+// the list is inlined into the bundle once, not twice (r8 nit).
+const textureUrls = bundledAssets.filter((asset) => asset.group === 'textures').map((asset) => asset.url);
 
 const failedUrls = new Set<string>();
 let ready = false;
-let started = false;
-let inFlight: Promise<void> | null = null;
-let progress: TextureProgress = {
-  loadedBytes: 0,
-  totalBytes: 0,
-  loadedFiles: 0,
-  totalFiles: Object.values(textureModules).length,
-  failedFiles: 0,
-};
-export type TextureProgressListener = (state: TextureProgress) => void;
-const listeners = new Set<TextureProgressListener>();
-let publishQueued = false;
+let activeRun: { promise: Promise<void>; controller: AbortController; forced: boolean } | null = null;
 
-function publish(): void {
-  const state = { ...progress };
-  listeners.forEach((listener) => listener(state));
-}
+type TextureReadResult = 'ok' | 'failed' | 'aborted';
 
-function publishSoon(): void {
-  if (publishQueued) return;
-  publishQueued = true;
-  requestAnimationFrame(() => { publishQueued = false; publish(); });
-}
-
-async function readTexture(url: string, signal: AbortSignal): Promise<void> {
+async function readTexture(url: string, signal: AbortSignal): Promise<TextureReadResult> {
   try {
     const response = await fetch(url, { signal });
     if (!response.ok) throw new Error(`Texture request failed: ${response.status}`);
-    const contentLength = Number(response.headers.get('content-length') ?? 0);
-    progress.totalBytes += contentLength;
-    if (!response.body) {
-      progress.loadedBytes += contentLength;
-      progress.loadedFiles += 1;
-      publishSoon();
-      return;
+    if (response.body) {
+      // Drain the stream: reading the bytes is what lands them in the cache.
+      const reader = response.body.getReader();
+      for (;;) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
     }
-    const reader = response.body.getReader();
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      progress.loadedBytes += chunk.value.byteLength;
-      publishSoon();
-    }
-    progress.loadedFiles += 1;
+    // A successful (re)read repairs an earlier failure — the URL is
+    // available to the renderer again this session.
+    failedUrls.delete(url);
+    return 'ok';
   } catch {
+    // Abort (watchdog / forced upgrade) is a normal control path: keep the
+    // URL eligible for a later pass instead of downgrading the texture to
+    // procedural canvas for the whole session — and do NOT count it as a
+    // failure in progress reporting (r8 nit: the degrade path must not
+    // claim procedural fallbacks for files that were merely cancelled).
+    if (signal.aborted) return 'aborted';
     failedUrls.add(url);
-    progress.failedFiles += 1;
-    progress.loadedFiles += 1;
+    return 'failed';
   }
-  publish();
 }
 
-async function runWithConcurrency(urls: string[], limit: number, signal: AbortSignal): Promise<void> {
+async function runWithConcurrency(
+  urls: string[],
+  limit: number,
+  signal: AbortSignal,
+  onFileDone?: (loadedFiles: number, failedFiles: number, totalFiles: number) => void,
+): Promise<void> {
   let nextIndex = 0;
+  let loadedFiles = 0;
+  let failedFiles = 0;
   const worker = async (): Promise<void> => {
     while (nextIndex < urls.length) {
-      const url = urls[nextIndex++];
       if (signal.aborted) return;
-      if (url) await readTexture(url, signal);
+      const url = urls[nextIndex++];
+      if (url && (await readTexture(url, signal)) === 'failed') failedFiles += 1;
+      loadedFiles += 1;
+      onFileDone?.(loadedFiles, failedFiles, urls.length);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, urls.length) }, worker));
-}
-
-export function isTextureResourceReady(): boolean {
-  return ready;
 }
 
 export function isTextureResourceAvailable(url: string): boolean {
   return !failedUrls.has(url);
 }
 
-export function subscribeTextureResourceProgress(listener: TextureProgressListener): () => void {
-  listeners.add(listener);
-  listener({ ...progress });
-  return () => listeners.delete(listener);
-}
+export type TexturePreloadOptions = {
+  /** Will the renderer actually read the HD pack this session? */
+  enabled: boolean;
+  /** Session/watchdog signal — aborts the pass. */
+  signal?: AbortSignal;
+  /** Heavy-boot repair semantics: overrides data-saver gates, not `enabled`. */
+  force?: boolean;
+  /** File-level progress (skipped/aborted files not counted as failures). */
+  onFileDone?: (loadedFiles: number, failedFiles: number, totalFiles: number) => void;
+};
 
-export function preloadTextureResources(enabled = true, signal?: AbortSignal): Promise<void> {
-  if (started) return inFlight ?? Promise.resolve();
-  started = true;
-  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  if (!enabled || connection?.saveData || connection?.effectiveType === 'slow-2g') {
-    ready = true;
-    inFlight = Promise.resolve();
-    return inFlight;
+export function preloadTextureResources(options: TexturePreloadOptions): Promise<void> {
+  const { enabled, signal, force = false, onFileDone } = options;
+  if (activeRun) {
+    if (!force || activeRun.forced) return activeRun.promise;
+    // A forced run (heavy boot repair pass) upgrades an in-flight ambient
+    // pass: cancel it and restart with the long-timeout semantics.
+    activeRun.controller.abort();
+    void activeRun.promise.catch(() => {});
+    activeRun = null;
   }
-  publish();
+  // `enabled` = the renderer will actually read these textures. When false
+  // there is nothing to precache — force cannot override that (force only
+  // overrides network-frugality gates: saveData / slow-2g).
+  if (!enabled) {
+    ready = true;
+    return Promise.resolve();
+  }
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (!force && (connection?.saveData || connection?.effectiveType === 'slow-2g')) {
+    ready = true;
+    return Promise.resolve();
+  }
+  // A completed ambient pass already warmed the cache; a forced run still
+  // re-opens it (it may be a repair pass for earlier failures).
+  if (ready && !force) return Promise.resolve();
   const controller = new AbortController();
+  // Ambient runs bound themselves (30 s); forced runs are bounded by the
+  // lifecycle's 240 s watchdog via the shared signal — no duplicate timer
+  // (r8 nit: one of the two was dead weight).
   const timeout = setTimeout(() => controller.abort(), 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  inFlight = runWithConcurrency(Object.values(textureModules), 6, controller.signal).then(() => {
+  const promise = runWithConcurrency(textureUrls, 6, controller.signal, onFileDone).then(() => {
     clearTimeout(timeout);
-    ready = true;
-    publish();
+    // Only a COMPLETED pass claims readiness — an aborted one must not
+    // short-circuit a later forced re-run.
+    if (!controller.signal.aborted) ready = true;
+    if (activeRun?.promise === promise) activeRun = null;
   });
-  return inFlight;
+  activeRun = { promise, controller, forced: force };
+  return promise;
 }

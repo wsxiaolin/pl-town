@@ -48,6 +48,12 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
+  // Pending-construction content supersedes both main's 2026-09-30.1
+  // re-anchored row (#189) and the area branch's 2026-09-26.areas.2, so this
+  // branch ships it under its own version; boots migrate the persisted row
+  // through the policy/area reconciliation instead of the restore guard. Any
+  // content change must ship with a version bump or
+  // tests/city-config-snapshot.mjs fails at review time.
   version: '2026-09-27.blocks.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),

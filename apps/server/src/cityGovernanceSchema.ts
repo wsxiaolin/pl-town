@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { CITY_CONSTRUCTION_CONFIG as config, COLLECTIVE_STORY_BUILDING_IDS } from './data/cityConstructionConfig.js';
+import { CITY_CONSTRUCTION_CONFIG as config, COLLECTIVE_STORY_BUILDING_IDS, type CityProject } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
 import { reconcileInitialBuildings } from './cityGovernanceMigration.js';
@@ -52,6 +52,7 @@ export function initializeCityGovernance(db: Database.Database): void {
   if (saved && saved.config_json !== json) throw new Error('City config changed without a version bump');
   reconcileLegacyAreaProjectLayout(db, config);
   const ids = new Set<string>();
+  const healedProjects: string[] = [];
   for (const project of config.projects) {
     if (ids.has(project.id) || !Number.isSafeInteger(project.cost) || project.cost <= 0) throw new Error('Invalid city project');
     ids.add(project.id);
@@ -66,8 +67,32 @@ export function initializeCityGovernance(db: Database.Database): void {
     if (project.buildingId && config.initialBuiltBuildingIds.includes(project.buildingId)) throw new Error('Construction overlaps core buildings');
     const old = db.prepare('SELECT definition_json FROM city_projects WHERE id = ?').get(project.id) as { definition_json: string } | undefined;
     // Paid projects keep immutable targets and geometry across deployments.
-    if (old && old.definition_json !== JSON.stringify(project)) throw new Error(`City project changed: ${project.id}; use a new project ID`);
-    db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
+    if (old && old.definition_json !== JSON.stringify(project)) {
+      let previous: CityProject;
+      try {
+        previous = JSON.parse(old.definition_json) as CityProject;
+      } catch {
+        throw new Error(`City project definition is unreadable: ${project.id}; use a new project ID`);
+      }
+      // Default-deny: display copy (name/description, both derived from the
+      // building catalog label) heals rename-driven drift like #181's tavern
+      // relabel in place — funded/built progress carries through. Every other
+      // field, including ones added to CityProject later, still requires a
+      // new project ID; anything missing from the previous row cannot flow
+      // through the heal silently.
+      const healable = new Set<keyof CityProject>(['name', 'description']);
+      const drifted = new Set<string>();
+      for (const field of new Set([...Object.keys(previous), ...Object.keys(project)])) {
+        if (JSON.stringify((previous as Record<string, unknown>)[field]) !== JSON.stringify((project as Record<string, unknown>)[field])) drifted.add(field);
+      }
+      if ([...drifted].some((field) => !healable.has(field as keyof CityProject))) {
+        throw new Error(`City project changed: ${project.id}; use a new project ID`);
+      }
+      db.prepare('UPDATE city_projects SET definition_json = ? WHERE id = ?').run(JSON.stringify(project), project.id);
+      healedProjects.push(project.id);
+    } else {
+      db.prepare('INSERT OR IGNORE INTO city_projects (id, definition_json) VALUES (?, ?)').run(project.id, JSON.stringify(project));
+    }
     const progress = db.prepare('SELECT funded, built FROM city_projects WHERE id = ?').get(project.id) as { funded: number; built: number };
     if (!Number.isSafeInteger(progress.funded) || progress.funded > project.cost || Boolean(progress.built) !== (progress.funded === project.cost)) throw new Error(`Invalid city project progress: ${project.id}`);
     // Reconcile legacy defaults and unlocks into completed project rows without
@@ -76,6 +101,11 @@ export function initializeCityGovernance(db: Database.Database): void {
       if (progress.funded !== 0) throw new Error(`Preserved city building has funded progress: ${project.id}; use explicit reconciliation`);
       db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
     }
+  }
+  if (healedProjects.length) {
+    // Leave a trace in the Render boot log so display-only heals are visible
+    // when one fires in production instead of passing silently.
+    console.warn(`[city-governance] healed display-only drift in projects: ${healedProjects.join(', ')}`);
   }
   const existing = db.prepare('SELECT id FROM city_projects').all() as Array<{ id: string }>;
   if (existing.some((entry) => !ids.has(entry.id))) throw new Error('City projects cannot be removed');
