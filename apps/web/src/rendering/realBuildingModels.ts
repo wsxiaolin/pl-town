@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { BUILDING_REGISTRY } from '../city/data/buildings/_registry';
 
-const MODEL_URLS = {
-  banana: new URL('../assets/models/banana.glb', import.meta.url).href,
-};
+// GLB 建筑由各自配置文件的 glbUrl 字段声明（文件位于 src/assets/models/）。
+const modelUrlFor = (file: string) => new URL(`../assets/models/${file}`, import.meta.url).href;
 
 export type ReplaceableBuilding = {
   id: string;
@@ -81,21 +81,32 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
 }
 
 export async function addRealBuildingModels(_scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
-  const bananaBuilding = buildings.find(building => building.id === 'banana_palace');
-  if (!bananaBuilding || bananaBuilding.group.userData.constructionPending) return;
-  const banana = await loader.loadAsync(MODEL_URLS.banana);
-  if (bananaBuilding.group.parent && !bananaBuilding.group.userData.constructionPending) {
-    replaceBuilding(bananaBuilding, banana.scene);
-  } else {
-    const textures = new Set<THREE.Texture>();
-    banana.scene.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      object.geometry.dispose();
-      for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-        for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
-        material.dispose();
-      }
-    });
-    textures.forEach((texture) => texture.dispose());
+  const glbUrlById = new Map(
+    BUILDING_REGISTRY
+      .filter((config) => config.glbUrl)
+      .map((config) => [config.id, config.glbUrl as string]),
+  );
+  for (const building of buildings) {
+    const glbUrl = glbUrlById.get(building.id);
+    if (!glbUrl || building.group.userData.constructionPending) continue;
+    const model = await loader.loadAsync(modelUrlFor(glbUrl));
+    if (building.group.parent && !building.group.userData.constructionPending) {
+      replaceBuilding(building, model.scene);
+    } else {
+      disposeScene(model.scene);
+    }
   }
+}
+
+function disposeScene(scene: THREE.Object3D): void {
+  const textures = new Set<THREE.Texture>();
+  scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    object.geometry.dispose();
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
+      material.dispose();
+    }
+  });
+  textures.forEach((texture) => texture.dispose());
 }

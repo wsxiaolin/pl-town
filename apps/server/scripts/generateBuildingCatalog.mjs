@@ -1,50 +1,30 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import ts from 'typescript';
 
-// Generates apps/server/src/buildingCatalog.ts from the authoritative client
-// building config (apps/web/src/city/data/buildings.ts). The server needs the
-// id/label/x/z of every building to render the admin world-config map; keeping
-// a generated mirror avoids hand-maintaining a second copy. Run after editing
-// BUILDING_DEFS. The generated file is committed.
+// Generates apps/server/src/data/buildingCatalog.ts from the authoritative
+// client building registry (apps/web/src/city/data/buildings/_registry.ts,
+// which aggregates the per-building config files next to it). The server needs
+// the id/label/x/z of every building to render the admin world-config map;
+// keeping a generated mirror avoids hand-maintaining a second copy. Run after
+// editing any building config file. The generated file is committed.
+//
+// The registry is loaded by bundling it with esbuild and importing the result,
+// so any pure-data config layout keeps working without this script knowing
+// about its file structure.
 //
 // `--check` regenerates in memory and compares against the committed file,
 // exiting non-zero on drift so CI catches placement changes.
 const ROOT = new URL('../../../', import.meta.url);
-const SOURCE_FILE = 'apps/web/src/city/data/buildings.ts';
-const CONSTANTS_FILE = 'apps/web/src/gameplay/content/stories/iceKing/iceKingContent.ts';
+const REGISTRY_FILE = 'apps/web/src/city/data/buildings/_registry.ts';
 const BUILDING_IDS_FILE = 'apps/server/src/progression.ts';
 const OUTPUT_FILE = 'apps/server/src/data/buildingCatalog.ts';
-const CATALOG_KEYS = ['id', 'label', 'num', 'x', 'z', 'storyLocked'];
 
 function parse(file) {
   return ts.createSourceFile(file, readFileSync(new URL(file, ROOT), 'utf8'), ts.ScriptTarget.Latest, true);
-}
-
-/** String constants exported by a module, so identifier ids like ICE_KING_BUILDING_ID resolve. */
-function readStringConstants(file) {
-  const constants = new Map();
-  parse(file).forEachChild((stmt) => {
-    if (!ts.isVariableStatement(stmt)) return;
-    for (const decl of stmt.declarationList.declarations) {
-      if (!ts.isIdentifier(decl.name) || !decl.initializer || !ts.isStringLiteral(decl.initializer)) continue;
-      constants.set(decl.name.text, decl.initializer.text);
-    }
-  });
-  return constants;
-}
-
-function extractValue(node, constants) {
-  if (ts.isStringLiteral(node)) return node.text;
-  if (ts.isNumericLiteral(node)) return Number(node.text);
-  if (ts.isIdentifier(node)) return constants.get(node.text);
-  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken) {
-    const operand = extractValue(node.operand, constants);
-    return typeof operand === 'number' ? -operand : undefined;
-  }
-  if (node.kind === ts.SyntaxKind.NullKeyword) return null;
-  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
-  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
-  return undefined;
 }
 
 function unwrap(node) {
@@ -54,28 +34,7 @@ function unwrap(node) {
   return node;
 }
 
-function readArray(file, varName, constants) {
-  let result = null;
-  parse(file).forEachChild((stmt) => {
-    if (result || !ts.isVariableStatement(stmt)) return;
-    for (const decl of stmt.declarationList.declarations) {
-      const initializer = unwrap(decl.initializer);
-      if (decl.name.getText() !== varName || !initializer || !ts.isArrayLiteralExpression(initializer)) continue;
-      result = initializer.elements.filter((el) => ts.isObjectLiteralExpression(el)).map((el) => {
-        const entry = {};
-        for (const prop of el.properties) {
-          if (!ts.isPropertyAssignment(prop)) continue;
-          const key = prop.name.getText();
-          if (CATALOG_KEYS.includes(key)) entry[key] = extractValue(prop.initializer, constants);
-        }
-        return entry;
-      });
-    }
-  });
-  if (!result) throw new Error(`Could not find ${varName} in ${file}`);
-  return result;
-}
-
+/** String array exported by a module (used for BUILDING_IDS in progression.ts). */
 function readStringArray(file, varName) {
   let result = null;
   parse(file).forEachChild((stmt) => {
@@ -90,8 +49,28 @@ function readStringArray(file, varName) {
   return result;
 }
 
-const constants = readStringConstants(CONSTANTS_FILE);
-const defs = readArray(SOURCE_FILE, 'BUILDING_DEFS', constants);
+/** Bundle the client registry to a temp ESM module and import BUILDING_DEFS. */
+async function loadBuildingDefs() {
+  const workDir = mkdtempSync(join(tmpdir(), 'building-catalog-'));
+  const outfile = join(workDir, 'registry.mjs');
+  try {
+    await build({
+      entryPoints: [fileURLToPath(new URL(REGISTRY_FILE, ROOT))],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      outfile,
+      logLevel: 'silent',
+    });
+    const registry = await import(pathToFileURL(outfile).href);
+    if (!Array.isArray(registry.BUILDING_DEFS)) throw new Error('Registry did not export a BUILDING_DEFS array');
+    return registry.BUILDING_DEFS;
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+const defs = await loadBuildingDefs();
 const byId = new Map(defs.filter((entry) => typeof entry.id === 'string').map((entry) => [entry.id, entry]));
 
 // BUILDING_IDS and the client definitions must cover the same buildings so

@@ -111,7 +111,7 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     const configuredQuery = BUILDING_API_QUERIES[b.id as keyof typeof BUILDING_API_QUERIES];
     if (configuredQuery) {
-      options.getCommunityPanels()?.openWorksPanel(b.id, configuredQuery as Record<string, unknown>);
+      options.getCommunityPanels()?.openWorksPanel(b.id, configuredQuery);
       options.trackInteraction(b.id);
       return;
     }

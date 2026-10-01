@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { BuildingContentQuery, BuildingPlotSpec } from './data/buildings/_types';
 
 export type BuildingDefinition = {
   id: string;
@@ -12,11 +13,12 @@ export type BuildingDefinition = {
   disabled?: boolean;
   facade?: string;
   storyLocked?: boolean;
-  contentQuery?: Record<string, unknown>;
+  contentQuery?: BuildingContentQuery;
   interactionRadius?: number;
   decorationClearance?: number;
   hasPlot?: boolean;
   featureIds?: readonly string[];
+  plot?: BuildingPlotSpec;
 };
 
 export type BuildingEntity = BuildingDefinition & {
