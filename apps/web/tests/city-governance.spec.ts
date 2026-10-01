@@ -14,6 +14,8 @@ test('city governance retries donations idempotently and renders both tabs', asy
       cost: 3_000,
     }],
     personalPlots: [{ id: 'north-garden-1', name: '北侧花园一号', x: 30, z: -40, options: ['flowers'] }],
+    personalBlocks: [{ id: 'north-garden-block', name: '北侧花园', areaId: null, description: '花园一角，一次投建。', cost: 80,
+      placements: [{ plotId: 'north-garden-1', decorationId: 'flowers' }] }],
     decorations: [{ id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 }],
     initialBuiltBuildingIds: ['commons', 'commons_outer'],
   };
@@ -83,6 +85,6 @@ test('city governance retries donations idempotently and renders both tabs', asy
   expect(requestIds[1]).toBe(requestIds[0]);
 
   await panel.getByRole('button', { name: '个人建设' }).click();
-  await expect(panel.getByText('北侧花园一号')).toBeVisible();
-  await expect(panel.getByRole('button', { name: '建设', exact: true })).toBeVisible();
+  await expect(panel.getByText('北侧花园')).toBeVisible();
+  await expect(panel.getByRole('button', { name: '投建这片', exact: true })).toBeVisible();
 });

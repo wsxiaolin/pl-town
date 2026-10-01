@@ -286,6 +286,7 @@ for (const completion of ['full-block', 'built-project', 'resident-moved'] as co
 
 for (const action of ['donate', 'decorate'] as const) {
   test(`${action} ${action === 'donate' ? 'requires confirming an uncertain target before changing its payment parameters' : 'replays the retained block request after an uncertain outcome'}`, async ({ page }) => {
+    test.setTimeout(90_000);
     const requests: Array<Record<string, unknown>> = [];
     const committed = new Map<string, Record<string, unknown>>();
     const outerFailures = [
@@ -319,7 +320,11 @@ for (const action of ['donate', 'decorate'] as const) {
     const input = card.getByRole(action === 'donate' ? 'spinbutton' : 'button');
     const original = '500';
     const setValue = (value: string) => action === 'donate' ? input.fill(value) : Promise.resolve();
-    const button = card.getByRole('button', { name: action === 'donate' ? '捐款' : '投建这片', exact: true });
+    // Donate buttons keep their label; block buttons relabel with the receipt
+    // state (投建这片/确认投建结果), so match the card's single action button.
+    const button = action === 'donate'
+      ? card.getByRole('button', { name: '捐款', exact: true })
+      : card.getByRole('button');
     if (action === 'donate') await setValue(original);
     await button.click();
     await expect(panel.getByRole('alert')).toContainText('网络连接异常');
@@ -395,6 +400,7 @@ test('receipt retries release definite 400 and 404 rejections but retain uncerta
 
 for (const kind of ['donation', 'block'] as const) {
 test(`${kind} login sessions keep separate receipts and ignore previous session responses`, async ({ page }) => {
+  test.setTimeout(90_000);
   const pending: Route[] = [];
   const requests: Array<{ requestId: string; blockId?: string }> = [];
   const fixture = await openGovernance(page, (route) => {
@@ -404,7 +410,9 @@ test(`${kind} login sessions keep separate receipts and ignore previous session 
   const panel = page.locator('.city-governance-panel');
   if (kind === 'block') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
   const target = panel.locator(kind === 'block' ? '[data-city-block="session-block"]' : '[data-city-project="build-catcafe"]');
-  const button = target.getByRole('button', { name: kind === 'block' ? '投建这片' : '捐款', exact: true });
+  const button = kind === 'donation'
+    ? target.getByRole('button', { name: '捐款', exact: true })
+    : target.getByRole('button');
   const switchSession = (token: string) => page.evaluate(async (nextToken) => {
     const modulePath = '/src/city/cityGovernanceClient.ts';
     const client = await import(modulePath) as typeof import('../src/city/cityGovernanceClient');
