@@ -8,6 +8,7 @@ export function storyLockedBuildingIds(definitions: ReadonlyArray<{ id: string; 
 export function createBuildingAvailability(options: {
   storyLockedIds: ReadonlySet<string>;
   getResidences: () => readonly ResidenceEntity[];
+  isConstructionPending: (buildingId: string) => boolean;
 }) {
   // Mutated in place so the stable closures below (captured by value into the
   // interaction, raycast, label and map layers) observe server-driven global
@@ -20,7 +21,7 @@ export function createBuildingAvailability(options: {
   }
 
   function isBuildingUnavailable(building: Pick<BuildingEntity, 'id' | 'group'>): boolean {
-    return isStoryLocked(building) || isBuildingDestroyed(building);
+    return options.isConstructionPending(building.id) || isStoryLocked(building) || isBuildingDestroyed(building);
   }
 
   function isResidenceUnavailable(residenceId: string): boolean {

@@ -11,6 +11,7 @@ import { createBootPipelineUi, type BootPipelineUi } from '../adapters/ui/bootPi
 import { describeDownload, downloadAllAssets, type AssetDownloadInclude } from '../core/assetDownloader';
 import { configureMomentSplash, showMomentHeavy, showMomentSplash, stopMomentPresentation } from '../adapters/ui/momentSplashView';
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
+import { disposeCityVoting } from './cityVotingClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
 // Governance fetch started before the boot decision (mode-independent,
@@ -287,6 +288,7 @@ export function createCityRuntimeLifecycle(options: {
     closeCityGovernancePanel();
     disposeCityGovernancePanel();
     disposeCityGovernance();
+    disposeCityVoting();
     destroyCG();
     stopInvasionCG();
     destroyMusterCG();

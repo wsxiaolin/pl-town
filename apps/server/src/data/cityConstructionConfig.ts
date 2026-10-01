@@ -1,3 +1,4 @@
+import { AREA_PLOTS, AREA_PROJECTS, PERSONAL_AREAS, PERSONAL_BLOCKS } from './cityConstructionAreas.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 
 export type DecorationKind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
@@ -11,18 +12,33 @@ export type CityProject = {
 export type CityConstructionConfig = {
   schemaVersion: 1; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
+  personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
+  personalBlocks?: Array<{
+    id: string; name: string; areaId: string | null; description: string; cost: number;
+    placements: Array<{ plotId: string; decorationId: string }>;
+  }>;
   decorations: Array<{ id: string; name: string; kind: DecorationKind; cost: number }>;
   initialBuiltBuildingIds: string[];
 };
 
+const buildingsById = new Map(BUILDING_CATALOG.map((building) => [building.id, building]));
+
 function buildingProject(buildingId: string, cost = 3000): CityProject {
-  const building = BUILDING_CATALOG.find((entry) => entry.id === buildingId);
+  const building = buildingsById.get(buildingId);
   if (!building) throw new Error(`Unknown construction building: ${buildingId}`);
   return { id: `build-${buildingId}`, buildingId, name: building.label, description: `共同筹建${building.label}`, kind: 'building', cost };
 }
 
-// Named civic buildings that start as empty lots. Core labs, 众议院, community
-// apps, one school, and story venues stay standing.
+// Story venues intentionally remain pending in a fresh city. Their story
+// entrypoints become available after the community completes the matching
+// project through the House of Commons; they are not silently gifted as part
+// of a future change to the initial-building policy.
+export const COLLECTIVE_STORY_BUILDING_IDS = [
+  'archive', 'newsstand', 'guesthouse', 'mall_south', 'mall_west', 'research',
+] as const;
+
+// Keep existing project definitions and IDs immutable. Newly governed buildings
+// are appended below; a fresh city starts with only the House of Commons.
 const constructionIds = [
   'catcafe', 'academy', 'shrine', 'beacon', 'television_tower', 'fried_chicken_shop',
   'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
@@ -32,18 +48,17 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  // 2026-09-30.1: content is identical to 2026-09-19.1 as serialized by this
-  // code, but the production off-site backup lineage carries a city_configs
-  // row at 2026-09-19.1 whose JSON predates #181's tavern relabel, so the
-  // restore guard ("City config changed without a version bump") rejects
-  // every boot that lands on that version. Re-anchoring the version lets
-  // the next restore migrate past the stale row; the project ledger then
-  // heals the display-only label drift (#181) in place.
-  // tests/city-config-snapshot.mjs fails at review time when the config
-  // content changes without a matching version bump.
-  version: '2026-09-30.1',
+  // Pending-construction content supersedes both main's 2026-09-30.1
+  // re-anchored row (#189) and the area branch's 2026-09-26.areas.2, so this
+  // branch ships it under its own version; boots migrate the persisted row
+  // through the policy/area reconciliation instead of the restore guard. Any
+  // content change must ship with a version bump or
+  // tests/city-config-snapshot.mjs fails at review time.
+  version: '2026-09-27.blocks.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
+    ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))
+      .map((building) => buildingProject(building.id)),
     { id: 'greenbelt-path', name: '北侧绿道', description: '公共步行绿道', cost: 800, kind: 'road', road: { x: 22, z: -40, width: 8, depth: 1 } },
     { id: 'greenbelt-trees', name: '北侧植树', description: '公共绿化', cost: 600, kind: 'trees', placements: [{ kind: 'oak', x: 19, z: -38.5 }, { kind: 'pine', x: 25, z: -38.5 }] },
     { id: 'greenbelt-lights', name: '绿道路灯', description: '公共照明', cost: 400, kind: 'lights', placements: [{ kind: 'lamp', x: 22, z: -38.5 }] },
@@ -64,7 +79,9 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'corner-lights-ne', name: '东北角路灯', description: '东北角夜间照明', cost: 450, kind: 'lights', placements: [{ kind: 'lamp', x: 38, z: -36 }, { kind: 'lamp', x: 36, z: -38 }] },
     { id: 'corner-lights-sw', name: '西南角路灯', description: '西南角夜间照明', cost: 450, kind: 'lights', placements: [{ kind: 'lamp', x: -38, z: 36 }, { kind: 'lamp', x: -36, z: 38 }] },
     { id: 'east-rim-benches', name: '东门外座椅', description: '东门外公共休憩点', cost: 300, kind: 'decoration', placements: [{ kind: 'bench', x: 41.5, z: 22 }] },
+    ...AREA_PROJECTS,
   ],
+  personalAreas: PERSONAL_AREAS,
   personalPlots: [
     { id: 'north-garden-1', name: '北侧花园一号', x: 30, z: -40, options: ['cherry', 'flowers', 'bench'] },
     { id: 'north-garden-2', name: '北侧花园二号', x: 34, z: -40, options: ['oak', 'pine', 'lamp'] },
@@ -79,7 +96,9 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'west-garden-3', name: '西侧花园三号', x: -40, z: -39, options: ['lamp', 'flowers', 'oak'] },
     { id: 'residence-yard-1', name: '南郊住宅庭院', x: 16, z: 38, options: ['cherry', 'flowers', 'bench'] },
     { id: 'residence-yard-2', name: '西郊住宅庭院', x: -16, z: -38, options: ['oak', 'lamp', 'flowers'] },
+    ...AREA_PLOTS,
   ],
+  personalBlocks: PERSONAL_BLOCKS,
   decorations: [
     { id: 'oak', name: '橡树', kind: 'oak', cost: 180 },
     { id: 'pine', name: '松树', kind: 'pine', cost: 180 },
@@ -88,5 +107,5 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'bench', name: '长椅', kind: 'bench', cost: 100 },
     { id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 },
   ],
-  initialBuiltBuildingIds: BUILDING_CATALOG.filter((entry) => !constructionIds.includes(entry.id)).map((entry) => entry.id),
+  initialBuiltBuildingIds: ['commons'],
 };

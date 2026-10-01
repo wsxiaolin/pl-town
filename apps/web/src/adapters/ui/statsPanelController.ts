@@ -12,10 +12,28 @@ export type StatsPanelControllerOptions = {
 
 export function createStatsPanelController(options: StatsPanelControllerOptions) {
   let mode: 'clean' | 'raw' = 'clean';
+  let returnFocus: HTMLElement | null = null;
 
   function render(): void { mode === 'clean' ? renderClean() : renderRaw(); }
-  function open(): void { render(); document.getElementById('statsPanel')?.classList.add('open'); }
-  function close(): void { document.getElementById('statsPanel')?.classList.remove('open'); }
+  function open(): void {
+    const panel = document.getElementById('statsPanel');
+    const opening = !panel?.classList.contains('open');
+    if (opening) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    render();
+    panel?.classList.add('open');
+    document.getElementById('statsToggle')?.setAttribute('aria-expanded', 'true');
+    document.getElementById('statsToggle')?.classList.add('active');
+    if (opening) document.getElementById('spClose')?.focus();
+  }
+  function close(): void {
+    const panel = document.getElementById('statsPanel');
+    if (!panel?.classList.contains('open')) return;
+    panel.classList.remove('open');
+    document.getElementById('statsToggle')?.setAttribute('aria-expanded', 'false');
+    document.getElementById('statsToggle')?.classList.remove('active');
+    if (returnFocus?.isConnected) returnFocus.focus();
+    returnFocus = null;
+  }
   function setMode(next: 'clean' | 'raw'): void {
     mode = next;
     document.getElementById('spModeClean')?.classList.toggle('active', next === 'clean');

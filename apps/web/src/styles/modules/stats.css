@@ -15,6 +15,8 @@
   overflow: hidden;
 }
 .stats-panel.open { transform: translateX(0); }
+.sp-archive-links { flex-shrink: 0; padding: 10px 20px; border-bottom: 1px solid rgba(0,0,0,.06); }
+.sp-archive-links .sp-mode { min-height: 32px; color: var(--blue); }
 
 .sp-head {
   display: flex;

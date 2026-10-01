@@ -1,0 +1,1234 @@
+[
+  {
+    "id": "north-meadow-01",
+    "name": "北侧花海 1 号",
+    "x": -30.25,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-02",
+    "name": "北侧花海 2 号",
+    "x": -28.4,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-03",
+    "name": "北侧花海 3 号",
+    "x": -24.95,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-04",
+    "name": "北侧花海 4 号",
+    "x": -23.1,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-05",
+    "name": "北侧花海 5 号",
+    "x": -21.25,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-06",
+    "name": "北侧花海 6 号",
+    "x": -19.4,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-07",
+    "name": "北侧花海 7 号",
+    "x": -16.6,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-08",
+    "name": "北侧花海 8 号",
+    "x": -13.65,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-09",
+    "name": "北侧花海 9 号",
+    "x": -10.35,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-10",
+    "name": "北侧花海 10 号",
+    "x": -7.65,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-11",
+    "name": "北侧花海 11 号",
+    "x": -4.35,
+    "z": -41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-12",
+    "name": "北侧花海 12 号",
+    "x": -30.25,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-13",
+    "name": "北侧花海 13 号",
+    "x": -28.4,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-14",
+    "name": "北侧花海 14 号",
+    "x": -24.95,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-15",
+    "name": "北侧花海 15 号",
+    "x": -23.1,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-16",
+    "name": "北侧花海 16 号",
+    "x": -21.25,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-17",
+    "name": "北侧花海 17 号",
+    "x": -19.4,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-18",
+    "name": "北侧花海 18 号",
+    "x": -13.65,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-19",
+    "name": "北侧花海 19 号",
+    "x": -10.35,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "north-meadow-20",
+    "name": "北侧花海 20 号",
+    "x": -7.65,
+    "z": -39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-01",
+    "name": "东北林荫带 1 号",
+    "x": 39.25,
+    "z": -33.95,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-02",
+    "name": "东北林荫带 2 号",
+    "x": 41.1,
+    "z": -33.95,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-03",
+    "name": "东北林荫带 3 号",
+    "x": 39.25,
+    "z": -32.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-04",
+    "name": "东北林荫带 4 号",
+    "x": 41.1,
+    "z": -32.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-05",
+    "name": "东北林荫带 5 号",
+    "x": 39.25,
+    "z": -30.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-06",
+    "name": "东北林荫带 6 号",
+    "x": 41.1,
+    "z": -30.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-07",
+    "name": "东北林荫带 7 号",
+    "x": 39.25,
+    "z": -28.4,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-08",
+    "name": "东北林荫带 8 号",
+    "x": 41.1,
+    "z": -28.4,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-09",
+    "name": "东北林荫带 9 号",
+    "x": 39.25,
+    "z": -24.95,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-10",
+    "name": "东北林荫带 10 号",
+    "x": 41.1,
+    "z": -24.95,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-11",
+    "name": "东北林荫带 11 号",
+    "x": 39.25,
+    "z": -23.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-12",
+    "name": "东北林荫带 12 号",
+    "x": 41.1,
+    "z": -23.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-13",
+    "name": "东北林荫带 13 号",
+    "x": 39.25,
+    "z": -21.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-14",
+    "name": "东北林荫带 14 号",
+    "x": 41.1,
+    "z": -21.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-15",
+    "name": "东北林荫带 15 号",
+    "x": 39.25,
+    "z": -19.4,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-16",
+    "name": "东北林荫带 16 号",
+    "x": 41.1,
+    "z": -19.4,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-17",
+    "name": "东北林荫带 17 号",
+    "x": 39.25,
+    "z": -16.6,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-18",
+    "name": "东北林荫带 18 号",
+    "x": 41.1,
+    "z": -16.6,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-19",
+    "name": "东北林荫带 19 号",
+    "x": 39.25,
+    "z": -13.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-20",
+    "name": "东北林荫带 20 号",
+    "x": 41.1,
+    "z": -13.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-21",
+    "name": "东北林荫带 21 号",
+    "x": 39.25,
+    "z": -10.35,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-22",
+    "name": "东北林荫带 22 号",
+    "x": 41.1,
+    "z": -10.35,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-23",
+    "name": "东北林荫带 23 号",
+    "x": 39.25,
+    "z": -7.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "east-park-24",
+    "name": "东北林荫带 24 号",
+    "x": 41.1,
+    "z": -7.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-01",
+    "name": "南侧花海 1 号",
+    "x": -7.65,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-02",
+    "name": "南侧花海 2 号",
+    "x": 7.65,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-03",
+    "name": "南侧花海 3 号",
+    "x": 10.35,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-04",
+    "name": "南侧花海 4 号",
+    "x": 13.65,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-05",
+    "name": "南侧花海 5 号",
+    "x": 19.4,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-06",
+    "name": "南侧花海 6 号",
+    "x": 21.25,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-07",
+    "name": "南侧花海 7 号",
+    "x": 23.1,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-08",
+    "name": "南侧花海 8 号",
+    "x": -10.35,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-09",
+    "name": "南侧花海 9 号",
+    "x": -7.65,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-10",
+    "name": "南侧花海 10 号",
+    "x": -4.35,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-11",
+    "name": "南侧花海 11 号",
+    "x": -2.1,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-12",
+    "name": "南侧花海 12 号",
+    "x": 2.1,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-13",
+    "name": "南侧花海 13 号",
+    "x": 4.35,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-14",
+    "name": "南侧花海 14 号",
+    "x": 7.65,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-15",
+    "name": "南侧花海 15 号",
+    "x": 10.35,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-16",
+    "name": "南侧花海 16 号",
+    "x": 13.65,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-17",
+    "name": "南侧花海 17 号",
+    "x": 16.6,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-18",
+    "name": "南侧花海 18 号",
+    "x": 19.4,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-19",
+    "name": "南侧花海 19 号",
+    "x": 21.25,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "south-meadow-20",
+    "name": "南侧花海 20 号",
+    "x": 23.1,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-01",
+    "name": "东南林荫带 1 号",
+    "x": 41.1,
+    "z": 4.35,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-02",
+    "name": "东南林荫带 2 号",
+    "x": 39.25,
+    "z": 7.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-03",
+    "name": "东南林荫带 3 号",
+    "x": 41.1,
+    "z": 7.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-04",
+    "name": "东南林荫带 4 号",
+    "x": 39.25,
+    "z": 10.35,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-05",
+    "name": "东南林荫带 5 号",
+    "x": 41.1,
+    "z": 10.35,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-06",
+    "name": "东南林荫带 6 号",
+    "x": 39.25,
+    "z": 13.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-07",
+    "name": "东南林荫带 7 号",
+    "x": 41.1,
+    "z": 13.65,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-08",
+    "name": "东南林荫带 8 号",
+    "x": 39.25,
+    "z": 16.6,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-09",
+    "name": "东南林荫带 9 号",
+    "x": 41.1,
+    "z": 16.6,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-10",
+    "name": "东南林荫带 10 号",
+    "x": 41.1,
+    "z": 28.4,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-11",
+    "name": "东南林荫带 11 号",
+    "x": 39.25,
+    "z": 32.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-12",
+    "name": "东南林荫带 12 号",
+    "x": 41.1,
+    "z": 32.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-13",
+    "name": "东南林荫带 13 号",
+    "x": 24.95,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-14",
+    "name": "东南林荫带 14 号",
+    "x": 28.4,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-15",
+    "name": "东南林荫带 15 号",
+    "x": 30.25,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-16",
+    "name": "东南林荫带 16 号",
+    "x": 32.1,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-17",
+    "name": "东南林荫带 17 号",
+    "x": 33.95,
+    "z": 39.25,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-18",
+    "name": "东南林荫带 18 号",
+    "x": 24.95,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-19",
+    "name": "东南林荫带 19 号",
+    "x": 28.4,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-20",
+    "name": "东南林荫带 20 号",
+    "x": 30.25,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-21",
+    "name": "东南林荫带 21 号",
+    "x": 32.1,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-22",
+    "name": "东南林荫带 22 号",
+    "x": 33.95,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-23",
+    "name": "东南林荫带 23 号",
+    "x": 39.25,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  },
+  {
+    "id": "west-park-24",
+    "name": "东南林荫带 24 号",
+    "x": 41.1,
+    "z": 41.1,
+    "options": [
+      "oak",
+      "pine",
+      "cherry",
+      "lamp",
+      "bench",
+      "flowers"
+    ]
+  }
+]

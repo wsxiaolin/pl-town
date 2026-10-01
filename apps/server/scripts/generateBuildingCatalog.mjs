@@ -94,9 +94,11 @@ const constants = readStringConstants(CONSTANTS_FILE);
 const defs = readArray(SOURCE_FILE, 'BUILDING_DEFS', constants);
 const byId = new Map(defs.filter((entry) => typeof entry.id === 'string').map((entry) => [entry.id, entry]));
 
-// Only buildings the server actually manages (BUILDING_PRICES) belong in the
-// catalog; accepted overrides must always have an effect.
+// BUILDING_IDS and the client definitions must cover the same buildings so
+// every named building has a server-side construction and access policy.
 const managedIds = readStringArray(BUILDING_IDS_FILE, 'BUILDING_IDS');
+const unmanagedIds = [...byId.keys()].filter((id) => !managedIds.includes(id));
+if (unmanagedIds.length) throw new Error(`BUILDING_DEFS has buildings missing from BUILDING_IDS: ${unmanagedIds.join(', ')}`);
 const entries = managedIds.map((id) => {
   const def = byId.get(id);
   if (!def) throw new Error(`BUILDING_IDS lists "${id}" but BUILDING_DEFS has no matching entry`);
