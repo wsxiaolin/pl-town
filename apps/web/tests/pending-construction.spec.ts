@@ -25,7 +25,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     };
     const libraryProject = config.projects.find((project) => project.buildingId === 'library')!;
     let state = { epoch: 'pending-test', revision: 0, configVersion: config.version,
-      projects: config.projects.map((project) => ({ id: project.id, funded: 0, built: false })), decorations: [] };
+      projects: config.projects.map((project) => ({ id: project.id, funded: 0, built: false, votes: 0 })), decorations: [] };
     let blockReload = false;
     let configRequests = 0;
     let releaseReload!: () => void;
@@ -33,13 +33,14 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     stubCityWebSocket(page, { user: 'pending-tester', unlockedBuildings: ['commons', 'library'] });
     await page.route('**/town-api/telemetry/event', (route) => route.fulfill({ status: 204, body: '' }));
     await page.route('**/town-api/city/**', async (route) => {
+      if (new URL(route.request().url()).pathname.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
       const endpoint = new URL(route.request().url()).pathname.split('/').at(-1);
       if (endpoint === 'config') {
         configRequests += 1;
         if (blockReload) await reloadGate;
       }
       if (endpoint === 'donate') {
-        state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === libraryProject.id ? { ...project, funded: libraryProject.cost, built: true } : project) };
+        state = { ...state, revision: state.revision + 1, projects: state.projects.map((project) => project.id === libraryProject.id ? { ...project, funded: libraryProject.cost, built: true, votes: 0 } : project) };
       }
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify(endpoint === 'config' ? config : endpoint === 'donate' ? { state } : state) });
     });
@@ -192,7 +193,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     const panel = page.locator('.city-governance-panel');
     await panel.getByRole('navigation', { name: '建设项目分类' }).getByRole('button', { name: '道路与绿化' }).click();
     await expect(panel.getByRole('heading', { name: '道路与绿化' })).toBeFocused();
-    await expect(panel.locator('[data-project-id="greenbelt-benches"]')).toBeInViewport();
+    await expect(panel.locator('[data-city-project="greenbelt-benches"]')).toBeInViewport();
     await page.screenshot({ path: testInfo.outputPath('public-works-jump.png') });
     await panel.locator('[data-building-id="library"]').getByRole('button', { name: '捐款', exact: true }).click();
     await expect.poll(renderedBuildingIds).toEqual(['commons', 'library']);

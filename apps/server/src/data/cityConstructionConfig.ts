@@ -1,4 +1,4 @@
-import { AREA_PLOTS, AREA_PROJECTS, PERSONAL_AREAS } from './cityConstructionAreas.js';
+import { AREA_PLOTS, AREA_PROJECTS, PERSONAL_AREAS, PERSONAL_BLOCKS } from './cityConstructionAreas.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 
 export type DecorationKind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
@@ -13,6 +13,10 @@ export type CityConstructionConfig = {
   schemaVersion: 1; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
   personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
+  personalBlocks?: Array<{
+    id: string; name: string; areaId: string | null; description: string; cost: number;
+    placements: Array<{ plotId: string; decorationId: string }>;
+  }>;
   decorations: Array<{ id: string; name: string; kind: DecorationKind; cost: number }>;
   initialBuiltBuildingIds: string[];
 };
@@ -44,7 +48,7 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  version: '2026-09-26.pending.3',
+  version: '2026-09-27.blocks.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))
@@ -88,6 +92,7 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
     { id: 'residence-yard-2', name: '西郊住宅庭院', x: -16, z: -38, options: ['oak', 'lamp', 'flowers'] },
     ...AREA_PLOTS,
   ],
+  personalBlocks: PERSONAL_BLOCKS,
   decorations: [
     { id: 'oak', name: '橡树', kind: 'oak', cost: 180 },
     { id: 'pine', name: '松树', kind: 'pine', cost: 180 },

@@ -5,6 +5,7 @@ export type MovementInputControllerOptions = {
   window: Window;
   signal: AbortSignal;
   onManualStart: () => void;
+  isUiModalOpen: () => boolean;
 };
 
 const JOYSTICK_RADIUS = 42;
@@ -106,6 +107,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   };
 
   options.window.addEventListener('keydown', (event) => {
+    if (locked || options.isUiModalOpen()) return;
     if (isEditable(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
     const key = event.code;
     if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(key)) return;
@@ -125,7 +127,7 @@ export function createMovementInputController(options: MovementInputControllerOp
   }, { signal: options.signal });
 
   options.window.addEventListener('pointerdown', (event) => {
-    if (!isTouchPointer(event) || pointerId !== null || locked) return;
+    if (!isTouchPointer(event) || pointerId !== null || locked || options.isUiModalOpen()) return;
     if (!zoneContains(event.clientX, event.clientY)) return;
     pointerId = event.pointerId;
     startX = event.clientX;
@@ -135,6 +137,11 @@ export function createMovementInputController(options: MovementInputControllerOp
 
   options.window.addEventListener('pointermove', (event) => {
     if (event.pointerId !== pointerId) return;
+    if (locked || options.isUiModalOpen()) {
+      keys.clear();
+      finishPointer();
+      return;
+    }
     if (pending) {
       if (options.document.body.classList.contains('camera-pan-active')) {
         pointerId = null;
@@ -163,7 +170,14 @@ export function createMovementInputController(options: MovementInputControllerOp
   }, { once: true });
 
   function getMovement(): MovementVector {
-    if (locked) { movement.x = 0; movement.z = 0; return movement; }
+    if (locked || options.isUiModalOpen()) {
+      if (pointerId !== null || pending || active || keys.size) {
+        keys.clear();
+        finishPointer();
+      }
+      movement.x = 0; movement.z = 0;
+      return movement;
+    }
     let screenX = 0;
     let screenY = 0;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) screenX -= 1;

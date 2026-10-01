@@ -1,3 +1,4 @@
+import { RESIDENT_TOKEN_KEY as TOKEN_KEY } from '../core/residentToken';
 import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
 import { isWeather, type Weather } from '../city/weather';
 import { applyCityState, refreshCityGovernanceSession } from '../city/cityGovernanceClient';
@@ -77,7 +78,6 @@ type Callbacks = {
 
 declare const __TOWN_VITE_SERVER_URL__: string;
 
-const TOKEN_KEY = 'minicityServerToken';
 const serverUrl = (): string => {
   const configured = __TOWN_VITE_SERVER_URL__.trim();
   if (configured) return configured;

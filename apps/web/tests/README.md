@@ -37,10 +37,30 @@
   reopening, and mobile feedback layout.
 - `city-governance-session.spec.ts`: concurrent focus, draft continuity,
   queued conflict refreshes, HTTP receipt retry policy, target parameter locking,
-  and isolation between login sessions. Uncertain receipts remain in memory for
+  and isolation between login sessions. Successful actions recover focus from
+  the modal's temporary fallback unless the resident moved elsewhere; completed
+  projects and full areas keep focus on an available control. Uncertain receipts remain in memory for
   the running page and original login token; reload, reauthentication with a new
   token, or disposal ends that retry guarantee. The client does not persist new
   credentials or payment receipts.
+- `city-commons.spec.ts`: full-screen voting, resident isolation, retained vote
+  records, close/fallback scroll restoration, and repeated-open focus. Vote and
+  payment success use separate labelled persistent status regions, present before
+  their text is set as required by [WAI ARIA22](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22).
+- `city-governance-notices.spec.ts`: concurrent donation retries and votes preserve
+  both success messages in either response order, with independent feedback when
+  another operation begins. Empty status regions stay accessible and visually collapse.
+- `city-voting-compatibility.spec.ts`: independently deployed older servers keep
+  donation and area construction usable when the votes read endpoint returns
+  404/405. Reopening or explicitly checking voting retries capability detection;
+  missing legacy counts stay unknown while explicit zero counts remain visible.
+  Transport/server failures and malformed mutation receipts remain errors.
+- `city-login-recovery.spec.ts`: a real client disconnect and automatic reconnect
+  followed by a rejected hello closes the commons dialog before ordinary login
+  or Physics Lab verification; server feedback, credentials, and focus remain usable.
+- `city-voting-epoch.spec.ts`: a conflict-triggered public read can observe a
+  restored city before reauthentication. A delayed successful vote receipt from
+  the previous epoch must not overwrite that state or announce a new success.
 
 Server integration tests live alongside the server in `server/tests/` because
 they require the server's runtime and dependencies.

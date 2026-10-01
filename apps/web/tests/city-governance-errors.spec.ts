@@ -34,14 +34,16 @@ for (const [action, failure] of scenarios) {
         { id: 'build-library', buildingId: 'library', name: '图书馆', description: '共同筹建图书馆', kind: 'building', cost: 2000 },
       ],
       personalPlots: [{ id: 'garden', name: '测试花园', x: 30, z: -40, options: ['flowers', 'pine'] }],
+      personalBlocks: [{ id: 'garden-block', name: '测试花园', areaId: null, description: '独享小花园，一次投建。', cost: 120,
+        placements: [{ plotId: 'garden', decorationId: 'pine' }] }],
       decorations: [{ id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 }, { id: 'pine', name: '松树', kind: 'pine', cost: 120 }],
       initialBuiltBuildingIds: ['commons'],
     };
     let state = {
       epoch: 'error-epoch', revision: 0, configVersion: config.version,
       projects: [
-        { id: 'build-catcafe', funded: 0, built: false },
-        { id: 'build-library', funded: 0, built: false },
+        { id: 'build-catcafe', funded: 0, built: false, votes: 0 },
+        { id: 'build-library', funded: 0, built: false, votes: 0 },
       ],
       decorations: [] as Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>,
     };
@@ -64,6 +66,7 @@ for (const [action, failure] of scenarios) {
     });
     await page.route('**/town-api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
       if (path.endsWith('/city/config')) return route.fulfill({ json: config });
       if (path.endsWith('/city/state')) {
         stateReads += 1;
@@ -79,7 +82,7 @@ for (const [action, failure] of scenarios) {
         if (attempts === 1 && failure === 'insufficient coins') return route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
         if (attempts === 1 && failure === 'sign in') return route.fulfill({ status: 401, json: { error: 'Please sign in' } });
         const requestId = String(body.requestId);
-        const fingerprint = JSON.stringify([body.projectId ?? body.plotId, body.amount ?? body.decorationId, body.configVersion]);
+        const fingerprint = JSON.stringify([body.projectId ?? body.blockId, body.amount ?? null, body.configVersion]);
         const replayed = committedRequests.has(requestId);
         if (replayed && committedRequests.get(requestId) !== fingerprint) {
           return route.fulfill({ status: 409, json: { error: 'requestId already used with different parameters' } });
@@ -93,11 +96,11 @@ for (const [action, failure] of scenarios) {
           state = {
             ...state, revision: state.revision + 1,
             projects: [
-              { id: 'build-catcafe', funded, built: false },
-              { id: 'build-library', funded: 0, built: false },
+              { id: 'build-catcafe', funded, built: false, votes: 0 },
+              { id: 'build-library', funded: 0, built: false, votes: 0 },
             ],
             decorations: action === 'decorate'
-              ? [{ plotId: 'garden', decorationId: String(body.decorationId), ownerId: 'stub-user', ownerNickname: 'error-tester' }]
+              ? [{ plotId: 'garden', decorationId: 'pine', ownerId: 'stub-user', ownerNickname: 'error-tester' }]
               : state.decorations,
           };
         }
@@ -124,11 +127,15 @@ for (const [action, failure] of scenarios) {
     }
     const feedback = await panel.locator('[data-city-feedback]').elementHandle();
     if (action === 'decorate') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const targetCard = panel.locator('.city-governance-card').filter({ hasText: action === 'donate' ? '猫猫咖啡厅' : '测试花园' }).first();
-    const input = action === 'donate' ? targetCard.getByRole('spinbutton') : targetCard.getByRole('combobox');
-    if (action === 'donate') await input.fill('500');
-    else await input.selectOption('pine');
-    const actionButton = targetCard.getByRole('button', { name: action === 'donate' ? '捐款' : '建设', exact: true });
+    const targetCard = panel.locator(action === 'donate' ? '[data-city-project="build-catcafe"]' : '[data-city-block="garden-block"]');
+    // Block purchases have no free parameters: the retained receipt is the draft.
+    const input = action === 'donate' ? targetCard.getByRole('spinbutton') : null;
+    if (input) await input.fill('500');
+    // Project cards carry both 投票建设 and 捐款 buttons; block cards have exactly
+    // one action button whose label follows the receipt state (投建这片/确认投建结果).
+    const actionButton = action === 'donate'
+      ? targetCard.getByRole('button', { name: '捐款', exact: true })
+      : targetCard.getByRole('button');
     await actionButton.click();
     await expect.poll(() => attempts).toBe(1);
     await expect(actionButton).toBeDisabled();
@@ -137,33 +144,42 @@ for (const [action, failure] of scenarios) {
     await expect(actionButton).toBeDisabled();
     await panel.getByRole('button', { name: '关闭', exact: true }).click();
     await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
-    await expect(panel).toHaveClass(/open/);
-    await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
+    await expect(panel).toHaveAttribute('open', '');
+    if (action === 'decorate') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
+    if (input) await expect(input).toHaveValue('500');
+    else await expect(targetCard.locator('[data-city-block-total]')).toContainText('结果待确认');
     await expect(actionButton).toBeDisabled();
     expect(attempts).toBe(1);
     releaseMutation();
     const message = failure === 'insufficient coins' ? '金币不足' : failure === 'sign in' ? '请先登录'
       : failure === 'invalid response' || failure === 'unknown error' ? '建设请求失败' : '网络连接异常';
-    await expect(panel.getByRole('alert')).toContainText(message);
     if (failure === 'sign in') {
       await expect.poll(() => page.evaluate(() => (window as unknown as { cityLoginRequests: number }).cityLoginRequests)).toBe(1);
       await expect(page.locator('#loginOverlay')).toBeVisible();
-      await expect(input).toHaveValue('500');
+      await expect(panel).not.toHaveAttribute('open');
+      await expect(page.locator('#loginInput')).toBeFocused();
+      await expect(panel.locator('[data-city-feedback]')).toBeHidden();
+      expect(attempts).toBe(1);
       expect(pageErrors).toEqual([]);
       return;
     }
+    await expect(panel.getByRole('alert')).toContainText(message);
     if (failure === 'unknown error') await expect(panel.getByRole('alert')).not.toContainText('unmapped internal server detail');
     await expect(actionButton).toBeEnabled();
-    // Reopening the panel moved focus to Close; a late failure must not steal it.
-    await expect(panel.getByRole('button', { name: '关闭', exact: true })).toBeFocused();
-    await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
+    // Reopening focuses Close; selecting personal construction moves to that
+    // tab. A late failure must preserve whichever control the resident chose.
+    const resumedFocus = action === 'decorate' ? '个人建设' : '关闭';
+    await expect(panel.getByRole('button', { name: resumedFocus, exact: true })).toBeFocused();
+    if (input) await expect(input).toHaveValue('500');
+    else if (failure !== 'insufficient coins') await expect(targetCard.locator('[data-city-block-total]')).toContainText('结果待确认');
     if (failure === 'insufficient coins') {
       // The alert must appear while the 409 refresh is still blocked.
       await expect.poll(() => stateReads).toBeGreaterThanOrEqual(2);
-      await input.focus();
+      if (input) await input.focus();
+      else await actionButton.focus();
       state = { ...state, revision: state.revision + 1 };
       const latestRevision = state.revision;
-      const focusedInput = await input.elementHandle();
+      const focusedInput = input ? await input.elementHandle() : null;
       await broadcastCityState(page, state);
       // Capture this exact in-flight load before releasing its stale response;
       // starting another load afterwards could conceal a temporary rollback.
@@ -179,10 +195,11 @@ for (const [action, failure] of scenarios) {
         delete loading.pendingCityRefresh;
       });
       await expect(panel.locator('[data-city-status]')).toHaveText(`云端进度 #${latestRevision}`);
-      await expect(input).toBeFocused();
+      const focusTarget = input ?? actionButton;
+      await expect(focusTarget).toBeFocused();
       state = { ...state, revision: state.revision + 1 };
       await broadcastCityState(page, state);
-      await expect(input).toBeFocused();
+      await expect(focusTarget).toBeFocused();
       await expect(panel.getByRole('alert')).toContainText(message);
       if (action === 'donate') expect(await focusedInput?.evaluate((node) => node === document.activeElement)).toBe(true);
     }
@@ -195,8 +212,11 @@ for (const [action, failure] of scenarios) {
         state = { ...state, configVersion: config.version };
         await reloadCityState(page);
       } else {
-        await input.selectOption('flowers');
-        await input.selectOption('pine');
+        // Blocks have no draft parameters; roll the config to prove the
+        // uncertain receipt still replays the original request afterwards.
+        config.version = 'error-fixture-v2';
+        state = { ...state, configVersion: config.version };
+        await reloadCityState(page);
       }
     }
     // Drafts must survive removal of their controls, not just an immediate refresh.
@@ -209,17 +229,18 @@ for (const [action, failure] of scenarios) {
     await panel.getByRole('button', { name: currentTab, exact: true }).click();
     await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
     expect(await feedback?.evaluate((node) => node === document.querySelector('[data-city-feedback]'))).toBe(true);
-    await expect(input).toHaveValue(action === 'donate' ? '500' : 'pine');
+    if (input) await expect(input).toHaveValue('500');
+    else if (failure !== 'insufficient coins') await expect(targetCard.locator('[data-city-block-total]')).toContainText('结果待确认');
     await actionButton.click();
     await expect(panel.getByRole('alert')).toHaveCount(0);
-    await expect(panel).toContainText(action === 'donate' ? '500 金币 / 3,000 金币' : '已由 error-tester 建设：松树');
+    await expect(panel).toContainText(action === 'donate' ? '500 金币 / 3,000 金币' : '已由 error-tester 投建');
     expect(attempts).toBe(2);
     const { requestId: firstId, ...first } = requests[0]!;
     const { requestId: retryId, ...retry } = requests[1]!;
     expect(retry).toEqual(first);
     if (failure !== 'insufficient coins') expect(retryId).toBe(firstId);
     else expect(retryId).not.toBe(firstId);
-    if (failure !== 'insufficient coins') await expect(panel.getByRole('status')).toHaveText('上一笔已成功，未重复扣费。');
+    if (failure !== 'insufficient coins') await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('上一笔已成功，未重复扣费。');
     if (action === 'donate') {
       // A confirmed replay releases the old ID; another donation is a new charge.
       await actionButton.click();
@@ -227,7 +248,7 @@ for (const [action, failure] of scenarios) {
       expect(requests[2]!.requestId).not.toBe(retryId);
       expect(requests[2]!.configVersion).toBe(config.version);
       expect(committedRequests.size).toBe(2);
-      await expect(panel.getByRole('status')).toHaveCount(0);
+      await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('');
       if (failure === 'insufficient coins') {
         // After focus restoration, the action's original input may be detached.
         await input.fill('450');

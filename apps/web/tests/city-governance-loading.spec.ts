@@ -9,7 +9,7 @@ test('config refresh distinguishes loading from failure and preserves payment fe
     personalPlots: [], decorations: [],
   };
   const state: CityState = { epoch: 'loading-epoch', revision: 0, configVersion: config.version,
-    projects: [{ id: 'build-library', funded: 0, built: false }], decorations: [] };
+    projects: [{ id: 'build-library', funded: 0, built: false, votes: 0 }], decorations: [] };
   const mutations: Array<Record<string, unknown>> = [];
   const errors: string[] = [];
   let holdReads = false;
@@ -31,6 +31,7 @@ test('config refresh distinguishes loading from failure and preserves payment fe
       mutations.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({ status: 503, json: { error: 'Internal server error' } });
     }
+    if (path.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
     if (path.endsWith('/telemetry/event')) return route.fulfill({ status: 204, body: '' });
     return route.fulfill({ status: 404, json: { error: 'Unexpected test endpoint' } });
   });

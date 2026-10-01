@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
+import { MINICITY_SCHEMA_VERSION } from '../dist/databaseMetadata.js';
 
 const port = 8792;
 const physicsLabPort = 8794;
@@ -129,12 +130,27 @@ try {
   before.prepare('UPDATE users SET nickname = ? WHERE nickname = ?').run('ChangedAfterBackup', 'RestoreAlice');
   before.close();
 
-  const restored = spawnSync(process.execPath, ['dist/restoreBackup.js', backup.name, backup.sha256, '--confirm'], {
+  // Exercise a construction-only backup before the voting schema existed.
+  // Check the resulting schema before any server startup can migrate it again.
+  const preVoteName = 'minicity-20260925T000000.000Z-00000001.sqlite';
+  const preVotePath = join(dataDir, 'backups', preVoteName);
+  copyFileSync(join(dataDir, 'backups', backup.name), preVotePath);
+  const preVote = new Database(preVotePath);
+  preVote.exec('DROP TABLE city_vote_operations; DROP TABLE city_votes');
+  preVote.pragma('user_version = 6');
+  const preVoteApplicationId = preVote.pragma('application_id', { simple: true });
+  preVote.close();
+  const preVoteBytes = readFileSync(preVotePath);
+  const preVoteHash = createHash('sha256').update(preVoteBytes).digest('hex');
+  writeFileSync(`${preVotePath}.manifest.json`, JSON.stringify({ version: 1, name: preVoteName, sha256: preVoteHash, bytes: preVoteBytes.length, userVersion: 6, applicationId: preVoteApplicationId }));
+  const restored = spawnSync(process.execPath, ['dist/restoreBackup.js', preVoteName, preVoteHash, '--confirm'], {
     cwd: serverDir, env: environment, encoding: 'utf8', timeout: 30_000,
   });
   if (restored.status !== 0) throw new Error(`Offline restore failed: ${restored.stderr || restored.stdout}`);
 
   const after = new Database(databasePath, { readonly: true });
+  if (after.pragma('user_version', { simple: true }) !== MINICITY_SCHEMA_VERSION) throw new Error('Offline restore must publish the migrated schema version before startup');
+  if (after.prepare('SELECT COUNT(*) AS total FROM city_votes').get().total !== 0) throw new Error('Legacy backup must migrate to an empty voting table');
   const row = after.prepare('SELECT nickname, token_hash, session_expires_at FROM users').get();
   after.close();
   if (row.nickname !== 'RestoreAlice') throw new Error('Restore did not replace post-backup database changes');
@@ -153,7 +169,7 @@ try {
   copyFileSync(join(backupDirectory, backup.name), legacyPath);
   const legacy = new Database(legacyPath);
   legacy.pragma('foreign_keys = OFF');
-  for (const table of ['city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs', 'world_config']) {
+  for (const table of ['city_vote_operations', 'city_votes', 'city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs', 'world_config']) {
     legacy.exec(`DROP TABLE ${table}`);
   }
   const legacyUser = legacy.prepare('SELECT id, token_hash FROM users WHERE nickname = ?').get('RestoreAlice');
@@ -174,6 +190,7 @@ try {
   });
   assert.equal(legacyRestore.status, 0, `Schema 5 offline restore failed: ${legacyRestore.stderr || legacyRestore.stdout}`);
   const restoredLegacy = new Database(databasePath, { readonly: true });
+  assert.equal(restoredLegacy.pragma('user_version', { simple: true }), MINICITY_SCHEMA_VERSION);
   assert.equal(restoredLegacy.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(legacyUser.id).currency, 4321);
   assert.notEqual(restoredLegacy.prepare('SELECT token_hash FROM users WHERE id = ?').get(legacyUser.id).token_hash, legacyUser.token_hash);
   for (const id of ['build-library', 'build-academy', 'build-photostudio']) {

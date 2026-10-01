@@ -1,26 +1,11 @@
-import { decorateCity, decorateCityArea, getCityConfig, getPendingCityAreaOperation, refreshCityGovernanceSession, type CityConfig, type CityState, type CityMutationResult } from '../../city/cityGovernanceClient';
+import { decorateCityBlock, getCityConfig, getPendingCityBlockOperation, refreshCityGovernanceSession, type CityConfig, type CityMutationResult, type CityPersonalBlock, type CityState } from '../../city/cityGovernanceClient';
 import { actionButton, card, money, trackPendingActionFocus } from './cityGovernanceDom';
 
-type Draft = { decorationId: string; pending: boolean };
-type AreaDraft = Draft & { quantityText: string };
-const areaDrafts = new Map<string, AreaDraft>();
-const plotDrafts = new Map<string, Draft>();
+// Block purchases have no drafts: one card is one immutable purchase of a
+// pre-designed patch. Only the in-flight marker survives a rerender.
+const pendingBlocks = new Map<string, symbol>();
 
-export function clearCityConstructionDrafts(): void { areaDrafts.clear(); plotDrafts.clear(); }
-
-function decorationSelect(name: string, config: CityConfig, ids: string[]): HTMLSelectElement {
-  const select = document.createElement('select');
-  select.setAttribute('aria-label', `${name}装饰类型`);
-  for (const id of ids) {
-    const decoration = config.decorations.find((entry) => entry.id === id);
-    if (!decoration) continue;
-    const option = document.createElement('option');
-    option.value = id;
-    option.textContent = `${decoration.name} · ${money(decoration.cost)} / 处`;
-    select.append(option);
-  }
-  return select;
-}
+export function clearCityConstructionDrafts(): void { pendingBlocks.clear(); }
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '建设失败，请重试'; }
 
@@ -28,153 +13,123 @@ type ConstructionFeedback = {
   rerender: () => void;
   reportError: (message: string, actionKey: string) => void;
   reportNotice: (message: string) => void;
-  focusAction: (dataKey: 'cityArea' | 'plotId', id: string) => void;
+  focusAction: (dataKey: 'cityBlock', id: string) => void;
 };
 
 async function submitConstruction(
-  draft: Draft, dataKey: 'cityArea' | 'plotId', id: string,
+  blockId: string, blockName: string,
   mutation: () => Promise<CityMutationResult>, feedback: ConstructionFeedback,
 ): Promise<void> {
   const session = refreshCityGovernanceSession();
-  const drafts = dataKey === 'cityArea' ? areaDrafts : plotDrafts;
-  const isCurrentDraft = () => drafts.get(id) === draft && refreshCityGovernanceSession() === session;
-  if (!isCurrentDraft()) return;
-  if (draft.pending) return;
-  const config = getCityConfig();
-  const targetName = dataKey === 'cityArea'
-    ? config?.personalAreas?.find((area) => area.id === id)?.name ?? '该区域'
-    : config?.personalPlots.find((plot) => plot.id === id)?.name ?? '这块地';
-  const targetPrefix = `「${targetName}」`;
-  draft.pending = true;
-  const focus = trackPendingActionFocus(`${dataKey === 'cityArea' ? 'area-build' : 'decorate'}:${id}`);
-  const actionKey = `${dataKey}:${id}`;
+  const action = Symbol(blockId);
+  const isCurrent = () => pendingBlocks.get(blockId) === action && refreshCityGovernanceSession() === session;
+  if (pendingBlocks.has(blockId)) return;
+  const targetPrefix = `「${blockName}」`;
+  pendingBlocks.set(blockId, action);
+  const focus = trackPendingActionFocus(`block-build:${blockId}`);
+  const actionKey = `cityBlock:${blockId}`;
   feedback.reportError('', actionKey);
   feedback.rerender();
   let failed = false;
   try {
     const result = await mutation();
-    if (!result || !isCurrentDraft()) return;
+    if (!result || !isCurrent()) return;
     feedback.reportNotice(result.replayed ? '上一笔已成功，未重复扣费。' : '');
   } catch (error) {
-    if (!isCurrentDraft()) return;
+    if (!isCurrent()) return;
     failed = true;
     const message = errorMessage(error);
     feedback.reportError(message.startsWith(targetPrefix) ? message : `${targetPrefix}${message}`, actionKey);
-  }
-  finally {
+  } finally {
     focus.dispose();
-    if (isCurrentDraft()) {
-      draft.pending = false;
+    if (isCurrent()) {
+      pendingBlocks.delete(blockId);
       const restoreActionFocus = focus.shouldRestore(failed);
       feedback.rerender();
-      if (restoreActionFocus) feedback.focusAction(dataKey, id);
+      if (restoreActionFocus) feedback.focusAction('cityBlock', blockId);
     }
   }
 }
 
-export function renderCityPersonalAreas(
+function compositionSummary(block: CityPersonalBlock, config: CityConfig): string {
+  const counts = new Map<string, number>();
+  for (const placement of block.placements) counts.set(placement.decorationId, (counts.get(placement.decorationId) ?? 0) + 1);
+  const parts: string[] = [];
+  for (const [decorationId, count] of counts) {
+    const decoration = config.decorations.find((entry) => entry.id === decorationId);
+    parts.push(`${decoration?.name ?? decorationId} ×${count}`);
+  }
+  return parts.join(' · ');
+}
+
+export function renderCityPersonalBlocks(
   list: HTMLElement, config: CityConfig, state: CityState, feedback: ConstructionFeedback,
 ): void {
   const occupied = new Map(state.decorations.map((entry) => [entry.plotId, entry]));
   const plotsById = new Map(config.personalPlots.map((plot) => [plot.id, plot]));
-  const grouped = new Set((config.personalAreas ?? []).flatMap((area) => area.plotIds));
-  for (const area of config.personalAreas ?? []) {
-    const plots = area.plotIds.flatMap((id) => { const plot = plotsById.get(id); return plot ? [plot] : []; });
-    const item = card(area.name, `在同一区域连续建设，已建 ${plots.filter((plot) => occupied.has(plot.id)).length} / ${plots.length} 处。`);
-    item.dataset.cityArea = area.id;
-    const ids = config.decorations.filter((decoration) => plots.some((plot) => plot.options.includes(decoration.id))).map((decoration) => decoration.id);
-    const draft = areaDrafts.get(area.id) ?? { decorationId: ids[0] ?? '', quantityText: String(Math.min(20, plots.length)), pending: false };
-    areaDrafts.set(area.id, draft);
-    const pendingReceipt = getPendingCityAreaOperation(area.id);
-    if (pendingReceipt) {
-      // A lost response may already have charged the original request. Keep
-      // the visible draft aligned with that immutable receipt before retry.
-      draft.decorationId = pendingReceipt.decorationId;
-      draft.quantityText = String(pendingReceipt.quantity);
-    }
-    if (!pendingReceipt && !ids.includes(draft.decorationId)) draft.decorationId = ids[0] ?? '';
-    const select = decorationSelect(area.name, config, ids);
-    select.dataset.focusKey = `area-decoration:${area.id}`;
-    select.value = draft.decorationId;
-    const quantity = document.createElement('input');
-    quantity.dataset.focusKey = `area-quantity:${area.id}`;
-    quantity.type = 'number'; quantity.min = '1'; quantity.step = '1'; quantity.value = draft.quantityText;
-    quantity.setAttribute('aria-label', `${area.name}建设数量`);
-    const total = document.createElement('p');
-    total.dataset.cityAreaTotal = 'true';
-    total.setAttribute('aria-live', 'polite');
+  const blocks = config.personalBlocks ?? [];
+  const knownAreas = new Set((config.personalAreas ?? []).map((area) => area.id));
+  // Area blocks keep their manifest order; gate gardens and yards close the list.
+  const ordered = [
+    ...blocks.filter((block) => block.areaId !== null && knownAreas.has(block.areaId)),
+    ...blocks.filter((block) => block.areaId === null || !knownAreas.has(block.areaId)),
+  ];
+  for (const block of ordered) {
+    const plots = block.placements.flatMap((placement) => { const plot = plotsById.get(placement.plotId); return plot ? [plot] : []; });
+    const item = card(block.name, `${block.description}一次性建成 ${block.placements.length} 处装饰，全城居民都能看到。`);
+    item.dataset.cityBlock = block.id;
     const preview = document.createElement('div');
     preview.className = 'city-area-preview';
-    preview.setAttribute('aria-label', `${area.name}地块预览`);
+    preview.setAttribute('aria-label', `${block.name}地块预览`);
     const columns = [...new Set(plots.map((plot) => plot.x))].sort((a, b) => a - b);
     const rows = [...new Set(plots.map((plot) => plot.z))].sort((a, b) => a - b);
     preview.style.gridTemplateColumns = `repeat(${columns.length}, minmax(0, 1fr))`;
     preview.style.width = `min(100%, ${columns.length * 3}rem)`;
-    const action = actionButton('批量建设', undefined, false, `area-build:${area.id}`);
-    const update = () => {
-      const count = Number(draft.quantityText);
-      const available = plots.filter((plot) => !occupied.has(plot.id) && plot.options.includes(draft.decorationId));
-      quantity.max = String(Math.max(available.length, pendingReceipt?.quantity ?? 0));
-      const valid = Number.isSafeInteger(count) && count >= 1 && count <= available.length;
-      const selected = new Set(valid ? available.slice(0, count).map((plot) => plot.id) : []);
-      const decoration = config.decorations.find((entry) => entry.id === draft.decorationId);
-      const cost = decoration?.cost ?? 0;
-      total.textContent = pendingReceipt ? `上次 ${count} 处建设结果待确认，在当前页面及登录会话内重试不会重复扣费。`
-        : valid ? `将建设 ${count} 处 · 总价 ${money(cost * count)} · 可用 ${available.length} 处`
-        : available.length ? `请输入 1–${available.length} 之间的整数`
-        : plots.some((plot) => !occupied.has(plot.id)) ? `该区域没有适合${decoration?.name ?? '所选装饰'}的空地，请选择其他装饰。`
-        : '该区域已无可用地块';
-      // A city broadcast can already show the committed plots as occupied.
-      // Confirming its pending receipt remains safe even with no capacity left.
-      action.disabled = draft.pending || (!pendingReceipt && !valid);
-      select.disabled = quantity.disabled = draft.pending || Boolean(pendingReceipt);
-      preview.replaceChildren();
-      for (const plot of plots) {
-        const cell = document.createElement('span');
-        const built = occupied.has(plot.id);
-        cell.className = `city-area-cell${built ? ' occupied' : selected.has(plot.id) ? ' selected' : ''}`;
-        cell.style.gridColumn = String(columns.indexOf(plot.x) + 1);
-        cell.style.gridRow = String(rows.indexOf(plot.z) + 1);
-        cell.textContent = built ? '已建' : selected.has(plot.id) ? '待建' : '空地';
-        cell.title = `${plot.name}：${cell.textContent}`;
-        preview.append(cell);
-      }
-    };
-    select.addEventListener('change', () => { draft.decorationId = select.value; update(); });
-    quantity.addEventListener('input', () => { draft.quantityText = quantity.value; update(); });
+    const builtPlacements = block.placements
+      .flatMap((placement) => { const entry = occupied.get(placement.plotId); return entry ? [{ ...entry, placement }] : []; });
+    const complete = builtPlacements.length === block.placements.length;
+    const singleOwner = complete && new Set(builtPlacements.map((entry) => entry.ownerId)).size === 1;
+    const owners = [...new Set(builtPlacements.map((entry) => entry.ownerNickname))];
+    const pendingReceipt = getPendingCityBlockOperation(block.id);
+    const inFlight = pendingBlocks.has(block.id);
+    // A retained receipt must stay clickable: the retry replays the saved
+    // request and never charges twice. Only occupancy or an in-flight request
+    // locks the card.
+    const action = actionButton(pendingReceipt ? '确认投建结果' : '投建这片', undefined, !!(builtPlacements.length && !pendingReceipt) || inFlight, `block-build:${block.id}`);
+    const total = document.createElement('p');
+    total.dataset.cityBlockTotal = 'true';
+    total.setAttribute('aria-live', 'polite');
+    if (pendingReceipt) {
+      total.textContent = '上次投建结果待确认，在当前页面及登录会话内重试不会重复扣费。';
+    } else if (complete) {
+      total.textContent = singleOwner
+        ? `已由 ${owners[0]} 投建 · ${compositionSummary(block, config)}`
+        : `已建成 · ${compositionSummary(block, config)}`;
+    } else if (builtPlacements.length) {
+      total.textContent = `部分地块已有装饰（${owners.join('、')}），暂不能整块投建。`;
+    } else {
+      total.textContent = `整片投建 ${block.placements.length} 处 · ${compositionSummary(block, config)} · ${money(block.cost)}`;
+    }
     action.addEventListener('click', () => {
       if (action.disabled) return;
-      void submitConstruction(draft, 'cityArea', area.id,
-        () => decorateCityArea(area.id, draft.decorationId, Number(draft.quantityText)), feedback);
+      void submitConstruction(block.id, block.name, () => decorateCityBlock(block.id), feedback);
     });
-    update();
-    item.append(preview, select, quantity, total, action);
-    list.append(item);
-  }
-  // The original individually purchased plots keep their IDs and remain usable.
-  for (const plot of config.personalPlots.filter((entry) => !grouped.has(entry.id))) {
-    const item = card(plot.name, '选择一项装饰，建设完成后全城居民都能看到。');
-    item.dataset.plotId = plot.id;
-    const built = occupied.get(plot.id);
-    if (built) {
-      const owner = document.createElement('p');
-      owner.textContent = `已由 ${built.ownerNickname} 建设：${config.decorations.find((entry) => entry.id === built.decorationId)?.name ?? built.decorationId}`;
-      item.append(owner);
-    } else {
-      const select = decorationSelect(plot.name, config, plot.options);
-      select.dataset.focusKey = `decoration:${plot.id}`;
-      const action = actionButton('建设', undefined, false, `decorate:${plot.id}`);
-      const draft = plotDrafts.get(plot.id) ?? { decorationId: select.value, pending: false };
-      plotDrafts.set(plot.id, draft);
-      if (!plot.options.includes(draft.decorationId)) draft.decorationId = select.value;
-      select.value = draft.decorationId;
-      select.disabled = action.disabled = draft.pending;
-      select.addEventListener('change', () => { draft.decorationId = select.value; });
-      action.addEventListener('click', () => {
-        void submitConstruction(draft, 'plotId', plot.id, () => decorateCity(plot.id, draft.decorationId), feedback);
-      });
-      item.append(select, action);
+    for (const placement of block.placements) {
+      const plot = plotsById.get(placement.plotId);
+      const cell = document.createElement('span');
+      const built = occupied.get(placement.plotId);
+      const decorationName = config.decorations.find((entry) => entry.id === (built?.decorationId ?? placement.decorationId))?.name ?? '';
+      cell.className = `city-area-cell${built ? ' occupied' : ''}`;
+      if (plot) {
+        cell.style.gridColumn = String(columns.indexOf(plot.x) + 1);
+        cell.style.gridRow = String(rows.indexOf(plot.z) + 1);
+      }
+      cell.textContent = built ? '已建' : decorationName;
+      cell.title = `${plot?.name ?? placement.plotId}：${built ? `已建 · ${decorationName}` : `待建 · ${decorationName}`}`;
+      preview.append(cell);
     }
+    item.append(preview, total, action);
     list.append(item);
   }
+  if (!ordered.length) list.append(card('小区块列表暂时为空', '请稍后刷新查看可投建的小区块。'));
 }

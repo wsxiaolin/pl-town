@@ -102,7 +102,7 @@ test('construction access retains the last trusted policy during config reload a
       await reloadGate;
       return Response.json({ version, initialBuiltBuildingIds: ['commons'], projects: [{ id: 'library-project', buildingId: 'library' }] });
     }
-    return Response.json({ epoch: 'test', revision: 1, configVersion: version, projects: [{ id: 'library-project', built, funded: built ? 3000 : 0 }], decorations: [] });
+    return Response.json({ epoch: 'test', revision: 1, configVersion: version, projects: [{ id: 'library-project', built, funded: built ? 3000 : 0, votes: 0 }], decorations: [] });
   });
   const building = { id: 'library', group: new THREE.Group() };
   const availability = createBuildingAvailability({ storyLockedIds: new Set(), getResidences: () => [], isConstructionPending });
@@ -121,7 +121,7 @@ test('construction access retains the last trusted policy during config reload a
   await reloading;
   assert.equal(availability.isBuildingUnavailable(building), false);
 
-  applyCityState({ epoch: 'test', revision: 2, configVersion: version, projects: [{ id: 'library-project', funded: 0, built: false }], decorations: [] });
+  applyCityState({ epoch: 'test', revision: 2, configVersion: version, projects: [{ id: 'library-project', funded: 0, built: false, votes: 0 }], decorations: [] });
   unavailable = true;
   await loadCityGovernance();
   assert.equal(availability.isBuildingUnavailable(building), true);
@@ -176,7 +176,7 @@ test('new configured buildings stay hidden when state loading fails without chan
     await stateGate;
     if (failState) throw new Error('state unavailable');
     return Response.json({ epoch: 'test', revision: 1, configVersion: version,
-      projects: ids.map((id) => ({ id: `build-${id}`, built: id !== 'academy', funded: id === 'academy' ? 0 : 3000 })), decorations: [] });
+      projects: ids.map((id) => ({ id: `build-${id}`, built: id !== 'academy', funded: id === 'academy' ? 0 : 3000, votes: 0 })), decorations: [] });
   });
   await loadCityGovernance();
   const assertKnownOutcomes = () => {
@@ -204,7 +204,7 @@ test('new configured buildings stay hidden when state loading fails without chan
   assertKnownOutcomes();
   assert.equal(isConstructionPending('photostudio'), false);
   applyCityState({ epoch: 'restored-city', revision: 0, configVersion: version,
-    projects: ids.map((id) => ({ id: `build-${id}`, built: false, funded: 0 })), decorations: [] });
+    projects: ids.map((id) => ({ id: `build-${id}`, built: false, funded: 0, votes: 0 })), decorations: [] });
   assert.equal(isConstructionPending('library'), true);
   assert.equal(isConstructionPending('photostudio'), true);
   assert.equal(isConstructionPending('commons'), false);
@@ -236,7 +236,7 @@ test('an updated initial building clears stale pending state while a matching sn
     await stateGate;
     if (failState) return new Response(null, { status: 503 });
     return Response.json({ epoch: 'test', revision: 1, configVersion: version,
-      projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: id === 'research', funded: id === 'research' ? 3000 : 0 })), decorations: [] });
+      projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: id === 'research', funded: id === 'research' ? 3000 : 0, votes: 0 })), decorations: [] });
   });
   await loadCityGovernance();
   assert.equal(isConstructionPending('library'), true);
@@ -270,7 +270,7 @@ test('an updated initial building clears stale pending state while a matching sn
   await loadCityGovernance();
   assertPendingPolicy();
   applyCityState({ epoch: 'restored-city', revision: 0, configVersion: version,
-    projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: false, funded: 0 })), decorations: [] });
+    projects: projectBuildings.map((id) => ({ id: `build-${id}`, built: false, funded: 0, votes: 0 })), decorations: [] });
   assert.equal(isConstructionPending('library'), false);
   assert.equal(isConstructionPending('research'), true);
 });

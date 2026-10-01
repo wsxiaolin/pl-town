@@ -16,7 +16,7 @@ test('new initial policy reveals a previously pending building even when state r
   };
   let state: CityState = {
     epoch: 'pending-initial', revision: 0, configVersion: config.version,
-    projects: config.projects.map(({ id }) => ({ id, funded: id === 'build-research' ? 3000 : 0, built: id === 'build-research' })), decorations: [],
+    projects: config.projects.map(({ id }) => ({ id, funded: id === 'build-research' ? 3000 : 0, built: id === 'build-research', votes: 0 })), decorations: [],
   };
   let failState = false;
   let stateRequests = 0;

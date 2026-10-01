@@ -11,7 +11,7 @@ test('an open map updates construction access without creating more WebGL contex
     personalPlots: [], decorations: [],
   };
   const state = { epoch: 'map-test', revision: 0, configVersion: config.version,
-    projects: [{ id: 'build-library', funded: 0, built: false }], decorations: [] };
+    projects: [{ id: 'build-library', funded: 0, built: false, votes: 0 }], decorations: [] };
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
@@ -43,7 +43,7 @@ test('an open map updates construction access without creating more WebGL contex
   const shot = await page.locator('#mapImage').getAttribute('src');
   for (let revision = 1; revision <= 13; revision += 1) {
     const built = revision % 2 === 1;
-    await pushCityState(page, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built }] });
+    await pushCityState(page, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built, votes: 0 }] });
     await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(built ? 1 : 0);
     await expect(page.locator('.map-search-result[data-building-id="library"]')).toHaveCount(built ? 1 : 0);
   }
@@ -63,7 +63,7 @@ test('construction updates retain map search selection, focus and dismissed resu
     personalPlots: [], decorations: [],
   };
   const state = { epoch: 'map-search-test', revision: 0, configVersion: config.version,
-    projects: [{ id: 'build-library', funded: 0, built: false }], decorations: [] };
+    projects: [{ id: 'build-library', funded: 0, built: false, votes: 0 }], decorations: [] };
   stubCityWebSocket(page, { user: 'map-search-update-tester', unlockedBuildings: ['commons', 'mall_south', 'mall_west', 'library'] });
   await page.route('**/town-api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -81,7 +81,7 @@ test('construction updates retain map search selection, focus and dismissed resu
   const activeId = await page.locator('.map-search-result.is-active').getAttribute('data-building-id');
   await expect(search).toHaveAttribute('aria-activedescendant', 'mapSearchResult-1');
   const updateLibrary = async (revision: number, built: boolean) => {
-    await pushCityState(page, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built }] });
+    await pushCityState(page, { ...state, revision, projects: [{ id: 'build-library', funded: built ? 3000 : 0, built, votes: 0 }] });
     await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(built ? 1 : 0);
   };
   await updateLibrary(1, true);

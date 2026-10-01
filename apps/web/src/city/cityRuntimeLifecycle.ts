@@ -6,6 +6,7 @@ import { preloadTextureResources } from './textureResourcePreloader';
 import { readRenderSettings } from '../rendering/createRenderer';
 import { showUnlockToast } from './toast';
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
+import { disposeCityVoting } from './cityVotingClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
 export function createCityRuntimeLifecycle(options: {
@@ -54,6 +55,7 @@ export function createCityRuntimeLifecycle(options: {
     closeCityGovernancePanel();
     disposeCityGovernancePanel();
     disposeCityGovernance();
+    disposeCityVoting();
     destroyCG();
     stopInvasionCG();
     destroyMusterCG();
