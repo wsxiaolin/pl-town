@@ -18,7 +18,7 @@ import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_CHECK_IN, DAILY_DEAL_DISCOUNT_PERCENT, DAILY_MISSIONS, DAILY_REWARDS, DAILY_SUPPLY_ORDERS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, isMarketTradeableItemId, MARKET_RECIPES, MAX_ACTIVE_MARKET_LISTINGS, MAX_MARKET_LISTING_PRICE, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
@@ -46,6 +46,7 @@ const globalPublicMutationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
+const marketMutationRate = new FixedWindowRateLimiter(20, 10_000);
 const chatHistoryRate = new FixedWindowRateLimiter(20, 60_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(5, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
@@ -90,6 +91,11 @@ function broadcastHousingState() {
   housingBroadcastTimer.unref();
 }
 function broadcastWeather() { broadcast({ type: 'world.weather', weather: serverWeather }); }
+// The listing board is per-viewer (own listings carry private state), so each
+// resident receives their own snapshot whenever the escrow ledger changes.
+function broadcastMarketListings() {
+  clients.forEach((client) => send(client.socket, { type: 'market.listings', listings: db.listMarketListings(client.user.id) }));
+}
 // The periodic broadcast is the "global broadcast" toggle: when the admin turns
 // it off, weather only travels on join and on an explicit admin apply.
 // getWeatherConfig() is cached; the cache is only invalidated by resetWorldConfig
@@ -258,10 +264,82 @@ async function handle(client: Client, raw: string) {
       const quantity = message.quantity ?? 1;
       if (!validQuantity(quantity)) return fail(client.socket, 'Invalid quantity');
       const product = SHOP_PRODUCTS[message.productId as keyof typeof SHOP_PRODUCTS];
+      const market = getProgressionCatalog().store;
+      const featured = message.productId === market.featuredProductId && message.dealDay === market.dayKey;
+      const unitPrice = featured ? Math.max(1, Math.floor(product.unitPrice * (100 - DAILY_DEAL_DISCOUNT_PERCENT) / 100)) : product.unitPrice;
       try {
-        const progress = db.purchaseItem(userId, product.itemId, quantity, product.unitPrice);
-        send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'shop.purchased', productId: message.productId, quantity } });
+        const progress = db.purchaseItem(userId, product.itemId, quantity, unitPrice);
+        send(client.socket, { type: 'progress.updated', progress, catalog: getProgressionCatalog(), event: { type: 'shop.purchased', productId: message.productId, quantity, pricePaid: quantity * unitPrice, featured } });
       } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Purchase failed'); }
+      return;
+    }
+    if (message.type === 'progress.daily.checkin') {
+      const result = db.claimDailyCheckIn(userId, DAILY_CHECK_IN);
+      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'daily.checkin', claimed: result.claimed, reward: result.reward, streak: result.streak } });
+      return;
+    }
+    if (message.type === 'progress.daily.mission.claim') {
+      if (!validId(message.missionId)) return fail(client.socket, 'Daily mission is not available');
+      const mission = DAILY_MISSIONS.find((entry) => entry.id === message.missionId);
+      if (!mission) return fail(client.socket, 'Daily mission is not available');
+      const result = db.claimDailyMission(userId, mission);
+      send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'daily.mission.claimed', missionId: mission.id, claimed: result.claimed, reward: result.reward } });
+      return;
+    }
+    if (message.type === 'market.recipe.craft') {
+      if (!validId(message.recipeId)) return fail(client.socket, 'Recipe is not available');
+      const recipe = MARKET_RECIPES.find((entry) => entry.id === message.recipeId);
+      if (!recipe) return fail(client.socket, 'Recipe is not available');
+      try {
+        const result = db.craftMarketRecipe(userId, recipe);
+        send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'market.crafted', recipeId: recipe.id, crafted: result.crafted } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not craft'); }
+      return;
+    }
+    if (message.type === 'market.supply.fulfill') {
+      if (!validId(message.orderId)) return fail(client.socket, 'Supply order is not available');
+      const order = DAILY_SUPPLY_ORDERS.find((entry) => entry.id === message.orderId);
+      if (!order) return fail(client.socket, 'Supply order is not available');
+      try {
+        const result = db.fulfillDailySupplyOrder(userId, order);
+        send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'market.order.fulfilled', orderId: order.id, fulfilled: result.fulfilled, reward: result.reward } });
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not fulfill supply order'); }
+      return;
+    }
+    if (message.type === 'market.listings.get') {
+      send(client.socket, { type: 'market.listings', listings: db.listMarketListings(userId) });
+      return;
+    }
+    if (message.type === 'market.listing.create') {
+      if (!validId(message.itemId) || !isMarketTradeableItemId(message.itemId)) return fail(client.socket, 'This item cannot be listed');
+      if (!validQuantity(message.quantity)) return fail(client.socket, 'Invalid quantity');
+      if (!Number.isInteger(message.price) || message.price < 1 || message.price > MAX_MARKET_LISTING_PRICE) return fail(client.socket, 'Invalid price');
+      if (!marketMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many market requests, try again later');
+      try {
+        const result = db.createMarketListing(userId, message.itemId, message.quantity, message.price, MAX_ACTIVE_MARKET_LISTINGS);
+        send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'market.listing.created', listingId: result.listing.id, itemId: message.itemId, quantity: message.quantity, price: message.price } });
+        broadcastMarketListings();
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not create listing'); }
+      return;
+    }
+    if (message.type === 'market.listing.buy') {
+      if (!validId(message.listingId)) return fail(client.socket, 'Listing is not available');
+      if (!marketMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many market requests, try again later');
+      try {
+        const result = db.buyMarketListing(userId, message.listingId);
+        send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'market.listing.sold', listingId: result.listing.id, itemId: result.listing.itemId, quantity: result.listing.quantity, price: result.listing.price } });
+        broadcastMarketListings();
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not buy listing'); }
+      return;
+    }
+    if (message.type === 'market.listing.cancel') {
+      if (!validId(message.listingId)) return fail(client.socket, 'Listing is not available');
+      if (!marketMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many market requests, try again later');
+      try {
+        const result = db.cancelMarketListing(userId, message.listingId);
+        send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'market.listing.cancelled', listingId: result.listing.id } });
+        broadcastMarketListings();
+      } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not cancel listing'); }
       return;
     }
     if (message.type === 'progress.item.consume') {

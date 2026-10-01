@@ -204,12 +204,14 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
       readyState = NativeWebSocket.CONNECTING;
       progress = {
         currency: 1200,
-        inventory: { dragonwell_tea: 2, city_badge: 1, mandarin: 0 },
+        inventory: { dragonwell_tea: 4, city_badge: 1, mandarin: 0 },
         achievements: ['citizen'],
         unlockedBuildings: [],
         visitedBuildings: ['activity', 'library'],
+        daily: { dayKey: '2026-09-25', checkInStreak: 0, checkInClaimed: false, visitedBuildings: ['activity', 'library'], claimedMissions: [], fulfilledOrders: [] },
       };
       claimedOrange = false;
+      listings = { active: [] as Array<Record<string, unknown>>, own: [] as Array<Record<string, unknown>> };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
         const request = JSON.parse(raw);
@@ -218,12 +220,26 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
           buildingUnlockable: { mall_south: true, academy_library: true },
           achievementRewards: { citizen: 20, cat_cafe_note: 30, minicity_origin: 50, dragonwell_assimilation: 80 },
           products: {
-            dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30 },
-            beef: { itemId: 'beef', name: '牛肉', unitPrice: 45 },
-            radish: { itemId: 'radish', name: '萝卜', unitPrice: 20 },
-            music_box: { itemId: 'music_box', name: '音乐盒', unitPrice: 120 },
+            dragonwell_tea: { itemId: 'dragonwell_tea', name: '龙井茶', unitPrice: 30, category: 'story' },
+            beef: { itemId: 'beef', name: '牛肉', unitPrice: 45, category: 'food' },
+            radish: { itemId: 'radish', name: '萝卜', unitPrice: 20, category: 'food' },
+            music_box: { itemId: 'music_box', name: '音乐盒', unitPrice: 120, category: 'story' },
           },
+          dailyCheckIn: { baseReward: 40, streakBonus: 10, maxStreakBonus: 60 },
+          dailyMissions: [
+            { id: 'market_walk_3', title: '街巷漫游', description: '今天探访 3 座不同的开放建筑', target: 3, reward: 35 },
+            { id: 'market_walk_6', title: '城市寻宝', description: '今天探访 6 座不同的开放建筑', target: 6, reward: 90 },
+          ],
+          store: { dayKey: '2026-09-25', featuredProductId: 'beef', discountPercent: 25 },
+          recipes: [
+            { id: 'shared_meal', name: '热炖牛肉', description: '牛肉和萝卜慢炖成一份热食', ingredients: [{ itemId: 'beef', quantity: 1 }, { itemId: 'radish', quantity: 2 }], output: { itemId: 'shared_meal', quantity: 1 } },
+            { id: 'tea_service', name: '龙井茶席', description: '两份龙井配成一席清茶', ingredients: [{ itemId: 'dragonwell_tea', quantity: 2 }], output: { itemId: 'tea_service', quantity: 1 } },
+          ],
+          dailySupplyOrder: { id: 'library_tea_service', title: '图书馆茶席', description: '为下午读书会准备一席龙井茶。', requirements: [{ itemId: 'tea_service', quantity: 1 }], reward: 110, dayKey: '2026-09-25' },
+          market: { maxListingQuantity: 20, maxListingPrice: 9999, maxActiveListings: 6 },
+          tradeableItemIds: ['dragonwell_tea', 'beef', 'radish', 'music_box', 'shared_meal', 'tea_service', 'memory_parcel'],
         };
+        const broadcastListings = () => queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'market.listings', listings: this.listings }) })));
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
           response = {
@@ -246,7 +262,75 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
           if (!this.progress.unlockedBuildings.includes(request.buildingId)) this.progress.unlockedBuildings.push(request.buildingId);
           response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'building.unlocked', buildingId: request.buildingId, purchased: true } };
         } else if (request.type === 'progress.building.visit') {
+          if (!this.progress.daily.visitedBuildings.includes(request.buildingId)) this.progress.daily.visitedBuildings.push(request.buildingId);
           response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
+        } else if (request.type === 'progress.daily.mission.claim') {
+          const mission = catalog.dailyMissions.find((entry: { id: string }) => entry.id === request.missionId);
+          const claimed = Boolean(mission && this.progress.daily.visitedBuildings.length >= mission.target && !this.progress.daily.claimedMissions.includes(mission.id));
+          if (claimed && mission) {
+            this.progress.daily.claimedMissions.push(mission.id);
+            this.progress.currency += mission.reward;
+          }
+          response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'daily.mission.claimed', missionId: request.missionId, claimed, reward: claimed && mission ? mission.reward : 0 } };
+        } else if (request.type === 'progress.daily.checkin') {
+          this.progress.currency += 40;
+          this.progress.daily.checkInStreak = 1;
+          this.progress.daily.checkInClaimed = true;
+          response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'daily.checkin', claimed: true, reward: 40, streak: 1 } };
+        } else if (request.type === 'progress.shop.buy') {
+          const product = catalog.products[request.productId];
+          const featured = request.productId === catalog.store.featuredProductId && request.dealDay === catalog.store.dayKey;
+          const unitPrice = featured ? Math.floor(product.unitPrice * .75) : product.unitPrice;
+          const pricePaid = unitPrice * request.quantity;
+          this.progress.currency -= pricePaid;
+          this.progress.inventory[product.itemId] = (this.progress.inventory[product.itemId] ?? 0) + request.quantity;
+          response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'shop.purchased', productId: request.productId, quantity: request.quantity, pricePaid, featured } };
+        } else if (request.type === 'market.recipe.craft') {
+          const recipe = catalog.recipes.find((entry: { id: string }) => entry.id === request.recipeId);
+          const canCraft = Boolean(recipe && recipe.ingredients.every((ingredient: { itemId: string; quantity: number }) => (this.progress.inventory[ingredient.itemId] ?? 0) >= ingredient.quantity));
+          if (canCraft && recipe) {
+            recipe.ingredients.forEach((ingredient: { itemId: string; quantity: number }) => { this.progress.inventory[ingredient.itemId] -= ingredient.quantity; });
+            this.progress.inventory[recipe.output.itemId] = (this.progress.inventory[recipe.output.itemId] ?? 0) + recipe.output.quantity;
+          }
+          response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'market.crafted', recipeId: request.recipeId, crafted: canCraft } };
+        } else if (request.type === 'market.supply.fulfill') {
+          const order = request.orderId === catalog.dailySupplyOrder.id ? catalog.dailySupplyOrder : null;
+          const stocked = Boolean(order && !this.progress.daily.fulfilledOrders.includes(order.id) && order.requirements.every((requirement: { itemId: string; quantity: number }) => (this.progress.inventory[requirement.itemId] ?? 0) >= requirement.quantity));
+          if (order && stocked) {
+            order.requirements.forEach((requirement: { itemId: string; quantity: number }) => { this.progress.inventory[requirement.itemId] -= requirement.quantity; });
+            this.progress.currency += order.reward;
+            this.progress.daily.fulfilledOrders.push(order.id);
+          }
+          response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'market.order.fulfilled', orderId: request.orderId, fulfilled: stocked, reward: stocked && order ? order.reward : 0 } };
+        } else if (request.type === 'market.listings.get') {
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'market.listings', listings: this.listings }) })));
+          return;
+        } else if (request.type === 'market.listing.create') {
+          const owned = this.progress.inventory[request.itemId] ?? 0;
+          if (request.itemId === 'dragonwell_tea' && owned >= request.quantity) {
+            this.progress.inventory[request.itemId] -= request.quantity;
+            const listing = { id: `listing-${this.listings.active.length + 1}`, itemId: request.itemId, quantity: request.quantity, price: request.price, status: 'active', sellerId: 'world-user', sellerNickname: 'world-tester', buyerId: null, createdAt: '2026-09-25T08:00:00.000Z' };
+            this.listings.active.push(listing);
+            this.listings.own.push(listing);
+            response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'market.listing.created', listingId: listing.id, itemId: request.itemId, quantity: request.quantity, price: request.price } };
+            queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+            broadcastListings();
+            return;
+          }
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'error', message: 'This item cannot be listed' }) })));
+          return;
+        } else if (request.type === 'market.listing.cancel') {
+          const listing = this.listings.own.find((entry: { id: string }) => entry.id === request.listingId);
+          if (listing && listing.status === 'active') {
+            listing.status = 'cancelled';
+            this.listings.active = this.listings.active.filter((entry: { id: string }) => entry.id !== listing.id);
+            this.progress.inventory[listing.itemId as string] = (this.progress.inventory[listing.itemId as string] ?? 0) + (listing.quantity as number);
+            response = { type: 'progress.updated', progress: this.progress, catalog, event: { type: 'market.listing.cancelled', listingId: listing.id } };
+            queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+            broadcastListings();
+            return;
+          }
+          return;
         }
         if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
       }
@@ -266,7 +350,17 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
   await page.evaluate(() => (window as any)._mini.interactBuilding('mall_south'));
   await expect(page.locator('#shopPanel')).toHaveClass(/open/);
-  await expect(page.locator('#shopPanel')).toContainText('物实商店');
+  await expect(page.locator('#shopPanel')).toContainText('物实市集');
+  await expect(page.locator('[data-daily-board]')).toContainText('今日城市委托');
+  await expect(page.locator('[data-daily-board]')).toContainText('街巷漫游');
+  await page.locator('[data-daily-checkin]').click();
+  await expect(page.locator('[data-shop-currency]')).toHaveText('1240');
+  await expect(page.locator('[data-daily-checkin]')).toHaveText('已签到');
+  const firstMission = page.locator('[data-daily-claim="market_walk_3"]');
+  await expect(firstMission).toBeEnabled();
+  await firstMission.click();
+  await expect(firstMission).toHaveText('已领取');
+  await expect(page.locator('[data-shop-currency]')).toHaveText('1275');
   await expect(page.locator('#onlinePanel')).not.toHaveClass(/open/);
   const expectedProducts = [
     ['dragonwell_tea', '茶', '龙井茶', '西湖龙井 · 可用于石井剧情'],
@@ -278,8 +372,42 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     const product = page.locator(`[data-product-id="${productId}"]`);
     await expect(product.locator('.shop-product-icon')).toHaveText(icon);
     await expect(product.locator('.sp-ul-name')).toHaveText(name);
-    await expect(product.locator('small')).toHaveText(detail);
+    await expect(product.locator('.shop-product-copy > small').first()).toHaveText(detail);
   }
+  await page.locator('[data-market-category="story"]').click();
+  await expect(page.locator('#shopPanel .shop-product[data-product-id]')).toHaveCount(2);
+  await expect(page.locator('#shopPanel .shop-product[data-product-id="beef"]')).toHaveCount(0);
+  await page.locator('[data-market-category="all"]').click();
+  const featured = page.locator('.shop-product[data-product-id="beef"]');
+  await expect(featured).toContainText('今日特惠 −25%');
+  await featured.locator('[data-quantity-step="1"]').click();
+  await expect(featured.locator('[data-shop-buy]')).toHaveText('购买 · 66 币');
+  await featured.locator('[data-shop-buy]').click();
+  await expect(page.locator('[data-shop-currency]')).toHaveText('1209');
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('牛肉');
+
+  // 市集工坊与交易所：合成、供货交付、挂单托管与下架退回
+  await expect(page.locator('[data-market-exchange]')).toContainText('今日供货 · 图书馆茶席');
+  await expect(page.locator('[data-market-exchange]')).toContainText('居民交易所');
+  const craftButton = page.locator('[data-recipe-craft="tea_service"]');
+  await expect(craftButton).toBeEnabled();
+  await craftButton.click();
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶席');
+  const fulfillButton = page.locator('[data-supply-fulfill="library_tea_service"]');
+  await expect(fulfillButton).toBeEnabled();
+  await fulfillButton.click();
+  await expect(fulfillButton).toHaveText('已交付');
+  await expect(page.locator('[data-shop-currency]')).toHaveText('1319');
+  await page.locator('[data-listing-item]').selectOption('dragonwell_tea');
+  await page.locator('[data-listing-price]').fill('50');
+  await page.locator('[data-listing-create]').click();
+  const activeListing = page.locator('.market-listing[data-listing-id]');
+  await expect(activeListing).toContainText('龙井茶 ×1');
+  await expect(activeListing).toContainText('购买 · 50 币');
+  await expect(page.locator('[data-listing-item]')).toContainText('龙井茶 ×1');
+  await activeListing.locator('[data-listing-cancel]').click();
+  await expect(activeListing).toContainText('已取消');
+  await expect(page.locator('[data-listing-item]')).toContainText('龙井茶 ×2');
   await page.locator('[data-shop-close]').click();
 
   await page.evaluate(() => (window as any)._mini.interactBuilding('academy_library'));

@@ -19,6 +19,7 @@ const normalized = normalizePlayerProgress({
 });
 
 assert(normalized.currency === 85, 'currency should be preserved');
+assert(normalized.daily.checkInStreak === 0 && normalized.daily.visitedBuildings.length === 0, 'older progression snapshots should receive an empty daily state');
 assert(normalized.inventory.dragonwell_tea === 2 && normalized.inventory.invalid === undefined, 'inventory should only contain positive integer counts');
 assert(normalized.achievements.length === 1, 'achievement IDs should be deduplicated');
 assert(normalized.repeatableRewardClaims.ice_accept === 2 && normalized.repeatableRewardClaims.invalid === undefined, 'repeatable reward claim counts should be normalized');
@@ -40,5 +41,10 @@ assert(questView.unlockedBuildings.has('mall_south'), 'quest view should expose 
 
 const malformed = normalizePlayerProgress({ currency: -5, inventory: null, achievements: 'bad' });
 assert(malformed.currency === 0 && Object.keys(malformed.inventory).length === 0, 'malformed snapshots should fall back safely');
+const daily = normalizePlayerProgress({ daily: { dayKey: '2026-09-25', checkInStreak: 4, checkInClaimed: true, visitedBuildings: ['library', 'library', 'activity'], claimedMissions: ['market_walk_3'], fulfilledOrders: ['library_tea_service', 'library_tea_service', ''] } });
+assert(daily.daily.dayKey === '2026-09-25' && daily.daily.checkInStreak === 4 && daily.daily.checkInClaimed, 'daily check-in state should survive normalization');
+assert(daily.daily.visitedBuildings.length === 2 && daily.daily.claimedMissions[0] === 'market_walk_3', 'daily visit and claim IDs should be normalized and deduplicated');
+assert(daily.daily.fulfilledOrders.length === 1 && daily.daily.fulfilledOrders[0] === 'library_tea_service', 'daily fulfilled supply orders should be normalized and deduplicated');
+assert(normalized.daily.fulfilledOrders.length === 0, 'older progression snapshots should receive an empty fulfilled order list');
 
 console.log('playerProgress tests passed');

@@ -23,6 +23,14 @@ export type PlayerProgress = {
   achievements: string[];
   unlockedBuildings: string[];
   visitedBuildings: string[];
+  daily: {
+    dayKey: string;
+    checkInStreak: number;
+    checkInClaimed: boolean;
+    visitedBuildings: string[];
+    claimedMissions: string[];
+    fulfilledOrders: string[];
+  };
 };
 
 export type StoryFlagValue = boolean | number | string | null;
@@ -63,7 +71,15 @@ export type ClientMessage =
   | { type: 'progress.building.visit'; buildingId: string }
   | { type: 'progress.building.unlock'; buildingId: string }
   | { type: 'progress.achievement.unlock'; achievementId: string }
-  | { type: 'progress.shop.buy'; productId: string; quantity?: number }
+  | { type: 'progress.shop.buy'; productId: string; quantity?: number; dealDay?: string }
+  | { type: 'progress.daily.checkin' }
+  | { type: 'progress.daily.mission.claim'; missionId: string }
+  | { type: 'market.recipe.craft'; recipeId: string }
+  | { type: 'market.supply.fulfill'; orderId: string }
+  | { type: 'market.listings.get' }
+  | { type: 'market.listing.create'; itemId: string; quantity: number; price: number }
+  | { type: 'market.listing.buy'; listingId: string }
+  | { type: 'market.listing.cancel'; listingId: string }
   | { type: 'progress.item.consume'; itemId: string; quantity?: number }
   | { type: 'progress.filmCity.experience' }
   | { type: 'progress.reward.claim'; rewardId: string; claimSequence?: number }

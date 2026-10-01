@@ -4,8 +4,10 @@ import {
   canInteractWithBuilding,
   inventoryEntries,
   ITEM_DETAILS,
+  ITEM_LABELS,
   normalizePlayerProgress,
   toQuestProgressView,
+  type MarketListingView,
   type PlayerProgress,
   type ProgressionCatalog,
   type ProgressionEvent,
@@ -17,7 +19,15 @@ type ProgressionCommand =
   | { type: 'progress.building.visit'; buildingId: string }
   | { type: 'progress.building.unlock'; buildingId: string }
   | { type: 'progress.achievement.unlock'; achievementId: string }
-  | { type: 'progress.shop.buy'; productId: string; quantity?: number }
+  | { type: 'progress.shop.buy'; productId: string; quantity?: number; dealDay?: string }
+  | { type: 'progress.daily.checkin' }
+  | { type: 'progress.daily.mission.claim'; missionId: string }
+  | { type: 'market.recipe.craft'; recipeId: string }
+  | { type: 'market.supply.fulfill'; orderId: string }
+  | { type: 'market.listings.get' }
+  | { type: 'market.listing.create'; itemId: string; quantity: number; price: number }
+  | { type: 'market.listing.buy'; listingId: string }
+  | { type: 'market.listing.cancel'; listingId: string }
   | { type: 'progress.item.consume'; itemId: string; quantity?: number }
   | { type: 'progress.filmCity.experience' }
   | { type: 'progress.reward.claim'; rewardId: string; claimSequence?: number };
@@ -41,6 +51,7 @@ const PRODUCT_PRESENTATIONS: Readonly<Record<string, { icon: string; detail: str
 const KNOWN_ITEM_ICONS: Readonly<Record<string, string>> = Object.freeze({
   city_guide: '册', mandarin: '柑', dragonwell_tea: '茶', beef: '肉', radish: '萝',
   music_box: '音', city_badge: '章', tirpitz_card: '舰',
+  shared_meal: '炖', tea_service: '席', memory_parcel: '礼',
   [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.icon,
   [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.icon,
 });
@@ -61,6 +72,16 @@ export function createCloudProgressionController(options: Options) {
   let currencyValue: HTMLElement | null = null;
   let shopCurrencyValue: HTMLElement | null = null;
   let shopArea: HTMLElement | null = null;
+  let shopTabs: HTMLElement | null = null;
+  let dailyBoard: HTMLElement | null = null;
+  let exchangeBoard: HTMLElement | null = null;
+  let activeShopCategory: 'all' | 'food' | 'story' = 'all';
+  const shopQuantities = new Map<string, number>();
+  const pendingShopProducts = new Set<string>();
+  const pendingDailyClaims = new Set<string>();
+  const pendingMarketActions = new Set<string>();
+  let listings: { active: MarketListingView[]; own: MarketListingView[] } = { active: [], own: [] };
+  const listingDraft = { itemId: '', quantity: 1, price: 1 };
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
   const pendingRewards = new Map<string, {
     claimSequence?: number;
@@ -98,21 +119,29 @@ export function createCloudProgressionController(options: Options) {
     shopPanel.id = 'shopPanel';
     shopPanel.className = 'stats-panel shop-panel';
     shopPanel.setAttribute('role', 'dialog');
-    shopPanel.setAttribute('aria-label', '物实商店');
+    shopPanel.setAttribute('aria-label', '物实市集');
     shopPanel.innerHTML = `
       <div class="sp-head">
-        <span class="sp-title shop-title">物实商店 <small><strong data-shop-currency>0</strong> 物实币</small></span>
-        <button class="sp-close" type="button" data-shop-close aria-label="关闭物实商店">X</button>
+        <span class="sp-title shop-title">物实市集 <small><strong data-shop-currency>0</strong> 物实币</small></span>
+        <button class="sp-close" type="button" data-shop-close aria-label="关闭物实市集">X</button>
       </div>
       <div class="sp-body">
-        <div class="sp-unlocks" data-shop-area><div data-shop-list></div></div>
+        <section class="market-daily" data-daily-board aria-label="今日任务"></section>
+        <nav class="market-tabs" data-market-tabs aria-label="商品分类"></nav>
+        <div class="market-products" data-shop-area><div data-shop-list></div></div>
+        <section class="market-exchange" data-market-exchange aria-label="市集工坊与交易所"></section>
       </div>`;
     options.document.body.appendChild(shopPanel);
     inventoryList = panel.querySelector('[data-inventory-list]');
     currencyValue = panel.querySelector('[data-currency]');
     shopArea = shopPanel.querySelector('[data-shop-area]');
+    shopTabs = shopPanel.querySelector('[data-market-tabs]');
+    dailyBoard = shopPanel.querySelector('[data-daily-board]');
+    exchangeBoard = shopPanel.querySelector('[data-market-exchange]');
     shopCurrencyValue = shopPanel.querySelector('[data-shop-currency]');
     shopPanel.querySelector('[data-shop-close]')?.addEventListener('click', closeShop, { signal: options.signal });
+    shopPanel.addEventListener('click', onShopClick, { signal: options.signal });
+    shopPanel.addEventListener('input', onShopInput, { signal: options.signal });
     render();
   }
 
@@ -124,7 +153,15 @@ export function createCloudProgressionController(options: Options) {
 
   function applySnapshot(next: unknown, nextCatalog: ProgressionCatalog | undefined, event?: ProgressionEvent): void {
     progress = normalizePlayerProgress(next);
-    if (nextCatalog) catalog = nextCatalog;
+    if (nextCatalog) mergeCatalog(nextCatalog);
+    if (event?.type === 'shop.purchased' && event.productId) pendingShopProducts.delete(event.productId);
+    if (event?.type === 'daily.checkin') pendingDailyClaims.delete('checkin');
+    if (event?.type === 'daily.mission.claimed' && event.missionId) pendingDailyClaims.delete(`mission:${event.missionId}`);
+    if (event?.type === 'market.crafted' && event.recipeId) pendingMarketActions.delete(`craft:${event.recipeId}`);
+    if (event?.type === 'market.order.fulfilled' && event.orderId) pendingMarketActions.delete(`order:${event.orderId}`);
+    if ((event?.type === 'market.listing.created' || event?.type === 'market.listing.cancelled') && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
+    if (event?.type === 'market.listing.sold' && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
+    if (event?.type === 'market.listing.sold') requestListings();
     render();
     describeEvent(event);
     if (event?.type === 'item.consumed' && event.itemId) {
@@ -164,18 +201,63 @@ export function createCloudProgressionController(options: Options) {
   // its previous value instead of falling back to undefined.
   function applyCatalog(nextCatalog: ProgressionCatalog | undefined): void {
     if (!nextCatalog) return;
-    catalog = { ...catalog, ...nextCatalog };
+    mergeCatalog(nextCatalog);
     render();
+  }
+
+  function mergeCatalog(nextCatalog: ProgressionCatalog): void {
+    catalog = {
+      ...catalog,
+      ...nextCatalog,
+      products: nextCatalog.products ?? catalog.products,
+      dailyCheckIn: nextCatalog.dailyCheckIn ?? catalog.dailyCheckIn,
+      dailyMissions: nextCatalog.dailyMissions ?? catalog.dailyMissions,
+      store: nextCatalog.store ? { ...catalog.store, ...nextCatalog.store } : catalog.store,
+      recipes: nextCatalog.recipes ?? catalog.recipes,
+      dailySupplyOrder: nextCatalog.dailySupplyOrder ?? catalog.dailySupplyOrder,
+      market: nextCatalog.market ?? catalog.market,
+      tradeableItemIds: nextCatalog.tradeableItemIds ?? catalog.tradeableItemIds,
+    };
+    if (listingDraft.itemId && !isTradeable(listingDraft.itemId)) { listingDraft.itemId = ''; listingDraft.quantity = 1; }
+  }
+
+  /** Server push of the escrow board (also covers other residents' trades). */
+  function applyListings(next: unknown): void {
+    if (!next || typeof next !== 'object') return;
+    const input = next as { active?: unknown; own?: unknown };
+    const validListing = (value: unknown): value is MarketListingView => Boolean(value && typeof value === 'object'
+      && typeof (value as MarketListingView).id === 'string' && typeof (value as MarketListingView).itemId === 'string');
+    listings = {
+      active: Array.isArray(input.active) ? input.active.filter(validListing) : [],
+      own: Array.isArray(input.own) ? input.own.filter(validListing) : [],
+    };
+    renderExchange();
+  }
+
+  function requestListings(): void {
+    if (online) options.send({ type: 'market.listings.get' });
+  }
+
+  function isTradeable(itemId: string): boolean {
+    return catalog.tradeableItemIds?.includes(itemId) ?? false;
+  }
+
+  function itemName(itemId: string): string {
+    return catalog.products[itemId]?.name ?? ITEM_LABELS[itemId] ?? itemId;
   }
 
   function describeEvent(event?: ProgressionEvent): void {
     if (!event) return;
     if (event.welcomeItemsGranted) options.showToast('背包已解锁，获得城市导览册和居民纪念徽章');
     else if (event.type === 'achievement.unlocked' && event.reward) options.showToast(`成就奖励 +${event.reward} 物实币`);
-else if (event.type === 'shop.purchased') {
+    else if (event.type === 'shop.purchased') {
       const productName = event.productId ? catalog.products[event.productId]?.name : undefined;
-      options.showToast(`${productName ?? '商品'}已放入背包`);
+      options.showToast(`${productName ?? '商品'}已放入背包${event.pricePaid ? ` · 支付 ${event.pricePaid} 币` : ''}`);
     }
+    else if (event.type === 'daily.checkin') options.showToast(event.claimed ? `签到成功，获得 ${event.reward ?? 0} 物实币 · 连续 ${event.streak ?? 1} 天` : '今天已经签到过了');
+    else if (event.type === 'daily.mission.claimed') options.showToast(event.claimed ? `今日委托完成，获得 ${event.reward ?? 0} 物实币` : '先完成今日委托再来领取');
+    else if (event.type === 'market.crafted') options.showToast(event.crafted ? `${catalog.recipes?.find((recipe) => recipe.id === event.recipeId)?.name ?? '合成品'}已放入背包` : '合成失败，食材不足');
+    else if (event.type === 'market.order.fulfilled') options.showToast(event.fulfilled ? `供货完成，获得 ${event.reward ?? 0} 物实币` : '这份委托今天已经交付过了');
     else if (event.type === 'reward.claimed' && event.rewardId === 'tirpitz_beach') options.showToast(event.claimed ? '皮尔皮茨号已放入背包' : '皮尔皮茨号已经领取过了');
     else if (event.type === 'reward.claimed' && event.rewardId && iceRewardById.has(event.rewardId)) {
       const reward = iceRewardById.get(event.rewardId)!;
@@ -215,7 +297,9 @@ else if (event.type === 'shop.purchased') {
         return row;
       }) : [emptyRow('背包里还没有物品')]));
     }
+    renderDailyBoard();
     renderShop();
+    renderExchange();
     const hasInventory = progress.visitedBuildings.length >= 2;
     const welcome = options.document.querySelector<HTMLElement>('.welcome-block');
     welcome?.classList.remove('hidden');
@@ -225,10 +309,25 @@ else if (event.type === 'shop.purchased') {
   function renderShop(): void {
     const list = shopArea?.querySelector<HTMLElement>('[data-shop-list]');
     if (!list) return;
-    list.replaceChildren(...Object.entries(catalog.products).map(([productId, product]) => {
+    const categories = [
+      { id: 'all' as const, label: '全部' },
+      { id: 'food' as const, label: '食材' },
+      { id: 'story' as const, label: '剧情道具' },
+    ];
+    shopTabs?.replaceChildren(...categories.map((category) => {
+      const tab = options.document.createElement('button');
+      tab.type = 'button';
+      tab.className = `market-tab${activeShopCategory === category.id ? ' active' : ''}`;
+      tab.dataset.marketCategory = category.id;
+      tab.setAttribute('aria-pressed', String(activeShopCategory === category.id));
+      tab.textContent = category.label;
+      return tab;
+    }));
+    const entries = Object.entries(catalog.products).filter(([, product]) => activeShopCategory === 'all' || product.category === activeShopCategory);
+    list.replaceChildren(...(entries.length ? entries.map(([productId, product]) => {
       const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: '物', detail: `${product.name} · 商场在售商品` };
       const row = options.document.createElement('div');
-      row.className = 'shop-product';
+      row.className = `shop-product${productId === catalog.store.featuredProductId ? ' featured' : ''}`;
       row.dataset.productId = productId;
       const icon = options.document.createElement('span');
       icon.className = 'shop-product-icon';
@@ -241,15 +340,383 @@ else if (event.type === 'shop.purchased') {
       const detail = options.document.createElement('small');
       detail.textContent = presentation.detail;
       copy.append(name, detail);
+      const deal = productId === catalog.store.featuredProductId && catalog.store.dayKey.length > 0;
+      if (deal) {
+        const badge = options.document.createElement('span');
+        badge.className = 'market-deal-badge';
+        badge.textContent = `今日特惠 −${catalog.store.discountPercent}%`;
+        copy.append(badge);
+      }
+      const price = deal ? Math.max(1, Math.floor(product.unitPrice * (100 - catalog.store.discountPercent) / 100)) : product.unitPrice;
+      const unitPrice = options.document.createElement('span');
+      unitPrice.className = 'market-unit-price';
+      unitPrice.textContent = deal ? `${product.unitPrice} → ${price} 币/件` : `${price} 币/件`;
+      copy.append(unitPrice);
+      const quantity = Math.max(1, Math.min(20, shopQuantities.get(productId) ?? 1));
+      const controls = options.document.createElement('div');
+      controls.className = 'market-purchase-controls';
+      const quantityPicker = options.document.createElement('div');
+      quantityPicker.className = 'market-quantity';
+      const decrease = options.document.createElement('button');
+      decrease.type = 'button';
+      decrease.className = 'market-quantity-step';
+      decrease.dataset.quantityStep = '-1';
+      decrease.dataset.productId = productId;
+      decrease.setAttribute('aria-label', `减少${product.name}数量`);
+      decrease.textContent = '−';
+      const count = options.document.createElement('span');
+      count.className = 'market-quantity-value';
+      count.textContent = String(quantity);
+      const increase = options.document.createElement('button');
+      increase.type = 'button';
+      increase.className = 'market-quantity-step';
+      increase.dataset.quantityStep = '1';
+      increase.dataset.productId = productId;
+      increase.setAttribute('aria-label', `增加${product.name}数量`);
+      increase.textContent = '+';
+      quantityPicker.append(decrease, count, increase);
+      const total = price * quantity;
       const buy = options.document.createElement('button');
       buy.type = 'button';
       buy.className = 'inventory-buy';
-      buy.textContent = `${product.unitPrice} 币`;
-      buy.disabled = !online || progress.currency < product.unitPrice;
-      buy.addEventListener('click', () => buyProduct(productId), { signal: options.signal });
+      buy.dataset.shopBuy = productId;
+      buy.textContent = `购买 · ${total} 币`;
+      buy.disabled = !online || progress.currency < total || pendingShopProducts.has(productId);
+      controls.append(quantityPicker, buy);
+      row.append(icon, copy, controls);
+      return row;
+    }) : [emptyRow('这个货架今天没有商品')]));
+  }
+
+  function renderDailyBoard(): void {
+    if (!dailyBoard) return;
+    const daily = progress.daily;
+    const claimedToday = daily.checkInClaimed;
+    const previousStreak = claimedToday ? Math.max(0, daily.checkInStreak - 1) : daily.checkInStreak;
+    const checkInReward = catalog.dailyCheckIn.baseReward + Math.min(previousStreak * catalog.dailyCheckIn.streakBonus, catalog.dailyCheckIn.maxStreakBonus);
+    const checkIn = options.document.createElement('article');
+    checkIn.className = 'market-checkin';
+    const checkInCopy = options.document.createElement('div');
+    checkInCopy.className = 'market-checkin-copy';
+    const checkInTitle = options.document.createElement('strong');
+    checkInTitle.textContent = claimedToday || daily.checkInStreak > 0 ? `连续签到 ${daily.checkInStreak} 天` : '今日签到';
+    const checkInDetail = options.document.createElement('small');
+    checkInDetail.textContent = claimedToday ? '明天再来，连续签到奖励会继续增加' : `领取 ${checkInReward} 币${daily.checkInStreak ? ' · 明日奖励继续增加' : ''}`;
+    checkInCopy.append(checkInTitle, checkInDetail);
+    const checkInButton = options.document.createElement('button');
+    checkInButton.type = 'button';
+    checkInButton.className = 'market-claim-button';
+    checkInButton.dataset.dailyCheckin = 'true';
+    checkInButton.textContent = claimedToday ? '已签到' : pendingDailyClaims.has('checkin') ? '领取中…' : '领取';
+    checkInButton.disabled = !online || claimedToday || pendingDailyClaims.has('checkin');
+    checkIn.append(checkInCopy, checkInButton);
+
+    const heading = options.document.createElement('div');
+    heading.className = 'market-daily-heading';
+    const title = options.document.createElement('strong');
+    title.textContent = '今日城市委托';
+    const date = options.document.createElement('small');
+    date.textContent = daily.dayKey;
+    heading.append(title, date);
+    const missions = catalog.dailyMissions.map((mission) => {
+      const item = options.document.createElement('article');
+      const complete = daily.claimedMissions.includes(mission.id);
+      const count = Math.min(mission.target, daily.visitedBuildings.length);
+      item.className = `market-mission${complete ? ' complete' : ''}`;
+      const copy = options.document.createElement('div');
+      copy.className = 'market-mission-copy';
+      const missionTitle = options.document.createElement('strong');
+      missionTitle.textContent = mission.title;
+      const description = options.document.createElement('small');
+      description.textContent = `${mission.description} · ${count}/${mission.target}`;
+      const progress = options.document.createElement('span');
+      progress.className = 'market-mission-track';
+      const fill = options.document.createElement('span');
+      fill.style.width = `${Math.min(100, count / mission.target * 100)}%`;
+      progress.append(fill);
+      copy.append(missionTitle, description, progress);
+      const claim = options.document.createElement('button');
+      claim.type = 'button';
+      claim.className = 'market-claim-button';
+      claim.dataset.dailyClaim = mission.id;
+      claim.textContent = complete ? '已领取' : pendingDailyClaims.has(`mission:${mission.id}`) ? '领取中…' : `+${mission.reward}`;
+      claim.disabled = !online || complete || count < mission.target || pendingDailyClaims.has(`mission:${mission.id}`);
+      item.append(copy, claim);
+      return item;
+    });
+    dailyBoard.replaceChildren(checkIn, heading, ...missions);
+  }
+
+  function renderExchange(): void {
+    if (!exchangeBoard) return;
+    const children: HTMLElement[] = [];
+    const order = catalog.dailySupplyOrder;
+    if (order && catalog.dailySupplyOrder?.id) {
+      const fulfilled = progress.daily.fulfilledOrders.includes(order.id);
+      const item = options.document.createElement('article');
+      item.className = `market-order${fulfilled ? ' complete' : ''}`;
+      const copy = options.document.createElement('div');
+      copy.className = 'market-order-copy';
+      const title = options.document.createElement('strong');
+      title.textContent = `今日供货 · ${order.title}`;
+      const detail = options.document.createElement('small');
+      detail.textContent = `${order.description} 需要 ${order.requirements.map((requirement) => `${itemName(requirement.itemId)}×${requirement.quantity}`).join('、')} · 报酬 ${order.reward} 币`;
+      copy.append(title, detail);
+      const claim = options.document.createElement('button');
+      claim.type = 'button';
+      claim.className = 'market-claim-button';
+      claim.dataset.supplyFulfill = order.id;
+      claim.textContent = fulfilled ? '已交付' : pendingMarketActions.has(`order:${order.id}`) ? '交付中…' : `+${order.reward}`;
+      claim.disabled = !online || fulfilled || pendingMarketActions.has(`order:${order.id}`);
+      item.append(copy, claim);
+      children.push(item);
+    }
+    for (const recipe of catalog.recipes ?? []) {
+      const canCraft = recipe.ingredients.every((ingredient) => (progress.inventory[ingredient.itemId] ?? 0) >= ingredient.quantity);
+      const item = options.document.createElement('article');
+      item.className = 'market-recipe';
+      const copy = options.document.createElement('div');
+      copy.className = 'market-recipe-copy';
+      const title = options.document.createElement('strong');
+      title.textContent = recipe.name;
+      const detail = options.document.createElement('small');
+      detail.textContent = `${recipe.ingredients.map((ingredient) => `${itemName(ingredient.itemId)}×${ingredient.quantity}`).join(' + ')} → ${itemName(recipe.output.itemId)}×${recipe.output.quantity} · ${recipe.description}`;
+      copy.append(title, detail);
+      const craft = options.document.createElement('button');
+      craft.type = 'button';
+      craft.className = 'market-claim-button';
+      craft.dataset.recipeCraft = recipe.id;
+      craft.textContent = canCraft ? '合成' : '缺食材';
+      craft.disabled = !online || !canCraft || pendingMarketActions.has(`craft:${recipe.id}`);
+      item.append(copy, craft);
+      children.push(item);
+    }
+
+    const board = options.document.createElement('div');
+    board.className = 'market-board-heading';
+    const boardTitle = options.document.createElement('strong');
+    boardTitle.textContent = '居民交易所';
+    const boardHint = options.document.createElement('small');
+    boardHint.textContent = `挂单上限 ${catalog.market?.maxActiveListings ?? 6} 个 · 每单 1–${catalog.market?.maxListingQuantity ?? 20} 件`;
+    board.append(boardTitle, boardHint);
+    children.push(board);
+
+    const draft = options.document.createElement('div');
+    draft.className = 'market-listing-draft';
+    const itemSelect = options.document.createElement('select');
+    itemSelect.dataset.listingItem = 'true';
+    itemSelect.setAttribute('aria-label', '选择要出售的物品');
+    const tradeable = (catalog.tradeableItemIds ?? []).filter((itemId) => (progress.inventory[itemId] ?? 0) > 0);
+    const placeholder = options.document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '选择背包物品';
+    placeholder.disabled = true;
+    itemSelect.append(placeholder);
+    for (const itemId of tradeable) {
+      const option = options.document.createElement('option');
+      option.value = itemId;
+      option.textContent = `${itemName(itemId)} ×${progress.inventory[itemId]}`;
+      itemSelect.append(option);
+    }
+    if (listingDraft.itemId && tradeable.includes(listingDraft.itemId)) itemSelect.value = listingDraft.itemId;
+    else itemSelect.value = '';
+    itemSelect.disabled = tradeable.length === 0;
+    const quantityInput = options.document.createElement('input');
+    quantityInput.type = 'number';
+    quantityInput.min = '1';
+    quantityInput.max = String(catalog.market?.maxListingQuantity ?? 20);
+    quantityInput.value = String(listingDraft.quantity);
+    quantityInput.dataset.listingQuantity = 'true';
+    quantityInput.setAttribute('aria-label', '出售数量');
+    const priceInput = options.document.createElement('input');
+    priceInput.type = 'number';
+    priceInput.min = '1';
+    priceInput.max = String(catalog.market?.maxListingPrice ?? 9999);
+    priceInput.value = String(listingDraft.price);
+    priceInput.dataset.listingPrice = 'true';
+    priceInput.setAttribute('aria-label', '单价');
+    const create = options.document.createElement('button');
+    create.type = 'button';
+    create.className = 'market-claim-button';
+    create.dataset.listingCreate = 'true';
+    create.textContent = '挂单出售';
+    create.disabled = !online || !listingDraft.itemId || !tradeable.includes(listingDraft.itemId);
+    draft.append(itemSelect, quantityInput, priceInput, create);
+    children.push(draft);
+
+    if (listings.own.length) {
+      const ownHeading = options.document.createElement('div');
+      ownHeading.className = 'market-board-subheading';
+      ownHeading.textContent = '我的挂单';
+      children.push(ownHeading);
+      children.push(...listings.own.map((listing) => listingRow(listing, true)));
+    }
+    children.push(...(listings.active.length
+      ? listings.active.map((listing) => listingRow(listing, false))
+      : [emptyRow('交易所暂时没有在售挂单')]));
+    exchangeBoard.replaceChildren(...children);
+  }
+
+  function listingRow(listing: MarketListingView, own: boolean): HTMLElement {
+    const row = options.document.createElement('div');
+    row.className = 'market-listing';
+    row.dataset.listingId = listing.id;
+    const icon = options.document.createElement('span');
+    icon.className = 'inventory-item-icon';
+    icon.textContent = itemIcon(listing.itemId, itemName(listing.itemId));
+    const copy = options.document.createElement('div');
+    copy.className = 'market-listing-copy';
+    const name = options.document.createElement('span');
+    name.className = 'sp-ul-name';
+    name.textContent = `${itemName(listing.itemId)} ×${listing.quantity}`;
+    const detail = options.document.createElement('small');
+    detail.textContent = listing.status === 'active'
+      ? `${listing.sellerNickname} · 单价 ${listing.price} 币${own ? ' · 在售中' : ''}`
+      : `${listing.sellerNickname} · ${listing.status === 'sold' ? '已售出' : '已取消'} · 单价 ${listing.price} 币`;
+    copy.append(name, detail);
+    if (own && listing.status === 'active') {
+      const cancel = options.document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'market-claim-button secondary';
+      cancel.dataset.listingCancel = listing.id;
+      cancel.textContent = '下架';
+      cancel.disabled = !online || pendingMarketActions.has(`listing:${listing.id}`);
+      row.append(icon, copy, cancel);
+      return row;
+    }
+    if (listing.status === 'active') {
+      const buy = options.document.createElement('button');
+      buy.type = 'button';
+      buy.className = 'market-claim-button';
+      buy.dataset.listingBuy = listing.id;
+      buy.textContent = `购买 · ${listing.price} 币`;
+      buy.disabled = !online || progress.currency < listing.price || pendingMarketActions.has(`listing:${listing.id}`);
       row.append(icon, copy, buy);
       return row;
-    }));
+    }
+    row.className += ' closed';
+    row.append(icon, copy);
+    return row;
+  }
+
+  function onShopClick(event: MouseEvent): void {
+    const target = event.target;
+    const ElementConstructor = options.document.defaultView?.Element;
+    if (!ElementConstructor || !(target instanceof ElementConstructor)) return;
+    const category = target.closest<HTMLElement>('[data-market-category]')?.dataset.marketCategory;
+    if (category === 'all' || category === 'food' || category === 'story') {
+      activeShopCategory = category;
+      renderShop();
+      return;
+    }
+    const checkIn = target.closest<HTMLElement>('[data-daily-checkin]');
+    if (checkIn) {
+      if (pendingDailyClaims.has('checkin') || progress.daily.checkInClaimed || !online) return;
+      pendingDailyClaims.add('checkin');
+      renderDailyBoard();
+      if (!options.send({ type: 'progress.daily.checkin' })) { pendingDailyClaims.delete('checkin'); renderDailyBoard(); }
+      return;
+    }
+    const dailyClaim = target.closest<HTMLElement>('[data-daily-claim]')?.dataset.dailyClaim;
+    if (dailyClaim) {
+      const key = `mission:${dailyClaim}`;
+      if (pendingDailyClaims.has(key) || !online) return;
+      pendingDailyClaims.add(key);
+      renderDailyBoard();
+      if (!options.send({ type: 'progress.daily.mission.claim', missionId: dailyClaim })) { pendingDailyClaims.delete(key); renderDailyBoard(); }
+      return;
+    }
+    const quantityButton = target.closest<HTMLElement>('[data-quantity-step]');
+    if (quantityButton?.dataset.productId) {
+      const productId = quantityButton.dataset.productId;
+      const current = shopQuantities.get(productId) ?? 1;
+      shopQuantities.set(productId, Math.max(1, Math.min(20, current + Number(quantityButton.dataset.quantityStep))));
+      renderShop();
+      return;
+    }
+    const supplyFulfill = target.closest<HTMLElement>('[data-supply-fulfill]')?.dataset.supplyFulfill;
+    if (supplyFulfill) {
+      const key = `order:${supplyFulfill}`;
+      if (pendingMarketActions.has(key) || !online) return;
+      pendingMarketActions.add(key);
+      renderExchange();
+      if (!options.send({ type: 'market.supply.fulfill', orderId: supplyFulfill })) { pendingMarketActions.delete(key); renderExchange(); }
+      return;
+    }
+    const recipeCraft = target.closest<HTMLElement>('[data-recipe-craft]')?.dataset.recipeCraft;
+    if (recipeCraft) {
+      const key = `craft:${recipeCraft}`;
+      if (pendingMarketActions.has(key) || !online) return;
+      pendingMarketActions.add(key);
+      renderExchange();
+      if (!options.send({ type: 'market.recipe.craft', recipeId: recipeCraft })) { pendingMarketActions.delete(key); renderExchange(); }
+      return;
+    }
+    const listingCancel = target.closest<HTMLElement>('[data-listing-cancel]')?.dataset.listingCancel;
+    if (listingCancel) {
+      const key = `listing:${listingCancel}`;
+      if (pendingMarketActions.has(key) || !online) return;
+      pendingMarketActions.add(key);
+      renderExchange();
+      if (!options.send({ type: 'market.listing.cancel', listingId: listingCancel })) { pendingMarketActions.delete(key); renderExchange(); }
+      return;
+    }
+    const listingBuy = target.closest<HTMLElement>('[data-listing-buy]')?.dataset.listingBuy;
+    if (listingBuy) {
+      const key = `listing:${listingBuy}`;
+      const listing = listings.active.find((entry) => entry.id === listingBuy);
+      if (!listing || pendingMarketActions.has(key) || !online) return;
+      if (progress.currency < listing.price) { options.showToast('余额不足，买不下这份挂单'); return; }
+      pendingMarketActions.add(key);
+      renderExchange();
+      if (!options.send({ type: 'market.listing.buy', listingId: listingBuy })) { pendingMarketActions.delete(key); renderExchange(); }
+      return;
+    }
+    const listingCreate = target.closest<HTMLElement>('[data-listing-create]');
+    if (listingCreate) {
+      if (!online || !listingDraft.itemId || !isTradeable(listingDraft.itemId)) return;
+      const maxQuantity = catalog.market?.maxListingQuantity ?? 20;
+      const maxPrice = catalog.market?.maxListingPrice ?? 9999;
+      const quantity = Math.max(1, Math.min(maxQuantity, Math.floor(listingDraft.quantity)));
+      const price = Math.max(1, Math.min(maxPrice, Math.floor(listingDraft.price)));
+      if (!Number.isFinite(quantity) || !Number.isFinite(price) || (progress.inventory[listingDraft.itemId] ?? 0) < quantity) return;
+      const key = 'listing:create';
+      if (pendingMarketActions.has(key)) return;
+      pendingMarketActions.add(key);
+      renderExchange();
+      if (!options.send({ type: 'market.listing.create', itemId: listingDraft.itemId, quantity, price })) { pendingMarketActions.delete(key); renderExchange(); }
+      return;
+    }
+    const productId = target.closest<HTMLElement>('[data-shop-buy]')?.dataset.shopBuy;
+    if (!productId) return;
+    const quantity = shopQuantities.get(productId) ?? 1;
+    const featured = catalog.store.featuredProductId === productId;
+    buyProduct(productId, quantity, featured ? catalog.store.dayKey : undefined);
+  }
+
+  // The listing draft is uncontrolled state inside a re-rendered panel; update
+  // it on input instead of after render.
+  function onShopInput(event: Event): void {
+    const target = event.target;
+    const ElementConstructor = options.document.defaultView?.Element;
+    if (!ElementConstructor || !(target instanceof ElementConstructor)) return;
+    const itemSelect = target.closest<HTMLElement>('[data-listing-item]');
+    if (itemSelect) {
+      listingDraft.itemId = (itemSelect as HTMLSelectElement).value;
+      renderExchange();
+      return;
+    }
+    const quantityInput = target.closest<HTMLElement>('[data-listing-quantity]');
+    if (quantityInput) {
+      const value = Number((quantityInput as HTMLInputElement).value);
+      listingDraft.quantity = Number.isFinite(value) && value >= 1 ? value : 1;
+      return;
+    }
+    const priceInput = target.closest<HTMLElement>('[data-listing-price]');
+    if (priceInput) {
+      const value = Number((priceInput as HTMLInputElement).value);
+      listingDraft.price = Number.isFinite(value) && value >= 1 ? value : 1;
+    }
   }
 
   function emptyRow(message: string): HTMLElement {
@@ -267,6 +734,7 @@ else if (event.type === 'shop.purchased') {
   function openShop(): void {
     if (!online) return offlineNotice();
     shopPanel?.classList.add('open');
+    requestListings();
   }
 
   function closeShop(): void { shopPanel?.classList.remove('open'); }
@@ -308,9 +776,15 @@ else if (event.type === 'shop.purchased') {
     });
   }
 
-  function buyProduct(productId: string, quantity = 1): boolean {
+  function buyProduct(productId: string, quantity = 1, dealDay?: string): boolean {
     if (!online) { offlineNotice(); return false; }
-    return options.send({ type: 'progress.shop.buy', productId, quantity });
+    if (pendingShopProducts.has(productId)) return false;
+    const sent = options.send({ type: 'progress.shop.buy', productId, quantity, dealDay });
+    if (sent) {
+      pendingShopProducts.add(productId);
+      renderShop();
+    }
+    return sent;
   }
 
   function consumeItem(itemId: string, quantity = 1): Promise<boolean> {
@@ -377,14 +851,18 @@ else if (event.type === 'shop.purchased') {
     pendingRewards.forEach(({ resolve, timeout }) => { clearTimeout(timeout); resolve(false); });
     pendingConsumption.clear();
     pendingRewards.clear();
+    pendingShopProducts.clear();
+    pendingDailyClaims.clear();
+    pendingMarketActions.clear();
     pendingFilmCity?.(false);
     pendingFilmCity = null;
+    render();
   }
 
   function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
-    setup, setConnection, applySnapshot, applyCatalog, interactBuilding, unlockAchievement, syncAchievements,
+    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement, syncAchievements,
  buyProduct, consumeItem, purchaseFilmCityExperience, nextRewardClaimSequence, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),

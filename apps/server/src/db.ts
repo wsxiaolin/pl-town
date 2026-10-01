@@ -5,6 +5,7 @@ import { CITY_CONSTRUCTION_CONFIG } from './data/cityConstructionConfig.js';
 import { DATA_DIR, DATABASE_PATH } from './config.js';
 import { MINICITY_APPLICATION_ID, MINICITY_SCHEMA_VERSION } from './databaseMetadata.js';
 import { ensureProgress, addInventory } from './playerProgressDefaults.js';
+import { previousDayKey, shanghaiDayKey } from './shanghaiTime.js';
 import { acquireRuntimeLock, releaseRuntimeLock } from './runtimeLock.js';
 import type { PlayerProgress, Position, StoryFlagValue, StoryProgress, User } from './types.js';
 import type {
@@ -122,6 +123,33 @@ db.exec(`
     updated_at TEXT NOT NULL,
     PRIMARY KEY (user_id, reward_id)
   );
+  CREATE TABLE IF NOT EXISTS player_daily_economy (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    day_key TEXT NOT NULL,
+    streak INTEGER NOT NULL DEFAULT 0 CHECK (streak >= 0),
+    last_check_in_day TEXT,
+    check_in_claimed INTEGER NOT NULL DEFAULT 0 CHECK (check_in_claimed IN (0, 1)),
+    visited_buildings_json TEXT NOT NULL DEFAULT '[]',
+    claimed_missions_json TEXT NOT NULL DEFAULT '[]',
+    fulfilled_orders_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  );
+  -- Listings are an escrow ledger. Creating a listing moves the item out of
+  -- the seller inventory; buying or cancelling settles it atomically.
+  CREATE TABLE IF NOT EXISTS market_listings (
+    id TEXT PRIMARY KEY,
+    seller_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    item_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0 AND quantity <= 20),
+    price INTEGER NOT NULL CHECK (price > 0 AND price <= 9999),
+    status TEXT NOT NULL CHECK (status IN ('active', 'sold', 'cancelled')),
+    buyer_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    closed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS market_listings_active_idx ON market_listings(status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS market_listings_seller_idx ON market_listings(seller_id, status, created_at DESC);
   CREATE TABLE IF NOT EXISTS story_progress (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     story_id TEXT NOT NULL,
@@ -252,6 +280,50 @@ db.exec('COMMIT');
 }
 
 const now = () => new Date().toISOString();
+type DailyEconomyRow = {
+  user_id: string;
+  day_key: string;
+  streak: number;
+  last_check_in_day: string | null;
+  check_in_claimed: number;
+  visited_buildings_json: string;
+  claimed_missions_json: string;
+  fulfilled_orders_json: string;
+  updated_at: string;
+};
+const parseStringList = (value: string): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((entry): entry is string => typeof entry === 'string'))] : [];
+  } catch { return []; }
+};
+function ensureDailyEconomyRow(userId: string, timestamp: string, at = new Date()): DailyEconomyRow {
+  const dayKey = shanghaiDayKey(at);
+  let row = db.prepare('SELECT * FROM player_daily_economy WHERE user_id = ?').get(userId) as DailyEconomyRow | undefined;
+  if (!row) {
+    db.prepare('INSERT INTO player_daily_economy (user_id, day_key, updated_at) VALUES (?, ?, ?)').run(userId, dayKey, timestamp);
+    row = db.prepare('SELECT * FROM player_daily_economy WHERE user_id = ?').get(userId) as DailyEconomyRow;
+  } else if (row.day_key !== dayKey) {
+    const streak = row.last_check_in_day === previousDayKey(dayKey) ? row.streak : 0;
+    db.prepare(`UPDATE player_daily_economy SET day_key = ?, streak = ?, check_in_claimed = 0,
+      visited_buildings_json = '[]', claimed_missions_json = '[]', fulfilled_orders_json = '[]', updated_at = ? WHERE user_id = ?`)
+      .run(dayKey, streak, timestamp, userId);
+    row = db.prepare('SELECT * FROM player_daily_economy WHERE user_id = ?').get(userId) as DailyEconomyRow;
+  }
+  return row;
+}
+function dailyEconomyView(row: DailyEconomyRow, at = new Date()): PlayerProgress['daily'] {
+  const dayKey = shanghaiDayKey(at);
+  const yesterday = previousDayKey(dayKey);
+  return {
+    dayKey,
+    checkInStreak: row.last_check_in_day === dayKey || row.last_check_in_day === yesterday ? row.streak : 0,
+    checkInClaimed: row.day_key === dayKey && Boolean(row.check_in_claimed),
+    visitedBuildings: row.day_key === dayKey ? parseStringList(row.visited_buildings_json) : [],
+    claimedMissions: row.day_key === dayKey ? parseStringList(row.claimed_missions_json) : [],
+    fulfilledOrders: row.day_key === dayKey ? parseStringList(row.fulfilled_orders_json) : [],
+  };
+}
 const cityBuildingBuilt = (buildingId: string): boolean => {
   const project = CITY_CONSTRUCTION_CONFIG.projects.find((entry) => entry.buildingId === buildingId);
   return !project || Boolean((db.prepare('SELECT built FROM city_projects WHERE id = ?').get(project.id) as { built: number } | undefined)?.built);
@@ -285,8 +357,9 @@ export function updateUserProfile(id: string, nickname: string, email?: string):
 export function savePosition(id: string, position: Position): void {
   db.prepare('UPDATE users SET position_x = ?, position_y = ?, position_z = ?, rotation = ?, updated_at = ? WHERE id = ?').run(position.x, position.y, position.z, position.rotation ?? null, now(), id);
 }
-export function getPlayerProgress(userId: string): PlayerProgress {
+export function getPlayerProgress(userId: string, at = new Date()): PlayerProgress {
   ensureProgress(db, userId, now());
+  const daily = dailyEconomyView(ensureDailyEconomyRow(userId, now(), at), at);
   const currency = (db.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(userId) as { currency: number }).currency;
   const inventoryRows = db.prepare('SELECT item_id, quantity FROM player_inventory WHERE user_id = ? ORDER BY item_id').all(userId) as Array<{ item_id: string; quantity: number }>;
   const inventory = Object.fromEntries(inventoryRows.map((row) => [row.item_id, row.quantity]));
@@ -295,14 +368,21 @@ export function getPlayerProgress(userId: string): PlayerProgress {
   const achievements = (db.prepare('SELECT achievement_id FROM player_achievements WHERE user_id = ? ORDER BY unlocked_at, achievement_id').all(userId) as Array<{ achievement_id: string }>).map((row) => row.achievement_id);
   const unlockedBuildings = (db.prepare('SELECT building_id FROM player_building_unlocks WHERE user_id = ? ORDER BY unlocked_at, building_id').all(userId) as Array<{ building_id: string }>).map((row) => row.building_id);
   const visitedBuildings = (db.prepare('SELECT building_id FROM player_building_visits WHERE user_id = ? ORDER BY first_visited_at, building_id').all(userId) as Array<{ building_id: string }>).map((row) => row.building_id);
-  return { currency, inventory, repeatableRewardClaims, achievements, unlockedBuildings, visitedBuildings };
+  return { currency, inventory, repeatableRewardClaims, achievements, unlockedBuildings, visitedBuildings, daily };
 }
 
-export function recordBuildingVisit(userId: string, buildingId: string): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
+export function recordBuildingVisit(userId: string, buildingId: string, at = new Date()): { progress: PlayerProgress; welcomeItemsGranted: boolean } {
   if (!cityBuildingBuilt(buildingId)) throw new Error('Building is not built');
   let welcomeItemsGranted = false;
   db.transaction(() => {
     ensureProgress(db, userId, now());
+    const timestamp = now();
+    const daily = ensureDailyEconomyRow(userId, timestamp, at);
+    const dailyVisits = parseStringList(daily.visited_buildings_json);
+    if (!dailyVisits.includes(buildingId)) {
+      dailyVisits.push(buildingId);
+      db.prepare('UPDATE player_daily_economy SET visited_buildings_json = ?, updated_at = ? WHERE user_id = ?').run(JSON.stringify(dailyVisits), timestamp, userId);
+    }
     const inserted = db.prepare('INSERT OR IGNORE INTO player_building_visits (user_id, building_id, first_visited_at) VALUES (?, ?, ?)').run(userId, buildingId, now());
     if (!inserted.changes) return;
     const count = (db.prepare('SELECT COUNT(*) AS count FROM player_building_visits WHERE user_id = ?').get(userId) as { count: number }).count;
@@ -312,7 +392,173 @@ export function recordBuildingVisit(userId: string, buildingId: string): { progr
       welcomeItemsGranted = true;
     }
   })();
-  return { progress: getPlayerProgress(userId), welcomeItemsGranted };
+  return { progress: getPlayerProgress(userId, at), welcomeItemsGranted };
+}
+
+export function claimDailyCheckIn(userId: string, rewards: { baseReward: number; streakBonus: number; maxStreakBonus: number }, at = new Date()): { progress: PlayerProgress; claimed: boolean; reward: number; streak: number } {
+  let claimed = false;
+  let reward = 0;
+  let streak = 0;
+  db.transaction(() => {
+    const timestamp = now();
+    ensureProgress(db, userId, timestamp);
+    const row = ensureDailyEconomyRow(userId, timestamp, at);
+    const dayKey = shanghaiDayKey(at);
+    if (row.check_in_claimed) { streak = row.streak; return; }
+    streak = row.last_check_in_day === previousDayKey(dayKey) ? row.streak + 1 : 1;
+    reward = rewards.baseReward + Math.min((streak - 1) * rewards.streakBonus, rewards.maxStreakBonus);
+    db.prepare(`UPDATE player_daily_economy SET streak = ?, last_check_in_day = ?, check_in_claimed = 1, updated_at = ? WHERE user_id = ?`)
+      .run(streak, dayKey, timestamp, userId);
+    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(reward, timestamp, userId);
+    claimed = true;
+  })();
+  return { progress: getPlayerProgress(userId, at), claimed, reward, streak };
+}
+
+export function claimDailyMission(userId: string, mission: { id: string; target: number; reward: number }, at = new Date()): { progress: PlayerProgress; claimed: boolean; reward: number } {
+  let claimed = false;
+  db.transaction(() => {
+    const timestamp = now();
+    ensureProgress(db, userId, timestamp);
+    const row = ensureDailyEconomyRow(userId, timestamp, at);
+    const claimedMissions = parseStringList(row.claimed_missions_json);
+    const visits = parseStringList(row.visited_buildings_json);
+    if (claimedMissions.includes(mission.id) || visits.length < mission.target) return;
+    claimedMissions.push(mission.id);
+    db.prepare('UPDATE player_daily_economy SET claimed_missions_json = ?, updated_at = ? WHERE user_id = ?').run(JSON.stringify(claimedMissions), timestamp, userId);
+    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(mission.reward, timestamp, userId);
+    claimed = true;
+  })();
+  return { progress: getPlayerProgress(userId, at), claimed, reward: claimed ? mission.reward : 0 };
+}
+
+/** Shared ingredient deduction for crafting and supply orders. Caller holds the transaction. */
+function takeInventoryItems(userId: string, requirements: ReadonlyArray<{ itemId: string; quantity: number }>, timestamp: string): void {
+  for (const requirement of requirements) {
+    const row = db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, requirement.itemId) as { quantity: number } | undefined;
+    if (!row || row.quantity < requirement.quantity) throw new Error('Ingredient is not available');
+  }
+  for (const requirement of requirements) {
+    if (requirement.quantity === (db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, requirement.itemId) as { quantity: number }).quantity) {
+      db.prepare('DELETE FROM player_inventory WHERE user_id = ? AND item_id = ?').run(userId, requirement.itemId);
+    } else {
+      db.prepare('UPDATE player_inventory SET quantity = quantity - ?, updated_at = ? WHERE user_id = ? AND item_id = ?').run(requirement.quantity, timestamp, userId, requirement.itemId);
+    }
+  }
+}
+
+export function craftMarketRecipe(userId: string, recipe: { id: string; ingredients: ReadonlyArray<{ itemId: string; quantity: number }>; output: { itemId: string; quantity: number } }, at = new Date()): { progress: PlayerProgress; crafted: boolean } {
+  let crafted = false;
+  db.transaction(() => {
+    const timestamp = now();
+    ensureProgress(db, userId, timestamp);
+    ensureDailyEconomyRow(userId, timestamp, at);
+    takeInventoryItems(userId, recipe.ingredients, timestamp);
+    addInventory(db, userId, recipe.output.itemId, recipe.output.quantity, timestamp);
+    crafted = true;
+  })();
+  return { progress: getPlayerProgress(userId, at), crafted };
+}
+
+export function fulfillDailySupplyOrder(userId: string, order: { id: string; requirements: ReadonlyArray<{ itemId: string; quantity: number }>; reward: number }, at = new Date()): { progress: PlayerProgress; fulfilled: boolean; reward: number } {
+  let fulfilled = false;
+  db.transaction(() => {
+    const timestamp = now();
+    ensureProgress(db, userId, timestamp);
+    const row = ensureDailyEconomyRow(userId, timestamp, at);
+    const fulfilledOrders = parseStringList(row.fulfilled_orders_json);
+    if (fulfilledOrders.includes(order.id)) return;
+    takeInventoryItems(userId, order.requirements, timestamp);
+    fulfilledOrders.push(order.id);
+    db.prepare('UPDATE player_daily_economy SET fulfilled_orders_json = ?, updated_at = ? WHERE user_id = ?').run(JSON.stringify(fulfilledOrders), timestamp, userId);
+    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(order.reward, timestamp, userId);
+    fulfilled = true;
+  })();
+  return { progress: getPlayerProgress(userId, at), fulfilled, reward: fulfilled ? order.reward : 0 };
+}
+
+export type MarketListingView = {
+  id: string;
+  itemId: string;
+  quantity: number;
+  price: number;
+  status: 'active' | 'sold' | 'cancelled';
+  sellerId: string;
+  sellerNickname: string;
+  buyerId: string | null;
+  createdAt: string;
+};
+
+const listingView = (row: {
+  id: string; item_id: string; quantity: number; price: number; status: 'active' | 'sold' | 'cancelled';
+  seller_id: string; seller_nickname: string | null; buyer_id: string | null; created_at: string;
+}): MarketListingView => ({
+  id: row.id,
+  itemId: row.item_id,
+  quantity: row.quantity,
+  price: row.price,
+  status: row.status,
+  sellerId: row.seller_id,
+  sellerNickname: row.seller_nickname ?? '神秘居民',
+  buyerId: row.buyer_id,
+  createdAt: row.created_at,
+});
+
+export function listMarketListings(viewerId: string): { active: MarketListingView[]; own: MarketListingView[] } {
+  const base = `SELECT l.id, l.item_id, l.quantity, l.price, l.status, l.seller_id, u.nickname AS seller_nickname, l.buyer_id, l.created_at
+    FROM market_listings l JOIN users u ON u.id = l.seller_id`;
+  const active = (db.prepare(`${base} WHERE l.status = 'active' ORDER BY l.created_at DESC LIMIT 60`).all() as Array<Parameters<typeof listingView>[0]>).map(listingView);
+  const own = (db.prepare(`${base} WHERE l.seller_id = ? AND l.status != 'cancelled' ORDER BY l.created_at DESC LIMIT 60`).all(viewerId) as Array<Parameters<typeof listingView>[0]>).map(listingView);
+  return { active, own };
+}
+
+export function createMarketListing(userId: string, itemId: string, quantity: number, price: number, maxActiveListings: number): { progress: PlayerProgress; listing: MarketListingView } {
+  const timestamp = now();
+  db.transaction(() => {
+    ensureProgress(db, userId, timestamp);
+    const activeCount = (db.prepare(`SELECT COUNT(*) AS count FROM market_listings WHERE seller_id = ? AND status = 'active'`).get(userId) as { count: number }).count;
+    if (activeCount >= maxActiveListings) throw new Error('Too many active listings');
+    takeInventoryItems(userId, [{ itemId, quantity }], timestamp);
+    db.prepare(`INSERT INTO market_listings (id, seller_id, item_id, quantity, price, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomUUID(), userId, itemId, quantity, price, timestamp, timestamp);
+  })();
+  const listing = (db.prepare(`SELECT l.id, l.item_id, l.quantity, l.price, l.status, l.seller_id, u.nickname AS seller_nickname, l.buyer_id, l.created_at
+    FROM market_listings l JOIN users u ON u.id = l.seller_id WHERE l.seller_id = ? ORDER BY l.created_at DESC LIMIT 1`).get(userId) as Parameters<typeof listingView>[0]);
+  return { progress: getPlayerProgress(userId), listing: listingView(listing) };
+}
+
+export function buyMarketListing(buyerId: string, listingId: string): { progress: PlayerProgress; listing: MarketListingView } {
+  let listing: MarketListingView | null = null;
+  db.transaction(() => {
+    const timestamp = now();
+    ensureProgress(db, buyerId, timestamp);
+    const row = db.prepare(`SELECT l.*, u.nickname AS seller_nickname FROM market_listings l JOIN users u ON u.id = l.seller_id
+      WHERE l.id = ? AND l.status = 'active'`).get(listingId) as (Parameters<typeof listingView>[0] & { seller_nickname: string | null }) | undefined;
+    if (!row) throw new Error('Listing is not available');
+    if (row.seller_id === buyerId) throw new Error('You cannot buy your own listing');
+    const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(row.price, timestamp, buyerId, row.price);
+    if (!charged.changes) throw new Error('Insufficient currency');
+    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(row.price, timestamp, row.seller_id);
+    db.prepare(`UPDATE market_listings SET status = 'sold', buyer_id = ?, closed_at = ?, updated_at = ? WHERE id = ?`).run(buyerId, timestamp, timestamp, listingId);
+    addInventory(db, buyerId, row.item_id, row.quantity, timestamp);
+    listing = listingView({ ...row, status: 'sold', buyer_id: buyerId });
+  })();
+  return { progress: getPlayerProgress(buyerId), listing: listing! };
+}
+
+export function cancelMarketListing(userId: string, listingId: string): { progress: PlayerProgress; listing: MarketListingView } {
+  let listing: MarketListingView | null = null;
+  db.transaction(() => {
+    const timestamp = now();
+    ensureProgress(db, userId, timestamp);
+    const row = db.prepare(`SELECT l.*, u.nickname AS seller_nickname FROM market_listings l JOIN users u ON u.id = l.seller_id
+      WHERE l.id = ? AND l.seller_id = ? AND l.status = 'active'`).get(listingId, userId) as (Parameters<typeof listingView>[0] & { seller_nickname: string | null }) | undefined;
+    if (!row) throw new Error('Listing is not available');
+    db.prepare(`UPDATE market_listings SET status = 'cancelled', closed_at = ?, updated_at = ? WHERE id = ?`).run(timestamp, timestamp, listingId);
+    addInventory(db, userId, row.item_id, row.quantity, timestamp);
+    listing = listingView({ ...row, status: 'cancelled' });
+  })();
+  return { progress: getPlayerProgress(userId), listing: listing! };
 }
 
 export function unlockAchievement(userId: string, achievementId: string, currencyReward: number): { progress: PlayerProgress; unlocked: boolean; rewardGranted: number } {

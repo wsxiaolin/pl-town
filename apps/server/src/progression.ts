@@ -3,6 +3,8 @@ import { isCityBuildingBuilt, isCityProjectBuilt } from './cityGovernance.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { DEFAULT_SHOP_CATALOG, type ShopProduct } from './shopCatalog.js';
 import { getBuildingOverrides, getShopProducts, type BuildingUnlockState } from './worldConfig.js';
+import { shanghaiDayKey } from './shanghaiTime.js';
+export { shanghaiDayKey } from './shanghaiTime.js';
 
 export const INITIAL_CURRENCY = 1200;
 export const FILM_CITY_EXPERIENCE_PRICE = 400;
@@ -79,6 +81,77 @@ export type ShopProductEntry = { itemId: string; name: string; unitPrice: number
 // applyShopCatalog / initShopCatalog for how the admin-configured catalog
 // (world_config "shop" row) is mirrored into these bindings.
 
+export type MarketIngredient = { itemId: string; quantity: number };
+export type MarketRecipe = {
+  id: string;
+  name: string;
+  description: string;
+  ingredients: readonly MarketIngredient[];
+  output: MarketIngredient;
+};
+export type DailySupplyOrder = {
+  id: string;
+  title: string;
+  description: string;
+  requirements: readonly MarketIngredient[];
+  reward: number;
+};
+
+/**
+ * Ingredients are intentionally also the existing story items. Residents can
+ * decide whether to keep them for a scene, turn them into a crafted good, or
+ * sell them to another resident; nothing is silently consumed by the market.
+ */
+export const MARKET_RECIPES: readonly MarketRecipe[] = Object.freeze([
+  {
+    id: 'shared_meal', name: '热炖牛肉', description: '牛肉和萝卜慢炖成一份热食，可交付给社区厨房或挂到交易所。',
+    ingredients: Object.freeze([{ itemId: 'beef', quantity: 1 }, { itemId: 'radish', quantity: 2 }]),
+    output: Object.freeze({ itemId: 'shared_meal', quantity: 1 }),
+  },
+  {
+    id: 'tea_service', name: '龙井茶席', description: '两份龙井配成一席清茶，适合图书馆和邻里会面。',
+    ingredients: Object.freeze([{ itemId: 'dragonwell_tea', quantity: 2 }]),
+    output: Object.freeze({ itemId: 'tea_service', quantity: 1 }),
+  },
+  {
+    id: 'memory_parcel', name: '夜谈礼盒', description: '用茶和音乐盒打包的礼物；需要时也可以继续保留音乐盒走剧情。',
+    ingredients: Object.freeze([{ itemId: 'dragonwell_tea', quantity: 1 }, { itemId: 'music_box', quantity: 1 }]),
+    output: Object.freeze({ itemId: 'memory_parcel', quantity: 1 }),
+  },
+]);
+
+export const DAILY_SUPPLY_ORDERS: readonly DailySupplyOrder[] = Object.freeze([
+  { id: 'kitchen_shared_meal', title: '社区厨房的热食', description: '厨房正在等一份热炖牛肉，交付后把晚餐送给巡逻居民。', requirements: Object.freeze([{ itemId: 'shared_meal', quantity: 1 }]), reward: 145 },
+  { id: 'library_tea_service', title: '图书馆茶席', description: '为下午读书会准备一席龙井茶。', requirements: Object.freeze([{ itemId: 'tea_service', quantity: 1 }]), reward: 110 },
+  { id: 'music_memory_parcel', title: '音乐厅夜谈', description: '音乐厅需要一份夜谈礼盒，给今天留下可交换的纪念。', requirements: Object.freeze([{ itemId: 'memory_parcel', quantity: 1 }]), reward: 210 },
+  { id: 'grocery_radish', title: '菜市补货', description: '向公共食堂送去 3 份新鲜萝卜。', requirements: Object.freeze([{ itemId: 'radish', quantity: 3 }]), reward: 85 },
+  { id: 'restaurant_beef', title: '餐馆备料', description: '为野生菌餐馆送去 2 份牛肉。', requirements: Object.freeze([{ itemId: 'beef', quantity: 2 }]), reward: 125 },
+]);
+
+/** Crafted goods stay tradeable even when the shop does not sell them. */
+export const RECIPE_OUTPUT_ITEM_IDS: ReadonlySet<string> = new Set(MARKET_RECIPES.map((recipe) => recipe.output.itemId));
+export const MARKET_FOOD_ITEM_IDS: ReadonlySet<string> = new Set(['beef', 'radish']);
+export const MAX_MARKET_LISTING_QUANTITY = 20;
+export const MAX_MARKET_LISTING_PRICE = 9_999;
+export const MAX_ACTIVE_MARKET_LISTINGS = 6;
+
+/** Tradeable goods = whatever the shop currently sells plus crafted outputs. */
+export function isMarketTradeableItemId(itemId: string): boolean {
+  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || itemId in SHOP_PRODUCTS;
+}
+
+export function getMarketTradeableItemIds(): string[] {
+  return [...new Set([...RECIPE_OUTPUT_ITEM_IDS, ...Object.values(SHOP_PRODUCTS).map((product) => product.itemId)])];
+}
+
+export const DAILY_MISSIONS = Object.freeze([
+  { id: 'market_walk_3', title: '街巷漫游', description: '今天探访 3 座不同的开放建筑', target: 3, reward: 35 },
+  { id: 'market_walk_6', title: '城市寻宝', description: '今天探访 6 座不同的开放建筑', target: 6, reward: 90 },
+]);
+
+export const DAILY_CHECK_IN = Object.freeze({ baseReward: 40, streakBonus: 10, maxStreakBonus: 60 });
+export const DAILY_DEAL_DISCOUNT_PERCENT = 25;
+
 export const DAILY_REWARDS = Object.freeze({
   mandarin_daily: { itemId: 'mandarin', quantity: 1 },
 });
@@ -142,13 +215,25 @@ export function initShopCatalog(): void {
   applyShopCatalog(getShopProducts());
 }
 
+export function getDailySupplyOrder(dayKey = shanghaiDayKey()): DailySupplyOrder {
+  const dayNumber = Math.floor(Date.parse(`${dayKey}T00:00:00.000Z`) / 86_400_000);
+  return DAILY_SUPPLY_ORDERS[((dayNumber % DAILY_SUPPLY_ORDERS.length) + DAILY_SUPPLY_ORDERS.length) % DAILY_SUPPLY_ORDERS.length]!;
+}
+
 export type ProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
   buildingUnlockable: Record<string, boolean>;
   globallyUnlockedBuildings: string[];
   achievementRewards: Record<string, number>;
-  products: Record<string, { itemId: string; name: string; unitPrice: number }>;
+  products: Record<string, { itemId: string; name: string; unitPrice: number; category: 'food' | 'story' }>;
+  dailyCheckIn: typeof DAILY_CHECK_IN;
+  dailyMissions: typeof DAILY_MISSIONS;
+  recipes: readonly MarketRecipe[];
+  dailySupplyOrder: DailySupplyOrder & { dayKey: string };
+  tradeableItemIds: string[];
+  market: { maxListingQuantity: number; maxListingPrice: number; maxActiveListings: number };
+  store: { dayKey: string; featuredProductId: string; discountPercent: number };
 };
 
 export type ProgressionState = {
@@ -208,13 +293,35 @@ export function getProgressionCatalog(): ProgressionCatalog {
   for (const id of BUILDING_IDS) buildingUnlockable[id] = isBuildingUnlockable(id);
   const globallyUnlockedBuildings: string[] = [];
   for (const id of BUILDING_IDS) if (isBuildingGloballyUnlocked(id)) globallyUnlockedBuildings.push(id);
+  const dayKey = shanghaiDayKey();
+  const dayNumber = Math.floor(Date.parse(`${dayKey}T00:00:00.000Z`) / 86_400_000);
+  const productIds = Object.keys(SHOP_PRODUCTS);
+  const dailySupplyOrder = getDailySupplyOrder(dayKey);
   return {
     initialCurrency: INITIAL_CURRENCY,
     buildingPrices: { ...BUILDING_PRICES },
     buildingUnlockable,
     globallyUnlockedBuildings,
     achievementRewards: { ...ACHIEVEMENT_REWARDS },
-    products: { ...SHOP_PRODUCTS },
+    products: Object.fromEntries(Object.values(SHOP_PRODUCTS).map((product) => [
+      product.itemId,
+      { ...product, category: MARKET_FOOD_ITEM_IDS.has(product.itemId) ? 'food' as const : 'story' as const },
+    ])),
+    dailyCheckIn: DAILY_CHECK_IN,
+    dailyMissions: DAILY_MISSIONS,
+    recipes: MARKET_RECIPES,
+    dailySupplyOrder: { ...dailySupplyOrder, dayKey },
+    tradeableItemIds: getMarketTradeableItemIds(),
+    market: {
+      maxListingQuantity: MAX_MARKET_LISTING_QUANTITY,
+      maxListingPrice: MAX_MARKET_LISTING_PRICE,
+      maxActiveListings: MAX_ACTIVE_MARKET_LISTINGS,
+    },
+    store: {
+      dayKey,
+      featuredProductId: productIds.length ? productIds[((dayNumber % productIds.length) + productIds.length) % productIds.length]! : '',
+      discountPercent: DAILY_DEAL_DISCOUNT_PERCENT,
+    },
   };
 }
 
@@ -225,10 +332,4 @@ export function verifiedAchievementReward(progress: PlayerProgress, achievementI
     || (achievementId === 'explorer_10' && progress.visitedBuildings.length >= 10)
     || (achievementId === 'unlock_3' && progress.unlockedBuildings.length >= 3);
   return eligible ? ACHIEVEMENT_REWARDS[achievementId] ?? 0 : 0;
-}
-
-export function shanghaiDayKey(at = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(at);
 }

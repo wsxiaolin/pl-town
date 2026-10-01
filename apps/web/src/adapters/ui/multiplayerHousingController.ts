@@ -284,6 +284,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       },
       weather: setWeather,
       worldCatalog: (catalog) => { progression.applyCatalog(catalog); onWorldCatalog(catalog); },
+      marketListings: (listings) => progression.applyListings(listings),
       authenticationFailed: (message, code) => {
         const gate = getLoginGate();
         gate?.onAuthFailed();

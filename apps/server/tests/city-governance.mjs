@@ -15,13 +15,34 @@ function fixture(code) {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 fixture(`
-  const { db, createUser, getPlayerProgress, closeDatabase } = await import('./dist/db.js');
+  const assert = (await import('node:assert/strict')).default;
+  const { db, createUser, getPlayerProgress, claimDailyCheckIn, claimDailyMission, recordBuildingVisit, closeDatabase } = await import('./dist/db.js');
+  const { DAILY_CHECK_IN, DAILY_MISSIONS } = await import('./dist/progression.js');
   const { tokenHash } = await import('./dist/auth.js');
   for (const [id, token] of [['11111111-1111-4111-8111-111111111111','city-token-a'],['22222222-2222-4222-8222-222222222222','city-token-b']]) {
     createUser(id, tokenHash(token), id, 'unused', '2099-01-01T00:00:00.000Z');
     getPlayerProgress(id);
     db.prepare('UPDATE player_progress SET currency = 10000 WHERE user_id = ?').run(id);
   }
+  const residentId = '11111111-1111-4111-8111-111111111111';
+  const firstDay = new Date('2026-09-20T04:00:00.000Z');
+  const nextDay = new Date('2026-09-21T04:00:00.000Z');
+  const afterMissedDay = new Date('2026-09-23T04:00:00.000Z');
+  const firstCheckIn = claimDailyCheckIn(residentId, DAILY_CHECK_IN, firstDay);
+  assert.deepEqual([firstCheckIn.reward, firstCheckIn.streak], [40, 1]);
+  assert.equal(claimDailyCheckIn(residentId, DAILY_CHECK_IN, firstDay).claimed, false);
+  const secondCheckIn = claimDailyCheckIn(residentId, DAILY_CHECK_IN, nextDay);
+  assert.deepEqual([secondCheckIn.reward, secondCheckIn.streak], [50, 2]);
+  const resumedCheckIn = claimDailyCheckIn(residentId, DAILY_CHECK_IN, afterMissedDay);
+  assert.deepEqual([resumedCheckIn.reward, resumedCheckIn.streak], [40, 1]);
+  for (const buildingId of ['activity', 'bulletin', 'writingclub_outer', 'activity']) recordBuildingVisit(residentId, buildingId, afterMissedDay);
+  assert.equal(getPlayerProgress(residentId, afterMissedDay).daily.visitedBuildings.length, 3);
+  const mission = DAILY_MISSIONS[0];
+  assert.equal(claimDailyMission(residentId, mission, afterMissedDay).reward, mission.reward);
+  const balanceAfterMission = getPlayerProgress(residentId, afterMissedDay).currency;
+  assert.equal(claimDailyMission(residentId, mission, afterMissedDay).claimed, false);
+  assert.equal(getPlayerProgress(residentId, afterMissedDay).currency, balanceAfterMission);
+  db.prepare('UPDATE player_progress SET currency = 10000 WHERE user_id = ?').run(residentId);
   closeDatabase();
 `);
 let server;
@@ -51,7 +72,7 @@ async function start() {
 }
 async function stop() {
   for (const socket of sockets.splice(0)) socket.terminate();
-  if (server && server.exitCode === null) {
+  if (server && server.exitCode === null && server.signalCode === null) {
     const exited = once(server, 'exit');
     server.kill('SIGTERM');
     const timeout = setTimeout(() => server.kill('SIGKILL'), 5000);
@@ -277,7 +298,7 @@ try {
     closeDatabase();
   `);
   const backup = new Database(join(dataDir, 'city-backup.sqlite'), { readonly: true });
-  assert.equal(backup.pragma('user_version', { simple: true }), 6);
+  assert.equal(backup.pragma('user_version', { simple: true }), 8);
   assert.equal(backup.pragma('foreign_key_check').length, 0);
   backup.close();
   console.log('City governance integration passed');

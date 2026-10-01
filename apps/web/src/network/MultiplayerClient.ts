@@ -18,14 +18,41 @@ export type HousingRequest = {
   kind: 'invite' | 'application';
   createdAt: string;
 };
-export type NetPlayerProgress = { currency: number; inventory: Record<string, number>; repeatableRewardClaims: Record<string, number>; achievements: string[]; unlockedBuildings: string[]; visitedBuildings: string[] };
+export type NetPlayerProgress = {
+  currency: number;
+  inventory: Record<string, number>;
+  repeatableRewardClaims: Record<string, number>;
+  achievements: string[];
+  unlockedBuildings: string[];
+  visitedBuildings: string[];
+  daily: { dayKey: string; checkInStreak: number; checkInClaimed: boolean; visitedBuildings: string[]; claimedMissions: string[]; fulfilledOrders: string[] };
+};
+export type NetMarketListing = {
+  id: string;
+  itemId: string;
+  quantity: number;
+  price: number;
+  status: 'active' | 'sold' | 'cancelled';
+  sellerId: string;
+  sellerNickname: string;
+  buyerId: string | null;
+  createdAt: string;
+};
+export type NetMarketListings = { active: NetMarketListing[]; own: NetMarketListing[] };
 export type NetProgressionCatalog = {
   initialCurrency: number;
   buildingPrices: Record<string, number>;
   buildingUnlockable?: Record<string, boolean>;
   globallyUnlockedBuildings?: string[];
   achievementRewards: Record<string, number>;
-  products: Record<string, { itemId: string; name: string; unitPrice: number }>;
+  products: Record<string, { itemId: string; name: string; unitPrice: number; category: 'food' | 'story' }>;
+  dailyCheckIn: { baseReward: number; streakBonus: number; maxStreakBonus: number };
+  dailyMissions: ReadonlyArray<{ id: string; title: string; description: string; target: number; reward: number }>;
+  store: { dayKey: string; featuredProductId: string; discountPercent: number };
+  recipes?: ReadonlyArray<{ id: string; name: string; description: string; ingredients: ReadonlyArray<{ itemId: string; quantity: number }>; output: { itemId: string; quantity: number } }>;
+  dailySupplyOrder?: { id: string; title: string; description: string; requirements: ReadonlyArray<{ itemId: string; quantity: number }>; reward: number; dayKey: string };
+  market?: { maxListingQuantity: number; maxListingPrice: number; maxActiveListings: number };
+  tradeableItemIds?: string[];
 };
 export type NetStoryProgress = {
   storyId: string;
@@ -53,6 +80,7 @@ type ServerMessage =
   | { type: 'story.updated'; story: NetStoryProgress; event?: Record<string, unknown> }
   | { type: 'world.weather'; weather: NetWeather }
   | { type: 'world.catalog'; catalog?: NetProgressionCatalog }
+  | { type: 'market.listings'; listings?: NetMarketListings }
   | { type: 'city.updated'; state: unknown }
   | { type: 'error'; message?: string; code?: string };
 
@@ -71,6 +99,7 @@ type Callbacks = {
   story?: (story: NetStoryProgress, event?: Record<string, unknown>) => void;
   weather?: (weather: NetWeather) => void;
   worldCatalog?: (catalog: NetProgressionCatalog) => void;
+  marketListings?: (listings: NetMarketListings) => void;
   authenticationFailed?: (message: string, code?: string) => void;
   error?: (message: string) => void;
 };
@@ -131,6 +160,7 @@ export class MultiplayerClient {
     else if (message.type === 'story.updated') this.callbacks.story?.(message.story, message.event);
     else if (message.type === 'world.weather' && isWeather(message.weather)) this.callbacks.weather?.(message.weather);
     else if (message.type === 'world.catalog' && message.catalog) this.callbacks.worldCatalog?.(message.catalog);
+    else if (message.type === 'market.listings' && message.listings) this.callbacks.marketListings?.(message.listings);
     else if (message.type === 'city.updated') applyCityState(message.state);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';

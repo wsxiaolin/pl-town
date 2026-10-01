@@ -15,6 +15,7 @@
 @import './modules/login.css';
 @import './modules/tutorial.css';
 @import './modules/stats.css';
+@import './modules/market.css';
 @import './modules/render-settings.css';
 @import './modules/population-filter.css';
 @import './modules/unlock-toast.css';

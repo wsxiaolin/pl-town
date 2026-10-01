@@ -8,6 +8,41 @@ export type PlayerProgress = {
   achievements: string[];
   unlockedBuildings: string[];
   visitedBuildings: string[];
+  daily: {
+    dayKey: string;
+    checkInStreak: number;
+    checkInClaimed: boolean;
+    visitedBuildings: string[];
+    claimedMissions: string[];
+    fulfilledOrders: string[];
+  };
+};
+
+export type MarketIngredient = { itemId: string; quantity: number };
+export type MarketRecipe = {
+  id: string;
+  name: string;
+  description: string;
+  ingredients: ReadonlyArray<MarketIngredient>;
+  output: MarketIngredient;
+};
+export type DailySupplyOrder = {
+  id: string;
+  title: string;
+  description: string;
+  requirements: ReadonlyArray<MarketIngredient>;
+  reward: number;
+};
+export type MarketListingView = {
+  id: string;
+  itemId: string;
+  quantity: number;
+  price: number;
+  status: 'active' | 'sold' | 'cancelled';
+  sellerId: string;
+  sellerNickname: string;
+  buyerId: string | null;
+  createdAt: string;
 };
 
 export type ProgressionCatalog = {
@@ -16,7 +51,14 @@ export type ProgressionCatalog = {
   buildingUnlockable?: Record<string, boolean>;
   globallyUnlockedBuildings?: string[];
   achievementRewards: Record<string, number>;
-  products: Record<string, { itemId: string; name: string; unitPrice: number }>;
+  products: Record<string, { itemId: string; name: string; unitPrice: number; category: 'food' | 'story' }>;
+  dailyCheckIn: { baseReward: number; streakBonus: number; maxStreakBonus: number };
+  dailyMissions: ReadonlyArray<{ id: string; title: string; description: string; target: number; reward: number }>;
+  store: { dayKey: string; featuredProductId: string; discountPercent: number };
+  recipes?: ReadonlyArray<MarketRecipe>;
+  dailySupplyOrder?: DailySupplyOrder & { dayKey: string };
+  market?: { maxListingQuantity: number; maxListingPrice: number; maxActiveListings: number };
+  tradeableItemIds?: string[];
 };
 
 export type ProgressionEvent = {
@@ -28,6 +70,16 @@ export type ProgressionEvent = {
   rewardId?: string;
   reward?: number;
   quantity?: number;
+  missionId?: string;
+  streak?: number;
+  pricePaid?: number;
+  featured?: boolean;
+  recipeId?: string;
+  orderId?: string;
+  listingId?: string;
+  price?: number;
+  crafted?: boolean;
+  fulfilled?: boolean;
   purchased?: boolean;
   claimed?: boolean;
   accepted?: boolean;
@@ -42,6 +94,7 @@ export const EMPTY_PLAYER_PROGRESS: PlayerProgress = {
   achievements: [],
   unlockedBuildings: [],
   visitedBuildings: [],
+  daily: { dayKey: '', checkInStreak: 0, checkInClaimed: false, visitedBuildings: [], claimedMissions: [], fulfilledOrders: [] },
 };
 
 export const EMPTY_PROGRESSION_CATALOG: ProgressionCatalog = {
@@ -49,6 +102,9 @@ export const EMPTY_PROGRESSION_CATALOG: ProgressionCatalog = {
   buildingPrices: {},
   achievementRewards: {},
   products: {},
+  dailyCheckIn: { baseReward: 0, streakBonus: 0, maxStreakBonus: 0 },
+  dailyMissions: [],
+  store: { dayKey: '', featuredProductId: '', discountPercent: 0 },
 };
 
 export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -60,6 +116,9 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   music_box: '音乐盒',
   mandarin: '沃柑',
   tirpitz_card: '皮尔皮茨号',
+  shared_meal: '热炖牛肉',
+  tea_service: '龙井茶席',
+  memory_parcel: '夜谈礼盒',
   [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.name,
   [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.name,
 });
@@ -67,6 +126,9 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
 export const ITEM_DETAILS: Readonly<Record<string, string>> = Object.freeze({
   [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.detail,
   [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.detail,
+  shared_meal: '热炖牛肉 · 可交付社区厨房或在交易所出售',
+  tea_service: '龙井茶席 · 可交付图书馆或在交易所出售',
+  memory_parcel: '夜谈礼盒 · 可交付音乐厅或在交易所出售',
 });
 
 const validStringArray = (value: unknown): string[] => Array.isArray(value)
@@ -78,6 +140,7 @@ export function normalizePlayerProgress(value: unknown): PlayerProgress {
   const input = value as Partial<PlayerProgress>;
   const inventory: Record<string, number> = {};
   const repeatableRewardClaims: Record<string, number> = {};
+  const daily = input.daily && typeof input.daily === 'object' ? input.daily : EMPTY_PLAYER_PROGRESS.daily;
   if (input.inventory && typeof input.inventory === 'object') {
     Object.entries(input.inventory).forEach(([itemId, quantity]) => {
       if (Number.isInteger(quantity) && Number(quantity) > 0) inventory[itemId] = Number(quantity);
@@ -95,6 +158,14 @@ export function normalizePlayerProgress(value: unknown): PlayerProgress {
     achievements: validStringArray(input.achievements),
     unlockedBuildings: validStringArray(input.unlockedBuildings),
     visitedBuildings: validStringArray(input.visitedBuildings),
+    daily: {
+      dayKey: typeof daily.dayKey === 'string' ? daily.dayKey : '',
+      checkInStreak: Number.isSafeInteger(daily.checkInStreak) && daily.checkInStreak >= 0 ? Number(daily.checkInStreak) : 0,
+      checkInClaimed: daily.checkInClaimed === true,
+      visitedBuildings: validStringArray(daily.visitedBuildings),
+      claimedMissions: validStringArray(daily.claimedMissions),
+      fulfilledOrders: validStringArray(daily.fulfilledOrders),
+    },
   };
 }
 
