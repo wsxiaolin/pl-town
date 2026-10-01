@@ -346,7 +346,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   const phoneToggle = page.locator('#onlinePanelToggle');
   await expect(phoneToggle).toHaveClass(/connected/, { timeout: 30_000 });
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
-  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 2');
+  await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 4');
   await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
   await page.evaluate(() => (window as any)._mini.interactBuilding('mall_south'));
   await expect(page.locator('#shopPanel')).toHaveClass(/open/);
