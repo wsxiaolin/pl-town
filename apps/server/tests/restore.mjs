@@ -1,10 +1,13 @@
+import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
+import { MINICITY_SCHEMA_VERSION } from '../dist/databaseMetadata.js';
 
 const port = 8792;
 const physicsLabPort = 8794;
@@ -127,12 +130,27 @@ try {
   before.prepare('UPDATE users SET nickname = ? WHERE nickname = ?').run('ChangedAfterBackup', 'RestoreAlice');
   before.close();
 
-  const restored = spawnSync(process.execPath, ['dist/restoreBackup.js', backup.name, backup.sha256, '--confirm'], {
+  // Exercise a construction-only backup before the voting schema existed.
+  // Check the resulting schema before any server startup can migrate it again.
+  const preVoteName = 'minicity-20260925T000000.000Z-00000001.sqlite';
+  const preVotePath = join(dataDir, 'backups', preVoteName);
+  copyFileSync(join(dataDir, 'backups', backup.name), preVotePath);
+  const preVote = new Database(preVotePath);
+  preVote.exec('DROP TABLE city_vote_operations; DROP TABLE city_votes');
+  preVote.pragma('user_version = 6');
+  const preVoteApplicationId = preVote.pragma('application_id', { simple: true });
+  preVote.close();
+  const preVoteBytes = readFileSync(preVotePath);
+  const preVoteHash = createHash('sha256').update(preVoteBytes).digest('hex');
+  writeFileSync(`${preVotePath}.manifest.json`, JSON.stringify({ version: 1, name: preVoteName, sha256: preVoteHash, bytes: preVoteBytes.length, userVersion: 6, applicationId: preVoteApplicationId }));
+  const restored = spawnSync(process.execPath, ['dist/restoreBackup.js', preVoteName, preVoteHash, '--confirm'], {
     cwd: serverDir, env: environment, encoding: 'utf8', timeout: 30_000,
   });
   if (restored.status !== 0) throw new Error(`Offline restore failed: ${restored.stderr || restored.stdout}`);
 
   const after = new Database(databasePath, { readonly: true });
+  if (after.pragma('user_version', { simple: true }) !== MINICITY_SCHEMA_VERSION) throw new Error('Offline restore must publish the migrated schema version before startup');
+  if (after.prepare('SELECT COUNT(*) AS total FROM city_votes').get().total !== 0) throw new Error('Legacy backup must migrate to an empty voting table');
   const row = after.prepare('SELECT nickname, token_hash, session_expires_at FROM users').get();
   after.close();
   if (row.nickname !== 'RestoreAlice') throw new Error('Restore did not replace post-backup database changes');
@@ -143,7 +161,57 @@ try {
     throw new Error('Original and pre-restore backups must both include immutable checksum sidecars');
   }
 
-  console.log('Restore passed: live lock refusal, verified offline replacement, rollback snapshot, and session revocation');
+  // Schema 5 also predates world_config. Exercise the real offline CLI against
+  // that backup shape: importing db.ts first would create the missing table and
+  // hide migration failures before any replacement has taken place.
+  const legacyName = 'minicity-20260101T000000.000Z-1234abcd.sqlite';
+  const legacyPath = join(backupDirectory, legacyName);
+  copyFileSync(join(backupDirectory, backup.name), legacyPath);
+  const legacy = new Database(legacyPath);
+  legacy.pragma('foreign_keys = OFF');
+  for (const table of ['city_vote_operations', 'city_votes', 'city_operations', 'city_decorations', 'city_projects', 'city_meta', 'city_configs', 'world_config']) {
+    legacy.exec(`DROP TABLE ${table}`);
+  }
+  const legacyUser = legacy.prepare('SELECT id, token_hash FROM users WHERE nickname = ?').get('RestoreAlice');
+  legacy.prepare('UPDATE player_progress SET currency = 4321 WHERE user_id = ?').run(legacyUser.id);
+  legacy.prepare('INSERT OR IGNORE INTO player_building_unlocks (user_id, building_id, unlocked_at) VALUES (?, ?, ?)')
+    .run(legacyUser.id, 'academy', new Date().toISOString());
+  legacy.pragma('user_version = 5');
+  const applicationId = legacy.pragma('application_id', { simple: true });
+  legacy.pragma('journal_mode = DELETE');
+  legacy.close();
+  const legacySha256 = createHash('sha256').update(readFileSync(legacyPath)).digest('hex');
+  writeFileSync(`${legacyPath}.manifest.json`, JSON.stringify({
+    version: 1, name: legacyName, sha256: legacySha256,
+    bytes: statSync(legacyPath).size, userVersion: 5, applicationId,
+  }));
+  const legacyRestore = spawnSync(process.execPath, ['dist/restoreBackup.js', legacyName, legacySha256, '--confirm'], {
+    cwd: serverDir, env: environment, encoding: 'utf8', timeout: 30_000,
+  });
+  assert.equal(legacyRestore.status, 0, `Schema 5 offline restore failed: ${legacyRestore.stderr || legacyRestore.stdout}`);
+  const restoredLegacy = new Database(databasePath, { readonly: true });
+  assert.equal(restoredLegacy.pragma('user_version', { simple: true }), MINICITY_SCHEMA_VERSION);
+  assert.equal(restoredLegacy.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(legacyUser.id).currency, 4321);
+  assert.notEqual(restoredLegacy.prepare('SELECT token_hash FROM users WHERE id = ?').get(legacyUser.id).token_hash, legacyUser.token_hash);
+  for (const id of ['build-library', 'build-academy', 'build-photostudio']) {
+    const project = restoredLegacy.prepare('SELECT funded, built, definition_json FROM city_projects WHERE id = ?').get(id);
+    assert.equal(project.built, 1);
+    assert.equal(project.funded, JSON.parse(project.definition_json).cost);
+  }
+  assert.equal(restoredLegacy.prepare("SELECT built FROM city_projects WHERE id = 'build-shrine'").get().built, 0);
+  assert.equal(restoredLegacy.prepare('SELECT COUNT(*) AS n FROM city_operations').get().n, 0);
+  assert.equal(restoredLegacy.pragma('foreign_key_check').length, 0);
+  restoredLegacy.close();
+  running = startServer();
+  await running.ready;
+  await stopServer(running.processHandle);
+  running = undefined;
+  const restarted = new Database(databasePath, { readonly: true });
+  assert.equal(restarted.prepare("SELECT built FROM city_projects WHERE id = 'build-shrine'").get().built, 0);
+  assert.equal(restarted.prepare('SELECT currency FROM player_progress WHERE user_id = ?').get(legacyUser.id).currency, 4321);
+  restarted.close();
+
+  console.log('Restore passed: live lock refusal, verified offline replacement, rollback snapshot, session revocation, and legacy schema 5 migration');
 } finally {
   resident?.socket.close();
   if (running) await stopServer(running.processHandle);

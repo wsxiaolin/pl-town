@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { getCityState } from './cityGovernance.js';
+import { getCityState, isCityBuildingBuilt } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
 import { execSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -231,6 +231,7 @@ async function handle(client: Client, raw: string) {
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
+      if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       const progress = db.getPlayerProgress(userId);
       if (!progress.unlockedBuildings.includes(message.buildingId) && !isBuildingGloballyUnlocked(message.buildingId)) return fail(client.socket, 'Building is locked');
@@ -240,6 +241,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.building.unlock') {
       if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
+      if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       try {
         const result = db.purchaseBuilding(userId, message.buildingId, BUILDING_PRICES[message.buildingId]!);
@@ -460,8 +462,10 @@ const http = createServer(async (request, response) => {
   if (await handleCityRequest(request, response, headers, (userId, result) => {
     if (!result.replayed) broadcast({ type: 'city.updated', state: result.state });
     const client = clients.get(userId);
-    if (client) sendProgress(client.socket, userId, { type: 'city.committed', requestId: result.requestId, acceptedAmount: result.acceptedAmount, operationRevision: result.operationRevision, replayed: result.replayed });
-    if (!result.replayed) broadcastWorldCatalog();
+    if (result.kind === 'payment') {
+      if (client) sendProgress(client.socket, userId, { type: 'city.committed', requestId: result.requestId, acceptedAmount: result.acceptedAmount, operationRevision: result.operationRevision, replayed: result.replayed });
+      if (!result.replayed) broadcastWorldCatalog();
+    }
   })) return;
   if (request.method === 'GET' && request.url === '/town-api/npc-edit-catalog') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });

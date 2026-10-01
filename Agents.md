@@ -102,7 +102,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 - 先阅读目标模块及其 README，再进行最小范围修改；避免顺手重构无关代码。
 - 优先使用现有 TypeScript 类型、辅助函数和模块边界，不重复实现认证、网络或渲染基础设施。
-- 新增用户可见行为时补充 Playwright 烟雾测试；新增服务端协议或持久化行为时补充 `apps/server/tests/integration.mjs` 覆盖。
+- 新增用户可见行为时补充 Playwright 烟雾测试；新增服务端协议或持久化行为时补充对应的集成套件：通用 HTTP/WebSocket 行为放在 `apps/server/tests/integration.mjs`，备份恢复放在 `restore.mjs`，城市治理协议与账本放在 `city-governance.mjs`（其中导入 `city-area-layout.mjs` 校验区域布局与迁移）。以上套件均由 `npm run test:server` 执行。
 - 修改资源、渲染参数或响应式布局时，至少检查桌面和移动视口，并确认无控制台错误、横向溢出和空白 WebGL 画布。
 - 提交前查看 `git status`，不要提交生成目录、数据库、日志或本地环境文件。
 
@@ -110,7 +110,11 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 `.github/workflows/deploy-frontend.yml` 在 `main` 分支 push 或手动触发时构建并部署前端到 GitHub Pages。该工作流使用 Node.js 20、重新安装 npm 依赖，并以 `BASE_PATH=/pl-town/` 构建 `apps/web/dist`。服务端不在此工作流中部署。
 
-城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 保存请求幂等记录，防止历史请求重放后重复扣款，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
+城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`personalAreas`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 和 `city_vote_operations` 保存建设及投票请求的幂等记录，防止历史请求重放后重复扣款或重复计票，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
+
+新增建筑目录坐标或移动建筑也会改变既有地块和公共装饰的间距校验。发布前应验证保存的布局；若新目录使旧布局不再有效，必须同时提高治理配置版本并提供显式布局对账，不能只更新目录后让历史城市启动失败。
+
+城市治理配置的内容（含经生成的 `buildingCatalog` 烤入的项目名称文案）随 `CITY_CONSTRUCTION_CONFIG.version` 一起序列化持久化——**任何内容变更都必须同步 bump 版本号**，否则线上恢复路径会在启动时以 `"City config changed without a version bump"` 拒绝启动（#181 酒馆改名曾触发线上 crash-loop）。`apps/server/tests/city-config-snapshot.mjs` 的 golden 快照在 review 阶段强制此规则。唯一例外：项目 `name`/`description` 这类纯展示文案的漂移会在恢复时自愈改写（保留筹资/建成进度），其余字段（含未来新增字段）仍要求新项目 ID。
 
 ## AI 自动化工作流
 
@@ -155,6 +159,7 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 - `gameplay/`：严格 TypeScript 的任务、对话、条件、效果、存档适配和声明式内容，不依赖 DOM、Three.js、网络或 `localStorage`。
 - `adapters/ui/`：对话、社区面板、多人和住房等 DOM/API 适配器，内部状态不能回流到 `gameplay/`。
+- `city/cityGovernanceClient.ts`、`city/cityVotingClient.ts`：现有浏览器传输适配门面，封装 HTTP、认证会话、收据及状态订阅；不是纯领域模块，`gameplay/` 不得依赖它们。
 - `city/navigation/`、`city/npcSystem.ts`：道路寻路、碰撞、NPC 生成、日程和巡逻行为。
 - `city/progression/`：旧统计数据的兼容读写和迁移边界。
 - `rendering/`：程序纹理、建筑网格工厂、城市装饰和场景视觉资源。

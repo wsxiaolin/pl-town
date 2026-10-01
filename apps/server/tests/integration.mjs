@@ -4,6 +4,31 @@ import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
+import assert from 'node:assert/strict';
+
+// Error text is currently the shared city protocol discriminator. A new server
+// rejection needs a safe localized client mapping, including its retry policy.
+// These city modules own business rejection messages. The selected outer HTTP
+// failures below also need localized text, but cannot resolve an earlier attempt
+// whose response was lost: they do not confirm its saved city receipt.
+function checkCityErrorMappings() {
+  const cityErrorClient = readFileSync(new URL('../../web/src/city/cityGovernanceClient.ts', import.meta.url), 'utf8');
+  const clientKeys = new Set([...cityErrorClient.matchAll(/^\s*(['"])((?:\\.|(?!\1)[^\\\r\n])*)\1\s*:/gm)].map((match) => match[2]));
+  for (const file of ['cityGovernance.ts', 'cityGovernanceRouter.ts']) {
+    const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+    const errors = [...source.matchAll(/(?:new HttpBodyError\s*\(\s*|\berror\s*:\s*)(['"`])((?:\\.|(?!\1)[^\\\r\n])*)\1/g)];
+    assert.ok(errors.length > 0, `City error mapping contract: no literal errors found in ${file}`);
+    for (const [, , message] of errors) {
+      assert.ok(clientKeys.has(message), `City error mapping contract: ${file} has no client mapping for ${message}`);
+    }
+  }
+  const httpSource = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const httpErrors = new Set([...httpSource.matchAll(/\berror\s*:\s*(['"`])((?:\\.|(?!\1)[^\\\r\n])*)\1/g)].map((match) => match[2]));
+  for (const message of ['Too many requests', 'Request origin is not allowed', 'Internal server error']) {
+    assert.ok(httpErrors.has(message), `City error mapping contract: outer HTTP error changed: ${message}`);
+    assert.ok(clientKeys.has(message), `City error mapping contract: outer HTTP error has no client mapping: ${message}`);
+  }
+}
 
 const port = 8791;
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-server-'));
@@ -182,6 +207,26 @@ await new Promise((resolve, reject) => {
   physicsLabServer.once('error', reject);
   physicsLabServer.listen(physicsLabPort, '127.0.0.1', resolve);
 });
+// Verify fresh-town access before preparing the established town used by this
+// suite's shopping and story scenarios. No test resident is needed for rejection.
+const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e', `
+  const assert = (await import('node:assert/strict')).default;
+  const { db, closeDatabase, recordBuildingVisit, purchaseBuilding } = await import('./dist/db.js');
+  const { isBuildingUnlockable } = await import('./dist/progression.js');
+  const { CITY_CONSTRUCTION_CONFIG: config } = await import('./dist/data/cityConstructionConfig.js');
+  assert.equal(isBuildingUnlockable('library'), false);
+  assert.throws(() => recordBuildingVisit('fresh-town-access-check', 'library'), /Building is not built/);
+  assert.throws(() => purchaseBuilding('fresh-town-access-check', 'library', 0), /Building is not built/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM player_progress').get().count, 0);
+  // Leave one project pending for real WebSocket access/error checks below.
+  for (const project of config.projects.filter((entry) => entry.buildingId && entry.buildingId !== 'library')) {
+    db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
+  }
+  closeDatabase();
+`], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
+if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout
+  || establishedTown.error?.message || `Established town fixture failed: signal=${establishedTown.signal}, status=${establishedTown.status}`);
 const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: new URL('..', import.meta.url),
   env: {
@@ -251,7 +296,7 @@ const waitFor = (client, type, predicate = () => true) => {
   return new Promise((resolve, reject) => {
     const existing = client.messages.find((message) => message.type === type && predicate(message));
     if (existing) return resolve(existing);
-    const timeout = setTimeout(() => { writeFileSync('/tmp/server-startup-dump.log', serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
+    const timeout = setTimeout(() => { writeFileSync(join(tmpdir(), 'server-startup-dump.log'), serverStartupOutput); reject(new Error(`Timed out waiting for ${type} (client=${client.hello?.user?.nickname ?? 'unknown'}, recent=[${client.messages.slice(-4).map((message) => `${message.type}:${message.message ?? message.event?.type ?? ''}`).join(' | ')}], called=${callSite})`)); }, 15_000);
     const listener = (raw) => {
       const message = JSON.parse(raw);
       if (message.type !== type || !predicate(message)) return;
@@ -309,6 +354,7 @@ let bob;
 let charlie;
 let requester;
 try {
+  checkCityErrorMappings();
   await waitForServer();
 
   if (await rejectedWebSocketOrigin() !== 401) throw new Error('Untrusted WebSocket origins must be rejected during the handshake');
@@ -494,12 +540,23 @@ try {
   const storyEnding = await waitFor(alice, 'story.updated', (message) => message.story?.ending === 'reconciled');
   if (storyEnding.story.flags.heardWhisper !== false || storyEnding.story.visitCount !== 1) throw new Error('Story updates must merge flags without resetting other state');
 
+  assert.equal(alice.hello.catalog.buildingUnlockable.library, false);
+  for (const type of ['progress.building.visit', 'progress.building.unlock']) {
+    // Start after earlier messages so both requests must receive their own error.
+    const previousMessages = alice.messages.length;
+    send(alice, { type, buildingId: 'library' });
+    const rejection = await poll(() => alice.messages.slice(previousMessages).find((message) => message.type === 'error'), Boolean, `${type} pending rejection`);
+    assert.deepEqual(rejection, { type: 'error', message: 'Building is not built' });
+  }
+
   send(alice, { type: 'progress.building.unlock', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
   send(alice, { type: 'progress.building.visit', buildingId: 'litreview' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is story-locked');
 
-  send(alice, { type: 'progress.building.visit', buildingId: 'activity' });
+  // The core House of Commons still exercises personal unlock validation;
+  // collectively completed projects are open to everyone.
+  send(alice, { type: 'progress.building.visit', buildingId: 'commons' });
   await waitFor(alice, 'error', (message) => message.message === 'Building is locked');
   send(alice, { type: 'progress.building.unlock', buildingId: 'activity' });
   await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'building.unlocked' && message.event.buildingId === 'activity' && message.progress.currency === 1200);

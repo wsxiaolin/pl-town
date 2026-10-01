@@ -24,6 +24,7 @@ import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
+import { closeCityGovernancePanel, isCityGovernancePanelOpen } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
@@ -52,6 +53,7 @@ import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatur
 import { createWeatherEffect } from '../rendering/weatherEffect';
 import { createNavigationTargetMarker } from '../rendering/navigationTargetMarker';
 import { createBuildingAvailability, storyLockedBuildingIds } from './buildingAvailability';
+import { isConstructionPending } from './cityGovernanceClient';
 import { applyStoryLockedBuildingPresentation, restoreStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
 import { addCityLighting, createCityOrthographicCamera, createCityScene, createCityWebRenderer } from './citySceneBootstrap';
 import { createStoryOrchestration, routeNpcDialog, type StoryOrchestration } from './storyOrchestration';
@@ -97,6 +99,7 @@ const residences: ResidenceEntity[] = [];
 const availability = createBuildingAvailability({
   storyLockedIds: storyLockedBuildingIds(BUILDING_DEFS),
   getResidences: () => residences,
+  isConstructionPending,
 });
 const baseStoryLockedIds = storyLockedBuildingIds(BUILDING_DEFS);
 
@@ -117,7 +120,7 @@ function applyWorldCatalog(catalog: { globallyUnlockedBuildings?: readonly strin
     toUnlock.forEach((building) => buildingLabelController?.addLabel(building));
     buildingLabelController?.applyRenames();
   }
-  if (toUnlock.length > 0 || toLock.length > 0) mapController?.invalidateShot();
+  if (toUnlock.length > 0 || toLock.length > 0) mapController?.invalidateShot('scene');
 }
 let cityDialogs: CityDialogController | null = null;
 let stories: StoryOrchestration;
@@ -185,7 +188,7 @@ const themeClock = createThemeClock({
   getGameClock: () => gameClock,
   setGameClock: (value) => { gameClock = value; },
   announceGuide: () => stories?.announceGuide(),
-  invalidateMapShot: () => mapController?.invalidateShot(),
+  invalidateMapShot: () => mapController?.invalidateShot('theme'),
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
   saveStats,
@@ -360,6 +363,7 @@ const eventBindings = createEventBindings({
   getLibrarySearchController: () => librarySearchController,
   toggleMapMode: () => mapController?.toggle(),
   closeModal: () => buildingInteraction.closeModal(),
+  openMemorial: (beforeOpen) => cityDialogs?.openMemorial(beforeOpen),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
   getLoginController: () => loginController,
   isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
@@ -478,6 +482,7 @@ function init() {
     isStoryLocked: availability.isStoryLocked,
     interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
     onModelsLoaded: () => buildingDamageController?.applyPersisted(),
+    onConstructionChanged: () => mapController?.invalidateShot(),
   });
   worldDecorations = world.worldDecorations;
   npcSystem = world.npcSystem;
@@ -506,7 +511,7 @@ function init() {
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
     getResidences: () => residences,
-    invalidateMap: () => mapController?.invalidateShot(),
+    invalidateMap: (reason) => mapController?.invalidateShot(reason),
     refreshResidenceLabels: () => multiplayerHousing?.renderMapHouseTags(),
     setResidenceVisualVisible: (id, visible) => worldDecorations?.setResidenceVisualVisible(id, visible),
   });
@@ -521,6 +526,8 @@ function init() {
   });
   initStoryTaskGuideWiring({
     document,
+    isConstructionPending,
+    showToast: showUnlockToast,
     getBuildings: () => buildings,
     getEchoController: () => stories.echo,
     getCursor: () => cursorChar,
@@ -560,7 +567,7 @@ function init() {
     getStats,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
-    isStoryLocked: availability.isBuildingUnavailable,
+    isBuildingUnavailable: availability.isBuildingUnavailable,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     movePlayerTo: (target) => playerController?.moveTo(target),
@@ -572,6 +579,7 @@ function init() {
   movementInputController = createMovementInputController({
     document, window, signal: lifecycle.signal,
     onManualStart: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
+    isUiModalOpen: isCityGovernancePanelOpen,
   });
   cameraPanController = createCameraPanController({
     canvas: document.getElementById('c') as HTMLElement, document, window, signal: lifecycle.signal,
@@ -579,7 +587,7 @@ function init() {
     getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant), stopCameraMotion: () => cameraController?.stop(),
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
-      || Boolean(cityDialogs?.isOpen()) || Boolean(stories?.echo.isInteriorView()),
+      || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
   });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
@@ -591,7 +599,7 @@ function init() {
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     getPlayerPath: () => view.getPlayerPath(),
     setPlayerPath: (path) => view.setPlayerPath(path),
-    isDialogOpen: () => Boolean(cityDialogs?.isOpen()),
+    isDialogOpen: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen(),
     isMapOpen: () => Boolean(mapController?.isOpen()),
     buildRoadPath: roadNavigation.buildRoadPath,
     clamp: roadNavigation.clamp,
@@ -600,7 +608,7 @@ function init() {
     getEcho: () => stories?.echo,
     getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
     echoInterior: ECHO_OBSERVATORY_AREA.interior,
-    onIdle: () => interactionPointer.handlePlayerIdle(),
+    onIdle: () => { if (!isCityGovernancePanelOpen()) interactionPointer.handlePlayerIdle(); },
     sendPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
     addDistance: (amount) => interactionTracker.flushDistance(amount),
     getManualMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
@@ -616,6 +624,7 @@ function init() {
     checkAchievements,
     shouldShowIntro: shouldShowCG,
     startIntro: startCG,
+    beforeShow: closeCityGovernancePanel,
     proceed: proceedToCity,
   });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });
@@ -633,6 +642,7 @@ function init() {
   cityDialogs = createCityDialogController({
     document,
     buildingContent: BUILDING_CONTENT,
+    isConstructionPending,
     getQuestAction: (npcId) => questRuntime.getNpcAction(npcId, readQuestProgressView(multiplayerHousing)),
     performQuestAction: (action, at) => questRuntime.performNpcAction(action, at),
     onNpcInteracted: (npcId) => interactionTracker.recordNpcInteraction(npcId),
@@ -688,7 +698,7 @@ function init() {
     },
     clearTravel: () => { view.clearPlayerPath(); interactionPointer.clearPending(); },
     setWeather: (weather) => graphics.weather.set(weather),
-    invalidateMap: () => mapController?.invalidateShot(),
+    invalidateMap: () => mapController?.invalidateShot('scene'),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     focusCamera: (x, z) => cameraController?.focus(x, z),
     sendLocalPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),

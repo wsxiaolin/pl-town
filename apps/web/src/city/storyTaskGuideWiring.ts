@@ -24,13 +24,20 @@ export function initStoryTaskGuideWiring(options: {
   getCursor: () => unknown;
   getNpcPosition: (npcId: string) => { x: number; z: number } | null;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
+  isConstructionPending: (buildingId: string) => boolean;
+  showToast: (message: string) => void;
 }): void {
   const panTo = (x: number, z: number): void => {
     if (options.getCursor()) options.setCameraTarget(x, z, false);
   };
   const panToBuilding = (buildingId: string): void => {
     const building = options.getBuildings().find((item) => item.id === buildingId);
-    if (building) panTo(building.x, building.z);
+    if (!building) return;
+    if (options.isConstructionPending(buildingId)) {
+      options.showToast(`「${building.label ?? building.id}」尚未建成，请前往众议院参与募捐，建成后再继续任务。`);
+      return;
+    }
+    panTo(building.x, building.z);
   };
 
   initStoryTaskGuide(options.document, {
