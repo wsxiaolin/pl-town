@@ -26,18 +26,16 @@ const SURF_SEAWARD = 3;
 const SURF_LANDWARD = 2.2;
 
 // Surf strip: a narrow, finely subdivided ribbon laid over the seam between
-// the sea sheet and the sand. It alone carries the lapping waterline (vertex
-// advance/retreat + crest lift), the foam and the translucency — the big sea
-// sheet stays opaque, unmoved and cheap. Frequencies are tuned against the
-// already time-scaled `time` uniform shared with the sea.
+// the sea sheet and the sand. It carries the lapping waterline (vertex
+// advance/retreat + crest lift) and a faint shallow tint that feathers into
+// the sand — the big sea sheet stays opaque, unmoved and cheap. Frequencies
+// are tuned against the already time-scaled `time` uniform shared with the sea.
 const SURF_VERT = /* glsl */ `
   uniform float time;
   uniform float reach;
   uniform float lift;
   uniform float limitX;
-  varying float vCrest;
   varying float vFront;
-  varying vec2 vWorldXZ;
   void main() {
     vec3 p = position;
     // uv.x 0 → 1 runs from open water to the wet sand; the first ~1 unit
@@ -60,49 +58,28 @@ const SURF_VERT = /* glsl */ `
     // Sits 0.005 above the sea sheet so the underwater root covers the join;
     // the crest climbs the sand from there.
     p.y = 0.065 + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3);
-    vCrest = root * crest;
     vFront = uv.x;
-    vWorldXZ = p.xz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }
 `;
 
 const SURF_FRAG = /* glsl */ `
-  uniform float time;
   uniform float daylight;
   uniform vec3 shallowDay;
   uniform vec3 shallowNight;
-  uniform vec3 foamDay;
-  uniform vec3 foamNight;
-  varying float vCrest;
   varying float vFront;
-  varying vec2 vWorldXZ;
-  float hash(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
-  float vnoise(vec2 q) {
-    vec2 i = floor(q), f = fract(q);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash(i), b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-  }
   void main() {
+    // Shallow tint only: a slightly lighter, still-saturated sea tone. No
+    // foam — a white foam line read as a glaring, unnatural rim rather than
+    // water, so the strip just carries the lapping edge in water colour.
     vec3 shallow = mix(shallowNight, shallowDay, daylight);
-    vec3 foamColor = mix(foamNight, foamDay, daylight);
-    // Translucency: mostly see-through over the sea sheet, more solid near
-    // the running edge, then feathered to zero so the waterline dissolves
-    // into wet sand instead of ending on a hard rim.
-    float alpha = mix(0.55, 0.85, smoothstep(0.0, 0.7, vFront));
+    // Translucency: mostly see-through over the sea sheet, then feathered to
+    // zero so the waterline dissolves into wet sand instead of ending on a
+    // hard rim.
+    float alpha = mix(0.38, 0.6, smoothstep(0.0, 0.7, vFront));
     alpha *= smoothstep(0.0, 0.25, vFront);
     alpha = mix(alpha, 0.0, smoothstep(0.75, 1.0, vFront));
-    // Foam rides the crest: value noise breaks it into pockets and it only
-    // shows while a wave is actually pushing in (vCrest → 0 between waves,
-    // so the resting waterline carries no residual foam veil).
-    float n = vnoise(vWorldXZ * 3.0 + vec2(time * 0.25, -time * 0.2));
-    float foamBand = smoothstep(0.45, 0.95, vFront) * vCrest;
-    float foam = foamBand * smoothstep(0.35, 0.75, n + vCrest * 0.38);
-    vec3 color = mix(shallow, foamColor, foam);
-    alpha = max(alpha, foam * 0.9);
-    gl_FragColor = vec4(color, alpha);
+    gl_FragColor = vec4(shallow, alpha);
     // Same output chain as the sea sheet's Water shader, so the strip and
     // the water it sits on agree under every tone-mapping exposure.
     #include <tonemapping_fragment>
@@ -140,10 +117,8 @@ function createShoreSurf(
       reach: { value: SURF_REACH },
       lift: { value: SURF_LIFT },
       limitX: { value: westBeachWaterlineMaxX(SURF_REACH) },
-      shallowDay: { value: new THREE.Color(0x6ab5b0) },
-      shallowNight: { value: new THREE.Color(0x123642) },
-      foamDay: { value: new THREE.Color(0xdce9e6) },
-      foamNight: { value: new THREE.Color(0x2c3a4a) },
+      shallowDay: { value: new THREE.Color(0x2f93a8) },
+      shallowNight: { value: new THREE.Color(0x0e2b36) },
     },
   });
   const mesh = new THREE.Mesh(geometry, material);
@@ -303,9 +278,9 @@ export function createWestBeach(options: BeachOptions): {
         distortionScale: 3.7,
         timeScale: SEA_TIME_SCALE,
         // The sea sheet only takes the near-shore tint: the open water stays
-        // deep and opaque, and the pale band is a few world units wide (not
+        // deep and opaque, and the band is a few world units wide (not
         // a fraction of the 96-unit ribbon) so the far horizon stays solid.
-        // Lapping, foam and translucency live on the surf strip below.
+        // The lapping waterline lives on the surf strip below.
         shoreBlend: { ribbonDepth: 96, width: 12 },
       })
     : null;
@@ -321,7 +296,7 @@ export function createWestBeach(options: BeachOptions): {
   // The lapping waterline rides on its own fine strip: underwater it blends
   // into the sea sheet, on land it climbs the sand and feathers away.
   // The landward edge is capped at the geometry level, NOT in the shader:
-  // uv.x drives alpha/foam, so a world-space shader clamp would squeeze the
+  // uv.x drives alpha, so a world-space shader clamp would squeeze the
   // front band non-uniformly wherever the coast wobbles landward. Capping
   // the geometry keeps the uv→x mapping linear per row; the eased clamp in
   // SURF_VERT remains as a backstop for the crest displacement overshoot.

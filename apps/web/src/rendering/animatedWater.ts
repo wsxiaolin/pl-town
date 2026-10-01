@@ -32,11 +32,11 @@ export type AnimatedWaterConfig = {
   textureHeight?: number;
   /** Optional near-shore color blend for the sea surface. The open sea stays
    *  deep and opaque; within a few world units of the waterline the color
-   *  eases toward a pale aqua so the shallows read as lit-through water.
-   *  Distplacement, foam and transparency live on the caller's dedicated
-   *  surf strip (see westBeach.ts), not here: this mesh is large, coarse
-   *  (1.5 units per column) and double-rendered by the mirror pass, so it
-   *  must stay a single opaque, unmoved sheet. */
+   *  eases toward a lighter aqua so the shallows read as lit-through water.
+   *  Displacement and transparency live on the caller's dedicated surf strip
+   *  (see westBeach.ts), not here: this mesh is large, coarse (1.5 units per
+   *  column) and double-rendered by the mirror pass, so it must stay a single
+   *  opaque, unmoved sheet. */
   shoreBlend?: {
     /** Ribbon span in world units covered by uv.x 0 → 1. */
     ribbonDepth: number;
@@ -55,16 +55,15 @@ export type AnimatedWaterSurface = {
 
 let sharedWaterNormals: THREE.Texture | null = null;
 
-// Pale aqua the sea eases toward near the waterline, so the shallows read
-// as lit-through water. Authoring note: this must be a *uniform lerped with
-// the daylight clock*, not a shader literal — a literal keeps shining at
-// full brightness after dark while the rest of the sea dims. The day value
-// is the linear equivalent of the original vec3(0.44, 0.78, 0.74) literal.
+// Aqua the sea eases toward near the waterline, so the shallows read as
+// lit-through water without a glaring white rim. Authoring note: this must be
+// a *uniform lerped with the daylight clock*, not a shader literal — a literal
+// keeps shining at full brightness after dark while the rest of the sea dims.
 // It pairs with the surf strip in westBeach.ts: this band is deliberately
 // wider than the strip's seaward extent (SURF_SEAWARD there, `width` here),
 // so the strip's root fade always happens over already-tinted water.
-const SHALLOW_TINT_DAY = new THREE.Color(0xb1e5df);
-const SHALLOW_TINT_NIGHT = new THREE.Color(0x1d4a56);
+const SHALLOW_TINT_DAY = new THREE.Color(0x3f9fb5);
+const SHALLOW_TINT_NIGHT = new THREE.Color(0x123642);
 
 function getWaterNormals(): THREE.Texture {
   if (!sharedWaterNormals) {
@@ -238,11 +237,12 @@ export function createAnimatedWaterSurface(
           fragmentAnchor,
           /* glsl */ `
           {
-            // Shallow-water tint: ease toward a pale aqua near the waterline.
-            // Stays opaque — the sea floor and any offshore models (ships!)
-            // must not bleed through the deep sheet.
-            vec3 shallowTint = mix(waterColor, shoreTint, 0.62);
-            outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(1.5, ${width}, vShoreDist)) * 0.55);
+            // Shallow-water tint: ease toward a lighter aqua near the
+            // waterline, kept subtle so it reads as water rather than a
+            // glaring white band. Stays opaque — the sea floor and any
+            // offshore models (ships!) must not bleed through the deep sheet.
+            vec3 shallowTint = mix(waterColor, shoreTint, 0.55);
+            outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(1.5, ${width}, vShoreDist)) * 0.4);
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );
