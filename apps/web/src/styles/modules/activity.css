@@ -247,32 +247,24 @@
   transition: background-image 0.35s ease;
 }
 
-/* Bottom-heavy scrim for text legibility */
+/* Bottom scrim for text legibility */
 .activity-panel-hero-scrim {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(3, 7, 16, 0) 15%,
-      rgba(3, 7, 16, 0.55) 58%,
-      rgba(3, 7, 16, 0.94) 100%
-    ),
-    linear-gradient(
-      90deg,
-      rgba(3, 7, 16, 0.76) 0%,
-      rgba(3, 7, 16, 0.22) 38%,
-      rgba(3, 7, 16, 0) 60%
-    );
+  background: linear-gradient(
+    180deg,
+    rgba(3, 7, 16, 0) 28%,
+    rgba(3, 7, 16, 0.72) 62%,
+    rgba(3, 7, 16, 0.96) 100%
+  );
 }
 
-/* Text block anchored to bottom-left */
+/* Text block anchored to bottom-left, fills full hero width */
 .activity-panel-hero-copy {
   position: absolute;
-  bottom: 44px;
+  bottom: 40px;
   left: 46px;
-  right: auto;
-  width: min(500px, 54%);
+  right: 46px;
   text-align: left;
 }
 
@@ -357,7 +349,7 @@
   .activity-panel-hero-copy {
     bottom: 28px;
     left: 22px;
-    width: calc(100% - 44px);
+    right: 22px;
   }
   .activity-panel-kicker { margin-top: 10px; }
   .activity-panel-title {
@@ -384,6 +376,6 @@
   .activity-panel-hero-copy {
     bottom: 20px;
     left: 16px;
-    width: calc(100% - 32px);
+    right: 16px;
   }
 }
