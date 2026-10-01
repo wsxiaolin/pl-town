@@ -85,10 +85,15 @@ assert.ok(roads, 'ROAD_COORDS must remain readable by the placement contract');
 assert.deepEqual(JSON.parse(roads[1]), AREA_CLEARANCE.roadCoords);
 assert.equal(Number(city.match(/MAIN_ROAD_WIDTH\s*=\s*([\d.]+)/)?.[1]), 2.4);
 assert.equal(Number(city.match(/CITY_LIMIT\s*=\s*([\d.]+)/)?.[1]), AREA_CLEARANCE.cityLimit);
-assert.match(source('rendering/createCitySurfaces.ts'), /addRing\(37,\s*39,\s*ringMat/);
+assert.match(source('rendering/createCitySurfaces.ts'), /addRing\(RING_ROAD_RADII\.inner,\s*RING_ROAD_RADII\.outer,\s*ringMat/);
+assert.match(city, /RING_ROAD_RADII\s*=\s*Object\.freeze\(\{\s*inner:\s*37,\s*outer:\s*39\s*\}\)/);
 assert.match(source('rendering/worldDecorations.ts').replace(/\s/g, ''), /Math\.abs\(position\)===6\|\|Math\.abs\(position\)===12\?1\.5:1\.0/);
 const beach = source('rendering/westBeach.ts');
 assert.match(beach, /shorelineX\(z\)\s*\+\s*10/);
-assert.match(beach, /Math\.sin\(z\s*\*\s*0\.19\)\s*\*\s*0\.85\s*\+\s*Math\.sin\(z\s*\*\s*0\.47\s*\+\s*1\.4\)\s*\*\s*0\.35/);
+// The coast wobble now lives beside coastlineX in cityConfig so the visible
+// shore and the waterline-clearance budget share one amplitude source.
+assert.match(city, /Math\.sin\(z\s*\*\s*0\.19\)\s*\*\s*COAST_WOBBLE_A\s*\+\s*Math\.sin\(z\s*\*\s*0\.47\s*\+\s*1\.4\)\s*\*\s*COAST_WOBBLE_B/);
+assert.match(city, /COAST_WOBBLE_A\s*=\s*0\.85/);
+assert.match(city, /COAST_WOBBLE_B\s*=\s*0\.35/);
 const coastline = Number(city.match(/coastlineX:\s*(-?[\d.]+)/)?.[1]);
 assert.ok(Math.abs(coastline + 0.85 + 0.35 + 10 - AREA_CLEARANCE.beachLandEdge) < 1e-6);
