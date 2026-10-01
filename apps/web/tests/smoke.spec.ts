@@ -211,7 +211,10 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
         daily: { dayKey: '2026-09-25', checkInStreak: 0, checkInClaimed: false, visitedBuildings: ['activity', 'library'], claimedMissions: [], fulfilledOrders: [] },
       };
       claimedOrange = false;
-      listings = { active: [] as Array<Record<string, unknown>>, own: [] as Array<Record<string, unknown>> };
+      listings = {
+        active: [{ id: 'listing-other', itemId: 'music_box', quantity: 1, price: 88, status: 'active', sellerId: 'other-resident', sellerNickname: '隔壁居民', buyerId: null, createdAt: '2026-09-25T08:00:00.000Z' }],
+        own: [] as Array<Record<string, unknown>>,
+      };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
         const request = JSON.parse(raw);
@@ -401,12 +404,15 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await page.locator('[data-listing-item]').selectOption('dragonwell_tea');
   await page.locator('[data-listing-price]').fill('50');
   await page.locator('[data-listing-create]').click();
-  const activeListing = page.locator('.market-listing[data-listing-id]');
-  await expect(activeListing).toContainText('龙井茶 ×1');
-  await expect(activeListing).toContainText('购买 · 50 币');
+  const otherListing = page.locator('.market-listing[data-listing-id="listing-other"]');
+  await expect(otherListing).toContainText('音乐盒 ×1');
+  await expect(otherListing).toContainText('购买 · 88 币');
+  const ownListing = page.locator('[data-own-listings] .market-listing');
+  await expect(ownListing).toContainText('龙井茶 ×1');
+  await expect(ownListing).toContainText('下架');
   await expect(page.locator('[data-listing-item]')).toContainText('龙井茶 ×1');
-  await activeListing.locator('[data-listing-cancel]').click();
-  await expect(activeListing).toContainText('已取消');
+  await ownListing.locator('[data-listing-cancel]').click();
+  await expect(ownListing).toContainText('已取消');
   await expect(page.locator('[data-listing-item]')).toContainText('龙井茶 ×2');
   await page.locator('[data-shop-close]').click();
 

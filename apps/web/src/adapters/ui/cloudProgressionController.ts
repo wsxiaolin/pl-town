@@ -548,11 +548,17 @@ export function createCloudProgressionController(options: Options) {
       const ownHeading = options.document.createElement('div');
       ownHeading.className = 'market-board-subheading';
       ownHeading.textContent = '我的挂单';
-      children.push(ownHeading);
-      children.push(...listings.own.map((listing) => listingRow(listing, true)));
+      const ownWrap = options.document.createElement('div');
+      ownWrap.className = 'market-own-listings';
+      ownWrap.dataset.ownListings = 'true';
+      ownWrap.append(...listings.own.map((listing) => listingRow(listing, true)));
+      children.push(ownHeading, ownWrap);
     }
-    children.push(...(listings.active.length
-      ? listings.active.map((listing) => listingRow(listing, false))
+    // 自家挂单已在「我的挂单」区展示（且不能买自己），交易所区只显示他人的在售单。
+    const ownActiveIds = new Set(listings.own.filter((listing) => listing.status === 'active').map((listing) => listing.id));
+    const otherActive = listings.active.filter((listing) => !ownActiveIds.has(listing.id));
+    children.push(...(otherActive.length
+      ? otherActive.map((listing) => listingRow(listing, false))
       : [emptyRow('交易所暂时没有在售挂单')]));
     exchangeBoard.replaceChildren(...children);
   }
