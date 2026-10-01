@@ -32,6 +32,12 @@ fixture(`
   const firstDay = new Date('2026-09-20T04:00:00.000Z');
   const nextDay = new Date('2026-09-21T04:00:00.000Z');
   const afterMissedDay = new Date('2026-09-23T04:00:00.000Z');
+  // 只有 Commons 初始建成；委托测试需要三座可访问建筑，先把其余项目置满建成。
+  const { CITY_CONSTRUCTION_CONFIG } = await import('./dist/data/cityConstructionConfig.js');
+  for (const entry of CITY_CONSTRUCTION_CONFIG.projects) {
+    if (!entry.buildingId || entry.buildingId === 'commons') continue;
+    db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(entry.cost, entry.id);
+  }
   const firstCheckIn = claimDailyCheckIn(residentId, DAILY_CHECK_IN, firstDay);
   assert.deepEqual([firstCheckIn.reward, firstCheckIn.streak], [40, 1]);
   assert.equal(claimDailyCheckIn(residentId, DAILY_CHECK_IN, firstDay).claimed, false);
@@ -47,6 +53,12 @@ fixture(`
   assert.equal(claimDailyMission(residentId, mission, afterMissedDay).claimed, false);
   assert.equal(getPlayerProgress(residentId, afterMissedDay).currency, balanceAfterMission);
   db.prepare('UPDATE player_progress SET currency = 10000 WHERE user_id = ?').run(residentId);
+  // Restore the fresh-town state the governance suite asserts below: only
+  // Commons starts built and every other project sits at zero funding.
+  for (const entry of CITY_CONSTRUCTION_CONFIG.projects) {
+    if (!entry.buildingId || entry.buildingId === 'commons') continue;
+    db.prepare('UPDATE city_projects SET funded = 0, built = 0 WHERE id = ?').run(entry.id);
+  }
   closeDatabase();
 `);
 let server;
