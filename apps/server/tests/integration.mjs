@@ -767,18 +767,18 @@ try {
   send(aliceAgain, { type: 'progress.shop.buy', productId: featuredId, quantity: 1, dealDay: '2000-01-01' });
   const expiredDealPurchase = await waitFor(aliceAgain, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === featuredId && message.event.quantity === 1);
   if (expiredDealPurchase.event.featured !== false || expiredDealPurchase.event.pricePaid !== featuredProduct.unitPrice) throw new Error('Expired featured deals must fall back to the regular server price');
-  aliceAgain.socket.close();
-  const marketReconnect = await connect('Alice');
-  if (!marketReconnect.hello.progress.daily.checkInClaimed || !marketReconnect.hello.progress.daily.claimedMissions.includes('market_walk_3')) throw new Error('Daily check-in and mission claims must survive reconnecting');
-  marketReconnect.socket.close();
 
   // 市集交易：合成、供货订单与托管挂单。所有断言基于消息前后的余额/库存差值，
-  // 不依赖当日特惠或供货轮换的具体商品。
-  const trader = await connect('Alice');
-  const tradeCatalog = trader.hello.catalog;
+  // 不依赖当日特惠或供货轮换的具体商品。trader 复用 aliceAgain 连接、买家复用
+  // 一直在线的 charlie：认证限流为每 IP 60 秒 20 次，新增连接会把配额打爆。
+  const trader = aliceAgain;
+  const traderBaseSince = trader.messages.length;
+  send(trader, { type: 'progress.get' });
+  const traderBase = await waitFor(trader, 'progress.updated', (item) => !item.event, traderBaseSince);
+  const tradeCatalog = traderBase.catalog;
   if (!tradeCatalog.recipes?.length || !tradeCatalog.dailySupplyOrder?.id || !tradeCatalog.tradeableItemIds?.includes('radish')) throw new Error('Market catalog must expose recipes, the daily supply order, and tradeable items');
-  let traderInventory = trader.hello.progress.inventory;
-  let traderCurrency = trader.hello.progress.currency;
+  let traderInventory = traderBase.progress.inventory;
+  let traderCurrency = traderBase.progress.currency;
   const trackTrader = (message) => { traderInventory = message.progress.inventory; traderCurrency = message.progress.currency; };
   const consumeAll = async (itemId) => {
     const owned = traderInventory[itemId] ?? 0;
@@ -862,9 +862,10 @@ try {
   const selfBuy = await sinceMessage(trader, 'error', (item) => item.message === 'You cannot buy your own listing', selfBuySince);
   if (!selfBuy) throw new Error('Residents must not buy their own listing');
 
-  const buyer = await connect('Charlie');
+  const buyer = charlie;
+  const buyerBaseSince = buyer.messages.length;
   send(buyer, { type: 'progress.get' });
-  const buyerBaseline = await waitFor(buyer, 'progress.updated', (item) => !item.event);
+  const buyerBaseline = await waitFor(buyer, 'progress.updated', (item) => !item.event, buyerBaseSince);
   const buyerInventoryBefore = buyerBaseline.progress.inventory;
   const buyerListingsGet = buyer.messages.length;
   send(buyer, { type: 'market.listings.get' });
@@ -898,8 +899,6 @@ try {
   const refund = await waitFor(trader, 'progress.updated', (item) => !item.event, refundSince);
   if ((refund.progress.inventory.radish ?? 0) !== (traderInventory.radish ?? 0) + 1) throw new Error('Cancelling a listing must return the escrowed items to the seller');
   traderInventory = refund.progress.inventory;
-  trader.socket.close();
-  buyer.socket.close();
 
   const disableCharlie = await fetch(`${adminBase}/users/${charlie.hello.user.id}/status`, {
     method: 'PATCH', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },
@@ -946,6 +945,7 @@ try {
 
   // Shop catalog: admin edits must persist, broadcast, and price purchases live.
   const shopClient = await connect('Alice');
+  if (!shopClient.hello.progress.daily.checkInClaimed || !shopClient.hello.progress.daily.claimedMissions.includes('market_walk_3')) throw new Error('Daily check-in and mission claims must survive reconnecting');
   const shopWorldState = await fetch(`${adminBase}/world`, { headers: { cookie } });
   const shopWorldStatePayload = await shopWorldState.json();
   if (!shopWorldState.ok || shopWorldStatePayload.shop?.length !== 4 || shopWorldStatePayload.shop.find((product) => product.itemId === 'beef')?.unitPrice !== 45) throw new Error('Admin world GET must return the default shop catalog');
