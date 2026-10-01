@@ -1,3 +1,4 @@
+import { BUILDING_LABEL_MAX_LENGTH, sanitizeBuildingLabel } from '../../core/textLimits';
 import type { BuildingEntity } from '../../city/buildingEntity';
 
 export function createBuildingLabelController(options: {
@@ -38,10 +39,10 @@ export function createBuildingLabelController(options: {
   function startRename(building: BuildingEntity, nameElement: HTMLElement): void {
     const current = nameElement.textContent ?? '';
     const input = document.createElement('input');
-    input.className = 'bl-rename-input'; input.value = current; input.maxLength = 16;
+    input.className = 'bl-rename-input'; input.value = current; input.maxLength = BUILDING_LABEL_MAX_LENGTH;
     nameElement.replaceWith(input); input.focus(); input.select();
     const finish = () => {
-      const value = input.value.trim() || current;
+      const value = sanitizeBuildingLabel(input.value, current);
       const span = document.createElement('span');
       span.className = 'bl-name'; span.textContent = value;
       span.addEventListener('dblclick', (event) => { event.preventDefault(); event.stopPropagation(); startRename(building, span); });

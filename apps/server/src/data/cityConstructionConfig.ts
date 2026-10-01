@@ -32,7 +32,16 @@ const constructionIds = [
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   schemaVersion: 1,
-  version: '2026-09-19.1',
+  // 2026-09-30.1: content is identical to 2026-09-19.1 as serialized by this
+  // code, but the production off-site backup lineage carries a city_configs
+  // row at 2026-09-19.1 whose JSON predates #181's tavern relabel, so the
+  // restore guard ("City config changed without a version bump") rejects
+  // every boot that lands on that version. Re-anchoring the version lets
+  // the next restore migrate past the stale row; the project ledger then
+  // heals the display-only label drift (#181) in place.
+  // tests/city-config-snapshot.mjs fails at review time when the config
+  // content changes without a matching version bump.
+  version: '2026-09-30.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     { id: 'greenbelt-path', name: '北侧绿道', description: '公共步行绿道', cost: 800, kind: 'road', road: { x: 22, z: -40, width: 8, depth: 1 } },

@@ -1,4 +1,5 @@
 import type { LegacyStats } from '../../city/progression/legacyStats';
+import { NICKNAME_PATTERN, PASSWORD_MAX_LENGTH, hasDisallowedControls } from '../../core/textLimits';
 import { renderVerifiedName } from './verifiedBadge';
 
 /**
@@ -174,8 +175,9 @@ export function createLoginController(options: LoginControllerOptions) {
     const name = input?.value.trim() ?? '';
     const password = passwordInput?.value ?? '';
     if (name.length < 2) return setError('Nickname must contain at least two characters.');
-    if (!/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
+    if (!NICKNAME_PATTERN.test(name)) return setError('Use only letters or numbers in your nickname.');
     if (!password) return setError('Enter a password.');
+    if (hasDisallowedControls(password) || password.length > PASSWORD_MAX_LENGTH) return setError('Password contains invalid characters.');
     const pl = collectPlCredentials();
     if (pl === null) return setError('请填写物实账号和密码完成身份验证，或换一个昵称。');
     localStorage.setItem('minicityUser', name);
@@ -203,7 +205,7 @@ export function createLoginController(options: LoginControllerOptions) {
     // The verification request is nickname-specific: editing the nickname
     // invalidates it, so put the form back into its plain state.
     hidePlVerification();
-    if (name && !/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
+    if (name && !NICKNAME_PATTERN.test(name)) return setError('Use only letters or numbers in your nickname.');
     if (name.length === 1) {
       nicknameFeedbackTimer = window.setTimeout(() => {
         const current = (document.getElementById('loginInput') as HTMLInputElement | null)?.value.trim() ?? '';
