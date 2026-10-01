@@ -254,12 +254,14 @@ try {
     // in: a restored lineage carrying the pre-relabel config row and project
     // definition must still boot — the version re-anchor skips the stale
     // config row, and the display-only drift heals in place with progress.
+    // The sentinel version keeps the fixture decoupled from production
+    // version history and collision-free.
     const relabelPath = ${JSON.stringify(join(dataDir, 'city-relabel.sqlite'))};
     const currentVersion = config.version;
     const tavern = config.projects.find((project) => project.id === 'build-tavern');
     const originalTavernName = tavern.name;
     const originalTavernDescription = tavern.description;
-    config.version = '2026-09-19.1';
+    config.version = 'test-previous-version';
     tavern.name = '酒馆';
     tavern.description = '共同筹建酒馆';
     db.prepare('INSERT INTO city_configs VALUES (?, ?)').run(config.version, JSON.stringify(config));

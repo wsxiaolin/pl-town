@@ -11,7 +11,7 @@
 //   node tests/city-config-snapshot.mjs --update
 //
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,12 +52,30 @@ if (process.argv.includes('--update')) {
     console.error('city-config-snapshot: --update is for local regeneration only; commit the regenerated golden deliberately.');
     process.exit(1);
   }
+  // Regenerating alone must not be able to re-arm the guard: a content change
+  // under the SAME version is exactly what the off-site restore path rejects,
+  // so --update refuses to record it. The golden may only change content
+  // together with a version bump.
+  if (existsSync(goldenPath)) {
+    const previous = JSON.parse(readFileSync(goldenPath, 'utf8'));
+    if (previous.version === config.version && JSON.stringify(previous) !== canonical) {
+      console.error(
+        `city-config-snapshot: content changed but the version is still ${config.version} — `
+          + 'bump CITY_CONSTRUCTION_CONFIG.version first, then rerun `node tests/city-config-snapshot.mjs --update`. '
+          + 'A same-version content change is what the production restore guard ("City config changed without a version bump") rejects.',
+      );
+      process.exit(1);
+    }
+  }
   mkdirSync(dirname(goldenPath), { recursive: true });
   writeFileSync(goldenPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   console.log(`city-config-snapshot: wrote golden for version ${config.version}`);
   process.exit(0);
 }
 
+if (!existsSync(goldenPath)) {
+  assert.fail(`city-config-snapshot: golden snapshot not found at ${goldenPath}; run \`node tests/city-config-snapshot.mjs --update\``);
+}
 const golden = readFileSync(goldenPath, 'utf8').trim();
 assert.ok(golden, 'city-config-snapshot: golden snapshot is missing; run `node tests/city-config-snapshot.mjs --update`');
 const goldenConfig = JSON.parse(golden);
