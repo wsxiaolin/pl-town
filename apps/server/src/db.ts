@@ -357,6 +357,9 @@ export function updateUserProfile(id: string, nickname: string, email?: string):
 export function savePosition(id: string, position: Position): void {
   db.prepare('UPDATE users SET position_x = ?, position_y = ?, position_z = ?, rotation = ?, updated_at = ? WHERE id = ?').run(position.x, position.y, position.z, position.rotation ?? null, now(), id);
 }
+// Note: reading progress can advance daily state (ensureDailyEconomyRow writes
+// the current-day row on first touch or day rollover), so never call this
+// against a read-only handle or from restore/telemetry paths.
 export function getPlayerProgress(userId: string, at = new Date()): PlayerProgress {
   ensureProgress(db, userId, now());
   const daily = dailyEconomyView(ensureDailyEconomyRow(userId, now(), at), at);
@@ -434,11 +437,16 @@ export function claimDailyMission(userId: string, mission: { id: string; target:
 
 /** Shared ingredient deduction for crafting and supply orders. Caller holds the transaction. */
 function takeInventoryItems(userId: string, requirements: ReadonlyArray<{ itemId: string; quantity: number }>, timestamp: string): void {
-  for (const requirement of requirements) {
+  // Same-item entries would otherwise double-count the availability check and
+  // re-dereference a deleted row, so collapse them up front.
+  const merged = new Map<string, number>();
+  for (const requirement of requirements) merged.set(requirement.itemId, (merged.get(requirement.itemId) ?? 0) + requirement.quantity);
+  const needed = [...merged].map(([itemId, quantity]) => ({ itemId, quantity }));
+  for (const requirement of needed) {
     const row = db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, requirement.itemId) as { quantity: number } | undefined;
     if (!row || row.quantity < requirement.quantity) throw new Error('Ingredient is not available');
   }
-  for (const requirement of requirements) {
+  for (const requirement of needed) {
     if (requirement.quantity === (db.prepare('SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?').get(userId, requirement.itemId) as { quantity: number }).quantity) {
       db.prepare('DELETE FROM player_inventory WHERE user_id = ? AND item_id = ?').run(userId, requirement.itemId);
     } else {
@@ -514,21 +522,25 @@ export function listMarketListings(viewerId: string): { active: MarketListingVie
 
 export function createMarketListing(userId: string, itemId: string, quantity: number, price: number, maxActiveListings: number): { progress: PlayerProgress; listing: MarketListingView } {
   const timestamp = now();
+  // The id is generated and re-fetched inside the transaction: resolving by
+  // "latest created_at" could return a different listing under same-millisecond inserts.
+  const listingId = randomUUID();
   db.transaction(() => {
     ensureProgress(db, userId, timestamp);
     const activeCount = (db.prepare(`SELECT COUNT(*) AS count FROM market_listings WHERE seller_id = ? AND status = 'active'`).get(userId) as { count: number }).count;
     if (activeCount >= maxActiveListings) throw new Error('Too many active listings');
     takeInventoryItems(userId, [{ itemId, quantity }], timestamp);
     db.prepare(`INSERT INTO market_listings (id, seller_id, item_id, quantity, price, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomUUID(), userId, itemId, quantity, price, timestamp, timestamp);
+      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(listingId, userId, itemId, quantity, price, timestamp, timestamp);
   })();
   const listing = (db.prepare(`SELECT l.id, l.item_id, l.quantity, l.price, l.status, l.seller_id, u.nickname AS seller_nickname, l.buyer_id, l.created_at
-    FROM market_listings l JOIN users u ON u.id = l.seller_id WHERE l.seller_id = ? ORDER BY l.created_at DESC LIMIT 1`).get(userId) as Parameters<typeof listingView>[0]);
+    FROM market_listings l JOIN users u ON u.id = l.seller_id WHERE l.id = ?`).get(listingId) as Parameters<typeof listingView>[0]);
   return { progress: getPlayerProgress(userId), listing: listingView(listing) };
 }
 
-export function buyMarketListing(buyerId: string, listingId: string): { progress: PlayerProgress; listing: MarketListingView } {
+export function buyMarketListing(buyerId: string, listingId: string): { progress: PlayerProgress; listing: MarketListingView; sellerId: string } {
   let listing: MarketListingView | null = null;
+  let sellerId = '';
   db.transaction(() => {
     const timestamp = now();
     ensureProgress(db, buyerId, timestamp);
@@ -536,14 +548,18 @@ export function buyMarketListing(buyerId: string, listingId: string): { progress
       WHERE l.id = ? AND l.status = 'active'`).get(listingId) as (Parameters<typeof listingView>[0] & { seller_nickname: string | null }) | undefined;
     if (!row) throw new Error('Listing is not available');
     if (row.seller_id === buyerId) throw new Error('You cannot buy your own listing');
-    const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(row.price, timestamp, buyerId, row.price);
+    // `price` is a unit price (validated 1..MAX_MARKET_LISTING_PRICE); the lot
+    // settles at price * quantity in one atomic transfer.
+    const total = row.price * row.quantity;
+    const charged = db.prepare('UPDATE player_progress SET currency = currency - ?, updated_at = ? WHERE user_id = ? AND currency >= ?').run(total, timestamp, buyerId, total);
     if (!charged.changes) throw new Error('Insufficient currency');
-    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(row.price, timestamp, row.seller_id);
+    db.prepare('UPDATE player_progress SET currency = currency + ?, updated_at = ? WHERE user_id = ?').run(total, timestamp, row.seller_id);
     db.prepare(`UPDATE market_listings SET status = 'sold', buyer_id = ?, closed_at = ?, updated_at = ? WHERE id = ?`).run(buyerId, timestamp, timestamp, listingId);
     addInventory(db, buyerId, row.item_id, row.quantity, timestamp);
+    sellerId = row.seller_id;
     listing = listingView({ ...row, status: 'sold', buyer_id: buyerId });
   })();
-  return { progress: getPlayerProgress(buyerId), listing: listing! };
+  return { progress: getPlayerProgress(buyerId), listing: listing!, sellerId };
 }
 
 export function cancelMarketListing(userId: string, listingId: string): { progress: PlayerProgress; listing: MarketListingView } {

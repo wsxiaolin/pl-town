@@ -18,7 +18,7 @@ import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
-import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_CHECK_IN, DAILY_DEAL_DISCOUNT_PERCENT, DAILY_MISSIONS, DAILY_REWARDS, DAILY_SUPPLY_ORDERS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, isMarketTradeableItemId, MARKET_RECIPES, MAX_ACTIVE_MARKET_LISTINGS, MAX_MARKET_LISTING_PRICE, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
+import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_CHECK_IN, DAILY_DEAL_DISCOUNT_PERCENT, DAILY_MISSIONS, DAILY_REWARDS, DAILY_SUPPLY_ORDERS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, isMarketTradeableItemId, MARKET_RECIPES, MAX_ACTIVE_MARKET_LISTINGS, MAX_MARKET_LISTING_PRICE, MAX_MARKET_LISTING_QUANTITY, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
@@ -47,7 +47,9 @@ const globalPublicMutationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalAuthenticationRate = new FixedWindowRateLimiter(200, 60_000, 1);
 const globalPhysicsLoginRate = new FixedWindowRateLimiter(60, 60_000, 1);
 const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
-const marketMutationRate = new FixedWindowRateLimiter(20, 10_000);
+// Generous by design: an engaged resident crafting, delivering and trading
+// stays far below this; only scripted abuse reaches it.
+const marketMutationRate = new FixedWindowRateLimiter(40, 10_000);
 const chatHistoryRate = new FixedWindowRateLimiter(20, 60_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(5, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
@@ -288,6 +290,7 @@ async function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'market.recipe.craft') {
+      if (!marketMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many market requests, try again later');
       if (!validId(message.recipeId)) return fail(client.socket, 'Recipe is not available');
       const recipe = MARKET_RECIPES.find((entry) => entry.id === message.recipeId);
       if (!recipe) return fail(client.socket, 'Recipe is not available');
@@ -298,6 +301,7 @@ async function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'market.supply.fulfill') {
+      if (!marketMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many market requests, try again later');
       if (!validId(message.orderId)) return fail(client.socket, 'Supply order is not available');
       const order = DAILY_SUPPLY_ORDERS.find((entry) => entry.id === message.orderId);
       if (!order) return fail(client.socket, 'Supply order is not available');
@@ -313,7 +317,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'market.listing.create') {
       if (!validId(message.itemId) || !isMarketTradeableItemId(message.itemId)) return fail(client.socket, 'This item cannot be listed');
-      if (!validQuantity(message.quantity)) return fail(client.socket, 'Invalid quantity');
+      if (!Number.isInteger(message.quantity) || message.quantity < 1 || message.quantity > MAX_MARKET_LISTING_QUANTITY) return fail(client.socket, 'Invalid quantity');
       if (!Number.isInteger(message.price) || message.price < 1 || message.price > MAX_MARKET_LISTING_PRICE) return fail(client.socket, 'Invalid price');
       if (!marketMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many market requests, try again later');
       try {
@@ -329,6 +333,10 @@ async function handle(client: Client, raw: string) {
       try {
         const result = db.buyMarketListing(userId, message.listingId);
         send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'market.listing.sold', listingId: result.listing.id, itemId: result.listing.itemId, quantity: result.listing.quantity, price: result.listing.price } });
+        // The seller's payout lands server-side; push it so their balance view
+        // updates without waiting for an unrelated progress message.
+        const seller = clients.get(result.sellerId);
+        if (seller) send(seller.socket, { type: 'progress.updated', ...progressState(result.sellerId), event: { type: 'market.listing.payout', listingId: result.listing.id, price: result.listing.price, quantity: result.listing.quantity } });
         broadcastMarketListings();
       } catch (error) { fail(client.socket, error instanceof Error ? error.message : 'Could not buy listing'); }
       return;

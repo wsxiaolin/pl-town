@@ -1,7 +1,11 @@
+// Intl.DateTimeFormat construction is expensive and shanghaiDayKey runs on
+// every progress read, so build the formatter once per process.
+const dayFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
 export function shanghaiDayKey(at = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(at);
+  return dayFormatter.format(at);
 }
 
 export function previousDayKey(dayKey: string): string {

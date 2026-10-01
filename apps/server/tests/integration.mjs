@@ -839,16 +839,16 @@ try {
   const repeatedOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === false);
   if (repeatedOrder.progress.currency !== currencyBeforeOrder + order.reward) throw new Error('A supply order must pay out once per day');
 
-  // 挂单：上架即托管（库存扣减），他人购买后货款转移，下架退回物品
-  await stockFor('radish', 1);
+  // 挂单：上架即托管（库存扣减），他人购买后按单价×数量结算，下架退回物品
+  await stockFor('radish', 2);
   const radishEscrowBefore = traderInventory.radish ?? 0;
   const currencyBeforeListing = traderCurrency;
   const createSince = trader.messages.length;
-  send(trader, { type: 'market.listing.create', itemId: 'radish', quantity: 1, price: 77 });
+  send(trader, { type: 'market.listing.create', itemId: 'radish', quantity: 2, price: 77 });
   const createdListing = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.listing.created', createSince);
   trackTrader(createdListing);
   const listingId = createdListing.event.listingId;
-  if (!listingId || (traderInventory.radish ?? 0) !== radishEscrowBefore - 1) throw new Error('Creating a listing must escrow the items out of the seller inventory');
+  if (!listingId || (traderInventory.radish ?? 0) !== radishEscrowBefore - 2) throw new Error('Creating a listing must escrow the items out of the seller inventory');
   const boardAfterCreate = await waitFor(trader, 'market.listings', (item) => item.listings?.active?.some((entry) => entry.id === listingId && entry.price === 77 && entry.sellerNickname === 'Alice'));
   if (!boardAfterCreate) throw new Error('The escrow board must broadcast the new listing');
 
@@ -873,12 +873,12 @@ try {
   const buySince = buyer.messages.length;
   send(buyer, { type: 'market.listing.buy', listingId });
   const listingPurchase = await waitFor(buyer, 'progress.updated', (item) => item.event?.type === 'market.listing.sold' && item.event.listingId === listingId, buySince);
-  if (listingPurchase.progress.currency !== buyerBaseline.progress.currency - 77 || (listingPurchase.progress.inventory.radish ?? 0) !== (buyerInventoryBefore.radish ?? 0) + 1) throw new Error('Buying a listing must move the escrowed items and the exact price to the buyer');
+  if (listingPurchase.progress.currency !== buyerBaseline.progress.currency - 154 || (listingPurchase.progress.inventory.radish ?? 0) !== (buyerInventoryBefore.radish ?? 0) + 2) throw new Error('Buying a listing must move the escrowed items and the unit-price-times-quantity total to the buyer');
   await waitFor(trader, 'market.listings', (item) => item.listings?.own?.some((entry) => entry.id === listingId && entry.status === 'sold'));
   const payoutSince = trader.messages.length;
   send(trader, { type: 'progress.get' });
   const payout = await waitFor(trader, 'progress.updated', (item) => !item.event, payoutSince);
-  if (payout.progress.currency !== currencyBeforeListing + 77) throw new Error('The seller must receive the listing price when the escrow settles');
+  if (payout.progress.currency !== currencyBeforeListing + 154) throw new Error('The seller must receive the full unit-price-times-quantity payout when the escrow settles');
 
   // 买不起的挂单：服务端拒绝且托管不变
   await stockFor('radish', 1);
@@ -899,6 +899,45 @@ try {
   const refund = await waitFor(trader, 'progress.updated', (item) => !item.event, refundSince);
   if ((refund.progress.inventory.radish ?? 0) !== (traderInventory.radish ?? 0) + 1) throw new Error('Cancelling a listing must return the escrowed items to the seller');
   traderInventory = refund.progress.inventory;
+
+  // 合成品也是可交易物品：crafted output 分支（RECIPE_OUTPUT_ITEM_IDS）
+  await stockFor('shared_meal', 1);
+  const craftedEscrowBefore = traderInventory.shared_meal ?? 0;
+  const craftedSince = trader.messages.length;
+  send(trader, { type: 'market.listing.create', itemId: 'shared_meal', quantity: 1, price: 30 });
+  const craftedListing = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.listing.created', craftedSince);
+  trackTrader(craftedListing);
+  if ((traderInventory.shared_meal ?? 0) !== craftedEscrowBefore - 1) throw new Error('Crafted goods must be escrowed like any other tradeable item');
+  const craftedCancelSince = trader.messages.length;
+  send(trader, { type: 'market.listing.cancel', listingId: craftedListing.event.listingId });
+  const craftedRefund = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.listing.cancelled' && item.event.listingId === craftedListing.event.listingId, craftedCancelSince);
+  trackTrader(craftedRefund);
+  if ((traderInventory.shared_meal ?? 0) !== craftedEscrowBefore) throw new Error('Cancelling must return the crafted good to the seller');
+
+  // 每人在售挂单上限：第 7 个创建必须被拒绝
+  await stockFor('radish', 6);
+  const capIds = [];
+  for (let index = 0; index < 6; index++) {
+    const since = trader.messages.length;
+    send(trader, { type: 'market.listing.create', itemId: 'radish', quantity: 1, price: 1 });
+    const created = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.listing.created', since);
+    trackTrader(created);
+    capIds.push(created.event.listingId);
+  }
+  const capRejectSince = trader.messages.length;
+  send(trader, { type: 'market.listing.create', itemId: 'radish', quantity: 1, price: 1 });
+  const capReject = await sinceMessage(trader, 'error', (item) => item.message === 'Too many active listings', capRejectSince);
+  if (!capReject) throw new Error('The seventh active listing must be refused by the server');
+  const capRefundBefore = traderInventory.radish ?? 0;
+  for (const id of capIds) {
+    const since = trader.messages.length;
+    send(trader, { type: 'market.listing.cancel', listingId: id });
+    await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.listing.cancelled' && item.event.listingId === id, since);
+  }
+  const capRefundSince = trader.messages.length;
+  send(trader, { type: 'progress.get' });
+  const capRefund = await waitFor(trader, 'progress.updated', (item) => !item.event, capRefundSince);
+  if ((capRefund.progress.inventory.radish ?? 0) !== capRefundBefore + 6) throw new Error('Cancelling every capped listing must return all six escrowed radishes');
 
   const disableCharlie = await fetch(`${adminBase}/users/${charlie.hello.user.id}/status`, {
     method: 'PATCH', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json', 'x-csrf-token': loginPayload.csrf },

@@ -159,7 +159,10 @@ export function createCloudProgressionController(options: Options) {
     if (event?.type === 'daily.mission.claimed' && event.missionId) pendingDailyClaims.delete(`mission:${event.missionId}`);
     if (event?.type === 'market.crafted' && event.recipeId) pendingMarketActions.delete(`craft:${event.recipeId}`);
     if (event?.type === 'market.order.fulfilled' && event.orderId) pendingMarketActions.delete(`order:${event.orderId}`);
-    if ((event?.type === 'market.listing.created' || event?.type === 'market.listing.cancelled') && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
+    if ((event?.type === 'market.listing.created' || event?.type === 'market.listing.cancelled') && event.listingId) {
+      pendingMarketActions.delete('listing:create');
+      pendingMarketActions.delete(`listing:${event.listingId}`);
+    }
     if (event?.type === 'market.listing.sold' && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
     if (event?.type === 'market.listing.sold') requestListings();
     render();
@@ -258,6 +261,7 @@ export function createCloudProgressionController(options: Options) {
     else if (event.type === 'daily.mission.claimed') options.showToast(event.claimed ? `今日委托完成，获得 ${event.reward ?? 0} 物实币` : '先完成今日委托再来领取');
     else if (event.type === 'market.crafted') options.showToast(event.crafted ? `${catalog.recipes?.find((recipe) => recipe.id === event.recipeId)?.name ?? '合成品'}已放入背包` : '合成失败，食材不足');
     else if (event.type === 'market.order.fulfilled') options.showToast(event.fulfilled ? `供货完成，获得 ${event.reward ?? 0} 物实币` : '这份委托今天已经交付过了');
+    else if (event.type === 'market.listing.payout') options.showToast(`挂单售出，收到 ${(event.price ?? 0) * (event.quantity ?? 0)} 物实币`);
     else if (event.type === 'reward.claimed' && event.rewardId === 'tirpitz_beach') options.showToast(event.claimed ? '皮尔皮茨号已放入背包' : '皮尔皮茨号已经领取过了');
     else if (event.type === 'reward.claimed' && event.rewardId && iceRewardById.has(event.rewardId)) {
       const reward = iceRewardById.get(event.rewardId)!;
@@ -577,7 +581,7 @@ export function createCloudProgressionController(options: Options) {
     name.textContent = `${itemName(listing.itemId)} ×${listing.quantity}`;
     const detail = options.document.createElement('small');
     detail.textContent = listing.status === 'active'
-      ? `${listing.sellerNickname} · 单价 ${listing.price} 币${own ? ' · 在售中' : ''}`
+      ? `${listing.sellerNickname} · 单价 ${listing.price} 币 · 合计 ${listing.price * listing.quantity} 币${own ? ' · 在售中' : ''}`
       : `${listing.sellerNickname} · ${listing.status === 'sold' ? '已售出' : '已取消'} · 单价 ${listing.price} 币`;
     copy.append(name, detail);
     if (own && listing.status === 'active') {
@@ -595,8 +599,8 @@ export function createCloudProgressionController(options: Options) {
       buy.type = 'button';
       buy.className = 'market-claim-button';
       buy.dataset.listingBuy = listing.id;
-      buy.textContent = `购买 · ${listing.price} 币`;
-      buy.disabled = !online || progress.currency < listing.price || pendingMarketActions.has(`listing:${listing.id}`);
+      buy.textContent = `购买 · ${listing.price * listing.quantity} 币`;
+      buy.disabled = !online || progress.currency < listing.price * listing.quantity || pendingMarketActions.has(`listing:${listing.id}`);
       row.append(icon, copy, buy);
       return row;
     }
