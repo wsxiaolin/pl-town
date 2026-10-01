@@ -4,6 +4,9 @@ import { SESSION_TTL_DAYS } from './config.js';
 import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
 import { authenticateAccount, findPhysicsLabUser } from './physicsLab.js';
 import type { User } from './types.js';
+import { PASSWORD_MIN_LENGTH, NICKNAME_PATTERN, validateNickname, validatePassword } from './textLimits.js';
+
+export { NICKNAME_PATTERN, validateNickname };
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 /** Public SHA-256 token digest used to look up game-resident sessions over HTTP. */
@@ -50,13 +53,6 @@ export class PhysicsLabVerificationRequiredError extends Error {
 
 export type PhysicsLabCredentials = { login: string; password: string };
 
-export const NICKNAME_PATTERN = /^[\p{L}\p{N}]{2,40}$/u;
-export function validateNickname(nickname: string): string | null {
-  if (!nickname || nickname.length < 2) return '昵称至少需要两个字符';
-  if (!NICKNAME_PATTERN.test(nickname)) return '昵称只能包含字母和数字';
-  return null;
-}
-
 export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number }; pl?: PhysicsLabCredentials; plVerifyGuard?: () => void }): Promise<{ user: User; token: string; registered: boolean }> {
   if (input.token) {
     if (input.token.length > 128) throw new Error('会话无效');
@@ -69,8 +65,8 @@ export async function authenticate(input: { token?: string; nickname?: string; p
   const nicknameError = validateNickname(nickname);
   if (nicknameError) throw new Error(nicknameError);
   const password = input.password ?? '';
-  if (!password) throw new Error('请输入密码');
-  if (password.length > 128) throw new Error('密码过长');
+  const passwordError = validatePassword(password);
+  if (passwordError) throw new Error(passwordError);
 
   const existing = getUserByNickname(nickname);
   if (existing) {
@@ -81,7 +77,7 @@ export async function authenticate(input: { token?: string; nickname?: string; p
     updateUserToken(existing.id, hash(newToken), sessionExpiry());
     return { user: getUserByToken(hash(newToken))!, token: newToken, registered: false };
   }
-  if (password.length < 10) throw new Error('新密码至少需要 10 个字符');
+  if (password.length < PASSWORD_MIN_LENGTH) throw new Error('新密码至少需要 10 个字符');
 
   // Nickname ownership: a name that already belongs to a Physics Lab account
   // can only be signed by that account's owner. Fail closed on lookup errors.

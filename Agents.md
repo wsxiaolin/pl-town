@@ -112,14 +112,16 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`personalAreas`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 保存请求幂等记录，防止历史请求重放后重复扣款，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
 
+城市治理配置的内容（含经生成的 `buildingCatalog` 烤入的项目名称文案）随 `CITY_CONSTRUCTION_CONFIG.version` 一起序列化持久化——**任何内容变更都必须同步 bump 版本号**，否则线上恢复路径会在启动时以 `"City config changed without a version bump"` 拒绝启动（#181 酒馆改名曾触发线上 crash-loop）。`apps/server/tests/city-config-snapshot.mjs` 的 golden 快照在 review 阶段强制此规则。唯一例外：项目 `name`/`description` 这类纯展示文案的漂移会在恢复时自愈改写（保留筹资/建成进度），其余字段（含未来新增字段）仍要求新项目 ID。
+
 ## AI 自动化工作流
 
 仓库包含两个移植自 `NetLogo-Mobile/plweb2` 的 AI 自动化工作流，均使用 OpenCode CLI（`opencode-ai`）与 `skills` 工具（`npx skills update` 读取根目录 `skills-lock.json`）。两者在 CI 中独立运行，不依赖本地开发环境。
 
 - **Auto-Fix（`.github/workflows/autofix.yml`）**：当 Issue 被打上 `autofix` 标签时触发。AI 代理按本指南修改代码、运行校验（`npm run typecheck` / `build` / `test:domain` / `test:server`，必要时 `test:web`），生成根目录 `conclusion.md`，随后由工作流自动创建 `autofix/issue-<n>-<run_id>` 分支、提交并以 `Resolves #<n>` 打开 PR。代理本身不得执行 `git commit` / `git push` / 创建 PR，这些由工作流统一完成。
-- **AI PR Reviewer（`.github/workflows/auto-review.yml`）**：PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。
+- **AI PR Reviewer（`.github/workflows/auto-review.yml`）**：PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。BOT 自身失败时工作流仍标记通过，仅在 PR 评论中说明「自动审查失败」。审查报告含 blocker 时先发评论，再将 required check 标为失败。
 
-`skills-lock.json` 声明了 `plweb-skill`（Physics Lab 社区 API 文档，来自 `NetLogo-Mobile/plweb-skill`）和 `code-review-skill`（来自 `awesome-skills/code-review-skill`）两个只读技能，为上述代理提供上下文。AI PR Reviewer 按 `opencode/deepseek-v4-flash-free`、`opencode/big-pickle`、`opencode/hy3-free` 的顺序尝试模型，统一使用 `variant high`；如需更换模型，应同步修改对应工作流，并保持只读技能的来源不变。
+`skills-lock.json` 声明了 `plweb-skill`（Physics Lab 社区 API 文档，来自 `NetLogo-Mobile/plweb-skill`）和 `code-review-skill`（来自 `awesome-skills/code-review-skill`）两个只读技能，为上述代理提供上下文。AI PR Reviewer 按 `opencode/big-pickle`、`opencode/deepseek-v4-flash-free`、`opencode/hy3-free` 的顺序尝试模型，统一使用 `variant high`；如需更换模型，应同步修改对应工作流，并保持只读技能的来源不变。
 
 ## 不确定事项
 
