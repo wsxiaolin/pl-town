@@ -341,11 +341,16 @@ export function createWestBeach(options: BeachOptions): {
     return bird;
   });
   const seaGod = createSeaGod(options);
-  seaGod.position.set(-41.2, 0, 11.5);
+  // Perched just landward of the furthest lapping crest (waterlineMaxX ≈
+  // coastlineX + wobble + surfReach ≈ -40.5): at -41.2 the crest sliced a
+  // hard water line through the pedestal mid-height — the statue read as
+  // drowned. At -40.7 the peak only licks the base's seaward face, the
+  // "waves washing against its feet" read (A/B capture + VLM verified).
+  seaGod.position.set(-40.7, 0, 11.5);
   object.add(seaGod);
-  const rewardCard = addMesh(object, options, new THREE.BoxGeometry(0.44, 0.58, 0.045), { color: 0x445466, roughness: 0.45, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [-40.65, 1.05, 11.5]);
+  const rewardCard = addMesh(object, options, new THREE.BoxGeometry(0.44, 0.58, 0.045), { color: 0x445466, roughness: 0.45, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [-40.15, 1.05, 11.5]);
   rewardCard.visible = false;
-  const cardStripe = addMesh(object, options, new THREE.BoxGeometry(0.35, 0.07, 0.052), { color: 0xe0c06b, roughness: 0.48, metalness: 0.25 }, [-40.65, 1.18, 11.5]);
+  const cardStripe = addMesh(object, options, new THREE.BoxGeometry(0.35, 0.07, 0.052), { color: 0xe0c06b, roughness: 0.48, metalness: 0.25 }, [-40.15, 1.18, 11.5]);
   cardStripe.visible = false;
   options.scene.add(object);
 

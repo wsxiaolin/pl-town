@@ -39,5 +39,5 @@ test('ice king city hooks isolate HUD, zoom, weather and well vision', () => {
   assert.ok(calls.includes('weather:rain'));
   assert.equal(zoom, 5.5);
   assert.ok(calls.includes('vision:focus'));
-  assert.ok(calls.includes('focus:-41.2,11.5'));
+  assert.ok(calls.includes('focus:-40.7,11.5'));
 });

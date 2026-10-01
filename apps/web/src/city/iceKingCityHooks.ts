@@ -61,7 +61,9 @@ export function createIceKingCityHooks(options: {
     },
     focusBeachEncounter() {
       options.setZoom(options.beachZoom);
-      options.focusCamera(-41.2, 11.5);
+      // Tracks the sea god's pedestal (westBeach.ts): 0.5 landward of the
+      // old spot so the furthest crest no longer slices through the base.
+      options.focusCamera(-40.7, 11.5);
     },
   };
 }
