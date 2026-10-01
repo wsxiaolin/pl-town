@@ -73,12 +73,11 @@ const SURF_FRAG = /* glsl */ `
     // foam — a white foam line read as a glaring, unnatural rim rather than
     // water, so the strip just carries the lapping edge in water colour.
     vec3 shallow = mix(shallowNight, shallowDay, daylight);
-    // Translucency: mostly see-through over the sea sheet, then feathered to
-    // zero so the waterline dissolves into wet sand instead of ending on a
-    // hard rim.
-    float alpha = mix(0.38, 0.6, smoothstep(0.0, 0.7, vFront));
-    alpha *= smoothstep(0.0, 0.25, vFront);
-    alpha = mix(alpha, 0.0, smoothstep(0.75, 1.0, vFront));
+    // Translucency: the strip fades in gently from the sea sheet so its
+    // seaward edge never shows as a line, then feathers to zero on the sand.
+    float alpha = mix(0.24, 0.42, smoothstep(0.0, 0.7, vFront));
+    alpha *= smoothstep(0.0, 0.5, vFront);
+    alpha = mix(alpha, 0.0, smoothstep(0.72, 1.0, vFront));
     gl_FragColor = vec4(shallow, alpha);
     // Same output chain as the sea sheet's Water shader, so the strip and
     // the water it sits on agree under every tone-mapping exposure.
@@ -117,7 +116,7 @@ function createShoreSurf(
       reach: { value: SURF_REACH },
       lift: { value: SURF_LIFT },
       limitX: { value: westBeachWaterlineMaxX(SURF_REACH) },
-      shallowDay: { value: new THREE.Color(0x2f93a8) },
+      shallowDay: { value: new THREE.Color(0x2c8699) },
       shallowNight: { value: new THREE.Color(0x0e2b36) },
     },
   });
@@ -278,10 +277,10 @@ export function createWestBeach(options: BeachOptions): {
         distortionScale: 3.7,
         timeScale: SEA_TIME_SCALE,
         // The sea sheet only takes the near-shore tint: the open water stays
-        // deep and opaque, and the band is a few world units wide (not
-        // a fraction of the 96-unit ribbon) so the far horizon stays solid.
+        // deep and opaque, and the tint fades over tens of world units so the
+        // deep→shallow change is a smooth gradient rather than a band edge.
         // The lapping waterline lives on the surf strip below.
-        shoreBlend: { ribbonDepth: 96, width: 12 },
+        shoreBlend: { ribbonDepth: 96, width: 34 },
       })
     : null;
   const water = waterSurface

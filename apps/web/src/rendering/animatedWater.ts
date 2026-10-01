@@ -31,16 +31,16 @@ export type AnimatedWaterConfig = {
   textureWidth?: number;
   textureHeight?: number;
   /** Optional near-shore color blend for the sea surface. The open sea stays
-   *  deep and opaque; within a few world units of the waterline the color
-   *  eases toward a lighter aqua so the shallows read as lit-through water.
-   *  Displacement and transparency live on the caller's dedicated surf strip
-   *  (see westBeach.ts), not here: this mesh is large, coarse (1.5 units per
-   *  column) and double-rendered by the mirror pass, so it must stay a single
-   *  opaque, unmoved sheet. */
+   *  deep and opaque; from tens of world units offshore the color eases toward
+   *  a lighter aqua so the shallows read as lit-through water, with no visible
+   *  band edge. Displacement and transparency live on the caller's dedicated
+   *  surf strip (see westBeach.ts), not here: this mesh is large, coarse
+   *  (1.5 units per column) and double-rendered by the mirror pass, so it must
+   *  stay a single opaque, unmoved sheet. */
   shoreBlend?: {
     /** Ribbon span in world units covered by uv.x 0 → 1. */
     ribbonDepth: number;
-    /** Distance from the waterline (world units) where the blend starts. */
+    /** Distance from the waterline (world units) over which the blend fades. */
     width: number;
   };
   side?: THREE.Side;
@@ -237,12 +237,12 @@ export function createAnimatedWaterSurface(
           fragmentAnchor,
           /* glsl */ `
           {
-            // Shallow-water tint: ease toward a lighter aqua near the
-            // waterline, kept subtle so it reads as water rather than a
-            // glaring white band. Stays opaque — the sea floor and any
-            // offshore models (ships!) must not bleed through the deep sheet.
+            // Shallow-water tint: a long, gradual fade from the open sea to
+            // the waterline so the deep→shallow change never reads as a band
+            // or a hard line. Stays opaque — the sea floor and any offshore
+            // models (ships!) must not bleed through the deep sheet.
             vec3 shallowTint = mix(waterColor, shoreTint, 0.55);
-            outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(1.5, ${width}, vShoreDist)) * 0.4);
+            outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(0.0, ${width}, vShoreDist)) * 0.4);
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );
