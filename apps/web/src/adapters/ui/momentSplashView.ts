@@ -142,6 +142,11 @@ export function stopMomentPresentation(): void {
   // revealListeners here instead of dropping them.
   presentationStopped = true;
   freezeMomentPresentation();
+  // The sr-only skip button is a sibling of #bootScreen, so hiding the screen
+  // does not remove it from the tab order. Disable it so keyboard users don't
+  // land on an invisible control for the rest of the session.
+  const skipButton = document.getElementById('bootSkipButton') as HTMLButtonElement | null;
+  if (skipButton) { skipButton.disabled = true; skipButton.hidden = true; }
   // Defensive reset so a same-document re-boot cannot inherit stale gate
   // flags. revealBound intentionally stays: the pointer listener must not
   // stack across re-binds.
