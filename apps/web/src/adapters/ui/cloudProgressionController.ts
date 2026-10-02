@@ -676,7 +676,7 @@ export function createCloudProgressionController(options: Options) {
       const key = `listing:${listingBuy}`;
       const listing = listings.active.find((entry) => entry.id === listingBuy);
       if (!listing || pendingMarketActions.has(key) || !online) return;
-      if (progress.currency < listing.price) { options.showToast('余额不足，买不下这份挂单'); return; }
+      if (progress.currency < listing.price * listing.quantity) { options.showToast('余额不足，买不下这份挂单'); return; }
       pendingMarketActions.add(key);
       renderExchange();
       if (!options.send({ type: 'market.listing.buy', listingId: listingBuy })) { pendingMarketActions.delete(key); renderExchange(); }

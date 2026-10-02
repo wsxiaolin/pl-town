@@ -916,6 +916,13 @@ try {
   const nonTradeable = await sinceMessage(trader, 'error', (item) => item.message === 'This item cannot be listed', nonTradeableSince);
   if (!nonTradeable) throw new Error('Non-tradeable items must be refused by the listing API');
 
+  // Object.prototype keys must not be mistaken for shop products via the `in`
+  // operator (the tradeable check must be own-property only).
+  const protoSince = trader.messages.length;
+  send(trader, { type: 'market.listing.create', itemId: 'toString', quantity: 1, price: 10 });
+  const protoListed = await sinceMessage(trader, 'error', (item) => item.message === 'This item cannot be listed', protoSince);
+  if (!protoListed) throw new Error('Inherited Object.prototype keys must not be tradeable');
+
   const selfBuySince = trader.messages.length;
   send(trader, { type: 'market.listing.buy', listingId });
   const selfBuy = await sinceMessage(trader, 'error', (item) => item.message === 'You cannot buy your own listing', selfBuySince);

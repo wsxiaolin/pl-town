@@ -142,7 +142,9 @@ export const MAX_ACTIVE_MARKET_LISTINGS = 6;
 
 /** Tradeable goods = whatever the shop currently sells plus crafted outputs. */
 export function isMarketTradeableItemId(itemId: string): boolean {
-  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || itemId in SHOP_PRODUCTS;
+  // Object.hasOwn keeps inherited Object.prototype keys ('toString',
+  // 'constructor', 'valueOf') out of the tradeable set.
+  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || Object.hasOwn(SHOP_PRODUCTS, itemId);
 }
 
 export function getMarketTradeableItemIds(): string[] {
