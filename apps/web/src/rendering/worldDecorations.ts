@@ -117,6 +117,9 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addBench(-2.6, 0, -47.2, Math.PI / 2);
     addBench(2.6, 0, -62.6, -Math.PI / 2);
     addBench(-2.6, 0, -71.8, Math.PI / 2);
+    // 斜巷路口小广场的座椅（朝向广场中心）。
+    addBench(-10.2, 0, -63.1, Math.PI);
+    addBench(13.8, 0, -63.1, Math.PI);
   }
 
   // 北城门：跨中央大道的石柱横梁（比主城 addArch 更宽的城区门户）。
