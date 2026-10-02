@@ -102,6 +102,10 @@ function createMiniCityApi(options: DebugApiOptions) {
       },
     },
     get tutorial() { return options.getTutorial(); },
+    /** Snap the player (and the camera that follows them) to a world spot. */
+    teleport: (x: number, z: number) => options.teleport(x, z),
+    /** Teleport + optional orthographic zoom (bigger = wider view). */
+    focus: (x: number, z: number, zoom?: number) => options.focus(x, z, zoom),
   };
 }
 
@@ -138,6 +142,8 @@ export type DebugApiOptions = {
   setWeather: (weather: Weather) => void;
   getIceSanctum: () => IceSanctumController | null;
   getTutorial: () => OnboardingTutorialController;
+  teleport: (x: number, z: number) => boolean;
+  focus: (x: number, z: number, zoom?: number) => boolean;
 };
 
 export function installDebugApi(options: DebugApiOptions) {

@@ -44,6 +44,7 @@ import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
+import { isDevPortalRequested } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
@@ -444,6 +445,8 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
+    teleport: devTeleport,
+    focus: devFocus,
   });
   addCityLighting(scene, MOBILE, isNight);
   navigationTargetMarker = createNavigationTargetMarker(scene);
@@ -782,7 +785,9 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
   // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
   if (password === undefined && pl === undefined) runEntrance(entrance);
   else loginController?.holdCityEntrance(() => runEntrance(entrance));
-  multiplayerHousing.connect(nickname, password, pl);
+  // Dev portal stays offline: a credential-less connect would bounce off the
+  // auth gate and re-open the login overlay we just skipped.
+  if (!isDevPortalRequested()) multiplayerHousing.connect(nickname, password, pl);
   checkAchievements();
 }
 
@@ -826,14 +831,30 @@ function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: Abo
   return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);
 }
 
+/** Dev portal: snap the player to a world spot; the follow camera lands there
+ *  on the next frame. Path state is cleared so no stale walk resumes. */
+function devTeleport(x: number, z: number): boolean {
+  if (!cursorChar) return false;
+  view.clearPlayerPath();
+  cursorChar.position.set(x, 0, z);
+  view.setTarget(x, z, true);
+  return true;
+}
+/** Dev portal: teleport + optional orthographic zoom (bigger = wider view). */
+function devFocus(x: number, z: number, zoom?: number): boolean {
+  if (zoom !== undefined) view.applyZoom(zoom);
+  return devTeleport(x, z);
+}
+
 const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
   prepareFirstFrame,
-  startTutorial: () => onboardingTutorial?.start(),
+  startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
   proceedToCity,
   showLogin: () => loginController?.showLogin(),
+  shouldSkipLoginGate: isDevPortalRequested,
   disposeSession,
 });
 

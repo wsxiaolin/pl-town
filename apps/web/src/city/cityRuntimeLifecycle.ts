@@ -37,6 +37,8 @@ export function createCityRuntimeLifecycle(options: {
   startTutorial: () => void;
   proceedToCity: () => void;
   showLogin: () => void;
+  /** Dev visual-verification portal (?dev): enter without the login gate. */
+  shouldSkipLoginGate?: () => boolean;
   disposeSession: () => void;
 }) {
   let started = false;
@@ -49,7 +51,7 @@ export function createCityRuntimeLifecycle(options: {
     window.addEventListener('minicity:login-required', options.showLogin, { signal: eventController.signal });
     initCG({
       onFinish: () => {
-        if (localStorage.getItem('minicityUser')) options.proceedToCity();
+        if (options.shouldSkipLoginGate?.() || localStorage.getItem('minicityUser')) options.proceedToCity();
         else options.showLogin();
       },
       reduced: options.reduced,
