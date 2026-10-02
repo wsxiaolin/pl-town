@@ -11,6 +11,11 @@ let operationNotice = '';
 let rendering = false;
 const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
+// The single construction list keeps its scroll position across rerenders. The
+// short loading/unavailable fallback is not a real list, so its clamped zero is
+// never captured; only the last list-backed scroll is restored.
+let bodyScrollTop = 0;
+let bodyHasList = false;
 let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
 let votesUnavailableSession: number | null = null;
@@ -22,9 +27,8 @@ let votesEpoch: string | null = null;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
-// Only the donation input is restored from the previous DOM value. Block cards
-// have no free inputs: one card is one immutable purchase, and rerenders keep
-// their pending state from the retained receipt keys instead of DOM values.
+// Only the donation input is restored from the previous DOM value; every other
+// control is a button that rerenders from the trusted state.
 const INPUT_SELECTOR = '[data-city-input]';
 const FOCUS_SELECTOR = '[data-city-focus],[aria-label]';
 const CARD_SELECTOR = '[data-city-project]';
@@ -109,8 +113,10 @@ function renderContents(preferredFocusKey?: string): void {
   status.textContent = state ? `云端进度 #${state.revision}` : loading ? '正在加载建设进度…' : '城市建设数据暂时不可用';
   updateFeedback();
   const body = root.querySelector<HTMLElement>('.city-governance-body')!;
+  if (bodyHasList) bodyScrollTop = body.scrollTop;
   body.replaceChildren();
   if (!config || !state) {
+    bodyHasList = false;
     if (loading) {
       body.append(document.createTextNode('正在加载建设进度，请稍候…'));
     } else {
@@ -133,6 +139,8 @@ function renderContents(preferredFocusKey?: string): void {
   list.className = 'city-governance-list';
   renderCollective(list, config.projects, state);
   body.append(list);
+  bodyHasList = true;
+  body.scrollTop = bodyScrollTop;
   for (const input of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)) {
     const previous = values.get(input.dataset.cityInput ?? input.getAttribute('aria-label'));
     if (previous !== undefined) input.value = previous;
@@ -491,6 +499,8 @@ export function disposeCityGovernancePanel(): void {
   root = null;
   unavailableFocus = null;
   activeBuilding = '';
+  bodyScrollTop = 0;
+  bodyHasList = false;
   errorActionKey = '';
   operationError = '';
   operationNotice = '';

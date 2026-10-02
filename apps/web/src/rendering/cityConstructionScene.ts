@@ -102,14 +102,20 @@ export function createCityConstructionScene(options: {
         lamps.push(visual);
       }
     }
-    // Keep the shader light count constant across dusk/day transitions. Allocate
-    // the pool only once a lamp exists, then retarget it near the resident.
-    if (lamps.length && !lights.length) {
+    // The default layout ships 11 lamps, so allocating the pool on first sight
+    // would tax every lit material day and night. Allocate it only at night,
+    // and release it at dawn so the shader light count stays zero while the
+    // construction lamps (and their glow) are unlit. The count is constant
+    // within each phase, so dusk/day transitions never recompile mid-frame.
+    if (night && lamps.length && !lights.length) {
       for (let index = 0; index < MAX_CONSTRUCTION_POINT_LIGHTS; index++) {
         const light = new THREE.PointLight(0xffd9a1, 0, 4, 2);
         lights.push(light);
         root.add(light);
       }
+    } else if (!night && lights.length) {
+      for (const light of lights) { light.dispose(); light.removeFromParent(); }
+      lights.length = 0;
     }
     lamps.sort((a, b) => a.root.position.distanceToSquared(lightingPosition) - b.root.position.distanceToSquared(lightingPosition));
     lights.forEach((light, index) => {

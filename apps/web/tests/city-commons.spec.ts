@@ -193,7 +193,7 @@ test('reopening skips a redundant votes read while votes stay confirmed and repe
   expect(api.requests).toHaveLength(1);
 });
 
-test('close and unavailable snapshots preserve the last real tab scroll', async ({ page }) => {
+test('close and unavailable snapshots preserve the last real scroll position', async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await fixture(page, false, 24);
   const panel = page.getByRole('dialog', { name: '众议院', exact: true });

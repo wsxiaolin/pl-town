@@ -13,7 +13,6 @@ export type CityPersonalBlock = {
 export type CityConfig = {
   schemaVersion: number; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
-  personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
   personalBlocks?: CityPersonalBlock[];
   decorations: CityDecoration[]; initialBuiltBuildingIds: string[];
 };
