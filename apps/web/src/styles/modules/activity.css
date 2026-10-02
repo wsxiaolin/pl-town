@@ -120,11 +120,10 @@
 
 .activity-panel-hero-copy {
   position: absolute;
-  top: 50%;
+  top: clamp(44px, 9vh, 92px);
   left: clamp(32px, 8vw, 116px);
   width: min(570px, calc(100% - 64px));
   color: white;
-  transform: translateY(-56%);
 }
 
 .activity-panel-badge {
@@ -285,10 +284,9 @@
   }
 
   .activity-panel-hero-copy {
-    top: 40%;
+    top: 32px;
     left: 24px;
     width: calc(100% - 48px);
-    transform: translateY(-50%);
   }
 
   .activity-panel-title {
