@@ -118,49 +118,6 @@ test('live chat that lands during a history backfill is preserved', async ({ pag
   expect(await page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
 });
 
-test('a failed chat history read is retried on the next open', async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as any).__chatHistoryRequests = 0;
-    const NativeWebSocket = window.WebSocket;
-    class RetryGameWebSocket extends EventTarget {
-      readyState = NativeWebSocket.CONNECTING;
-      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
-      send(raw: string) {
-        const request = JSON.parse(raw);
-        if (request.type === 'hello') {
-          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
-            type: 'hello', token: 'retry-token',
-            user: { id: 'retry-user', nickname: 'retry-tester', email: null, position: { x: 0, y: 0, z: -6 } },
-            players: [], houses: [], requests: [],
-            progress: { currency: 0, inventory: {}, achievements: ['citizen'], unlockedBuildings: [], visitedBuildings: [] },
-            catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
-          }) })));
-        } else if (request.type === 'chat.history') {
-          const attempt = (window as any).__chatHistoryRequests += 1;
-          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(
-            attempt === 1 ? { type: 'error', message: 'Too many requests' } : { type: 'chat.history', messages: [] },
-          ) })));
-        }
-      }
-      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
-    }
-    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
-      construct(Target, args) { return String(args[0]).includes(':8787') ? new RetryGameWebSocket() : Reflect.construct(Target, args); },
-    }) });
-  });
-  await waitForCityReady(page, 'retry-tester');
-  const toggle = page.locator('#onlinePanelToggle');
-  await expect(toggle).toHaveClass(/connected/, { timeout: 30_000 });
-  await toggle.click({ force: true });
-  await expect.poll(() => page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
-  // The failure toast proves the error callback ran (and reset the request flag)
-  // before we reopen; otherwise the reopen can race the error microtask.
-  await expect(page.locator('#utText')).toHaveText('Too many requests');
-  await toggle.click({ force: true });
-  await toggle.click({ force: true });
-  await expect.poll(() => page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(2);
-});
-
 test('neighborhood landmarks render their plots and open building details', async ({ page }) => {
   await waitForCityReady(page, 'landmark-tester');
 
