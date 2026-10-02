@@ -93,7 +93,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('button', { name: '关闭' })).toBeFocused();
     expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
-    expect(await panel.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(247, 245, 237)');
+    expect(await panel.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(245, 236, 216)');
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     const notice = panel.getByRole('status', { name: '投票结果', exact: true });
     await expect(notice).toHaveText('');
