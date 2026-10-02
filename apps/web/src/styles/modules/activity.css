@@ -1,272 +1,341 @@
-/* ===== ACTIVITY PANEL ===== */
-
-/* Top-right entry button: reuse the chrome pill, add a small live dot. */
 .activity-panel-toggle {
   position: relative;
   padding-left: 22px;
 }
+
 .activity-panel-toggle::before {
-  content: '';
   position: absolute;
-  left: 10px;
   top: 50%;
+  left: 10px;
   width: 6px;
   height: 6px;
-  margin-top: -3px;
   border-radius: 50%;
-  background: #ff7a59;
-  box-shadow: 0 0 0 3px rgba(255, 122, 89, 0.18);
+  background: #ff765e;
+  box-shadow: 0 0 0 3px rgba(255, 118, 94, 0.2);
+  content: '';
+  transform: translateY(-50%);
 }
 
 .activity-panel-overlay {
   position: fixed;
-  inset: 0;
   z-index: 240;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(120% 120% at 20% 0%, rgba(28, 42, 78, 0.72), rgba(6, 10, 20, 0.88));
-  backdrop-filter: blur(4px);
+  background: rgba(8, 12, 18, 0.78);
+  backdrop-filter: blur(12px);
+  inset: 0;
   opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.26s ease, visibility 0.26s;
+  transition: opacity 240ms ease, visibility 240ms ease;
+  visibility: hidden;
 }
+
 .activity-panel-overlay.open {
   opacity: 1;
-  visibility: visible;
   pointer-events: auto;
+  visibility: visible;
 }
 
 .activity-panel-shell {
   position: relative;
-  width: min(1180px, calc(100vw - 48px));
-  height: min(680px, calc(100dvh - 48px));
   display: flex;
-  flex-direction: column;
+  width: min(1240px, calc(100vw - 48px));
+  height: min(760px, calc(100dvh - 48px));
+  min-height: 440px;
   overflow: hidden;
-  border: 1px solid rgba(140, 174, 255, 0.16);
-  border-radius: 18px;
-  background: #0c1322;
-  box-shadow: 0 40px 110px rgba(4, 8, 18, 0.62);
-  transform: translateY(12px) scale(0.985);
-  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  background: #17211f;
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.55);
+  transform: translateY(16px) scale(0.99);
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
 .activity-panel-overlay.open .activity-panel-shell {
   transform: none;
 }
 
-.activity-panel-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 5;
-  flex: none;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(170, 195, 255, 0.28);
-  border-radius: 8px;
-  background: rgba(10, 16, 32, 0.58);
-  backdrop-filter: blur(6px);
-  color: #c9d8f8;
-  font-size: 18px;
-  cursor: pointer;
-  transition: background 0.18s, color 0.18s, border-color 0.18s;
-}
-.activity-panel-close:hover {
-  background: rgba(91, 140, 255, 0.22);
-  border-color: rgba(140, 174, 255, 0.5);
-  color: #fff;
-}
-
-.activity-panel-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-
-/* Left: activity list */
-.activity-panel-list {
-  flex: none;
-  width: 292px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  overflow-y: auto;
-  border-right: 1px solid rgba(140, 174, 255, 0.12);
-  background: #0a1020;
-}
-.activity-panel-item {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 8px 10px 8px 8px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #dbe6ff;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.18s, background 0.18s, transform 0.18s;
-}
-.activity-panel-item:hover {
-  background: rgba(91, 140, 255, 0.12);
-  transform: translateX(2px);
-}
-.activity-panel-item.active {
-  border-color: rgba(120, 165, 255, 0.75);
-  background: rgba(91, 140, 255, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(120, 165, 255, 0.25);
-}
-.activity-panel-thumb {
-  width: 72px;
-  height: 48px;
-  flex: none;
-  border: 1px solid rgba(160, 190, 255, 0.18);
-  border-radius: 8px;
-  background-position: center;
-  background-size: cover;
-}
-.activity-panel-item-copy {
-  min-width: 0;
-}
-.activity-panel-item-copy strong {
-  display: block;
-  overflow: hidden;
-  color: #eef4ff;
-  font-size: 14px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.activity-panel-item-copy small {
-  display: block;
-  margin-top: 3px;
-  color: #8ea3ca;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-}
-.activity-panel-item-badge {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #ff9a3d, #ff5f7e);
-  color: #fff;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-/* Right: hero preview */
+.activity-panel-body,
 .activity-panel-hero {
   position: relative;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  background: #0a0f1c;
 }
+
+.activity-panel-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-panel-hero {
+  min-height: 0;
+  overflow: hidden;
+  background: #35514b;
+}
+
 .activity-panel-hero-bg {
   position: absolute;
-  inset: -2%;
   background-position: center;
   background-size: cover;
+  inset: 0;
+  transform: scale(1.025);
+  transition: background-image 240ms ease, transform 7s ease;
 }
+
+.activity-panel-overlay.open .activity-panel-hero-bg {
+  transform: scale(1);
+}
+
 .activity-panel-hero-scrim {
   position: absolute;
-  inset: 0;
   background:
-    linear-gradient(90deg, rgba(8, 12, 24, 0.8) 0%, rgba(8, 12, 24, 0.12) 42%, rgba(8, 12, 24, 0) 60%),
-    linear-gradient(0deg, rgba(8, 12, 24, 0.72) 0%, rgba(8, 12, 24, 0) 46%);
+    linear-gradient(90deg, rgba(13, 22, 20, 0.72), rgba(13, 22, 20, 0.18) 70%),
+    linear-gradient(0deg, rgba(8, 15, 14, 0.82), transparent 60%),
+    linear-gradient(180deg, rgba(8, 15, 14, 0.48), transparent 26%);
+  inset: 0;
 }
+
+.activity-panel-close {
+  position: absolute;
+  z-index: 3;
+  top: 20px;
+  right: 22px;
+  display: grid;
+  width: 40px;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 50%;
+  background: rgba(12, 20, 18, 0.2);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.activity-panel-close:hover {
+  background: rgba(12, 20, 18, 0.65);
+  transform: rotate(90deg);
+}
+
 .activity-panel-hero-copy {
   position: absolute;
-  top: 56px;
-  left: 46px;
-  right: auto;
-  width: min(460px, 52%);
-  text-align: left;
+  top: 50%;
+  left: clamp(32px, 8vw, 116px);
+  width: min(570px, calc(100% - 64px));
+  color: white;
+  transform: translateY(-56%);
 }
+
 .activity-panel-badge {
-  display: inline-block;
-  padding: 3px 11px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #ff9a3d, #ff5f7e);
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 2px;
   color: #fff;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.activity-panel-badge[hidden] {
-  display: none;
-}
-.activity-panel-kicker {
-  display: block;
-  margin-top: 16px;
-  color: #7fb0ff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-}
-.activity-panel-title {
-  margin-top: 10px;
-  color: #ffffff;
-  font-size: clamp(24px, 2.9vw, 40px);
-  font-weight: 800;
-  line-height: 1.22;
-  letter-spacing: 0.02em;
-  text-shadow: 0 6px 26px rgba(0, 0, 0, 0.45);
-}
-.activity-panel-subtitle {
-  margin-top: 12px;
-  color: #bcd0f5;
-  font-size: 14px;
-  letter-spacing: 0.04em;
-}
-.activity-panel-description {
-  margin-top: 16px;
-  color: #dbe6ff;
-  font-size: 14px;
-  line-height: 1.85;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+  letter-spacing: 0.12em;
 }
 
-@media (max-width: 960px) {
-  .activity-panel-list {
-    width: 200px;
-    padding: 12px 10px;
+.activity-panel-badge[hidden],
+.activity-panel-subtitle[hidden] {
+  display: none;
+}
+
+.activity-panel-kicker {
+  display: block;
+  margin-top: 20px;
+  color: #d8e5d1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.activity-panel-title {
+  max-width: 12em;
+  margin-top: 14px;
+  color: #fff;
+  font-size: clamp(34px, 5vw, 66px);
+  font-weight: 750;
+  line-height: 1.14;
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.24);
+  text-wrap: balance;
+}
+
+.activity-panel-subtitle {
+  margin-top: 14px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+}
+
+.activity-panel-description {
+  max-width: 460px;
+  margin-top: 18px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 15px;
+  line-height: 1.85;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+
+.activity-panel-list {
+  position: absolute;
+  z-index: 2;
+  right: 30px;
+  bottom: 26px;
+  left: 30px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.activity-panel-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 3px;
+  background: rgba(12, 20, 18, 0.48);
+  color: white;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.activity-panel-item:hover {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: rgba(12, 20, 18, 0.7);
+  transform: translateY(-3px);
+}
+
+.activity-panel-item.active {
+  border-color: #fff;
+  background: rgba(248, 249, 239, 0.94);
+  color: #202b25;
+}
+
+.activity-panel-thumb {
+  width: 82px;
+  aspect-ratio: 1.45;
+  border-radius: 2px;
+  background-color: #526b60;
+  background-position: center;
+  background-size: cover;
+}
+
+.activity-panel-item-copy {
+  min-width: 0;
+}
+
+.activity-panel-item-copy strong,
+.activity-panel-item-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-panel-item-copy strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.activity-panel-item-copy small {
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.activity-panel-item.active .activity-panel-item-copy small {
+  color: #65746b;
+}
+
+.activity-panel-item-badge {
+  align-self: start;
+  padding: 2px 5px;
+  background: #e76f51;
+  color: white;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .activity-panel-overlay {
+    padding: 10px;
   }
-  .activity-panel-item {
-    gap: 9px;
-    padding: 7px 7px 7px 6px;
+
+  .activity-panel-shell {
+    width: calc(100vw - 20px);
+    height: min(760px, calc(100dvh - 20px));
+    min-height: 500px;
   }
-  .activity-panel-thumb {
-    width: 56px;
-    height: 40px;
-  }
-  .activity-panel-item-copy strong { font-size: 13px; }
-  .activity-panel-item-copy small { font-size: 10px; }
-  .activity-panel-item-badge {
-    padding: 2px 6px;
-    font-size: 9px;
-  }
+
   .activity-panel-hero-copy {
-    top: 18px;
-    right: auto;
-    left: 22px;
-    width: calc(100% - 44px);
+    top: 40%;
+    left: 24px;
+    width: calc(100% - 48px);
+    transform: translateY(-50%);
   }
-  .activity-panel-kicker { margin-top: 12px; }
+
   .activity-panel-title {
-    margin-top: 7px;
-    font-size: clamp(28px, 4vw, 38px);
+    max-width: 10em;
+    font-size: clamp(32px, 9vw, 48px);
   }
-  .activity-panel-subtitle { margin-top: 8px; }
+
   .activity-panel-description {
-    max-width: 620px;
-    margin-top: 10px;
-    line-height: 1.65;
+    max-width: 34em;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .activity-panel-close {
+    top: 14px;
+    right: 14px;
+  }
+
+  .activity-panel-list {
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  .activity-panel-item {
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px;
+  }
+
+  .activity-panel-thumb {
+    width: 54px;
+    aspect-ratio: 1;
+  }
+
+  .activity-panel-item-badge {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-panel-overlay,
+  .activity-panel-shell,
+  .activity-panel-hero-bg,
+  .activity-panel-item,
+  .activity-panel-close {
+    transition-duration: 0.01ms;
   }
 }
