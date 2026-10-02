@@ -1,0 +1,30 @@
+import { expect, test } from '@playwright/test';
+import { waitForCityReady } from './helpers';
+
+for (const viewport of [
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'short-mobile', width: 844, height: 390 },
+]) {
+  test(`activity panel works at ${viewport.name} size`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await waitForCityReady(page, `activity-${viewport.name}`);
+
+    await page.locator('#activityPanelToggle').click({ force: true });
+    const overlay = page.locator('#activityPanelOverlay');
+    const shell = page.locator('.activity-panel-shell');
+    await expect(overlay).toHaveClass(/open/);
+    await expect(page.locator('#activityPanelTitle')).toHaveText('巡星归程');
+    await expect(page.locator('#activityPanelBadge')).toHaveText('新');
+
+    const shellBox = await shell.boundingBox();
+    expect(shellBox).not.toBeNull();
+    expect(shellBox!.top).toBeGreaterThanOrEqual(0);
+    expect(shellBox!.bottom).toBeLessThanOrEqual(viewport.height);
+
+    await page.locator('[data-activity-id="meteor-market"]').click();
+    await expect(page.locator('#activityPanelTitle')).toHaveText('流星夜市，三日不打烊');
+
+    await page.keyboard.press('Escape');
+    await expect(overlay).not.toHaveClass(/open/);
+  });
+}

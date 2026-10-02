@@ -42,7 +42,6 @@
   display: flex;
   width: min(1240px, calc(100vw - 48px));
   height: min(760px, calc(100dvh - 48px));
-  min-height: 440px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 6px;
@@ -277,7 +276,12 @@
   .activity-panel-shell {
     width: calc(100vw - 20px);
     height: min(760px, calc(100dvh - 20px));
-    min-height: 500px;
+  }
+
+  @media (max-height: 560px) {
+    .activity-panel-shell {
+      height: calc(100dvh - 20px);
+    }
   }
 
   .activity-panel-hero-copy {
