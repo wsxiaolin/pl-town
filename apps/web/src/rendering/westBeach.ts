@@ -17,6 +17,13 @@ const SEA_TIME_SCALE = 0.55;
 const SURF_REACH = WEST_BEACH.surfReach;
 // Crest lift at the waterline, in world y units.
 const SURF_LIFT = 0.26;
+// Shared height of the flat sea sheet, and how far the surf strip's root sits
+// above it so the opaque sea covers the join. Both the mesh position and the
+// vertex shader read these, so a change can't silently make the two coplanar
+// and reintroduce z-fighting (Agents.md asks for a ≥0.004 y separation).
+const SEA_SURFACE_Y = 0.06;
+const SURF_ROOT_LIFT = 0.005;
+const SURF_SURFACE_Y = SEA_SURFACE_Y + SURF_ROOT_LIFT;
 // Surf strip extents, in world units from the coastline: how far it reaches
 // under the sea sheet (the root fade covers the strip/sea join; the sea's
 // own shoreBlend band in animatedWater.ts is wider than this, so the join
@@ -56,8 +63,11 @@ const SURF_VERT = /* glsl */ `
     float over = max(p.x - (limitX - band), 0.0);
     p.x = min(p.x, limitX - band) + band * over / (over + band);
     // Sits 0.005 above the sea sheet so the underwater root covers the join;
-    // the crest climbs the sand from there.
-    p.y = 0.065 + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3);
+    // the crest climbs the sand from there. Damp the lift to zero across the
+    // feathered landward edge (where alpha also fades) so the thin edge stays
+    // glued to the sand instead of hovering above it as a 40%-opacity lip.
+    float edge = 1.0 - smoothstep(0.72, 1.0, uv.x);
+    p.y = ${SURF_SURFACE_Y} + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3) * edge;
     vFront = uv.x;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }
@@ -285,8 +295,8 @@ export function createWestBeach(options: BeachOptions): {
     : null;
   const water = waterSurface
     ? waterSurface.water
-    : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, 0.06, 0]);
-  water.position.set(0, 0.06, 0);
+    : addMesh(object, options, waterGeometry, options.materialFor({ color: 0x438fb8, roughness: 0.28, metalness: 0.08, tex: 'water', rx: 20, ry: 30 }), [0, SEA_SURFACE_Y, 0]);
+  water.position.set(0, SEA_SURFACE_Y, 0);
   if (!options.waterRendering) {
     water.castShadow = false;
     water.renderOrder = 3;
