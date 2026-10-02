@@ -19,7 +19,6 @@ export type LoginControllerOptions = {
   getStats: () => LegacyStats;
   saveStats: (stats: LegacyStats) => void;
   ensureUserId: () => void;
-  checkAchievements: () => void;
   shouldShowIntro: () => boolean;
   startIntro: () => void;
   beforeShow?: () => void;
@@ -190,7 +189,6 @@ export function createLoginController(options: LoginControllerOptions) {
     }
     options.ensureUserId();
     applyUsername(name);
-    options.checkAchievements();
     // Keep the overlay up and hold the button in a waiting state until the
     // server confirms the resident; the city opens on the `hello` success
     // callback (closeAfterAuth), so verification always completes first.

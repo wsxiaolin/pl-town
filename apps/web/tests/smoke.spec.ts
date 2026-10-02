@@ -623,10 +623,10 @@ test('a world.catalog override unlocks a story-locked building for an online res
 });
 
 test('map search fuzzily finds a building and keeps the existing teleport flow', async ({ page }) => {
+  // Teleport unlocks from cloud progress (5 visited buildings), so the stub must
+  // report enough visited buildings instead of seeding a legacy achievement.
+  stubCityWebSocket(page, { user: 'map-search-tester', unlockedBuildings: ['newsstand', 'mall', 'plaza'] });
   await seedCityStorage(page, 'map-search-tester');
-  await page.addInitScript(() => {
-    localStorage.setItem('minicityStats', JSON.stringify({ achievements: ['walker_100'] }));
-  });
   await waitForCityBooted(page);
   const before = await page.evaluate(() => {
     const position = (window as any)._mini.player.position;

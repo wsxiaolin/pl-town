@@ -102,3 +102,52 @@ test('a world.catalog push globally unlocks a building without touching saved pr
   assert.deepEqual(commands.at(-1), { type: 'progress.building.visit', buildingId: 'litreview' });
   assert.deepEqual(controller.getProgress().unlockedBuildings, []);
 });
+
+test('stat achievements unlock from cloud progress without re-sending completed ones', () => {
+  const values = new Map<string, string>([['minicityUser', 'achievement-tester']]);
+  const localStorage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  } as Storage;
+  const document = {
+    defaultView: { localStorage },
+    getElementById: () => null,
+    querySelector: () => null,
+  } as unknown as Document;
+  const commands: Array<{ type: string; achievementId?: string }> = [];
+  const controller = createCloudProgressionController({
+    document,
+    signal: new AbortController().signal,
+    showToast: () => undefined,
+    send: (command) => { commands.push(command); return true; },
+    openPhoneView: () => undefined,
+  });
+  const catalog = {
+    ...EMPTY_PROGRESSION_CATALOG,
+    achievementRewards: { citizen: 20, first_building: 20, explorer_5: 35, explorer_10: 60, unlock_3: 40 },
+  };
+  controller.setConnection(true);
+  controller.applySnapshot(EMPTY_PLAYER_PROGRESS, catalog);
+  assert.deepEqual(commands, [{ type: 'progress.achievement.unlock', achievementId: 'citizen' }]);
+
+  commands.length = 0;
+  controller.applySnapshot(
+    { ...EMPTY_PLAYER_PROGRESS, visitedBuildings: ['a', 'b', 'c', 'd', 'e'], unlockedBuildings: ['x', 'y', 'z'] },
+    catalog,
+  );
+  const ids = commands.filter((command) => command.type === 'progress.achievement.unlock').map((command) => command.achievementId);
+  assert.deepEqual(new Set(ids), new Set(['first_building', 'explorer_5', 'unlock_3']));
+
+  commands.length = 0;
+  controller.applySnapshot(
+    {
+      ...EMPTY_PLAYER_PROGRESS,
+      visitedBuildings: ['a', 'b', 'c', 'd', 'e'],
+      unlockedBuildings: ['x', 'y', 'z'],
+      achievements: ['citizen', 'first_building', 'explorer_5', 'unlock_3'],
+    },
+    catalog,
+  );
+  assert.deepEqual(commands.filter((command) => command.type === 'progress.achievement.unlock'), []);
+});
