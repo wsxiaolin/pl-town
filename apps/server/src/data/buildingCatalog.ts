@@ -452,6 +452,102 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     x: 21,
     z: 15,
     storyLocked: false
+  },
+  {
+    id: "north_chat_plaza",
+    label: "聊天广场",
+    num: "53",
+    x: -15,
+    z: -49.5,
+    storyLocked: false
+  },
+  {
+    id: "north_pigeon_square",
+    label: "鸽子广场",
+    num: "54",
+    x: -26,
+    z: -49.5,
+    storyLocked: false
+  },
+  {
+    id: "north_stellar_hall",
+    label: "恒星会堂",
+    num: "55",
+    x: 5.5,
+    z: -49.5,
+    storyLocked: false
+  },
+  {
+    id: "north_singularity",
+    label: "奇点塔",
+    num: "56",
+    x: -5.5,
+    z: -49.5,
+    storyLocked: false
+  },
+  {
+    id: "north_binary_garden",
+    label: "双星花园",
+    num: "57",
+    x: 15,
+    z: -49.5,
+    storyLocked: false
+  },
+  {
+    id: "north_maya_grove",
+    label: "玛雅台地",
+    num: "58",
+    x: 25,
+    z: -49.5,
+    storyLocked: false
+  },
+  {
+    id: "north_api_memorial",
+    label: "安全碑",
+    num: "59",
+    x: -26,
+    z: -59.5,
+    storyLocked: false
+  },
+  {
+    id: "north_worry_store",
+    label: "解忧杂货店",
+    num: "60",
+    x: -14,
+    z: -59.5,
+    storyLocked: false
+  },
+  {
+    id: "north_bistro",
+    label: "会员制餐厅",
+    num: "61",
+    x: -6,
+    z: -59.5,
+    storyLocked: false
+  },
+  {
+    id: "north_night_kiosk",
+    label: "不打烊贩卖店",
+    num: "62",
+    x: 4,
+    z: -59.5,
+    storyLocked: false
+  },
+  {
+    id: "north_jukebox",
+    label: "点唱机",
+    num: "63",
+    x: 11,
+    z: -59.5,
+    storyLocked: false
+  },
+  {
+    id: "north_backrooms_door",
+    label: "后室之门",
+    num: "64",
+    x: 18,
+    z: -59.5,
+    storyLocked: false
   }
 ]
 );

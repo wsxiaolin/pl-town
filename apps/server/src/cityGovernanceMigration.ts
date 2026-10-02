@@ -22,6 +22,11 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
   'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall',
   'wushi_restaurant', 'tavern',
+  // 星语北城（2026-10-02）：保持待建的 legacy 政策决策——
+  // 新建筑不进入 LEGACY_INITIAL_BUILDINGS 赠礼，仅保留解锁语义。
+  'north_chat_plaza', 'north_pigeon_square', 'north_stellar_hall', 'north_singularity',
+  'north_binary_garden', 'north_maya_grove', 'north_api_memorial', 'north_worry_store',
+  'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
 ]);
 
 // Read-only reconciliation runs inside initializeCityGovernance's caller-owned

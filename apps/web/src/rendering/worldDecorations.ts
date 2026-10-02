@@ -4,7 +4,7 @@ import { InstancedBatch } from '../core/InstancedBatch';
 import { ResourcePool } from '../core/ResourcePool';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { createResidenceModel, residenceStyleSeedForLot } from './residenceStyles';
-import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH } from '../city/data/cityConfig';
+import { footprintOverlapsMainRoad, isFilmCityClearing, MAIN_ROAD_WIDTH, NORTH_DISTRICT_AREA } from '../city/data/cityConfig';
 import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch, type RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingEntity, ResidenceEntity } from '../city/buildingEntity';
@@ -54,6 +54,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   function addDecorations() {
     const existingSceneChildren = new Set(scene.children);
     addDistrictBuildings();
+    addNorthDistrictResidences();
     addSignpost(-4.0,0,-5.0);
     addSuburbHouse(12, 32, 90);
     addSuburbHouse(-12, -32, -90);
@@ -96,6 +97,14 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     }));
     lots.forEach(([x,z,t])=>addSmallBlock(x,0,z,t));
     decorationObstacleBounds=null;
+  }
+
+  // 星语北城民居批次：配置驱动（NORTH_DISTRICT_AREA.residenceLots），
+  // 复用主城 addSmallBlock（可认领住宅实体 + 导航障碍 + 标签批次）。
+  function addNorthDistrictResidences() {
+    NORTH_DISTRICT_AREA.residenceLots.forEach(([x, z], index) => {
+      addSmallBlock(x, 0, z, index % 3);
+    });
   }
   
   function addSmallBlock(x: number, y: number, z: number, type: number) {

@@ -340,6 +340,10 @@ try {
       'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
       'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall',
       'wushi_restaurant', 'tavern',
+      // 星语北城（2026-10-02）：新建筑一律保持待建，不进入 legacy 赠礼。
+      'north_chat_plaza', 'north_pigeon_square', 'north_stellar_hall', 'north_singularity',
+      'north_binary_garden', 'north_maya_grove', 'north_api_memorial', 'north_worry_store',
+      'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
     ];
     const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
     assert.deepEqual([...LEGACY_UNLOCK_PRESERVATION_BUILDINGS].sort(), [...legacyPendingBuildings].sort());

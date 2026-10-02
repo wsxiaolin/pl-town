@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
+import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, NORTH_DISTRICT_AREA, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
@@ -196,6 +196,79 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);
     addRing(2.25, 3, pedestrianMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
+
+    // ── 星语北城（North district）：地面、道路与公园 ─────────────────
+    // 地面：与主城/ Echo 区同层（painter-ordered，后画覆盖）的草地基底。
+    const northGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 12, ry: 8 });
+    const northGround = createMesh(
+      new THREE.PlaneGeometry(NORTH_DISTRICT_AREA.ground.maxX - NORTH_DISTRICT_AREA.ground.minX, NORTH_DISTRICT_AREA.ground.maxZ - NORTH_DISTRICT_AREA.ground.minZ),
+      northGroundMat,
+    );
+    northGround.rotation.x = -Math.PI / 2;
+    northGround.position.set(
+      (NORTH_DISTRICT_AREA.ground.minX + NORTH_DISTRICT_AREA.ground.maxX) / 2,
+      SURFACE_Y.district,
+      (NORTH_DISTRICT_AREA.ground.minZ + NORTH_DISTRICT_AREA.ground.maxZ) / 2,
+    );
+    northGround.receiveShadow = true;
+    northGround.renderOrder = RENDER_ORDER.district;
+    scene.add(northGround);
+    groundMaterials.push({ mat: northGroundMat, day: 0xb8c99d, night: 0x667256 });
+
+    // 公园草地板（星语公园，东北角）。
+    const parkMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 4, ry: 5 });
+    const park = createMesh(
+      new THREE.PlaneGeometry(NORTH_DISTRICT_AREA.park.maxX - NORTH_DISTRICT_AREA.park.minX, NORTH_DISTRICT_AREA.park.maxZ - NORTH_DISTRICT_AREA.park.minZ),
+      parkMat,
+    );
+    park.rotation.x = -Math.PI / 2;
+    park.position.set(
+      (NORTH_DISTRICT_AREA.park.minX + NORTH_DISTRICT_AREA.park.maxX) / 2,
+      SURFACE_Y.landscape,
+      (NORTH_DISTRICT_AREA.park.minZ + NORTH_DISTRICT_AREA.park.maxZ) / 2,
+    );
+    park.receiveShadow = true;
+    park.renderOrder = RENDER_ORDER.landscape;
+    scene.add(park);
+    groundMaterials.push({ mat: parkMat, day: 0xc0d0a0, night: 0x6a7a50 });
+
+    // 中央大道（沥青）——与主城南北主轴经 z=-40 步道、环城路无缝相接。
+    {
+      const [x1, z1, x2, z2] = NORTH_DISTRICT_AREA.avenueSegment as [number, number, number, number];
+      addRoadSegment(
+        NORTH_DISTRICT_AREA.roadWidth,
+        Math.abs(z2 - z1),
+        (x1 + x2) / 2,
+        (z1 + z2) / 2,
+        true,
+        'asphalt',
+        'north-district',
+      );
+    }
+
+    // 人行道街巷（与 Echo 区步道同规格：1.35 宽 pavement）。
+    NORTH_DISTRICT_AREA.laneSegments.forEach((segment) => {
+      const [x1, z1, x2, z2] = segment as [number, number, number, number];
+      const horizontal = Math.abs(x2 - x1) > Math.abs(z2 - z1);
+      addRoadSegment(
+        horizontal ? Math.abs(x2 - x1) : NORTH_DISTRICT_AREA.laneWidth,
+        horizontal ? NORTH_DISTRICT_AREA.laneWidth : Math.abs(z2 - z1),
+        (x1 + x2) / 2,
+        (z1 + z2) / 2,
+        false,
+        'pavement',
+        'north-district',
+      );
+    });
+
+    // 中央大道中心虚线（与主城主路同规格的黄色短划）。
+    const northLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
+    trackPathMaterial(northLineMat);
+    for (let z = -41.5; z >= -78.5; z -= 2.4) {
+      addMarking(new THREE.BoxGeometry(0.07, 0.008, 1.15), northLineMat, 0, z);
+    }
+
+    addLamps(NORTH_DISTRICT_AREA.lampPositions.map(([x, z]) => [x, 0, z] as const));
   }
 
   function addMarking(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, z: number): void {

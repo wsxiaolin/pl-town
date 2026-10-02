@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ResourcePool } from '../core/ResourcePool';
-import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
+import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
@@ -287,6 +287,7 @@ const frameLoop = createFrameLoop({
 const roadNavigation = createRoadNavigationSystem({
   roadCoords: ROAD_COORDS,
   echoObservatoryArea: ECHO_OBSERVATORY_AREA,
+  northDistrictArea: NORTH_DISTRICT_AREA,
   westBeach: WEST_BEACH,
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
