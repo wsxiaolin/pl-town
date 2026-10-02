@@ -333,8 +333,9 @@
 
   .activity-panel-hero-copy {
     top: 26px;
-    max-height: calc(100dvh - 210px);
-    overflow: hidden;
+    max-height: calc(100dvh - 166px);
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 }
 

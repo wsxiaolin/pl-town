@@ -4,6 +4,7 @@ import { waitForCityReady } from './helpers';
 for (const viewport of [
   { name: 'desktop', width: 1440, height: 900 },
   { name: 'short-mobile', width: 844, height: 390 },
+  { name: 'se-landscape', width: 667, height: 375 },
 ]) {
   test(`activity panel works at ${viewport.name} size`, async ({ page }) => {
     await page.setViewportSize(viewport);
@@ -25,6 +26,11 @@ for (const viewport of [
     expect(copyBox).not.toBeNull();
     expect(listBox).not.toBeNull();
     expect(copyBox!.y + copyBox!.height).toBeLessThanOrEqual(listBox!.y + 1);
+    const copyMetrics = await page.locator('.activity-panel-hero-copy').evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(copyMetrics.scrollHeight).toBeLessThanOrEqual(copyMetrics.clientHeight + 1);
 
     await page.locator('[data-activity-id="meteor-market"]').click();
     await expect(page.locator('#activityPanelTitle')).toHaveText('流星夜市，三日不打烊');
