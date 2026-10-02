@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BUILDING_REGISTRY } from '../city/data/buildings/_registry';
 
-// GLB 建筑由各自配置文件的 glbUrl 字段声明（文件位于 src/assets/models/）。
+// GLB 建筑由各自配置文件的 glbFile 字段声明（文件位于 src/assets/models/）。
 const modelUrlFor = (file: string) => new URL(`../assets/models/${file}`, import.meta.url).href;
 
 export type ReplaceableBuilding = {
@@ -80,33 +80,37 @@ function replaceBuilding(building: ReplaceableBuilding, source: THREE.Object3D):
   if (firstMaterial) building.bodyMat = firstMaterial;
 }
 
-export async function addRealBuildingModels(_scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
-  const glbUrlById = new Map(
-    BUILDING_REGISTRY
-      .filter((config) => config.glbUrl)
-      .map((config) => [config.id, config.glbUrl as string]),
-  );
-  for (const building of buildings) {
-    const glbUrl = glbUrlById.get(building.id);
-    if (!glbUrl || building.group.userData.constructionPending) continue;
-    const model = await loader.loadAsync(modelUrlFor(glbUrl));
-    if (building.group.parent && !building.group.userData.constructionPending) {
-      replaceBuilding(building, model.scene);
-    } else {
-      disposeScene(model.scene);
-    }
+// Parsed GLB scenes are cached by URL: several buildings may share one file,
+// and a transient fetch failure must not be retried per building.
+const modelCache = new Map<string, Promise<THREE.Group>>();
+
+function loadModel(url: string): Promise<THREE.Group> {
+  let pending = modelCache.get(url);
+  if (!pending) {
+    pending = loader.loadAsync(url).then((gltf) => gltf.scene);
+    modelCache.set(url, pending);
   }
+  return pending;
 }
 
-function disposeScene(scene: THREE.Object3D): void {
-  const textures = new Set<THREE.Texture>();
-  scene.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return;
-    object.geometry.dispose();
-    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-      for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
-      material.dispose();
+export async function addRealBuildingModels(_scene: THREE.Scene, buildings: ReplaceableBuilding[]): Promise<void> {
+  const glbFileById = new Map(
+    BUILDING_REGISTRY
+      .filter((config) => config.glbFile)
+      .map((config) => [config.id, config.glbFile as string]),
+  );
+  for (const building of buildings) {
+    const glbFile = glbFileById.get(building.id);
+    if (!glbFile || building.group.userData.constructionPending) continue;
+    // Isolate each model: a typo'd or missing GLB must not abort the models
+    // queued behind it (previously one rejection killed every later building).
+    try {
+      const source = await loadModel(modelUrlFor(glbFile));
+      if (building.group.parent && !building.group.userData.constructionPending) {
+        replaceBuilding(building, source);
+      }
+    } catch (error) {
+      console.warn(`[building-models] failed to load ${glbFile} for ${building.id}`, error);
     }
-  });
-  textures.forEach((texture) => texture.dispose());
+  }
 }

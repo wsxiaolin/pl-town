@@ -72,7 +72,7 @@ export interface BuildingConfig {
   /** 覆盖门面纹理 key；缺省用 `_shapeDefaults.ts` 里该 shape 的默认门面。 */
   facade?: string;
   /** GLB 文件名（`src/assets/models/` 下）。配置后渲染时用模型替换程序化网格。 */
-  glbUrl?: string;
+  glbFile?: string;
 
   // ── 地块（可选）────────────────────────────────
   /** 覆盖地块纹理 / 半径 / 颜色；缺省用 shape 级默认（见 inferPlot）。 */

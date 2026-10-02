@@ -9,7 +9,7 @@ export default defineBuilding({
   x: -30,
   z: 30,
   shape: "banana",
-  glbUrl: "banana.glb",
+  glbFile: "banana.glb",
   icon: iconSvg(`<path d="M6 14c0-4 2-8 6-8s6 4 6 8c0 3-2 6-6 6s-6-3-6-6z"/><path d="M12 6V3"/>`),
   content: {
     name: "布拿拉宫",
