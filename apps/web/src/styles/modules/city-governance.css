@@ -9,8 +9,10 @@
 .city-governance-panel {
   --gp-pad: max(1.25rem, env(safe-area-inset-left), env(safe-area-inset-right));
   /* Inline inset shared by the masthead, response strips and the register
-     column, so every row lines up on the same centered 900px axis. */
-  --gp-gutter: max(var(--gp-pad), calc((100% - 900px) / 2));
+     column, so every row lines up on the same centered 900px axis. Uses vw
+     rather than % so the value resolves to a length in both padding and
+     margin computed styles. */
+  --gp-gutter: max(var(--gp-pad), calc((100vw - 900px) / 2));
   --gp-paper: #f5ecd8;
   --gp-card: #fdfaf0;
   --gp-card-deep: #f8f1de;
