@@ -21,7 +21,9 @@ jobs:
     # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # 3 × (15m + 30s kill-after) 回退链约 46.5 分钟，必须给启动/评论留出余量，
+    # 否则回退耗尽会在循环内被硬杀，bot_failed 分支与评论步骤永不执行。
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,7 +59,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          set +e
+          set -e
           # 先写入解析后的 PR 上下文（env 变量在此处插值），再追加静态指令
           {
             echo "You are a Senior Engineer performing an expert-level Pull Request Code Review for the"
@@ -102,17 +104,25 @@ jobs:
           EOF
           } > review_prompt.txt
 
+          # 缺少任务描述会让 opencode 在无指令下运行，任何非空输出都会被误判为有效审查
+          if [ ! -s review_prompt.txt ]; then
+            echo "review_prompt.txt is empty; aborting the review" >&2
+            exit 1
+          fi
+
           # 代理运行期间移除令牌，避免模型自行下发评论或修改 PR；评论步骤单独注入 GH_TOKEN
           unset GITHUB_TOKEN GH_TOKEN
           review_succeeded=false
+          # 模型调用需要容错：单个模型超时/失败后继续回退，只在循环内部关闭 -e
+          set +e
           for model in \
             opencode/big-pickle \
             opencode/deepseek-v4-flash-free \
             opencode/hy3-free; do
             echo "Running OpenCode review with $model"
-            # Free models can occasionally hang without returning an error. Bound each
-            # attempt so the fallback chain can advance and the job cannot stay
-            # pending indefinitely.
+            # Any attempt (paid primary or free fallback) can hang without
+            # returning an error. Bound each one so the fallback chain can
+            # advance and the job cannot stay pending indefinitely.
             if timeout --signal=TERM --kill-after=30s 15m opencode run \
               --model "$model" \
               --variant high \
@@ -138,6 +148,8 @@ jobs:
           fi
 
       - name: Post PR review comment
+        # 评论投递失败不应掩盖审查结论：结论由下一个步骤独立判定
+        continue-on-error: true
         if: always() && !cancelled()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,21 +180,6 @@ jobs:
           gh pr comment "$PR_NUMBER" --body-file final_comment.md
 
       - name: Fail job when review has blockers
-        if: success() && steps.review.outputs.review_status == 'ok'
-        run: |
-          set +e
-          report=$(sed -r 's/\x1B\[[0-9;]*[mK]//g' review_report.md)
-          verdict=$(printf '%s\n' "$report" | grep -E '^REVIEW_VERDICT:' | tail -1 | awk -F: '{print toupper($2)}' | tr -d '[:space:]')
-          if [ "$verdict" = "BLOCKER" ]; then
-            echo "Review verdict is BLOCKER; failing the check." >&2
-            exit 1
-          fi
-          if [ "$verdict" = "PASS" ]; then
-            echo "Review verdict is PASS"
-            exit 0
-          fi
-          if printf '%s\n' "$report" | grep -qiE '🔴[[:space:]]*blocker'; then
-            echo "Review report contains blocker findings; failing the check." >&2
-            exit 1
-          fi
-          echo "No blockers in the review report."
+        # 不依赖评论步骤是否成功（comment 步骤 continue-on-error）
+        if: always() && !cancelled() && steps.review.outputs.review_status == 'ok'
+        run: bash scripts/review-verdict.sh review_report.md
