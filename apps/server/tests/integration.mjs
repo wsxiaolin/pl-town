@@ -832,7 +832,7 @@ try {
   const traderBaseSince = trader.messages.length;
   send(trader, { type: 'progress.get' });
   const traderBase = await waitFor(trader, 'progress.updated', (item) => !item.event, traderBaseSince);
-  const tradeCatalog = traderBase.catalog;
+  const tradeCatalog = { ...traderBase.catalog, products: { ...traderBase.catalog.products } };
   if (!tradeCatalog.recipes?.length || !tradeCatalog.dailySupplyOrder?.id || !tradeCatalog.tradeableItemIds?.includes('radish')) throw new Error('Market catalog must expose recipes, the daily supply order, and tradeable items');
   let traderInventory = traderBase.progress.inventory;
   let traderCurrency = traderBase.progress.currency;
@@ -891,12 +891,17 @@ try {
   const currencyBeforeOrder = traderCurrency;
   send(trader, { type: 'market.supply.fulfill', orderId: order.id });
   const fulfilledOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === true);
+  trackTrader(fulfilledOrder);
+  Object.assign(tradeCatalog.products, fulfilledOrder.catalog.products);
   if (fulfilledOrder.event.reward !== order.reward || fulfilledOrder.progress.currency !== currencyBeforeOrder + order.reward || !fulfilledOrder.progress.daily.fulfilledOrders.includes(order.id)) throw new Error('Delivering the daily supply order must grant its server-owned reward exactly once');
   send(trader, { type: 'market.supply.fulfill', orderId: order.id });
   const repeatedOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === false);
+  trackTrader(repeatedOrder);
+  Object.assign(tradeCatalog.products, repeatedOrder.catalog.products);
   if (repeatedOrder.progress.currency !== currencyBeforeOrder + order.reward) throw new Error('A supply order must pay out once per day');
 
   // 挂单：上架即托管（库存扣减），他人购买后按单价×数量结算，下架退回物品
+  await consumeAll('radish');
   await stockFor('radish', 2);
   const radishEscrowBefore = traderInventory.radish ?? 0;
   const currencyBeforeListing = traderCurrency;
