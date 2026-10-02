@@ -29,15 +29,15 @@ jobs:
 
       - name: Snapshot and optionally deploy
         env:
-          RENDER_SNAPSHOT_URL: ${{ [FUNC].RENDER_SNAPSHOT_URL }}
-          DEPLOY_SNAPSHOT_TOKEN: ${{ [FUNC].DEPLOY_SNAPSHOT_TOKEN }}
-          RENDER_DEPLOY_HOOK_URL: ${{ [FUNC].RENDER_DEPLOY_HOOK_URL }}
+          RENDER_SNAPSHOT_URL: ${{ secrets.RENDER_SNAPSHOT_URL }}
+          DEPLOY_SNAPSHOT_TOKEN: ${{ secrets.DEPLOY_SNAPSHOT_TOKEN }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
           # Set the SNAPSHOT_REQUIRED repository variable to 'true' to make a
           # missing secret a hard failure on every trigger (including push).
           SNAPSHOT_REQUIRED: ${{ vars.SNAPSHOT_REQUIRED }}
         run: |
           if [ -z "${RENDER_SNAPSHOT_URL}" ] || [ -z "${DEPLOY_SNAPSHOT_TOKEN}" ]; then
-            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] || [ "${SNAPSHOT_REQUIRED}" = "true" ]; then
+            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] || [ "${SNAPSHOT_REQUIRED,,}" = "true" ]; then
               echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are required" >&2
               exit 1
             fi
@@ -48,9 +48,9 @@ jobs:
             echo "::warning::Skipping snapshot: RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured"
             {
               echo "### ⚠️ Snapshot skipped"
-              echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured; no offsite backup was taken and the Render deploy hооk was not triggered for this push."
+              echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured; no offsite backup was taken and the Render deploy hook was not triggered for this push."
               echo "Set repository variable `SNAPSHOT_REQUIRED=true` to fail instead of warning."
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 0
           fi
           bash scripts/snapshot-offsite.sh

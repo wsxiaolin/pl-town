@@ -48,6 +48,17 @@ jobs:
   # The admin console is plain DOM (no WebGL), so it only needs a headless
   # Chromium. Runs on PRs too: the shop editor and sidebar assertions in
   # apps/server/tests/admin-ui.mjs gate the console changes they cover.
+  actionlint:
+    name: Lint workflows (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # YAML parsing cannot catch invalid expressions like `${{ secrets.X }}`
+      # typos or non-ASCII homoglyphs in workflow files; actionlint can.
+      - name: Run actionlint
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:latest -color
+
   admin-ui:
     name: Admin console UI tests
     needs: verify
