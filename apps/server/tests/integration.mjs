@@ -832,7 +832,7 @@ try {
   const traderBaseSince = trader.messages.length;
   send(trader, { type: 'progress.get' });
   const traderBase = await waitFor(trader, 'progress.updated', (item) => !item.event, traderBaseSince);
-  const tradeCatalog = { ...traderBase.catalog, products: { ...traderBase.catalog.products } };
+  const tradeCatalog = traderBase.catalog;
   if (!tradeCatalog.recipes?.length || !tradeCatalog.dailySupplyOrder?.id || !tradeCatalog.tradeableItemIds?.includes('radish')) throw new Error('Market catalog must expose recipes, the daily supply order, and tradeable items');
   let traderInventory = traderBase.progress.inventory;
   let traderCurrency = traderBase.progress.currency;
@@ -891,17 +891,12 @@ try {
   const currencyBeforeOrder = traderCurrency;
   send(trader, { type: 'market.supply.fulfill', orderId: order.id });
   const fulfilledOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === true);
-  trackTrader(fulfilledOrder);
-  Object.assign(tradeCatalog.products, fulfilledOrder.catalog.products);
   if (fulfilledOrder.event.reward !== order.reward || fulfilledOrder.progress.currency !== currencyBeforeOrder + order.reward || !fulfilledOrder.progress.daily.fulfilledOrders.includes(order.id)) throw new Error('Delivering the daily supply order must grant its server-owned reward exactly once');
   send(trader, { type: 'market.supply.fulfill', orderId: order.id });
   const repeatedOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === false);
-  trackTrader(repeatedOrder);
-  Object.assign(tradeCatalog.products, repeatedOrder.catalog.products);
   if (repeatedOrder.progress.currency !== currencyBeforeOrder + order.reward) throw new Error('A supply order must pay out once per day');
 
   // 挂单：上架即托管（库存扣减），他人购买后按单价×数量结算，下架退回物品
-  await consumeAll('radish');
   await stockFor('radish', 2);
   const radishEscrowBefore = traderInventory.radish ?? 0;
   const currencyBeforeListing = traderCurrency;
@@ -1047,11 +1042,6 @@ try {
   // Shop catalog: admin edits must persist, broadcast, and price purchases live.
   const shopClient = await connect('Alice');
   if (!shopClient.hello.progress.daily.checkInClaimed || !shopClient.hello.progress.daily.claimedMissions.includes('market_walk_3')) throw new Error('Daily check-in and mission claims must survive reconnecting');
-  const shopClientBase = await waitFor(shopClient, 'progress.updated', (message) => !message.event);
-  if (shopClientBase.progress.currency < 107) {
-    send(shopClient, { type: 'progress.shop.buy', productId: 'beef', quantity: 1 });
-    await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'beef');
-  }
   const shopWorldState = await fetch(`${adminBase}/world`, { headers: { cookie } });
   const shopWorldStatePayload = await shopWorldState.json();
   if (!shopWorldState.ok || shopWorldStatePayload.shop?.length !== 4 || shopWorldStatePayload.shop.find((product) => product.itemId === 'beef')?.unitPrice !== 45) throw new Error('Admin world GET must return the default shop catalog');
