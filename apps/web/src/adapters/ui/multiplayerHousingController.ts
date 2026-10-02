@@ -44,7 +44,6 @@ export interface MultiplayerHousingOptions {
   getMapMode: () => boolean;
   toggleMapMode: () => void;
   communityPanels: ReturnType<typeof createCommunityPanelController>;
-  getLegacyAchievements?: () => string[];
   isResidenceUnavailable?: (residenceId: string) => boolean;
   setWeather?: (weather: NetWeather) => void;
   getLoginGate?: () => LoginGate | null;
@@ -56,7 +55,6 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
     showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
     getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
-    getLegacyAchievements = () => [],
     isResidenceUnavailable = () => false,
     setWeather = () => {},
     getLoginGate = () => null,
@@ -287,7 +285,6 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       progress: (progress, catalog, event) => {
         progression.applySnapshot(progress, catalog, event);
         if (catalog) onWorldCatalog(catalog);
-        if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       weather: setWeather,
       worldCatalog: (catalog) => { progression.applyCatalog(catalog); onWorldCatalog(catalog); },

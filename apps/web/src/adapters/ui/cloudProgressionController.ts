@@ -165,6 +165,7 @@ export function createCloudProgressionController(options: Options) {
     }
     if (event?.type === 'market.listing.sold' && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
     if (event?.type === 'market.listing.sold') requestListings();
+    evaluateStatAchievements();
     render();
     describeEvent(event);
     if (event?.type === 'item.consumed' && event.itemId) {
@@ -777,12 +778,26 @@ export function createCloudProgressionController(options: Options) {
     return options.send({ type: 'progress.achievement.unlock', achievementId });
   }
 
-  function syncAchievements(achievementIds: readonly string[]): void {
+  // Stat achievements are evaluated from cloud progress after every snapshot;
+  // the server re-verifies each claim, so this only ever sends eligible unlocks.
+  const STAT_ACHIEVEMENT_CHECKS: ReadonlyArray<{ id: string; met: () => boolean }> = [
+    { id: 'citizen', met: () => true },
+    { id: 'first_building', met: () => progress.visitedBuildings.length >= 1 },
+    { id: 'explorer_5', met: () => progress.visitedBuildings.length >= 5 },
+    { id: 'explorer_10', met: () => progress.visitedBuildings.length >= 10 },
+    { id: 'unlock_3', met: () => progress.unlockedBuildings.length >= 3 },
+  ];
+  // Claims that were sent but not yet confirmed, so intermediate snapshots do
+  // not re-send them before the server echoes the unlock back.
+  const pendingStatAchievements = new Set<string>();
+
+  function evaluateStatAchievements(): void {
     if (!online) return;
-    achievementIds.forEach((achievementId) => {
-      if (achievementId in catalog.achievementRewards && !progress.achievements.includes(achievementId)) {
-        options.send({ type: 'progress.achievement.unlock', achievementId });
-      }
+    progress.achievements.forEach((id) => pendingStatAchievements.delete(id));
+    STAT_ACHIEVEMENT_CHECKS.forEach(({ id, met }) => {
+      if (!met() || !(id in catalog.achievementRewards)) return;
+      if (progress.achievements.includes(id) || pendingStatAchievements.has(id)) return;
+      if (options.send({ type: 'progress.achievement.unlock', achievementId: id })) pendingStatAchievements.add(id);
     });
   }
 
@@ -864,6 +879,7 @@ export function createCloudProgressionController(options: Options) {
     pendingShopProducts.clear();
     pendingDailyClaims.clear();
     pendingMarketActions.clear();
+    pendingStatAchievements.clear();
     pendingFilmCity?.(false);
     pendingFilmCity = null;
     render();
@@ -872,7 +888,7 @@ export function createCloudProgressionController(options: Options) {
   function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
-    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement, syncAchievements,
+    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement,
  buyProduct, consumeItem, purchaseFilmCityExperience, nextRewardClaimSequence, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),

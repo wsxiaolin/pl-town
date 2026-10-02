@@ -19,7 +19,6 @@ export type ThemeClockOptions = {
   updateNpcSchedules: () => void;
   getStats: () => LegacyStats;
   saveStats: (stats: LegacyStats) => void;
-  checkAchievements: () => void;
 };
 
 export function createThemeClock(options: ThemeClockOptions) {
@@ -72,7 +71,6 @@ export function createThemeClock(options: ThemeClockOptions) {
         const s = options.getStats();
         s.nightToggles = (s.nightToggles || 0) + 1;
         options.saveStats(s);
-        options.checkAchievements();
       }
     }
     const el = document.getElementById('communityTime');

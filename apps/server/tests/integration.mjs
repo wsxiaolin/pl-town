@@ -603,8 +603,8 @@ try {
   send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
   const duplicateAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building' && message.event.reward === 0);
   if (duplicateAchievement.progress.currency !== 1160) throw new Error('Achievement rewards must be idempotent');
-  send(alice, { type: 'progress.achievement.unlock', achievementId: 'walker_500' });
-  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'walker_500');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'echo_unnoticed' });
+  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'echo_unnoticed');
   if (unverifiedAchievement.event.reward !== 0 || unverifiedAchievement.progress.currency !== 1160) throw new Error('Client-only achievement claims must not mint currency');
   send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
   const consumed = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed');
