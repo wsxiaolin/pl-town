@@ -77,6 +77,11 @@ function parseShopProducts(value: unknown): ShopProduct[] {
     products.push(product);
     if (products.length >= SHOP_PRODUCT_MAX) break;
   }
+  if (products.length < entries.length) {
+    // A present-but-corrupt row silently degrades to an empty/partial shop for
+    // every resident; make it diagnosable instead of failing closed blindly.
+    console.warn(`[world-config] shop catalog dropped ${entries.length - products.length} of ${entries.length} entries while parsing`);
+  }
   return products;
 }
 
