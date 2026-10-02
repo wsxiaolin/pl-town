@@ -24,7 +24,7 @@ import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
-import { closeCityGovernancePanel, isCityGovernancePanelOpen } from '../adapters/ui/cityGovernancePanel';
+import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
@@ -324,6 +324,7 @@ const filmCityExperience = createFilmCityExperienceController({
 });
 
 const buildingInteraction = createBuildingInteraction({
+  openGovernancePanel: openCityGovernancePanel,
   isBuildingUnavailable: availability.isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
