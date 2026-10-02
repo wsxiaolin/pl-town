@@ -1,10 +1,10 @@
 import { ACTIVITY_ENTRIES, type ActivityBackgroundKey, type ActivityEntry } from '../../city/data/activities';
 
-// Temporary Microsoft placeholder photos; replace with generated event artwork later.
+// Local placeholder artwork; replace these files with generated event artwork later.
 const ACTIVITY_BACKGROUND_URLS: Record<ActivityBackgroundKey, string> = {
-  'star-voyage': 'https://placehold.co/1600x1000/20364b/e8f0ed?text=STAR+VOYAGE',
-  'aurora-festival': 'https://placehold.co/1600x1000/274a49/edf2df?text=AURORA+FESTIVAL',
-  'meteor-market': 'https://placehold.co/1600x1000/594638/f6e9ca?text=METEOR+MARKET',
+  'star-voyage': new URL('../../assets/activities/star-voyage.svg', import.meta.url).href,
+  'aurora-festival': new URL('../../assets/activities/aurora-festival.svg', import.meta.url).href,
+  'meteor-market': new URL('../../assets/activities/meteor-market.svg', import.meta.url).href,
 };
 
 export interface ActivityPanelControllerOptions {

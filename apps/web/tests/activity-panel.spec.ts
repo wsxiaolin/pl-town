@@ -20,6 +20,11 @@ for (const viewport of [
     expect(shellBox).not.toBeNull();
     expect(shellBox!.y).toBeGreaterThanOrEqual(0);
     expect(shellBox!.y + shellBox!.height).toBeLessThanOrEqual(viewport.height);
+    const copyBox = await page.locator('.activity-panel-hero-copy').boundingBox();
+    const listBox = await page.locator('#activityPanelList').boundingBox();
+    expect(copyBox).not.toBeNull();
+    expect(listBox).not.toBeNull();
+    expect(copyBox!.y + copyBox!.height).toBeLessThanOrEqual(listBox!.y + 1);
 
     await page.locator('[data-activity-id="meteor-market"]').click();
     await expect(page.locator('#activityPanelTitle')).toHaveText('流星夜市，三日不打烊');
