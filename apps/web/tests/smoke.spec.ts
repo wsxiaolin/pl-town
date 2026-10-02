@@ -153,7 +153,9 @@ test('a failed chat history read is retried on the next open', async ({ page }) 
   await expect(toggle).toHaveClass(/connected/, { timeout: 30_000 });
   await toggle.click({ force: true });
   await expect.poll(() => page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
-  // Reopen: the earlier failure must not suppress a retry.
+  // The failure toast proves the error callback ran (and reset the request flag)
+  // before we reopen; otherwise the reopen can race the error microtask.
+  await expect(page.locator('#utText')).toHaveText('Too many requests');
   await toggle.click({ force: true });
   await toggle.click({ force: true });
   await expect.poll(() => page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(2);
