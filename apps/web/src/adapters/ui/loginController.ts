@@ -129,11 +129,12 @@ export function createLoginController(options: LoginControllerOptions) {
     if (name) applyUsername(name);
     else if (options.isDevPortal?.()) applyUsername('dev-监工');
     else showLoginEntry();
-    if (options.shouldShowIntro()) options.startIntro();
+    // Dev portal enters before the intro check: with the opening CG disabled
+    // initCG never fires onFinish, so this is the only entrance trigger.
+    if (options.isDevPortal?.()) options.proceed();
+    else if (options.shouldShowIntro()) options.startIntro();
     else if (name) options.proceed();
-    // Dev portal: the entrance already ran via the boot gate — just keep the
-    // overlay down; there are no credentials to sign in with.
-    else if (!options.isDevPortal?.()) showLogin();
+    else showLogin();
   }
 
   /** Read the Physics Lab ownership-verification fields when they are shown. */
