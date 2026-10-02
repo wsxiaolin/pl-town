@@ -117,9 +117,13 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addBench(-2.6, 0, -47.2, Math.PI / 2);
     addBench(2.6, 0, -62.6, -Math.PI / 2);
     addBench(-2.6, 0, -71.8, Math.PI / 2);
-    // 斜巷路口小广场的座椅（朝向广场中心）。
-    addBench(-10.2, 0, -63.1, Math.PI);
-    addBench(13.8, 0, -63.1, Math.PI);
+    // 内部巷口小广场的座椅（朝向广场中心）。
+    addBench(-17.5, 0, -63.3, Math.PI);
+    addBench(13.6, 0, -63.3, Math.PI);
+    // 作品街区（博物馆区）内部的长椅：落在垫层间隙，供居民歇脚。
+    addBench(-20.5, 0, -49.5, 0);
+    addBench(-19.9, 0, -59.5, 0);
+    addBench(26, 0, -59.5, 0);
     addNorthCommunityProps();
   }
 

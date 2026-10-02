@@ -296,8 +296,8 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       });
     }
 
-    // 人行道街巷（与 Echo 区步道同规格：1.35 宽 pavement）。斜巷按两端
-    // 点方向旋转绘制（与 Echo 区渲染同法），其余保持轴对齐。
+    // 人行道街巷：支路（z=-44.5/-54.5/-64.5，宽 streetWidth）+ 巷道
+    // （laneWidth）。按两端点方向旋转绘制（与 Echo 区渲染同法）。
     const northLaneMat = createLayerMaterial({ color: pathColor, roughness: 1, tex: 'pavement', rx: 1, ry: 4 });
     trackPathMaterial(northLaneMat);
     NORTH_DISTRICT_AREA.laneSegments.forEach((segment) => {
@@ -305,7 +305,10 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       const dx = x2 - x1;
       const dz = z2 - z1;
       const length = Math.hypot(dx, dz);
-      const lane = createMesh(new THREE.BoxGeometry(NORTH_DISTRICT_AREA.laneWidth, 0.04, length), northLaneMat);
+      const isWideStreet = Math.abs(dx) > Math.abs(dz)
+        && NORTH_DISTRICT_AREA.wideStreetZs.includes((z1 + z2) / 2);
+      const width = isWideStreet ? NORTH_DISTRICT_AREA.streetWidth : NORTH_DISTRICT_AREA.laneWidth;
+      const lane = createMesh(new THREE.BoxGeometry(width, 0.04, length), northLaneMat);
       lane.position.set((x1 + x2) / 2, SURFACE_Y.road, (z1 + z2) / 2);
       lane.rotation.y = -Math.atan2(dx, dz);
       lane.renderOrder = RENDER_ORDER.road;
@@ -314,7 +317,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       scene.add(lane);
     });
 
-    // 路口小广场：斜巷与横街交汇处的圆形铺装（roadSurface 层，盖过
+    // 路口小广场：内部巷与支路交汇处的圆形铺装（roadSurface 层，盖过
     // 路口、低于中心线标记），中心树由 streetTrees 提供。
     const plazaMat = createLayerMaterial({ color: isNight ? 0xa8a7a1 : 0xd0cfca, roughness: 0.92, tex: 'pavement', rx: 2, ry: 2 });
     trackPathMaterial(plazaMat);
@@ -326,6 +329,20 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       plaza.receiveShadow = true;
       plaza.userData.district = 'north-district';
       scene.add(plaza);
+    });
+
+    // 作品街区（博物馆区）：四个大街坊的整片院落铺装——地标建筑、树阵
+    // 与长椅都落在这层连续的城市肌理上，而不是各自脚下一块孤立垫层。
+    const courtyardMat = createLayerMaterial({ color: isNight ? 0xaba9a3 : 0xdedcd7, roughness: 0.95, tex: 'ground5', rx: 8, ry: 5 });
+    trackPathMaterial(courtyardMat);
+    NORTH_DISTRICT_AREA.landmarkBlocks.forEach(([minX, minZ, maxX, maxZ]) => {
+      const block = createMesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), courtyardMat);
+      block.rotation.x = -Math.PI / 2;
+      block.position.set((minX + maxX) / 2, SURFACE_Y.landscape + 0.006, (minZ + maxZ) / 2);
+      block.receiveShadow = true;
+      block.renderOrder = RENDER_ORDER.landscape;
+      block.userData.district = 'north-district';
+      scene.add(block);
     });
 
     // 地标 parcel 垫层：12 处作品建筑的建设地块统一为 pavement 基面，
