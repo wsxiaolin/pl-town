@@ -45,7 +45,7 @@ jobs:
               echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are required" >&2
               exit 1
               ;;
-            *)
+            skip)
               # A skipped push used to be a silent success, so a missing secret
               # looked like a healthy backup. Surface it in the run UI and the
               # step summary instead of failing the push by default; set the
@@ -56,5 +56,10 @@ jobs:
                 echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured; no offsite backup was taken and the Render deploy hook was not triggered for this push."
                 echo "Set the SNAPSHOT_REQUIRED repository variable to true to fail instead of warning."
               } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              ;;
+            *)
+              # Never silently degrade an unexpected gate result into "skip".
+              echo "snapshot-gate.sh returned an unexpected decision: $decision" >&2
+              exit 1
               ;;
           esac
