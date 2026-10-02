@@ -1069,11 +1069,16 @@ try {
   if (invalidShop.status !== 400) throw new Error('Admin shop POST must reject malformed product catalogs');
   const missingShopCsrf = await fetch(`${adminBase}/world/shop`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json' } });
   if (missingShopCsrf.status !== 403) throw new Error('Admin shop POST must require CSRF');
+  const shopProgressSince = shopClient.messages.length;
+  send(shopClient, { type: 'progress.get' });
+  const shopProgress = await waitFor(shopClient, 'progress.updated', (message) => !message.event, shopProgressSince);
+  const teaBefore = shopProgress.progress.inventory.dragonwell_tea ?? 0;
+  const probeBefore = shopProgress.progress.inventory.shop_probe_item ?? 0;
   send(shopClient, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 1 });
-  const teaPurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === 1);
+  const teaPurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === teaBefore + 1);
   send(shopClient, { type: 'progress.shop.buy', productId: 'shop_probe_item', quantity: 1 });
   const badgePurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'shop_probe_item');
-  if (badgePurchase.progress.inventory.shop_probe_item !== 1 || badgePurchase.progress.currency !== teaPurchase.progress.currency - 77) throw new Error('Newly configured products must be purchasable at the configured price');
+  if (badgePurchase.progress.inventory.shop_probe_item !== probeBefore + 1 || badgePurchase.progress.currency !== teaPurchase.progress.currency - 77) throw new Error('Newly configured products must be purchasable at the configured price');
   send(shopClient, { type: 'progress.shop.buy', productId: 'radish', quantity: 1 });
   const radishRejection = await waitFor(shopClient, 'error', (message) => message.message === 'Product is not available');
   if (!radishRejection) throw new Error('Disabled products must not be purchasable');
