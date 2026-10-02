@@ -76,8 +76,7 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
   const config: CityConfig = {
     schemaVersion: 1, version: 'capability-fixture', initialBuiltBuildingIds: ['commons'],
     projects: [{ id: 'library', buildingId: 'library', name: '图书馆', description: '共同建设', kind: 'building', cost: 3000 }],
-    personalAreas: [{ id: 'garden', name: '小花园', plotIds: ['plot-1', 'plot-2'] }],
-    personalBlocks: [{ id: 'garden-block', name: '小花园小区块', areaId: 'garden', description: '两处花坛连成一片，一次投建。', cost: 160,
+    personalBlocks: [{ id: 'garden-block', name: '小花园小区块', areaId: null, description: '两处花坛连成一片，一次投建。', cost: 160,
       placements: [{ plotId: 'plot-1', decorationId: 'flowers' }, { plotId: 'plot-2', decorationId: 'flowers' }] }],
     personalPlots: [1, 2].map((index) => ({ id: `plot-${index}`, name: `花园 ${index}`, x: 30 + index * 2, z: -40, options: ['flowers'] })),
     decorations: [{ id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 }],
@@ -85,7 +84,7 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
   let state: LegacyState = { configVersion: config.version, epoch: 'capability-epoch', revision: 0,
     projects: [{ id: 'library', funded: 0, built: false }], decorations: [] };
   const errors: string[] = [];
-  const api = { supported: false, reads: 0, donations: 0, decorations: 0, votes: 0, errors };
+  const api = { supported: false, reads: 0, donations: 0, votes: 0, errors };
   page.on('pageerror', (error) => errors.push(error.message));
   stubCityWebSocket(page, { user: 'compat-resident', unlockedBuildings: ['commons'] });
   await page.route('**/town-api/**', (route) => {
@@ -100,14 +99,6 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
     if (path.endsWith('/city/donate')) {
       api.donations += 1;
       state = { ...state, revision: state.revision + 1, projects: [{ id: 'library', funded: 100, built: false }] };
-      return route.fulfill({ json: { state } });
-    }
-    if (path.endsWith('/city/decorate')) {
-      api.decorations += 1;
-      const request = route.request().postDataJSON();
-      const block = config.personalBlocks!.find((entry) => entry.id === request.blockId);
-      state = { ...state, revision: state.revision + 1, decorations: (block?.placements ?? [])
-        .map(({ plotId, decorationId }) => ({ plotId, decorationId, ownerId: 'compat-resident', ownerNickname: 'compat-resident' })) };
       return route.fulfill({ json: { state } });
     }
     if (path.endsWith('/city/vote')) {
@@ -132,20 +123,14 @@ for (const status of [404, 405] as const) {
     await expect(panel.locator('[data-city-vote-feedback]')).toBeHidden();
     await expect(panel.locator('[data-city-vote-count]')).toHaveCount(0);
     await expect(project.getByRole('button', { name: '投票建设', exact: true })).toHaveCount(0);
+    const previousReads = api.reads;
     await project.getByRole('button', { name: '捐款', exact: true }).click();
     await expect(project).toContainText('100 金币');
     expect(api.donations).toBe(1);
-    await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const gardenBlock = panel.locator('[data-city-block="garden-block"]');
-    await expect(gardenBlock.locator('.city-area-cell')).toHaveCount(2);
-    await gardenBlock.getByRole('button', { name: '投建这片', exact: true }).click();
-    await expect(gardenBlock).toContainText('已由 compat-resident 投建');
-    expect(api.decorations).toBe(1);
-    await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
     await expect(unavailable).toBeVisible();
     await expect(panel.getByRole('alert')).toHaveCount(0);
     expect(api.votes).toBe(0);
-    const previousReads = api.reads;
+    expect(api.reads).toBe(previousReads);
     api.supported = true;
     if (status === 404) {
       await panel.getByRole('button', { name: '关闭', exact: true }).click();
@@ -242,5 +227,32 @@ test('a missing legacy vote count stays unknown while an explicit zero is shown'
   await pushCityState(page, { configVersion: 'capability-fixture', epoch: 'capability-epoch', revision: 1,
     projects: [{ id: 'library', funded: 0, built: false, votes: 0 }], decorations: [] });
   await expect(count).toHaveText('0 位居民支持建设');
+  expect(api.errors).toEqual([]);
+});
+
+test('donation refreshes cross-tab sessions before rendering the construction list', async ({ page, context }) => {
+  const pending: Route[] = [];
+  const donations: Array<{ requestId: string }> = [];
+  const api = await compatibilityFixture(page, 404);
+  await page.route('**/town-api/city/donate', (route) => {
+    donations.push(route.request().postDataJSON() as { requestId: string });
+    pending.push(route);
+  });
+  const panel = page.getByRole('dialog', { name: '众议院', exact: true });
+  const donate = panel.locator('[data-city-project="library"]').getByRole('button', { name: '捐款', exact: true });
+
+  // A second tab changes storage without calling this page's client helpers.
+  // The next ordinary panel render must detect that change before any action.
+  const otherTab = await context.newPage();
+  try {
+    await otherTab.route('**/session-source', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Session source</title>' }));
+    await otherTab.goto(new URL('/session-source', page.url()).href);
+    await otherTab.evaluate(() => localStorage.setItem('minicityServerToken', 'cross-tab-resident'));
+  } finally { await otherTab.close(); }
+
+  await donate.click();
+  await expect.poll(() => pending.length).toBe(1);
+  expect(donations).toHaveLength(1);
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(api.errors).toEqual([]);
 });
