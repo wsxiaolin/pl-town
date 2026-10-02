@@ -327,15 +327,81 @@
 }
 
 @media (max-height: 560px) {
+  .activity-panel-overlay {
+    padding: 10px;
+  }
+
   .activity-panel-shell {
-    height: calc(100dvh - 40px);
+    height: calc(100dvh - 20px);
   }
 
   .activity-panel-hero-copy {
-    top: 26px;
-    max-height: calc(100dvh - 166px);
+    top: 24px;
+    right: 24px;
+    left: 96px;
+    width: auto;
+    max-height: calc(100% - 48px);
     overflow-y: auto;
     scrollbar-width: thin;
+  }
+
+  .activity-panel-kicker {
+    margin-top: 0;
+  }
+
+  .activity-panel-title {
+    margin-top: 8px;
+    font-size: clamp(24px, 8vh, 44px);
+  }
+
+  .activity-panel-subtitle {
+    margin-top: 8px;
+  }
+
+  .activity-panel-description {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .activity-panel-list {
+    top: 14px;
+    right: auto;
+    bottom: 14px;
+    left: 14px;
+    display: flex;
+    flex-direction: column;
+    width: 68px;
+    gap: 8px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .activity-panel-item {
+    position: relative;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .activity-panel-thumb {
+    width: 100%;
+    aspect-ratio: 1.25;
+  }
+
+  .activity-panel-item-copy strong {
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .activity-panel-item-copy small {
+    display: none;
+  }
+
+  .activity-panel-item-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
   }
 }
 
