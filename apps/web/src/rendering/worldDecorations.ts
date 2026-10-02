@@ -102,9 +102,11 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
 
   // 星语北城民居批次：配置驱动（NORTH_DISTRICT_AREA.residenceLots），
   // 复用主城 addSmallBlock（可认领住宅实体 + 导航障碍 + 标签批次）。
+  // 地块统一 pavement 色调：随机取色会抽到与北城基底同色的 0xE0D8CC，
+  // 让部分民居看起来「没有地板」。
   function addNorthDistrictResidences() {
     NORTH_DISTRICT_AREA.residenceLots.forEach(([x, z], index) => {
-      addSmallBlock(x, 0, z, index % 3);
+      addSmallBlock(x, 0, z, index % 3, { color: 0xdcdad6, tex: 'ground5' });
     });
   }
 
@@ -112,7 +114,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
   // 全部为主城既有装饰语汇的复用，让北城在作品建筑筹资前就有街区生活气。
   function addNorthDistrictScenery() {
     addNorthGate(NORTH_DISTRICT_AREA.gate.x, NORTH_DISTRICT_AREA.gate.z);
-    NORTH_DISTRICT_AREA.sceneryHouses.forEach(([x, z, rotDeg]) => addSuburbHouse(x, z, rotDeg));
+    NORTH_DISTRICT_AREA.sceneryHouses.forEach(([x, z, rotDeg]) => addSuburbHouse(x, z, rotDeg, true));
     addTrees(NORTH_DISTRICT_AREA.streetTrees.map(([x, z]) => [x, 0, z] as const));
     addBench(-2.6, 0, -47.2, Math.PI / 2);
     addBench(2.6, 0, -62.6, -Math.PI / 2);
@@ -134,10 +136,11 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     const pavementMat = stdMat({ color: getIsNight() ? 0x9d9c97 : 0xc6c5c0, roughness: 0.95, tex: 'pavement', rx: 1, ry: 1 });
     pavementMat.depthWrite = false;
     // 宅前小路：每个可认领民居沿 z 向连到最近的横街（-64.5 / -74 / -80）。
+    // 起点在地块边缘之外（地块 2.2 宽），避免路面切进住宅地板。
     NORTH_DISTRICT_AREA.residenceLots.forEach(([x, z]) => {
       const streets = [-64.5, -74, -80];
       const street = streets.reduce((best, s) => Math.abs(z - s) < Math.abs(z - best) ? s : best, streets[0]!);
-      const startZ = z + (street > z ? 0.95 : -0.95);
+      const startZ = z + (street > z ? 1.15 : -1.15);
       const endZ = street + (street > z ? 0.7 : -0.7);
       const length = Math.abs(endZ - startZ);
       if (length < 0.3) return;
@@ -259,7 +262,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     scene.add(g);
   }
 
-  function addSmallBlock(x: number, y: number, z: number, type: number) {
+  function addSmallBlock(x: number, y: number, z: number, type: number, plotStyle?: { color: number; tex: string }) {
     const variationSeed = residenceStyleSeedForLot(x, z);
     const { group:g, body, styleId, styleName } = createResidenceModel({x,z,variationSeed,lotType:type,isNight:getIsNight(),part});
     const residenceId=`residence:${x.toFixed(2)}:${z.toFixed(2)}`;
@@ -270,16 +273,23 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     residences.push({id:residenceId,label:`${Math.round(x)}, ${Math.round(z)} 号住宅 · ${styleName}`,group:g,body,labelEl:null,styleId});
     // ── 建筑下面的小地块贴图（成片共享纹理）──
     const plotTexs = ['ground5','ground4','ground2','ground','ground5','ground2','ground4','ground5'];
-    const plotTex = plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length];
+    const plotTex = plotStyle?.tex ?? plotTexs[Math.abs(Math.round(x+z)) % plotTexs.length]!;
     const plotColors = [0xE4E3E0, 0xC0D0A0, 0xE0D8CC, 0xF2F1EE, 0xE8E7E4, 0xD8D4CC, 0xB8C888, 0xE4E3E0];
-    const plotCol = plotColors[Math.abs(Math.round(x+z)) % plotColors.length]!;
+    const plotCol = plotStyle?.color ?? plotColors[Math.abs(Math.round(x+z)) % plotColors.length]!;
+    addGroundPlot(x, z, plotCol, plotTex, { residenceId });
+  }
+
+  // 建筑脚下的小地块：可带 residenceId 成为可交互地皮（认领入口），
+  // 也可作纯装饰垫层（街景小屋）。同一 jitter 公式避免与相邻地块共面。
+  function addGroundPlot(x: number, z: number, plotCol: number, plotTex: string, opts?: { residenceId?: string }) {
     const pmat = stdMat({color: getIsNight() ? Math.floor(plotCol*0.7) : plotCol, roughness:0.9, tex:plotTex, rx:1, ry:1});
     pmat.depthWrite = false;
     const plot = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), pmat);
-    plot.userData.residenceId = residenceId;
+    if (opts?.residenceId) plot.userData.residenceId = opts.residenceId;
     const plotJitter = (Math.abs(Math.round(x*7 + z*13)) % 8) * 0.0015;
     plot.rotation.x = -Math.PI/2; plot.position.set(x, SURFACE_Y.buildingPlot + plotJitter, z); plot.receiveShadow = true;
-    plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot); interactiveDecorationRoots.add(plot); addRaycastGroup(plot);
+    plot.renderOrder = RENDER_ORDER.buildingPlot; scene.add(plot);
+    if (opts?.residenceId) { interactiveDecorationRoots.add(plot); addRaycastGroup(plot); }
   }
   
   function addLamps(positions: readonly Vec3[]) {
@@ -333,7 +343,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     part(g,new THREE.BoxGeometry(0.36,0.18,0.04),{color:0xF0EFEC,roughness:0.5,tex:'wood',rx:1,ry:1},[0.18,0.72,0]);
     g.position.set(x,y,z); scene.add(g);
   }
-  function addSuburbHouse(x: number, z: number, rotDeg: number) {
+  // 街景小屋：默认与主城用法一致（纯装饰、无碰撞）。北城居住坊里它们
+  // 与可认领民居混排，必须 solid——注册导航障碍并补地块，否则看起来
+  // 和邻居一样却能穿墙、还没有地板。
+  function addSuburbHouse(x: number, z: number, rotDeg: number, solid = false) {
     const g = new THREE.Group();
     const bw = 1.2, bh = 0.9;
     // Foundation
@@ -363,6 +376,10 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     }
     g.position.set(x, 0, z); g.rotation.y = (rotDeg * Math.PI / 180);
     scene.add(g);
+    if (solid) {
+      addObstacleGroup?.(g);
+      addGroundPlot(x, z, 0xdcdad6, 'ground5');
+    }
   }
   
   return {
