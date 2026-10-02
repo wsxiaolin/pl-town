@@ -49,7 +49,7 @@ jobs:
             {
               echo "### ⚠️ Snapshot skipped"
               echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured; no offsite backup was taken and the Render deploy hook was not triggered for this push."
-              echo "Set repository variable `SNAPSHOT_REQUIRED=true` to fail instead of warning."
+              echo 'Set repository variable `SNAPSHOT_REQUIRED=true` to fail instead of warning.'
             } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 0
           fi
