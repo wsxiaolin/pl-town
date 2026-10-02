@@ -313,13 +313,13 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
 
     // 地标 parcel 垫层：12 处作品建筑的建设地块统一为 pavement 基面，
     // 让两排作品街区在项目筹资前也呈现「预留地块」的城市肌理，而不是
-    // 零散色块。坐标取自 BUILDING_DEFS（north_* 唯一事实来源），垫层
-    // 尺寸为建筑足印 + 1.2 边距（足印见 northDistrictBuildings finish）。
+    // 零散色块。坐标取自 BUILDING_DEFS（north_* 唯一事实来源）；尺寸
+    // 必须盖过各 north_*.ts 自带的 plot 方块（4.0–6.4），再留 0.5 边距。
     const northPadSizes: Record<string, [number, number]> = {
-      chat_plaza: [7.4, 6.6], pigeon_square: [7.2, 7.2], planetarium: [5.8, 5.0],
-      singularity: [5.6, 5.6], binary_garden: [6.0, 6.0], ziggurat: [5.8, 5.4],
-      monolith: [3.8, 3.4], worry_store: [3.9, 3.6], bistro: [4.3, 3.8],
-      night_kiosk: [3.9, 3.7], jukebox: [3.2, 2.7], backrooms_door: [4.2, 3.6],
+      chat_plaza: [7.4, 6.6], pigeon_square: [7.2, 7.2], planetarium: [6.8, 6.8],
+      singularity: [6.0, 6.0], binary_garden: [6.0, 6.0], ziggurat: [7.0, 7.0],
+      monolith: [5.2, 5.2], worry_store: [5.0, 5.0], bistro: [5.2, 5.2],
+      night_kiosk: [4.8, 4.8], jukebox: [4.6, 4.6], backrooms_door: [4.6, 4.6],
     };
     const northPadMat = createLayerMaterial({ color: isNight ? 0xa3a29c : 0xdcdad6, roughness: 0.92, tex: 'ground5', rx: 2, ry: 2 });
     trackPathMaterial(northPadMat);

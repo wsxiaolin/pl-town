@@ -129,8 +129,9 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       part(g, new THREE.BoxGeometry(0.5, 0.14, 0.5), stone, [px, 2.05, 0]);
       part(g, new THREE.SphereGeometry(0.11, 10, 10), trim, [px, 2.2, 0], false);
     });
-    part(g, new THREE.BoxGeometry(4.6, 0.22, 0.3), stone, [0, 1.9, 0]);
-    part(g, new THREE.BoxGeometry(4.6, 0.08, 0.34), trim, [0, 2.05, 0], false);
+    // 石梁 + 梁下细金线（点「星语」金色而不像道闸）。
+    part(g, new THREE.BoxGeometry(4.6, 0.3, 0.32), stone, [0, 1.88, 0]);
+    part(g, new THREE.BoxGeometry(4.3, 0.05, 0.2), trim, [0, 1.7, 0], false);
     g.position.set(x, 0, z);
     scene.add(g);
   }
