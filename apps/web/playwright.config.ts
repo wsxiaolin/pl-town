@@ -20,6 +20,10 @@ const webglChromiumArgs = [
 
 export default defineConfig({
   testDir: './tests',
+  // Unit tests use node:test and are compiled/run by `test:unit`, never by
+  // Playwright. Keep them out of discovery explicitly so a future default
+  // testMatch change (or a global grep) can't boot WebGL-less node tests here.
+  testIgnore: '**/unit/**',
   // Tests are page-scoped: each one boots its own city via addInitScript and a
   // mocked WebSocket, so they can run in parallel against the shared dev server.
   fullyParallel: true,
