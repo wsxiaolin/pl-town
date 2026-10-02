@@ -13,7 +13,7 @@ import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPrese
 import { createNpcSystem, type Npc } from './npcSystem';
 import { NPC_PROFILES } from './data/npcs';
 import { BUILDING_DEFS } from './data/buildings';
-import { CITY_LIMIT, PALETTE, ROAD_COORDS } from './data/cityConfig';
+import { CITY_LIMIT, NORTH_DISTRICT_AREA, PALETTE, ROAD_COORDS } from './data/cityConfig';
 import { addCityFountain } from './citySceneBootstrap';
 import type { CityGraphics } from './cityGraphics';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
@@ -143,6 +143,9 @@ export function assembleCityWorld(options: {
   }).forEach((group) => options.roadNavigation.registerObstacleGroup(group));
   options.roadNavigation.cacheBuildingBoxes();
   worldDecorations.addDecorations();
+  // 星语北城公园内容（树阵与长椅走世界装饰批次，与主城基础设施同级）。
+  worldDecorations.addTrees(NORTH_DISTRICT_AREA.parkTrees.map(([x, z]) => [x, 0, z] as const));
+  NORTH_DISTRICT_AREA.parkBenches.forEach(([x, z, rotY]) => worldDecorations.addBench(x, 0, z, rotY));
   npcSystem.addCharacters();
   const sceneInterestPoints = createSceneInterestPoints({
     scene,

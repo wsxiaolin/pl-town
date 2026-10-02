@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
-import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
+import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, NORTH_DISTRICT_AREA, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
+import { BUILDING_DEFS } from '../city/data/buildings';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
@@ -196,6 +197,186 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     const pedestrianMat = createLayerMaterial({ color: 0xb9b8b3, roughness: 0.9, tex: 'pavement', rx: 3, ry: 3 });
     trackPathMaterial(pedestrianMat);
     addRing(2.25, 3, pedestrianMat, SURFACE_Y.roadSurface, RENDER_ORDER.road);
+
+    // ── 星语北城（North district）：地面、道路与公园 ─────────────────
+    // 地面：与主城 district 层同色调同贴图（暖灰），让北城读作主城地面
+    // 的自然延伸；绿色只保留给公园与绿地斑块，避免「贴上去的绿洲」感。
+    const northGroundMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 18, ry: 12 });
+    const northGround = createMesh(
+      new THREE.PlaneGeometry(NORTH_DISTRICT_AREA.ground.maxX - NORTH_DISTRICT_AREA.ground.minX, NORTH_DISTRICT_AREA.ground.maxZ - NORTH_DISTRICT_AREA.ground.minZ),
+      northGroundMat,
+    );
+    northGround.rotation.x = -Math.PI / 2;
+    northGround.position.set(
+      (NORTH_DISTRICT_AREA.ground.minX + NORTH_DISTRICT_AREA.ground.maxX) / 2,
+      SURFACE_Y.district,
+      (NORTH_DISTRICT_AREA.ground.minZ + NORTH_DISTRICT_AREA.ground.maxZ) / 2,
+    );
+    northGround.receiveShadow = true;
+    northGround.renderOrder = RENDER_ORDER.district;
+    scene.add(northGround);
+    groundMaterials.push({ mat: northGroundMat, day: 0xe0d8cc, night: 0xb4b0a4 });
+
+    // 街区绿地斑块：主城在 ±24 处铺 24×24 草坪，北城以同色调草坪呼应
+    // （两坊南缘的共享绿地），密度低于公园、高于零。
+    const northLawnMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 5, ry: 4 });
+    trackPathMaterial(northLawnMat);
+    ([[-19.5, -82.6, 18, 3.6], [10.5, -82.6, 10, 3.6]] as Array<[number, number, number, number]>).forEach(([x, z, w, d]) => {
+      const lawn = createMesh(new THREE.PlaneGeometry(w, d), northLawnMat);
+      lawn.rotation.x = -Math.PI / 2;
+      lawn.position.set(x, SURFACE_Y.landscape, z);
+      lawn.receiveShadow = true;
+      lawn.renderOrder = RENDER_ORDER.landscape;
+      lawn.userData.district = 'north-district';
+      scene.add(lawn);
+    });
+
+    // 公园草地板（星语公园，东北角）。
+    const parkMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 4, ry: 5 });
+    const park = createMesh(
+      new THREE.PlaneGeometry(NORTH_DISTRICT_AREA.park.maxX - NORTH_DISTRICT_AREA.park.minX, NORTH_DISTRICT_AREA.park.maxZ - NORTH_DISTRICT_AREA.park.minZ),
+      parkMat,
+    );
+    park.rotation.x = -Math.PI / 2;
+    park.position.set(
+      (NORTH_DISTRICT_AREA.park.minX + NORTH_DISTRICT_AREA.park.maxX) / 2,
+      SURFACE_Y.landscape,
+      (NORTH_DISTRICT_AREA.park.minZ + NORTH_DISTRICT_AREA.park.maxZ) / 2,
+    );
+    park.receiveShadow = true;
+    park.renderOrder = RENDER_ORDER.landscape;
+    scene.add(park);
+    groundMaterials.push({ mat: parkMat, day: 0xc0d0a0, night: 0x6a7a50 });
+
+    // 中央大道（沥青）——与主城南北主轴经 z=-40 步道、环城路无缝相接。
+    {
+      const [x1, z1, x2, z2] = NORTH_DISTRICT_AREA.avenueSegment as [number, number, number, number];
+      addRoadSegment(
+        NORTH_DISTRICT_AREA.roadWidth,
+        Math.abs(z2 - z1),
+        (x1 + x2) / 2,
+        (z1 + z2) / 2,
+        true,
+        'asphalt',
+        'north-district',
+      );
+      // 大道两侧人行道：在横街交叉口处断开，避免与巷道路面共面重叠。
+      const sidewalkMat = createLayerMaterial({ color: isNight ? 0xa8a7a1 : 0xd4d3ce, roughness: 0.95, tex: 'pavement', rx: 1, ry: 6 });
+      trackPathMaterial(sidewalkMat);
+      const crossings = NORTH_DISTRICT_AREA.crosswalkZs;
+      const spanStart = NORTH_DISTRICT_AREA.avenueSegment[1] - 0.4;
+      const spanEnd = NORTH_DISTRICT_AREA.avenueSegment[3] + 0.4;
+      const gapHalf = NORTH_DISTRICT_AREA.laneWidth / 2 + 0.55;
+      const walkX = NORTH_DISTRICT_AREA.roadWidth / 2 + 0.45;
+      const sidewalkRuns: Array<[number, number]> = [];
+      let cursor = spanStart;
+      for (const crossing of crossings) {
+        sidewalkRuns.push([cursor, crossing - gapHalf]);
+        cursor = crossing + gapHalf;
+      }
+      sidewalkRuns.push([cursor, spanEnd]);
+      sidewalkRuns.forEach(([z1, z2]) => {
+        if (z2 - z1 < 0.4) return;
+        [-walkX, walkX].forEach((x) => {
+          const walk = createMesh(new THREE.BoxGeometry(0.7, 0.04, z2 - z1), sidewalkMat);
+          walk.position.set(x, SURFACE_Y.road, (z1 + z2) / 2);
+          walk.renderOrder = RENDER_ORDER.road;
+          walk.receiveShadow = true;
+          walk.userData.district = 'north-district';
+          scene.add(walk);
+        });
+      });
+      // 斑马线：白色短划横排，与主城路口观感一致（roadMarking 层）。
+      const zebraMat = createLayerMaterial({ color: 0xe8e7e4, roughness: 0.7 });
+      trackPathMaterial(zebraMat);
+      crossings.forEach((crossing) => {
+        for (let i = -2; i <= 2; i++) {
+          addMarking(new THREE.BoxGeometry(0.34, 0.008, 1.1), zebraMat, i * 0.5, crossing);
+        }
+      });
+    }
+
+    // 人行道街巷：支路（z=-44.5/-54.5/-64.5，宽 streetWidth）+ 巷道
+    // （laneWidth）。按两端点方向旋转绘制（与 Echo 区渲染同法）。
+    const northLaneMat = createLayerMaterial({ color: pathColor, roughness: 1, tex: 'pavement', rx: 1, ry: 4 });
+    trackPathMaterial(northLaneMat);
+    NORTH_DISTRICT_AREA.laneSegments.forEach((segment) => {
+      const [x1, z1, x2, z2] = segment as [number, number, number, number];
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const length = Math.hypot(dx, dz);
+      const isWideStreet = Math.abs(dx) > Math.abs(dz)
+        && NORTH_DISTRICT_AREA.wideStreetZs.includes((z1 + z2) / 2);
+      const width = isWideStreet ? NORTH_DISTRICT_AREA.streetWidth : NORTH_DISTRICT_AREA.laneWidth;
+      const lane = createMesh(new THREE.BoxGeometry(width, 0.04, length), northLaneMat);
+      lane.position.set((x1 + x2) / 2, SURFACE_Y.road, (z1 + z2) / 2);
+      lane.rotation.y = -Math.atan2(dx, dz);
+      lane.renderOrder = RENDER_ORDER.road;
+      lane.receiveShadow = true;
+      lane.userData.district = 'north-district';
+      scene.add(lane);
+    });
+
+    // 路口小广场：内部巷与支路交汇处的圆形铺装（roadSurface 层，盖过
+    // 路口、低于中心线标记），中心树由 streetTrees 提供。
+    const plazaMat = createLayerMaterial({ color: isNight ? 0xa8a7a1 : 0xd0cfca, roughness: 0.92, tex: 'pavement', rx: 2, ry: 2 });
+    trackPathMaterial(plazaMat);
+    NORTH_DISTRICT_AREA.plazaSpots.forEach(([x, z]) => {
+      const plaza = createMesh(new THREE.CircleGeometry(2.1, 24), plazaMat);
+      plaza.rotation.x = -Math.PI / 2;
+      plaza.position.set(x, SURFACE_Y.roadSurface, z);
+      plaza.renderOrder = RENDER_ORDER.road;
+      plaza.receiveShadow = true;
+      plaza.userData.district = 'north-district';
+      scene.add(plaza);
+    });
+
+    // 作品街区（博物馆区）：四个大街坊的整片院落铺装——地标建筑、树阵
+    // 与长椅都落在这层连续的城市肌理上，而不是各自脚下一块孤立垫层。
+    const courtyardMat = createLayerMaterial({ color: isNight ? 0xaba9a3 : 0xdedcd7, roughness: 0.95, tex: 'ground5', rx: 8, ry: 5 });
+    trackPathMaterial(courtyardMat);
+    NORTH_DISTRICT_AREA.landmarkBlocks.forEach(([minX, minZ, maxX, maxZ]) => {
+      const block = createMesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), courtyardMat);
+      block.rotation.x = -Math.PI / 2;
+      block.position.set((minX + maxX) / 2, SURFACE_Y.landscape + 0.006, (minZ + maxZ) / 2);
+      block.receiveShadow = true;
+      block.renderOrder = RENDER_ORDER.landscape;
+      block.userData.district = 'north-district';
+      scene.add(block);
+    });
+
+    // 地标 parcel 垫层：12 处作品建筑的建设地块统一为 pavement 基面，
+    // 让两排作品街区在项目筹资前也呈现「预留地块」的城市肌理，而不是
+    // 零散色块。坐标取自 BUILDING_DEFS（north_* 唯一事实来源）；尺寸
+    // 必须盖过各 north_*.ts 自带的 plot 方块（4.0–6.4），再留 0.5 边距。
+    const northPadSizes: Record<string, [number, number]> = {
+      chat_plaza: [7.4, 6.6], pigeon_square: [7.2, 7.2], planetarium: [6.8, 6.8],
+      singularity: [6.0, 6.0], binary_garden: [6.0, 6.0], ziggurat: [7.0, 7.0],
+      monolith: [5.2, 5.2], worry_store: [5.0, 5.0], bistro: [5.2, 5.2],
+      night_kiosk: [4.8, 4.8], jukebox: [4.6, 4.6], backrooms_door: [4.6, 4.6],
+    };
+    const northPadMat = createLayerMaterial({ color: isNight ? 0xa3a29c : 0xdcdad6, roughness: 0.92, tex: 'ground5', rx: 2, ry: 2 });
+    trackPathMaterial(northPadMat);
+    BUILDING_DEFS.filter((definition) => definition.id.startsWith('north_')).forEach((definition) => {
+      const padSize = northPadSizes[definition.shape];
+      if (!padSize) return;
+      const pad = createMesh(new THREE.PlaneGeometry(padSize[0], padSize[1]), northPadMat);
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set(definition.x, 0.054, definition.z);
+      pad.receiveShadow = true;
+      pad.renderOrder = RENDER_ORDER.road;
+      pad.userData.district = 'north-district';
+      scene.add(pad);
+    });
+
+    // 中央大道中心虚线（与主城主路同规格的黄色短划）。
+    const northLineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
+    trackPathMaterial(northLineMat);
+    for (let z = -41.5; z >= -78.5; z -= 2.4) {
+      addMarking(new THREE.BoxGeometry(0.07, 0.008, 1.15), northLineMat, 0, z);
+    }
+
+    addLamps(NORTH_DISTRICT_AREA.lampPositions.map(([x, z]) => [x, 0, z] as const));
   }
 
   function addMarking(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, z: number): void {

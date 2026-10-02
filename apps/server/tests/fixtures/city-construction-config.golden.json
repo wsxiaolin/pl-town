@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-09-27.blocks.1",
+  "version": "2026-10-02.north.1",
   "projects": [
     {
       "id": "build-catcafe",
@@ -431,6 +431,102 @@
       "buildingId": "photostudio",
       "name": "照相馆",
       "description": "共同筹建照相馆",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_chat_plaza",
+      "buildingId": "north_chat_plaza",
+      "name": "聊天广场",
+      "description": "共同筹建聊天广场",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_pigeon_square",
+      "buildingId": "north_pigeon_square",
+      "name": "鸽子广场",
+      "description": "共同筹建鸽子广场",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_stellar_hall",
+      "buildingId": "north_stellar_hall",
+      "name": "恒星会堂",
+      "description": "共同筹建恒星会堂",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_singularity",
+      "buildingId": "north_singularity",
+      "name": "奇点塔",
+      "description": "共同筹建奇点塔",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_binary_garden",
+      "buildingId": "north_binary_garden",
+      "name": "双星花园",
+      "description": "共同筹建双星花园",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_maya_grove",
+      "buildingId": "north_maya_grove",
+      "name": "玛雅台地",
+      "description": "共同筹建玛雅台地",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_api_memorial",
+      "buildingId": "north_api_memorial",
+      "name": "安全碑",
+      "description": "共同筹建安全碑",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_worry_store",
+      "buildingId": "north_worry_store",
+      "name": "解忧杂货店",
+      "description": "共同筹建解忧杂货店",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_bistro",
+      "buildingId": "north_bistro",
+      "name": "会员制餐厅",
+      "description": "共同筹建会员制餐厅",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_night_kiosk",
+      "buildingId": "north_night_kiosk",
+      "name": "不打烊贩卖店",
+      "description": "共同筹建不打烊贩卖店",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_jukebox",
+      "buildingId": "north_jukebox",
+      "name": "点唱机",
+      "description": "共同筹建点唱机",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_backrooms_door",
+      "buildingId": "north_backrooms_door",
+      "name": "后室之门",
+      "description": "共同筹建后室之门",
       "kind": "building",
       "cost": 3000
     },

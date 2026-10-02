@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
+import { createNorthDistrictBuilders } from './northDistrictBuildings';
 import { RENDER_ORDER } from './layers';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
@@ -929,6 +930,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     film_city: buildFilmCity,
+    ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
   };
 
   return { builders };

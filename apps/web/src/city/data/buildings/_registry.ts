@@ -57,6 +57,18 @@ import wushiRestaurant from './wushi_restaurant';
 import televisionTower from './television_tower';
 import friedChickenShop from './fried_chicken_shop';
 import tavern from './tavern';
+import northChatPlaza from './north_chat_plaza';
+import northPigeonSquare from './north_pigeon_square';
+import northStellarHall from './north_stellar_hall';
+import northSingularity from './north_singularity';
+import northBinaryGarden from './north_binary_garden';
+import northMayaGrove from './north_maya_grove';
+import northApiMemorial from './north_api_memorial';
+import northWorryStore from './north_worry_store';
+import northBistro from './north_bistro';
+import northNightKiosk from './north_night_kiosk';
+import northJukebox from './north_jukebox';
+import northBackroomsDoor from './north_backrooms_door';
 
 import type { BuildingConfig, BuildingContentLike } from './_types';
 import type { BuildingDefinition } from '../../buildingEntity';
@@ -118,6 +130,18 @@ export const BUILDING_REGISTRY: readonly BuildingConfig[] = [
   televisionTower,
   friedChickenShop,
   tavern,
+  northChatPlaza,
+  northPigeonSquare,
+  northStellarHall,
+  northSingularity,
+  northBinaryGarden,
+  northMayaGrove,
+  northApiMemorial,
+  northWorryStore,
+  northBistro,
+  northNightKiosk,
+  northJukebox,
+  northBackroomsDoor,
 ];
 
 export { inferFacade, inferPlot, SHAPE_FACADES, SHAPE_PLOTS } from './_shapeDefaults';

@@ -54,7 +54,10 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // through the policy/area reconciliation instead of the restore guard. Any
   // content change must ship with a version bump or
   // tests/city-config-snapshot.mjs fails at review time.
-  version: '2026-09-27.blocks.1',
+  // 2026-10-02.north.1: 星语北城（黑洞热门作品 Top100 城市化）——新增
+  // 12 栋 north_* 作品建筑（BUILDING_CATALOG 重新生成后自动追加为治理
+  // 项目）。既有项目与 initialBuiltBuildingIds 零改动。
+  version: '2026-10-02.north.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))

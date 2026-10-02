@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ResourcePool } from '../core/ResourcePool';
-import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
+import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
@@ -44,6 +44,7 @@ import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { installDebugApi } from './debugApi';
+import { isDevPortalRequested } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
@@ -285,6 +286,7 @@ const frameLoop = createFrameLoop({
 const roadNavigation = createRoadNavigationSystem({
   roadCoords: ROAD_COORDS,
   echoObservatoryArea: ECHO_OBSERVATORY_AREA,
+  northDistrictArea: NORTH_DISTRICT_AREA,
   westBeach: WEST_BEACH,
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
@@ -445,6 +447,8 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
+    teleport: devTeleport,
+    focus: devFocus,
   });
   addCityLighting(scene, MOBILE, isNight);
   navigationTargetMarker = createNavigationTargetMarker(scene);
@@ -623,6 +627,7 @@ function init() {
     shouldShowIntro: shouldShowCG,
     startIntro: startCG,
     beforeShow: closeCityGovernancePanel,
+    isDevPortal: isDevPortalRequested,
     proceed: proceedToCity,
   });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });
@@ -779,7 +784,9 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
   // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
   if (password === undefined && pl === undefined) runEntrance(entrance);
   else loginController?.holdCityEntrance(() => runEntrance(entrance));
-  multiplayerHousing.connect(nickname, password, pl);
+  // Dev portal stays offline: a credential-less connect would bounce off the
+  // auth gate and re-open the login overlay we just skipped.
+  if (!isDevPortalRequested()) multiplayerHousing.connect(nickname, password, pl);
 }
 
 function disposeSession() {
@@ -822,14 +829,30 @@ function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: Abo
   return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);
 }
 
+/** Dev portal: snap the player to a world spot; the follow camera lands there
+ *  on the next frame. Path state is cleared so no stale walk resumes. */
+function devTeleport(x: number, z: number): boolean {
+  if (!cursorChar) return false;
+  view.clearPlayerPath();
+  cursorChar.position.set(x, 0, z);
+  view.setTarget(x, z, true);
+  return true;
+}
+/** Dev portal: teleport + optional orthographic zoom (bigger = wider view). */
+function devFocus(x: number, z: number, zoom?: number): boolean {
+  if (zoom !== undefined) view.applyZoom(zoom);
+  return devTeleport(x, z);
+}
+
 const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
   prepareFirstFrame,
-  startTutorial: () => onboardingTutorial?.start(),
+  startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
   proceedToCity,
   showLogin: () => loginController?.showLogin(),
+  shouldSkipLoginGate: isDevPortalRequested,
   disposeSession,
 });
 

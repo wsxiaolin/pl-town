@@ -22,6 +22,9 @@ const BUILDING_IDS = [
   'archive', 'tradingpost', 'records', 'guildhall', 'musichall', 'conservatory', 'arena',
   'guesthouse', 'shrine', 'beacon', 'banana_palace', 'qipai_hall', 'wushi_restaurant', 'film_city', 'academy_library',
   'television_tower', 'fried_chicken_shop', 'tavern', 'photostudio',
+  'north_chat_plaza', 'north_pigeon_square', 'north_stellar_hall', 'north_singularity',
+  'north_binary_garden', 'north_maya_grove', 'north_api_memorial', 'north_worry_store',
+  'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(

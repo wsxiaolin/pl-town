@@ -21,6 +21,8 @@ export type LoginControllerOptions = {
   ensureUserId: () => void;
   shouldShowIntro: () => boolean;
   startIntro: () => void;
+  /** Dev visual-verification portal (?dev): never surface the login overlay. */
+  isDevPortal?: () => boolean;
   beforeShow?: () => void;
   proceed: (nickname?: string, password?: string, pl?: { login: string; password: string }) => void;
 };
@@ -124,8 +126,12 @@ export function createLoginController(options: LoginControllerOptions) {
     const name = localStorage.getItem('minicityUser');
     if (overlay) overlay.style.display = 'none';
     if (name) applyUsername(name);
+    else if (options.isDevPortal?.()) applyUsername('dev-监工');
     else showLoginEntry();
-    if (options.shouldShowIntro()) options.startIntro();
+    // Dev portal enters before the intro check: with the opening CG disabled
+    // initCG never fires onFinish, so this is the only entrance trigger.
+    if (options.isDevPortal?.()) options.proceed();
+    else if (options.shouldShowIntro()) options.startIntro();
     else if (name) options.proceed();
     else showLogin();
   }

@@ -13,6 +13,7 @@ type ObstacleGroup = THREE.Object3D & {
 export interface RoadNavigationOptions {
   roadCoords: readonly number[];
   echoObservatoryArea?: { roadNodes: readonly Coord2[]; roadSegments: readonly RoadSegment4[] };
+  northDistrictArea?: { roadNodes: readonly Coord2[]; avenueSegment: readonly [number, number, number, number]; laneSegments: readonly RoadSegment4[]; roadJunctions?: readonly RoadSegment4[] };
   westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
@@ -21,10 +22,16 @@ export interface RoadNavigationOptions {
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   const ROAD_COORDS = [...options.roadCoords];
   const ECHO_OBSERVATORY_AREA = { roadNodes: [...(options.echoObservatoryArea?.roadNodes ?? [])] as Coord2[], roadSegments: [...(options.echoObservatoryArea?.roadSegments ?? [])] as RoadSegment4[] };
+  const NORTH_DISTRICT_AREA = {
+    roadNodes: [...(options.northDistrictArea?.roadNodes ?? [])] as Coord2[],
+    avenueSegment: options.northDistrictArea?.avenueSegment ?? [0, 0, 0, 0],
+    laneSegments: [...(options.northDistrictArea?.laneSegments ?? [])] as RoadSegment4[],
+    roadJunctions: [...(options.northDistrictArea?.roadJunctions ?? [])] as RoadSegment4[],
+  };
   const CITY_LIMIT = options.cityLimit;
   const PLAYER_CLEARANCE = 0.2;
   const WEST_BEACH = options.westBeach;
-  const allExtraNodes = ECHO_OBSERVATORY_AREA.roadNodes;
+  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes, ...NORTH_DISTRICT_AREA.roadNodes];
   const WORLD_BOUNDS = {
     minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
     maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
@@ -227,6 +234,33 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
     ECHO_OBSERVATORY_AREA.roadSegments.forEach(([x1,z1,x2,z2])=>{
+      const aIdx=nodeIdx.get(x1+','+z1);
+      const bIdx=nodeIdx.get(x2+','+z2);
+      if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
+    });
+    
+    NORTH_DISTRICT_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
+    // 街道按途经节点切分成逐交叉口边，保证每个路口都是图节点
+    // （与主城网格逐格建边的方式一致）。
+    const northSegments=[NORTH_DISTRICT_AREA.avenueSegment,...NORTH_DISTRICT_AREA.laneSegments] as Array<[number,number,number,number]>;
+    northSegments.forEach(([x1,z1,x2,z2])=>{
+      const dx=x2-x1, dz=z2-z1;
+      const length=Math.hypot(dx,dz);
+      if(length<1e-6) return;
+      const onSegment=NORTH_DISTRICT_AREA.roadNodes
+        .filter(([nx,nz])=>Math.abs(dx*(nz-z1)-dz*(nx-x1))<1e-3)
+        .map(([nx,nz])=>({x:nx,z:nz,t:((nx-x1)*dx+(nz-z1)*dz)/(length*length)}))
+        .filter((p)=>p.t>=-1e-6&&p.t<=1+1e-6)
+        .sort((a,b)=>a.t-b.t);
+      for(let i=0;i+1<onSegment.length;i++){
+        const aIdx=nodeIdx.get(onSegment[i]!.x+','+onSegment[i]!.z);
+        const bIdx=nodeIdx.get(onSegment[i+1]!.x+','+onSegment[i+1]!.z);
+        if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
+      }
+    });
+    // roadJunctions 是图级连接边：路面由主城网格/环城步道覆盖，
+    // 仅把北城街道端点接入主城网格节点。
+    NORTH_DISTRICT_AREA.roadJunctions.forEach(([x1,z1,x2,z2])=>{
       const aIdx=nodeIdx.get(x1+','+z1);
       const bIdx=nodeIdx.get(x2+','+z2);
       if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
@@ -490,6 +524,12 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const buildingEntry=buildingRoadEntry(p);
     if(buildingEntry) return buildingEntry;
     if(isRoadPoint(p)) return snapToRoadClear(p);
+    if(p.z<=-42 && NORTH_DISTRICT_AREA.roadNodes.length){
+      const nearest=NORTH_DISTRICT_AREA.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
+      const q=new THREE.Vector3(nearest[0],0,nearest[1]);
+      if(!pointInAnyBuilding(p.x,p.z) && !pathBlocked(p.x,p.z,q.x,q.z)) return p.clone();
+      return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
+    }
     if(p.x>=44 && ECHO_OBSERVATORY_AREA.roadNodes.length){
       const nearest=ECHO_OBSERVATORY_AREA.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
       const q=new THREE.Vector3(nearest[0],0,nearest[1]);
@@ -515,6 +555,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     ROAD_COORDS.forEach((z:number)=>{ tryPoint(p.x,z); tryPoint(nearestRoadCoord(p.x),z); });
     PLAZA_POINTS.forEach(([x,z])=>tryPoint(x,z));
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
+    NORTH_DISTRICT_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
     if(bestD<Infinity) return best;
     return nearestRoadPoint(p);
   }
