@@ -12,7 +12,6 @@
      column, so every row lines up on the same centered 900px axis. */
   --gp-gutter: max(var(--gp-pad), calc((100% - 900px) / 2));
   --gp-paper: #f5ecd8;
-  --gp-paper-edge: #eaddbd;
   --gp-card: #fdfaf0;
   --gp-card-deep: #f8f1de;
   --gp-ink: #38301f;
@@ -388,30 +387,8 @@
 
 .city-governance-panel button:disabled { opacity: .6; cursor: default; }
 
-/* ── Night: darker parchment, same ink hierarchy ──────────────────────────── */
-body.night .city-governance-panel {
-  --gp-paper: #2f2c23;
-  --gp-paper-edge: #26241d;
-  --gp-card: #3a362b;
-  --gp-card-deep: #332f26;
-  --gp-ink: #f0e7d2;
-  --gp-ink-soft: #c3b48f;
-  --gp-line: #5c5138;
-  --gp-line-soft: #4a4130;
-  --gp-gold: #d6b56b;
-  --gp-gold-deep: #e7c573;
-  --gp-ok-bg: #34432f;
-  --gp-ok-ink: #cfe1c6;
-  color-scheme: dark;
-}
-body.night .city-governance-head { background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0)); }
-body.night .city-governance-head button,
-body.night .city-governance-card button,
-body.night .city-governance-card input[data-city-input],
-body.night .city-governance-group-links button,
-body.night .city-governance-intro button { background: rgba(255, 255, 255, .06); }
-body.night .city-governance-card button[data-city-focus^="donate:"] { background: #3d6b50; color: #f3f0e2; }
-body.night .city-governance-card button[data-city-focus^="vote:"] { border-color: #4f6b4a; background: #33452f; color: #bcd8b4; }
+/* The register is deliberately light at night too: it stands in for a lamp-lit
+   civic hall and the commons test pins this light contract. */
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
