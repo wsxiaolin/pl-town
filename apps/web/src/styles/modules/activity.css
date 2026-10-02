@@ -328,12 +328,12 @@
 
 @media (max-height: 560px) {
   .activity-panel-shell {
-    height: calc(100dvh - 20px);
+    height: calc(100dvh - 40px);
   }
 
   .activity-panel-hero-copy {
     top: 26px;
-    max-height: calc(100dvh - 166px);
+    max-height: calc(100dvh - 210px);
     overflow: hidden;
   }
 }
