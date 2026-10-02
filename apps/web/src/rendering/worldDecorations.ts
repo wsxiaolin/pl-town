@@ -120,6 +120,122 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     // 斜巷路口小广场的座椅（朝向广场中心）。
     addBench(-10.2, 0, -63.1, Math.PI);
     addBench(13.8, 0, -63.1, Math.PI);
+    addNorthCommunityProps();
+  }
+
+  // 居住坊的社区生活层：宅前小路（每户直连最近横街）、绿篱边界与院落
+  // 道具（菜畦/晾衣绳/信报箱/垃圾桶/花坛/小游园）——让民居坊读作有
+  // 日常生活的「小区」而不是几排孤立的房子。
+  function addNorthCommunityProps() {
+    const pavementMat = stdMat({ color: getIsNight() ? 0x9d9c97 : 0xc6c5c0, roughness: 0.95, tex: 'pavement', rx: 1, ry: 1 });
+    pavementMat.depthWrite = false;
+    // 宅前小路：每个可认领民居沿 z 向连到最近的横街（-64.5 / -74 / -80）。
+    NORTH_DISTRICT_AREA.residenceLots.forEach(([x, z]) => {
+      const streets = [-64.5, -74, -80];
+      const street = streets.reduce((best, s) => Math.abs(z - s) < Math.abs(z - best) ? s : best, streets[0]!);
+      const startZ = z + (street > z ? 0.95 : -0.95);
+      const endZ = street + (street > z ? 0.7 : -0.7);
+      const length = Math.abs(endZ - startZ);
+      if (length < 0.3) return;
+      const path = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.035, length), pavementMat);
+      path.position.set(x, SURFACE_Y.buildingPlot, (startZ + endZ) / 2);
+      path.renderOrder = RENDER_ORDER.buildingPlot;
+      path.receiveShadow = true;
+      scene.add(path);
+    });
+    // 绿篱：沿 run 逐段摆放，带轻微高度抖动。
+    const hedgeMat = stdMat({ color: getIsNight() ? 0x43603a : 0x5f8f49, roughness: 0.95, tex: 'grass', rx: 1, ry: 1 });
+    NORTH_DISTRICT_AREA.hedgeRuns.forEach(([x1, z1, x2, z2]) => {
+      const length = Math.hypot(x2 - x1, z2 - z1);
+      const count = Math.round(length / 0.55);
+      const rotY = -Math.atan2(x2 - x1, z2 - z1);
+      for (let i = 0; i < count; i++) {
+        const t = count === 1 ? 0.5 : i / (count - 1);
+        const hedge = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26 + ((i * 7) % 3) * 0.03, 0.6), hedgeMat);
+        hedge.position.set(x1 + (x2 - x1) * t, 0.13, z1 + (z2 - z1) * t);
+        hedge.rotation.y = rotY;
+        hedge.castShadow = true;
+        scene.add(hedge);
+      }
+    });
+    NORTH_DISTRICT_AREA.yardProps.forEach(([x, z, kind]) => addYardProp(x, z, kind));
+  }
+
+  // 单个院落道具：全部程序化小件，与主城装饰同一材质语汇。
+  function addYardProp(x: number, z: number, kind: string) {
+    const g = new THREE.Group();
+    const metal = { color: 0xb5b2ac, roughness: 0.45, metalness: 0.5, tex: 'metal', rx: 1, ry: 1 };
+    switch (kind) {
+      case 'tree':
+        part(g, new THREE.CylinderGeometry(0.06, 0.09, 0.38, 8), { color: 0x6a4a2a, roughness: 0.9 }, [0, 0.19, 0]);
+        part(g, new THREE.SphereGeometry(0.3, 12, 12), { color: 0x6f9f4f, roughness: 0.85 }, [0, 0.66, 0]);
+        break;
+      case 'bin':
+        part(g, new THREE.CylinderGeometry(0.14, 0.12, 0.4, 10), { color: 0x3f5a44, roughness: 0.6 }, [0, 0.2, 0]);
+        part(g, new THREE.CylinderGeometry(0.15, 0.15, 0.05, 10), { color: 0x35483a, roughness: 0.6 }, [0, 0.42, 0]);
+        break;
+      case 'mailbox':
+        part(g, new THREE.CylinderGeometry(0.03, 0.035, 0.55, 8), metal, [0, 0.28, 0]);
+        part(g, new THREE.BoxGeometry(0.26, 0.2, 0.14), { color: 0x4a6a9a, roughness: 0.5 }, [0, 0.62, 0]);
+        break;
+      case 'planter':
+        part(g, new THREE.BoxGeometry(0.6, 0.24, 0.44), { color: 0xcdccca, roughness: 0.8, tex: 'stone', rx: 1, ry: 1 }, [0, 0.12, 0]);
+        part(g, new THREE.BoxGeometry(0.52, 0.08, 0.36), { color: 0x5f8f49, roughness: 0.95 }, [0, 0.27, 0]);
+        part(g, new THREE.SphereGeometry(0.06, 8, 8), { color: 0xe8a838, roughness: 0.6 }, [0.12, 0.34, 0], false);
+        part(g, new THREE.SphereGeometry(0.06, 8, 8), { color: 0xd86a6a, roughness: 0.6 }, [-0.14, 0.34, 0.04], false);
+        break;
+      case 'bikeRack':
+        part(g, new THREE.BoxGeometry(0.05, 0.5, 0.05), metal, [-0.3, 0.25, 0]);
+        part(g, new THREE.BoxGeometry(0.05, 0.5, 0.05), metal, [0.3, 0.25, 0]);
+        part(g, new THREE.BoxGeometry(0.66, 0.05, 0.05), metal, [0, 0.5, 0]);
+        break;
+      case 'clothesline':
+        ([-0.95, 0.95] as const).forEach((px) => {
+          part(g, new THREE.CylinderGeometry(0.03, 0.04, 1.25, 8), { color: 0x8a6a42, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [px, 0.62, 0]);
+          part(g, new THREE.BoxGeometry(0.3, 0.04, 0.04), { color: 0x8a6a42, roughness: 0.8 }, [px, 1.2, 0], false);
+        });
+        part(g, new THREE.BoxGeometry(1.9, 0.018, 0.018), { color: 0xd8d7d2, roughness: 0.6 }, [0, 1.18, 0], false);
+        part(g, new THREE.BoxGeometry(0.24, 0.18, 0.03), { color: 0x9ac7dc, roughness: 0.7 }, [-0.4, 1.05, 0], false);
+        part(g, new THREE.BoxGeometry(0.24, 0.18, 0.03), { color: 0xe8d5a8, roughness: 0.7 }, [0.38, 1.04, 0], false);
+        break;
+      case 'garden': {
+        part(g, new THREE.BoxGeometry(1.7, 0.06, 1.05), { color: P.FIELD, roughness: 1, tex: 'field', rx: 1, ry: 1 }, [0, 0.04, 0]);
+        [0, 1, 2].forEach((row) => {
+          [0, 1, 2, 3].forEach((col) => {
+            part(g, new THREE.SphereGeometry(0.075, 8, 8), { color: row % 2 ? 0x6f9f4f : 0x87b45c, roughness: 0.95 }, [-0.55 + col * 0.37, 0.14, -0.3 + row * 0.3], false);
+          });
+        });
+        break;
+      }
+      case 'sandpit':
+        part(g, new THREE.CylinderGeometry(0.9, 0.95, 0.05, 18), { color: 0xd9c692, roughness: 1, tex: 'ground', rx: 1, ry: 1 }, [0, 0.03, 0]);
+        part(g, new THREE.TorusGeometry(0.92, 0.05, 6, 20), { color: 0xb5a37c, roughness: 0.85 }, [0, 0.06, 0], false).rotation.x = Math.PI / 2;
+        part(g, new THREE.CylinderGeometry(0.06, 0.05, 0.14, 8), { color: 0xe8a838, roughness: 0.5 }, [0.3, 0.12, 0.2], false);
+        break;
+      case 'swing': {
+        ([[-0.6, 0.25], [-0.6, -0.25], [0.6, 0.25], [0.6, -0.25]] as Array<[number, number]>).forEach(([px, pz]) => {
+          const leg = part(g, new THREE.BoxGeometry(0.06, 1.35, 0.06), metal, [px, 0.62, pz]);
+          leg.rotation.z = px < 0 ? 0.18 : -0.18;
+        });
+        part(g, new THREE.BoxGeometry(1.5, 0.06, 0.06), metal, [0, 1.28, 0]);
+        part(g, new THREE.BoxGeometry(0.02, 0.5, 0.02), metal, [-0.22, 1.0, 0], false);
+        part(g, new THREE.BoxGeometry(0.02, 0.5, 0.02), metal, [0.22, 1.0, 0], false);
+        part(g, new THREE.BoxGeometry(0.5, 0.05, 0.16), { color: 0x9b6b3f, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, 0.74, 0], false);
+        break;
+      }
+      case 'tap':
+        part(g, new THREE.CylinderGeometry(0.045, 0.055, 0.75, 8), metal, [0, 0.37, 0]);
+        part(g, new THREE.BoxGeometry(0.2, 0.04, 0.04), metal, [0.08, 0.68, 0], false);
+        part(g, new THREE.CylinderGeometry(0.16, 0.18, 0.06, 12), { color: 0x9ac7dc, roughness: 0.2, metalness: 0.2 }, [0.14, 0.04, 0.06], false);
+        break;
+      case 'bench':
+        addBench(x, 0, z, 0);
+        return;
+      default:
+        return;
+    }
+    g.position.set(x, 0, z);
+    scene.add(g);
   }
 
   // 北城门：跨中央大道的石柱横梁（比主城 addArch 更宽的城区门户）。
