@@ -1,5 +1,12 @@
 /* ===== ACTIVITY PANEL ===== */
 
+/* --act-gold / --act-badge-grad：夜祭调色板的两处核心色，统一改在这里。 */
+.activity-panel-shell {
+  --act-gold: rgba(222, 176, 72, 1);
+  --act-gold-dim: rgba(222, 176, 72, 0.48);
+  --act-badge-grad: linear-gradient(135deg, #f5a623, #e8365a);
+}
+
 /* Entry button: pulsing warm-amber dot */
 .activity-panel-toggle {
   position: relative;
@@ -19,9 +26,6 @@
   animation: activity-dot-pulse 2.6s ease-in-out infinite;
 }
 @keyframes activity-dot-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 2px rgba(255, 176, 74, 0.22), 0 0 9px 2px rgba(255, 150, 50, 0.38);
-  }
   50% {
     box-shadow: 0 0 0 4px rgba(255, 176, 74, 0.12), 0 0 16px 5px rgba(255, 150, 50, 0.22);
   }
@@ -102,7 +106,7 @@
   border: 1px solid rgba(180, 200, 255, 0.18);
   border-radius: 10px;
   background: rgba(6, 12, 28, 0.65);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(4px);
   color: #8fa4cc;
   font-size: 17px;
   cursor: pointer;
@@ -113,6 +117,10 @@
   border-color: rgba(255, 110, 90, 0.38);
   color: #ff8878;
   transform: rotate(90deg);
+}
+.activity-panel-close:focus-visible {
+  outline: 2px solid rgba(140, 174, 255, 0.7);
+  outline-offset: 2px;
 }
 
 /* Body */
@@ -129,18 +137,19 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 20px 14px 20px;
+  padding: 20px 14px;
   overflow-y: auto;
   border-right: 1px solid rgba(140, 174, 255, 0.07);
   background: linear-gradient(180deg, #050b18 0%, #070d1e 100%);
   scrollbar-width: thin;
   scrollbar-color: rgba(140, 174, 255, 0.18) transparent;
 }
-.activity-panel-list::before {
-  content: '当前活动';
-  display: block;
+
+/* Section heading for the list — rendered as a real DOM element */
+.activity-panel-list-heading {
   flex: none;
-  margin-bottom: 10px;
+  margin: 0 0 10px;
+  padding: 0;
   color: rgba(150, 180, 255, 0.4);
   font-size: 10px;
   font-weight: 700;
@@ -169,8 +178,12 @@
   border-color: rgba(140, 178, 255, 0.18);
   transform: translateX(3px);
 }
+.activity-panel-item:focus-visible {
+  outline: 2px solid rgba(140, 174, 255, 0.7);
+  outline-offset: 2px;
+}
 .activity-panel-item.active {
-  border-color: rgba(222, 176, 72, 0.48);
+  border-color: var(--act-gold-dim);
   background: rgba(222, 176, 72, 0.07);
   box-shadow:
     inset 0 0 0 1px rgba(222, 176, 72, 0.13),
@@ -221,7 +234,7 @@
 .activity-panel-item-badge {
   padding: 2px 7px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #f5a623, #e8365a);
+  background: var(--act-badge-grad);
   color: #fff;
   font-size: 9.5px;
   font-style: normal;
@@ -244,7 +257,6 @@
   inset: -4%;
   background-position: center;
   background-size: cover;
-  transition: background-image 0.35s ease;
 }
 
 /* Bottom scrim for text legibility */
@@ -259,12 +271,14 @@
   );
 }
 
-/* Text block anchored to bottom-left, fills full hero width */
+/* Text block anchored to bottom, fills full hero width */
 .activity-panel-hero-copy {
   position: absolute;
   bottom: 40px;
   left: 46px;
   right: 46px;
+  max-height: 80%;
+  overflow-y: auto;
   text-align: left;
 }
 
@@ -273,7 +287,7 @@
   display: inline-block;
   padding: 3px 12px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #f5a623, #e8365a);
+  background: var(--act-badge-grad);
   color: #fff;
   font-size: 10.5px;
   font-weight: 800;
@@ -311,12 +325,10 @@
   font-size: 13px;
   letter-spacing: 0.05em;
 }
-.activity-panel-subtitle[hidden] {
-  display: none;
-}
 
 .activity-panel-description {
   margin-top: 14px;
+  max-width: 68ch;
   color: #c8d6ee;
   font-size: 13.5px;
   line-height: 1.9;
@@ -373,6 +385,10 @@
     border-radius: 0;
   }
   .activity-panel-list { width: 154px; }
+  /* 手机宽度下缩略图与徽章占用了绝大多数横向空间，隐藏后文字可以铺满整行。 */
+  .activity-panel-thumb,
+  .activity-panel-item-badge { display: none; }
+  .activity-panel-item { grid-template-columns: 1fr; }
   .activity-panel-hero-copy {
     bottom: 20px;
     left: 16px;

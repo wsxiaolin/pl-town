@@ -66,7 +66,7 @@ export function createActivityPanelController(options: ActivityPanelControllerOp
   }
 
   function renderList(): void {
-    list.replaceChildren();
+    list.querySelectorAll<HTMLButtonElement>(".activity-panel-item").forEach((el) => el.remove());
     for (const entry of ACTIVITY_ENTRIES) {
       const button = document.createElement('button');
       button.type = 'button';
