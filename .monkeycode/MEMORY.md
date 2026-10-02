@@ -134,3 +134,10 @@ Entries discovered by the Agent during task execution should follow this format:
 - Instructions:
   - 自写 WebSocket stub 必须在 constructor 里 queueMicrotask 触发 open 事件（参照 tests/helpers.ts:69），否则 MultiplayerClient 停在 CONNECTING、hello 永不发送；gate 流程下表现为登录按钮卡「正在核实身份…」且手机面板显示「连接中」。
   - 排障路径：CI 失败先下载 `test-results-shard-N` artifact 看 error-context.md 页面快照，再对比 stub 与 helpers 差异；本地 Xvfb 复现受限（无 GPU 下 page.goto 60s 超时），以 CI 快照为准。
+
+[User Instruction Summary]
+- Date: 2026-10-02
+- Context: 处理「移除个人投建、装饰默认呈现」任务时
+- Instructions:
+  - 不要就产品/实现细节向用户提问；按自己判断的最优解直接实现。
+  - 取消个人投建后，个人地块的装饰按已有 personalBlocks 精心设计的布局默认呈现（全城共享），不再暴露个人建设。

@@ -298,9 +298,6 @@ test('commons keeps the scrolled project and nearby focus across refreshes and v
   expect(scrollTop).toBeGreaterThan(100);
   await api.pushVoteCount();
   await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeCloseTo(scrollTop, 0);
-  await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-  await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
-  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeCloseTo(scrollTop, 0);
   api.holdNextVote();
   await vote.focus();
   await page.keyboard.press('Enter');

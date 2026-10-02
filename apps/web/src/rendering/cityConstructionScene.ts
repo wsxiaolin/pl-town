@@ -3,6 +3,7 @@ import { gsap } from 'gsap';
 import type { BuildingEntity } from '../city/buildingEntity';
 import { restoreBuildingPresentation } from '../city/buildingDamage';
 import { getCityConfig, getCityState, isConstructionPending, subscribeCityGovernance } from '../city/cityGovernanceClient';
+import { collectDefaultDecorations } from '../city/cityConstructionLayout';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ResourcePool } from '../core/ResourcePool';
 import { createConstructionDecorations } from './constructionDecorations';
@@ -190,6 +191,14 @@ export function createCityConstructionScene(options: {
         const plot = config.personalPlots.find((entry) => entry.id === placed.plotId);
         const decoration = config.decorations.find((entry) => entry.id === placed.decorationId);
         if (plot && decoration) items.push({ key: `plot:${plot.id}`, kind: decoration.kind, x: plot.x, z: plot.z });
+      }
+      // Personal construction is gone; the curated block layout ships as the
+      // default scenery. A legacy per-plot record still wins over the preset on
+      // its own plot so previously built decorations remain visible.
+      const occupiedPlots = new Set(state.decorations.map((entry) => entry.plotId));
+      for (const preset of collectDefaultDecorations(config)) {
+        if (occupiedPlots.has(preset.plotId)) continue;
+        items.push({ key: `plot:${preset.plotId}`, kind: preset.kind, x: preset.x, z: preset.z });
       }
       const wanted = new Set(items.map((item) => item.key));
       for (const [key, visual] of visuals) {

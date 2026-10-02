@@ -50,17 +50,6 @@
   outline: 3px solid #55783d;
   outline-offset: 3px;
 }
-.city-governance-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .5rem;
-  padding: .9rem 1.5rem 0;
-}
-.city-governance-tabs button.active {
-  background: #315e45;
-  border-color: #315e45;
-  color: #fff;
-}
 .city-governance-panel [data-city-status] {
   margin: .7rem 1.5rem 0;
   color: #5b705d;
@@ -178,7 +167,7 @@
     margin-right: max(1rem, env(safe-area-inset-right));
   }
 
-  .city-governance-head, .city-governance-tabs, .city-governance-body {
+  .city-governance-head, .city-governance-body {
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
   }

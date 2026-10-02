@@ -85,7 +85,7 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
   let state: LegacyState = { configVersion: config.version, epoch: 'capability-epoch', revision: 0,
     projects: [{ id: 'library', funded: 0, built: false }], decorations: [] };
   const errors: string[] = [];
-  const api = { supported: false, reads: 0, donations: 0, decorations: 0, votes: 0, errors };
+  const api = { supported: false, reads: 0, donations: 0, votes: 0, errors };
   page.on('pageerror', (error) => errors.push(error.message));
   stubCityWebSocket(page, { user: 'compat-resident', unlockedBuildings: ['commons'] });
   await page.route('**/town-api/**', (route) => {
@@ -100,14 +100,6 @@ async function compatibilityFixture(page: Page, status: 404 | 405) {
     if (path.endsWith('/city/donate')) {
       api.donations += 1;
       state = { ...state, revision: state.revision + 1, projects: [{ id: 'library', funded: 100, built: false }] };
-      return route.fulfill({ json: { state } });
-    }
-    if (path.endsWith('/city/decorate')) {
-      api.decorations += 1;
-      const request = route.request().postDataJSON();
-      const block = config.personalBlocks!.find((entry) => entry.id === request.blockId);
-      state = { ...state, revision: state.revision + 1, decorations: (block?.placements ?? [])
-        .map(({ plotId, decorationId }) => ({ plotId, decorationId, ownerId: 'compat-resident', ownerNickname: 'compat-resident' })) };
       return route.fulfill({ json: { state } });
     }
     if (path.endsWith('/city/vote')) {
@@ -135,13 +127,6 @@ for (const status of [404, 405] as const) {
     await project.getByRole('button', { name: '捐款', exact: true }).click();
     await expect(project).toContainText('100 金币');
     expect(api.donations).toBe(1);
-    await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const gardenBlock = panel.locator('[data-city-block="garden-block"]');
-    await expect(gardenBlock.locator('.city-area-cell')).toHaveCount(2);
-    await gardenBlock.getByRole('button', { name: '投建这片', exact: true }).click();
-    await expect(gardenBlock).toContainText('已由 compat-resident 投建');
-    expect(api.decorations).toBe(1);
-    await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
     await expect(unavailable).toBeVisible();
     await expect(panel.getByRole('alert')).toHaveCount(0);
     expect(api.votes).toBe(0);
