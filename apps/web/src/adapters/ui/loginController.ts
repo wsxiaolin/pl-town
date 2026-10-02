@@ -22,6 +22,8 @@ export type LoginControllerOptions = {
   checkAchievements: () => void;
   shouldShowIntro: () => boolean;
   startIntro: () => void;
+  /** Dev visual-verification portal (?dev): never surface the login overlay. */
+  isDevPortal?: () => boolean;
   beforeShow?: () => void;
   proceed: (nickname?: string, password?: string, pl?: { login: string; password: string }) => void;
 };
@@ -125,10 +127,13 @@ export function createLoginController(options: LoginControllerOptions) {
     const name = localStorage.getItem('minicityUser');
     if (overlay) overlay.style.display = 'none';
     if (name) applyUsername(name);
+    else if (options.isDevPortal?.()) applyUsername('dev-监工');
     else showLoginEntry();
     if (options.shouldShowIntro()) options.startIntro();
     else if (name) options.proceed();
-    else showLogin();
+    // Dev portal: the entrance already ran via the boot gate — just keep the
+    // overlay down; there are no credentials to sign in with.
+    else if (!options.isDevPortal?.()) showLogin();
   }
 
   /** Read the Physics Lab ownership-verification fields when they are shown. */

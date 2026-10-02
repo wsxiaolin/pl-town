@@ -629,6 +629,7 @@ function init() {
     shouldShowIntro: shouldShowCG,
     startIntro: startCG,
     beforeShow: closeCityGovernancePanel,
+    isDevPortal: isDevPortalRequested,
     proceed: proceedToCity,
   });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });
