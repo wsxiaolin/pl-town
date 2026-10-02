@@ -36,6 +36,10 @@ for (const [label, report, expected] of [
   ['emoji fallback', '### 🔴 Blocker\n', 'BLOCKER'],
   ['CJK emoji fallback', '### 🔴 阻断\n', 'BLOCKER'],
   ['missing verdict defaults to pass', 'no verdict here\n', 'PASS'],
+  ['numbered blocker', '1. REVIEW_VERDICT: BLOCKER\n', 'BLOCKER'],
+  ['numbered pass', '10) REVIEW_VERDICT: PASS\n', 'PASS'],
+  ['quoted prompt line is not a verdict', '6. End with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: BLOCKER`.\n', 'PASS'],
+  ['decorated verdict after a prompt quote', '6. End with REVIEW_VERDICT: PASS\n1. REVIEW_VERDICT: BLOCKER\n', 'BLOCKER'],
 ] as const) {
   test(`review verdict: ${label}`, () => {
     const result = verdict(report);

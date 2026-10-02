@@ -21,10 +21,12 @@ fi
 raw=$(sed -r 's/\x1B\[[0-9;]*[mK]//g' "$REPORT")
 
 # Allow any non-alphanumeric prefix (bold markers, list dashes, quotes,
-# backticks) and either an underscore, space or hyphen inside the token.
-line=$(printf '%s\n' "$raw" | grep -iE '^[^[:alnum:]]*REVIEW[ _-]*VERDICT' | tail -1)
+# backticks) plus an optional ordered-list prefix (`1. ` / `10) `) and either an
+# underscore, space or hyphen inside the token. An anchored match keeps the task
+# prompt's quoted `REVIEW_VERDICT: PASS` line from ever counting.
+line=$(printf '%s\n' "$raw" | grep -iE '^[[:space:]]*([0-9]+[.)][[:space:]]*)?[^[:alnum:]]*REVIEW[ _-]*VERDICT' | tail -1)
 verdict=$(printf '%s\n' "$line" \
-  | sed -E 's/^[^[:alnum:]]*REVIEW[ _-]*VERDICT//I' \
+  | sed -E 's/.*REVIEW[ _-]*VERDICT//I' \
   | grep -oE '[A-Za-z]+' | head -1 \
   | tr '[:lower:]' '[:upper:]')
 
