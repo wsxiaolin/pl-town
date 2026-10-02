@@ -67,8 +67,8 @@ jobs:
           cat << 'EOF' >> issue_prompt.txt
 
           【Mandatory Requirements】:
-          1. Read `Agents.md` first and follow its module boundaries, dependency direction,
-             source-size limits (普通逻辑文件 ≤ 1000 行，MiniCityApp.ts ≤ 2000 行) and
+          1. Read `AGENTS.md` first and follow its module boundaries, dependency direction,
+             source-size limits (普通逻辑文件（含 MiniCityApp.ts）≤ 1000 行) and
              3D rendering z-fighting guidance. Do not refactor unrelated code.
           2. Develop or fix the codebase according to the Issue description above.
              - 前端：Vite + TypeScript + Three.js，入口 `apps/web/src/main.ts`。

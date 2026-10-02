@@ -819,7 +819,7 @@ function disposeSession() {
  * first visible frame. The heavy lifting lives in
  * `rendering/firstFrameWarmup.ts` — this adapter only binds the live
  * renderer/scene/camera handles (module lets assigned by init()), keeping
- * MiniCityApp a composition root per Agents.md.
+ * MiniCityApp a composition root per AGENTS.md.
  */
 function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
   return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);

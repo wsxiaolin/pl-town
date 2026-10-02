@@ -74,7 +74,7 @@ display `npm run test:web` works directly; in CI / containers use:
 
 ```bash
 scripts/run-web-tests.sh                # wraps `playwright test` in xvfb-run
-scripts/run-web-tests.sh --shard=1/4    # sharded run (see .github/workflows/test.yml)
+scripts/run-web-tests.sh --shard=1/8    # sharded run (see .github/workflows/test.yml)
 PLAYWRIGHT_WORKERS=4 scripts/run-web-tests.sh
 ```
 

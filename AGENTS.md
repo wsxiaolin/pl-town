@@ -11,14 +11,14 @@ apps/
   web/       Vite + TypeScript + Three.js 前端
   server/    Node.js + TypeScript HTTP/WebSocket 服务端
 data/        服务端运行时数据（被 Git 忽略）
-docs/        隐私政策、使用条款等文档
+docs/        部署、安全、治理迁移、剧情创作等文档
 ```
 
 前端负责 3D 城市渲染、交互、在线面板和 Physics Lab 数据展示；服务端负责 WebSocket 实时通信、临时身份、SQLite 持久化、住房关系，以及 `/town-api` HTTP 代理接口。
 
 ## 环境与启动
 
-- 需要 Node.js 20 或更高版本。
+- 需要 Node.js 22（仓库 `package.json` 固定 `22.x`）。
 - 拿到项目第一步先安装依赖，且安装与脚本准备要并发进行（后台跑安装的同时并行阅读文档、准备构建/测试/启动脚本）。
 - 依赖安装优先使用 `scripts/setup-deps.sh`：它会按运行环境自动选择最快镜像（国内 npmmirror / 清华 PyPI / goproxy.cn，海外官方源），按锁文件执行 `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` 等，并初始化 submodule。检测到 Playwright 项目时还会安装完整版 Chromium 及 WebGL 测试所需系统库（`xvfb`、`mesa-vulkan-drivers`、`libgbm1` 等，需 root/apt；`--skip-browser` 可跳过）。也可在仓库根目录直接 `npm install`。
 - `npm run dev` 同时启动前端（默认 `http://localhost:5173`）和服务端（默认 `http://localhost:8787`）。
@@ -48,7 +48,7 @@ npm test                 # 前端 Playwright + 服务端集成测试
 ```bash
 scripts/run-web-tests.sh                 # 整套，默认单 worker
 PLAYWRIGHT_WORKERS=4 scripts/run-web-tests.sh
-scripts/run-web-tests.sh --shard=1/4     # 分片，配合 CI matrix
+scripts/run-web-tests.sh --shard=1/8     # 分片，配合 CI matrix
 ```
 
 为避免在 GitHub CI 和不同 agent 机器上反复踩安装坑（Node 依赖、Playwright Chromium、xvfb、Vulkan/SwiftShader 系统库），所有依赖已打包进 `docker/test.Dockerfile`。镜像只预装稳定依赖、不拷贝源码，运行时挂载仓库即可复用：
@@ -58,7 +58,7 @@ docker build -f docker/test.Dockerfile -t pl-town-test .
 docker run --rm -v "$PWD":/work -w /work pl-town-test scripts/run-web-tests.sh
 ```
 
-CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）/ 服务端测试在 runner 上直接跑；Web Playwright 套件按 4 分片矩阵并发执行，每个分片在 Xvfb + SwiftShader 下运行并上传报告产物。分片数通过 matrix `shard/total` 控制，套件变长时调大 `total`。
+CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）/ 服务端测试在 runner 上直接跑；Web Playwright 套件按 8 分片矩阵并发执行，每个分片在 Xvfb + SwiftShader 下运行并上传报告产物。分片数通过 matrix `shard/total` 控制，套件变长时调大 `total`。
 
 新增或修改浏览器交互、布局、WebGL、端到端流程的测试时，注意：软件渲染下帧率偏低，涉及动画/位移的断言应使用 `expect.poll` 轮询而非固定 `waitForTimeout`；点击顶栏控件前必须经过 `waitForCityBooted`（等待启动屏淡出）；被画布拦截点击的控件使用 `click({ force: true })`。
 
@@ -108,7 +108,7 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 ## 部署
 
-`.github/workflows/deploy-frontend.yml` 在 `main` 分支 push 或手动触发时构建并部署前端到 GitHub Pages。该工作流使用 Node.js 20、重新安装 npm 依赖，并以 `BASE_PATH=/pl-town/` 构建 `apps/web/dist`。服务端不在此工作流中部署。
+`.github/workflows/deploy-frontend.yml` 在 `main` 分支 push 或手动触发时构建并部署前端到 GitHub Pages。该工作流使用 Node.js 22、重新安装 npm 依赖，并以 `BASE_PATH=/pl-town/` 构建 `apps/web/dist`。服务端不在此工作流中部署。
 
 城市治理配置属于持久化账本协议。已筹资项目的定义与 ID 保持不可变；调整 `personalPlots`、`personalAreas`、`decorations` 或 `initialBuiltBuildingIds` 时，必须先提供显式数据对账迁移，旧备份才能恢复到新版本。`city_operations` 和 `city_vote_operations` 保存建设及投票请求的幂等记录，防止历史请求重放后重复扣款或重复计票，因此容量治理应采用可证明安全的归档方案，不能直接按时间清理在线记录。
 
@@ -167,7 +167,7 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 ## 逻辑文件体积
 
-根脚本 `npm run check:source-size` 扫描前后端源码：普通逻辑文件上限为 1,000 行，迁移期的 `MiniCityApp.ts` 上限为 2,000 行；`data/` 和 `content/` 配置目录豁免。该检查已接入根级 `npm run typecheck` 和 `npm run build`。超过限制时，应按职责拆分模块，而不是把逻辑伪装成配置。
+根脚本 `npm run check:source-size` 扫描前后端源码：普通逻辑文件上限为 1,000 行（含迁移期的 `MiniCityApp.ts`）；`data/` 和 `content/` 配置目录豁免。该检查已接入根级 `npm run typecheck` 和 `npm run build`。超过限制时，应按职责拆分模块，而不是把逻辑伪装成配置。
 
 根脚本 `npm run check:asset-size` 扫描 `apps/web/src/assets`：单文件上限 1 MiB，资产树总量上限 48 MiB，已接入根级 `npm run typecheck` 和 `npm run build`。新增纹理需先经 `pngquant --quality=70-95 --force --skip-if-larger --ext .png` 压缩再提交，完整策略见 `docs/repo-size-reduction.md`。
 

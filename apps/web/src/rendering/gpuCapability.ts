@@ -74,7 +74,7 @@ function readCachedGpuInfo(): GpuInfo | null {
 /**
  * Synchronous probe for the boot path — cached sample when available, else a
  * quick WebGL read. The probe context is destroyed via WEBGL_lose_context and
- * the result cached, so the second-context cost (see Agents.md warning) is
+ * the result cached, so the second-context cost (see AGENTS.md warning) is
  * paid once per device, never per boot. WebGPU availability is a synchronous
  * `navigator.gpu` existence check — informational only.
  */

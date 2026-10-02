@@ -1,5 +1,5 @@
 // Server identity probe — fetches the /town-api/version fingerprint the
-// boot gate compares. Networking lives in core/ per Agents.md; the decision
+// boot gate compares. Networking lives in core/ per AGENTS.md; the decision
 // matrix and storage markers stay in city/bootGate.
 import { hasTownApiBase, townApiUrl } from './townApi';
 

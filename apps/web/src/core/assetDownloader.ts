@@ -1,6 +1,6 @@
 // Asset downloader — streams every bundled asset through the HTTP cache with
 // file-level progress (~0.1 MB emission steps). Network orchestration lives
-// in core/ per Agents.md; the DOM progress bar is adapters/ui/bootPipelineUi.
+// in core/ per AGENTS.md; the DOM progress bar is adapters/ui/bootPipelineUi.
 import { bundledAssets } from './bundledAssets';
 
 export type DownloadProgress = {
