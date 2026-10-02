@@ -4,6 +4,9 @@ import { readRenderSettings } from '../rendering/createRenderer';
 import { createWorldDecorations } from '../rendering/worldDecorations';
 import { createCityConstructionScene } from '../rendering/cityConstructionScene';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
+import { createMountainTerrain } from '../rendering/terrain/mountainRanges';
+import { createRiverChenxi } from '../rendering/terrain/riverChenxi';
+import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
@@ -124,6 +127,19 @@ export function assembleCityWorld(options: {
     groundMaterials: options.groundMats,
     addLamps: (positions) => worldDecorations.addLamps(positions),
   });
+  // ── 世界地形（岚屏岭山脉 / 晨溪河 / 明澜外海）：地表 ground 之后挂接。
+  // 配置在 city/data/terrain/，渲染器逐条消费；山脉工厂不自行挂接场景，
+  // 由这里 scene.add；河流与外海工厂内部自行 scene.add。
+  const mountainTerrain = createMountainTerrain({ scene });
+  scene.add(mountainTerrain.object);
+  const riverChenxi = createRiverChenxi({ scene });
+  const minglanIsles = createMinglanIsles({ scene });
+  // 导航：不把地形注册为障碍组。registerObstacleGroup 对整组只生成一个
+  // setFromObject AABB——山脉组横跨 x≈[-97,115]、z≈[-114,110]，会把环线
+  // （半径 38）与全城道路边全部判 blocked，玩家 movement 也被锁死；
+  // 而寻路基于道路图、movement 又钳制在 WORLD_BOUNDS（≈x[-50,76]/z±50），
+  // 远景地形（河 z≤-50.2、外海 x<-40）本就不在导航范围内。北麓少量山脚
+  // 印影伸入 z∈[-44,-50] 边缘带属可接受的视觉穿插，误注册的代价远大于此。
   addCityFountain({ scene, palette: PALETTE, part: graphics.mesh.part });
   const buildingSceneController = createBuildingSceneController({
     scene,
@@ -190,7 +206,7 @@ export function assembleCityWorld(options: {
   });
   void loadModels(options.buildings);
   const updateDecorations = worldDecorations.update;
-  worldDecorations.update = (elapsed) => { updateDecorations(elapsed); constructionScene.update(); };
+  worldDecorations.update = (elapsed) => { updateDecorations(elapsed); constructionScene.update(); riverChenxi.update(elapsed ?? 0); };
   return {
     constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
     worldDecorations,
@@ -199,5 +215,12 @@ export function assembleCityWorld(options: {
     buildingLabelController,
     sceneInterestPoints,
     raycastBuildingGroups,
+    terrain: {
+      dispose() {
+        mountainTerrain.dispose();
+        riverChenxi.dispose();
+        minglanIsles.dispose();
+      },
+    },
   };
 }
