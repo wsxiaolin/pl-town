@@ -55,6 +55,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     const existingSceneChildren = new Set(scene.children);
     addDistrictBuildings();
     addNorthDistrictResidences();
+    addNorthDistrictScenery();
     addSignpost(-4.0,0,-5.0);
     addSuburbHouse(12, 32, 90);
     addSuburbHouse(-12, -32, -90);
@@ -106,7 +107,34 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
       addSmallBlock(x, 0, z, index % 3);
     });
   }
-  
+
+  // 星语北城街景：北城门石柱、街景小屋（不可认领）、行道树与大道长椅。
+  // 全部为主城既有装饰语汇的复用，让北城在作品建筑筹资前就有街区生活气。
+  function addNorthDistrictScenery() {
+    addNorthGate(NORTH_DISTRICT_AREA.gate.x, NORTH_DISTRICT_AREA.gate.z);
+    NORTH_DISTRICT_AREA.sceneryHouses.forEach(([x, z, rotDeg]) => addSuburbHouse(x, z, rotDeg));
+    addTrees(NORTH_DISTRICT_AREA.streetTrees.map(([x, z]) => [x, 0, z] as const));
+    addBench(-2.6, 0, -47.2, Math.PI / 2);
+    addBench(2.6, 0, -62.6, -Math.PI / 2);
+    addBench(-2.6, 0, -71.8, Math.PI / 2);
+  }
+
+  // 北城门：跨中央大道的石柱横梁（比主城 addArch 更宽的城区门户）。
+  function addNorthGate(x: number, z: number) {
+    const g = new THREE.Group();
+    const stone = { color: 0xecebe8, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 };
+    const trim = { color: 0xe8a838, roughness: 0.35, metalness: 0.4 };
+    [-2.1, 2.1].forEach((px) => {
+      part(g, new THREE.BoxGeometry(0.34, 2.0, 0.34), stone, [px, 1.0, 0]);
+      part(g, new THREE.BoxGeometry(0.5, 0.14, 0.5), stone, [px, 2.05, 0]);
+      part(g, new THREE.SphereGeometry(0.11, 10, 10), trim, [px, 2.2, 0], false);
+    });
+    part(g, new THREE.BoxGeometry(4.6, 0.22, 0.3), stone, [0, 1.9, 0]);
+    part(g, new THREE.BoxGeometry(4.6, 0.08, 0.34), trim, [0, 2.05, 0], false);
+    g.position.set(x, 0, z);
+    scene.add(g);
+  }
+
   function addSmallBlock(x: number, y: number, z: number, type: number) {
     const variationSeed = residenceStyleSeedForLot(x, z);
     const { group:g, body, styleId, styleName } = createResidenceModel({x,z,variationSeed,lotType:type,isNight:getIsNight(),part});
