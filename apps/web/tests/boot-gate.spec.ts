@@ -29,9 +29,12 @@ test('light boot shows the current real-world moment still and enters', async ({
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
-  // Only the FRONT layer carries a src (the back one is the swap buffer).
-  const src = await page.locator('#bootMomentImg').getAttribute('src');
-  expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
+  // Progressive reveal: the ~1 KB preview lands first, the full still's src
+  // appears once the browser decode resolves — wait for it, then check the
+  // preview layer is fed too (soft → sharp boot, never a black flash).
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  const previewSrc = await page.locator('#bootMomentPreview').getAttribute('src');
+  expect(previewSrc).toMatch(/moments\/(dawn|noon|dusk|night)-preview\.webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
   // Skip interaction (r8 nit: click-skip had no coverage): the splash binds a
   // capture-phase pointerdown listener; exercising THAT path via a real
@@ -72,8 +75,8 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootPipeline')).toHaveClass(/is-active/);
   // The still behind the pipeline is the CURRENT moment, not a day cycle.
   // (The caption is display:none in heavy mode — assert what is visible.)
-  const heavySrc = await page.locator('#bootMomentImg').getAttribute('src');
-  expect(heavySrc).toMatch(new RegExp(`moments/(dawn|noon|dusk|night)\\.webp`));
+  // Same decode-gated src as the light path: wait instead of a sync read.
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
 
   // Full pipeline: download → scene → precompile → ready → reveal.
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });

@@ -9,23 +9,32 @@
 // outside, so there is no day-passing cycle; the progress bar carries time.
 
 import dawnUrl from '../../assets/moments/dawn.webp';
+import dawnPreviewUrl from '../../assets/moments/dawn-preview.webp';
 import noonUrl from '../../assets/moments/noon.webp';
+import noonPreviewUrl from '../../assets/moments/noon-preview.webp';
 import duskUrl from '../../assets/moments/dusk.webp';
+import duskPreviewUrl from '../../assets/moments/dusk-preview.webp';
 import nightUrl from '../../assets/moments/night.webp';
+import nightPreviewUrl from '../../assets/moments/night-preview.webp';
 import { momentForHour, type MomentName } from '../../core/momentClock';
 
-type ViewMoment = { name: MomentName; caption: string; url: string };
+type ViewMoment = { name: MomentName; caption: string; url: string; previewUrl: string };
 
-const IMAGE_BY_NAME: Record<MomentName, string> = {
-  dawn: dawnUrl,
-  noon: noonUrl,
-  dusk: duskUrl,
-  night: nightUrl,
+const IMAGE_BY_NAME: Record<MomentName, { url: string; previewUrl: string }> = {
+  dawn: { url: dawnUrl, previewUrl: dawnPreviewUrl },
+  noon: { url: noonUrl, previewUrl: noonPreviewUrl },
+  dusk: { url: duskUrl, previewUrl: duskPreviewUrl },
+  night: { url: nightUrl, previewUrl: nightPreviewUrl },
 };
 
 function viewMoment(hour: number): ViewMoment {
   const moment = momentForHour(hour);
-  return { name: moment.name, caption: moment.caption, url: IMAGE_BY_NAME[moment.name] };
+  return {
+    name: moment.name,
+    caption: moment.caption,
+    url: IMAGE_BY_NAME[moment.name].url,
+    previewUrl: IMAGE_BY_NAME[moment.name].previewUrl,
+  };
 }
 
 // ─── boot screen gate state ──────────────────────────────────────────────────
@@ -52,11 +61,30 @@ export function configureMomentSplash(options: { reduced: boolean }): void {
 }
 
 function paintMoment(moment: ViewMoment): void {
-  // Single <img>: there is no crossfade target anymore (the day-cycle was
-  // removed), so a two-layer swap buffer is pure dead weight — one image
-  // element, set directly.
+  // Progressive reveal in two layers: the ~1 KB preview webp lands almost
+  // instantly and shows blurred (CSS blur + scale hides its softness), then
+  // the full still fades in over it once the browser has decoded it — the
+  // picture goes soft → sharp instead of popping in from a black frame.
+  const preview = document.getElementById('bootMomentPreview') as HTMLImageElement | null;
+  if (preview && preview.getAttribute('src') !== moment.previewUrl) preview.src = moment.previewUrl;
+  if (preview) preview.classList.add('is-front');
+
   const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (img) img.src = moment.url;
+  if (img) {
+    if (img.getAttribute('src') !== moment.url) {
+      // Fade the full still in from zero: decode() first so the crossfade
+      // never exposes a half-decoded bitmap. On decode failure (corrupt
+      // fetch) still flip is-front — the blurred preview keeps the screen
+      // from falling back to bare black.
+      img.classList.remove('is-front');
+      img.src = moment.url;
+      img.decode().then(() => img.classList.add('is-front')).catch(() => img.classList.add('is-front'));
+    } else if (!img.classList.contains('is-front')) {
+      // Same still re-painted (heavy retargets the splash): already loading
+      // or loaded — just make sure it sits in front.
+      img.decode().then(() => img.classList.add('is-front')).catch(() => img.classList.add('is-front'));
+    }
+  }
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {
     caption.textContent = moment.caption;
@@ -128,12 +156,17 @@ function scheduleMinimumElapsed(): void {
  * memory from idling on an invisible 60fps transform for the whole session.
  */
 function freezeMomentPresentation(): void {
+  const preview = document.getElementById('bootMomentPreview') as HTMLImageElement | null;
   const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (!img) return;
-  img.style.animation = 'none';
+  if (!preview && !img) return;
+  if (preview) preview.style.animation = 'none';
+  if (img) img.style.animation = 'none';
   // Clear only after the boot fade has fully finished — clearing earlier
   // would flash a blank frame during the fade-out.
-  window.setTimeout(() => { img.removeAttribute('src'); }, REVEAL_CLEANUP_DELAY_MS);
+  window.setTimeout(() => {
+    preview?.removeAttribute('src');
+    img?.removeAttribute('src');
+  }, REVEAL_CLEANUP_DELAY_MS);
 }
 
 export function stopMomentPresentation(): void {
