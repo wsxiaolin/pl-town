@@ -18,8 +18,8 @@ for (const viewport of [
 
     const shellBox = await shell.boundingBox();
     expect(shellBox).not.toBeNull();
-    expect(shellBox!.top).toBeGreaterThanOrEqual(0);
-    expect(shellBox!.bottom).toBeLessThanOrEqual(viewport.height);
+    expect(shellBox!.y).toBeGreaterThanOrEqual(0);
+    expect(shellBox!.y + shellBox!.height).toBeLessThanOrEqual(viewport.height);
 
     await page.locator('[data-activity-id="meteor-market"]').click();
     await expect(page.locator('#activityPanelTitle')).toHaveText('流星夜市，三日不打烊');
