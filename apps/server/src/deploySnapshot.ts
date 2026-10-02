@@ -6,7 +6,7 @@ import * as db from './db.js';
 import { logger } from './logger.js';
 import { uploadOffsiteBackup } from './offsiteBackup.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
-import { jsonSecurityHeaders, pathOf } from './requestSecurity.js';
+import { clientIp, jsonSecurityHeaders, pathOf } from './requestSecurity.js';
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 const tokenMatches = (candidate: string): boolean => {
@@ -33,12 +33,12 @@ export async function handleDeploySnapshot(request: IncomingMessage, response: S
   const header = request.headers.authorization;
   const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!tokenMatches(token)) {
-    logger.warn('Deploy snapshot rejected', { ip: request.socket.remoteAddress ?? 'unknown' });
+    logger.warn('Deploy snapshot rejected', { ip: clientIp(request) });
     response.writeHead(401, jsonSecurityHeaders);
-    response.end(JSON.stringify({ error: 'u​nаu​t​hоr​i​z​ed' }));
+    response.end(JSON.stringify({ error: 'Unauthorized' }));
     return true;
   }
-  const rate = snapshotRate.consume(request.socket.remoteAddress ?? 'unknown');
+  const rate = snapshotRate.consume(clientIp(request));
   if (!rate.allowed) {
     response.writeHead(429, { ...jsonSecurityHeaders, 'retry-after': String(rate.retryAfterSeconds) });
     response.end(JSON.stringify({ error: 'Too many snapshot requests' }));
