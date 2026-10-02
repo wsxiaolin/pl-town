@@ -277,19 +277,6 @@
     height: min(760px, calc(100dvh - 20px));
   }
 
-  @media (max-height: 560px) {
-    .activity-panel-shell {
-      height: calc(100dvh - 20px);
-    }
-
-    .activity-panel-hero-copy {
-      top: 26px;
-      width: min(570px, calc(100% - 64px));
-      max-height: calc(100% - 166px);
-      overflow: hidden;
-    }
-  }
-
   .activity-panel-hero-copy {
     top: 32px;
     left: 24px;
@@ -336,6 +323,18 @@
 
   .activity-panel-item-badge {
     display: none;
+  }
+}
+
+@media (max-height: 560px) {
+  .activity-panel-shell {
+    height: calc(100dvh - 20px);
+  }
+
+  .activity-panel-hero-copy {
+    top: 26px;
+    max-height: calc(100dvh - 166px);
+    overflow: hidden;
   }
 }
 
