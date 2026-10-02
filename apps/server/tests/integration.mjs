@@ -891,9 +891,11 @@ try {
   const currencyBeforeOrder = traderCurrency;
   send(trader, { type: 'market.supply.fulfill', orderId: order.id });
   const fulfilledOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === true);
+  trackTrader(fulfilledOrder);
   if (fulfilledOrder.event.reward !== order.reward || fulfilledOrder.progress.currency !== currencyBeforeOrder + order.reward || !fulfilledOrder.progress.daily.fulfilledOrders.includes(order.id)) throw new Error('Delivering the daily supply order must grant its server-owned reward exactly once');
   send(trader, { type: 'market.supply.fulfill', orderId: order.id });
   const repeatedOrder = await waitFor(trader, 'progress.updated', (item) => item.event?.type === 'market.order.fulfilled' && item.event.orderId === order.id && item.event.fulfilled === false);
+  trackTrader(repeatedOrder);
   if (repeatedOrder.progress.currency !== currencyBeforeOrder + order.reward) throw new Error('A supply order must pay out once per day');
 
   // 挂单：上架即托管（库存扣减），他人购买后按单价×数量结算，下架退回物品
@@ -1067,11 +1069,16 @@ try {
   if (invalidShop.status !== 400) throw new Error('Admin shop POST must reject malformed product catalogs');
   const missingShopCsrf = await fetch(`${adminBase}/world/shop`, { method: 'POST', headers: { cookie, origin: adminOrigin, 'content-type': 'application/json' } });
   if (missingShopCsrf.status !== 403) throw new Error('Admin shop POST must require CSRF');
+  const shopProgressSince = shopClient.messages.length;
+  send(shopClient, { type: 'progress.get' });
+  const shopProgress = await waitFor(shopClient, 'progress.updated', (message) => !message.event, shopProgressSince);
+  const teaBefore = shopProgress.progress.inventory.dragonwell_tea ?? 0;
+  const probeBefore = shopProgress.progress.inventory.shop_probe_item ?? 0;
   send(shopClient, { type: 'progress.shop.buy', productId: 'dragonwell_tea', quantity: 1 });
-  const teaPurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === 1);
+  const teaPurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === teaBefore + 1);
   send(shopClient, { type: 'progress.shop.buy', productId: 'shop_probe_item', quantity: 1 });
   const badgePurchase = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'shop_probe_item');
-  if (badgePurchase.progress.inventory.shop_probe_item !== 1 || badgePurchase.progress.currency !== teaPurchase.progress.currency - 77) throw new Error('Newly configured products must be purchasable at the configured price');
+  if (badgePurchase.progress.inventory.shop_probe_item !== probeBefore + 1 || badgePurchase.progress.currency !== teaPurchase.progress.currency - 77) throw new Error('Newly configured products must be purchasable at the configured price');
   send(shopClient, { type: 'progress.shop.buy', productId: 'radish', quantity: 1 });
   const radishRejection = await waitFor(shopClient, 'error', (message) => message.message === 'Product is not available');
   if (!radishRejection) throw new Error('Disabled products must not be purchasable');
@@ -1089,8 +1096,13 @@ try {
   });
   if (!delistAll.ok) throw new Error('Admin shop POST must accept a catalog with every default product delisted');
   await waitFor(shopClient, 'world.catalog', (message) => Object.keys(message.catalog?.products ?? {}).length === 1 && message.catalog.products.shop_probe_item);
+  const delistedProgressSince = shopClient.messages.length;
+  send(shopClient, { type: 'progress.get' });
+  const delistedProgress = await waitFor(shopClient, 'progress.updated', (message) => !message.event, delistedProgressSince);
+  const teaOwnedBeforeConsume = delistedProgress.progress.inventory.dragonwell_tea ?? 0;
+  if (teaOwnedBeforeConsume < 1) throw new Error('Integration setup must leave an owned delisted item to consume');
   send(shopClient, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
-  const delistedConsumed = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'item.consumed' && message.event.itemId === 'dragonwell_tea' && message.progress.inventory.dragonwell_tea === undefined);
+  const delistedConsumed = await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'item.consumed' && message.event.itemId === 'dragonwell_tea' && (message.progress.inventory.dragonwell_tea ?? 0) === teaOwnedBeforeConsume - 1);
   if (!delistedConsumed) throw new Error('Delisted products must remain consumable for owned items');
   const shopRestore = await fetch(`${adminBase}/world/shop`, {
     method: 'POST',
