@@ -1252,6 +1252,12 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
           };
         } else if (request.type === 'progress.building.visit') {
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
+        } else if (request.type === 'progress.achievement.unlock') {
+          // Achievements now live in cloud progress: mirror the server so the
+          // test can assert on the unlock command the client sends.
+          if (!this.progress.achievements.includes(request.achievementId)) this.progress.achievements.push(request.achievementId);
+          (window as any).__unlockedAchievements = [...this.progress.achievements];
+          response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'achievement.unlocked', achievementId: request.achievementId, reward: 0 } };
         }
         if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
       }
@@ -1265,10 +1271,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await waitForCityBooted(page);
 
   const interact = () => page.evaluate(() => (window as any)._mini.interactBuilding('writingclub_outer'));
-  const unlocked = () => page.evaluate(() => {
-    const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { achievements?: string[] };
-    return stats.achievements ?? [];
-  });
+  const unlocked = () => page.evaluate(() => ((window as any).__unlockedAchievements ?? []) as string[]);
   const interactionCount = () => page.evaluate(() => {
     const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { interactions?: number };
     return stats.interactions ?? 0;
