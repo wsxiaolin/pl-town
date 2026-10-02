@@ -37,7 +37,7 @@
 - WebSocket 消息：`progress.daily.checkin`、`progress.daily.mission.claim`、`market.recipe.craft`、`market.supply.fulfill`、`market.listings.get`、`market.listing.create/buy/cancel`。服务端根据用户记录发奖，重复领取返回未领取结果，不重复增加余额；挂单变更通过 `market.listings` 按人广播（含自己的挂单视图）。市集写操作有独立限流（40 次/10 秒）。
 - `player_daily_economy` 保存当前日的签到状态、连续天数、当日去重探访清单、委托领取清单和供货交付清单。签到、任务领取、订单交付、钱包加币与每日状态更新放在同一 SQLite 事务内，上海日切换时全部按日重置。
 - `market_listings` 是托管账本：创建挂单事务内先把物品从卖方背包扣出，购买在同一事务内完成买方按「单价 × 数量」扣款、卖方等额入账、物品转移与状态落库；下架原路退回物品。`price` 始终是单价，结算总额由服务端计算；`status` 只能在 `active/sold/cancelled` 间由服务端迁移，买家不能购买自己的挂单，余额不足时拒绝结算。该表是持久账本，不做按时间清理。
-- 数据库 schema 从 6 升至 8，只新增 `player_daily_economy` 与 `market_listings` 两张表，不重写已有余额、背包或城市治理账本。旧备份没有这两张表时，正常启动会创建空表；旧备份里的现有进度仍按原表恢复。
+- 数据库 schema 从 7 升至 8，只新增 `player_daily_economy` 与 `market_listings` 两张表，不重写已有余额、背包或城市治理账本。旧备份没有这两张表时，正常启动会创建空表；旧备份里的现有进度仍按原表恢复。
 - 特惠折扣由服务器重新比对当前日期、今日商品和前端随请求提交的 `dealDay`。请求过期或商品不匹配时按原价结算，客户端显示值不能决定扣款金额。
 
 ## 后续扩展方向

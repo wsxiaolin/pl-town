@@ -460,7 +460,8 @@ export function craftMarketRecipe(userId: string, recipe: { id: string; ingredie
   db.transaction(() => {
     const timestamp = now();
     ensureProgress(db, userId, timestamp);
-    ensureDailyEconomyRow(userId, timestamp, at);
+    // getPlayerProgress below re-runs ensureDailyEconomyRow, so crafting does
+    // not need to create the daily row itself.
     takeInventoryItems(userId, recipe.ingredients, timestamp);
     addInventory(db, userId, recipe.output.itemId, recipe.output.quantity, timestamp);
     crafted = true;
