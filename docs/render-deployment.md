@@ -56,7 +56,6 @@ RENDER_DEPLOY_HOOK_URL=<Render Deploy Hook，可选>
 
 若希望缺少凭据时直接让工作流失败（而不是仅发 warning），设置仓库变量 `SNAPSHOT_REQUIRED=true`；默认（未设置或其它值）保持 warning 并跳过，避免一次配置疏漏卡死已合入 main 的 push。
 
-
 `DEPLOY_SNAPSHOT_TOKEN` 至少 32 字符，只用于 CI；不要把它写进仓库。空库会返回 HTTP 409，工作流按跳过处理，不会覆盖 OSS 上已有快照。首次部署没有远端备份时，服务以空库启动。测试账号和密码不得与生产复用。
 
 Render 的负载均衡器终止 TLS 并将请求转发给服务；其官方安全说明建议应用从 `X-Forwarded-For` 读取真实客户端 IP。因此此单层测试拓扑设置 `TRUST_PROXY_HOPS=1`。[Render Web Services](https://render.com/docs/web-services) [Render DDoS guidance](https://render.com/articles/how-render-handles-ddos-attacks)

@@ -36,8 +36,10 @@ npm run typecheck
 npm run build
 npm run test:web
 npm run test:server
-npm test                 # 前端 Playwright + 服务端集成测试
+npm test                 # 前端 Playwright + 服务端集成
 ```
+
+工作流文件（`.github/workflows/*.yml`）改动后额外跑一次 actionlint：CI 的 `actionlint` job 会用固定 digest 的 `rhysd/actionlint` 镜像校验全部 workflow，能发现 YAML 解析看不到的非法表达式（如误写的 `${{ secrets.X }}`）与非 ASCII 同形字符。本地可用 `docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint -color`。
 
 前端 Playwright 配置使用 Chromium、单 worker，并自动启动 `4173` 端口的 Vite 服务。`apps/web/tests/diagnostics/` 下的诊断脚本是按需运行的性能/视觉检查，不属于默认烟雾套件。
 
