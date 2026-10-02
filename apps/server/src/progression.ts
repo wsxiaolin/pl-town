@@ -270,7 +270,7 @@ export type BuildingUnlockResolution = {
 export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
   const overrides = getBuildingOverrides();
   return BUILDING_CATALOG
-    .filter((building) => building.id in BUILDING_PRICES)
+    .filter((building) => Object.hasOwn(BUILDING_PRICES, building.id))
     .map((building) => {
       const override = overrides[building.id] ?? null;
       const defaultState: ResolvedBuildingState = STORY_LOCKED_BUILDING_IDS.has(building.id) || BUILDING_UNLOCKABLE[building.id] !== true ? 'locked' : 'unlockable';
