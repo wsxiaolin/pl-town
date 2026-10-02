@@ -1,6 +1,5 @@
 import { initStoryTaskGuide } from '../adapters/ui/storyTaskGuide';
 import { ECHO_OBSERVATORY_AREA } from './data/cityConfig';
-import { ECHO_STORY } from '../gameplay/content/stories/echo/echoStory';
 import { YESTERDAY_SONG } from '../gameplay/content/stories/yesterday/yesterdaySong';
 import { MAGI_STORY } from '../gameplay/content/stories/magi/magiStory';
 import { OVERCOAT_STORY } from '../gameplay/content/stories/overcoat/overcoatStory';
@@ -42,7 +41,9 @@ export function initStoryTaskGuideWiring(options: {
 
   initStoryTaskGuide(options.document, {
     onNavigate: (storyId) => {
-      if (storyId === ECHO_STORY.id) {
+      // Echo's story id as a literal: 「回声」暂停期间剧情数据（echoStory.ts）
+      // 不进打包产物，这里不能再静态引用 ECHO_STORY。
+      if (storyId === 'main.echo.act-one') {
         const echo = options.getEchoController();
         if (echo?.story.state().nodeId === 'confrontation-active') echo.teleportFromCabin();
         else panTo(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1]);

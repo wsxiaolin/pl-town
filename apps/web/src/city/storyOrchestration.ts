@@ -1,5 +1,7 @@
+import type { Scene } from 'three';
 import type { CityDialogController } from '../adapters/ui/cityDialogController';
-import { createEchoStoryController, type EchoStoryControllerOptions } from './echo/echoStoryController';
+import type { EchoStoryControllerOptions } from './echo/echoStoryController';
+import { createEchoSuspendedController, type EchoStoryHandle } from './echo/echoSuspendedController';
 import { createYesterdaySongController } from './yesterday/yesterdaySongController';
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
@@ -47,14 +49,43 @@ export function createStoryOrchestration(options: {
     options.updateNpcSchedules();
   }
 
-  const echo = createEchoStoryController({
+  // 「回声」槽位：暂停期间由占位控制器顶上（剧情内容不进包）。开关翻转后
+  // esbuild 保留动态加载分支——真控制器按需加载并替换占位，同时补跑启动序列。
+  const echoOptions: EchoStoryControllerOptions = {
     ...options.echo,
     getQuestContext: options.getQuestContext,
     awardAchievement: options.awardAchievement,
     showToast: options.showToast,
     updateNpcSchedules: options.updateNpcSchedules,
     setActiveActors: (ids) => { echoActiveActors = new Set(ids); mergeActiveStoryActorIds(); },
-  });
+  };
+  let echoDisposed = false;
+  let echoBootScene: Scene | null = null;
+  let echoBootstrapped = false;
+  const echo: { current: EchoStoryHandle } = {
+    current: createEchoSuspendedController({ showToast: options.showToast }),
+  };
+  if (!__ECHO_STORY_SUSPENDED__) {
+    void import('./echo/echoStoryController').then(({ createEchoStoryController }) => {
+      if (echoDisposed) return;
+      const real = createEchoStoryController(echoOptions);
+      echo.current = real;
+      // Replay the boot sequence whichever order the lazy load and setupEcho
+      // land in; bootstrapEcho is idempotent per controller.
+      if (echoBootstrapped) {
+        if (echoBootScene) real.setupScene(echoBootScene);
+        real.setupGuide();
+        real.restoreAchievements();
+      }
+    }).catch(() => { /* lazy chunk failure: the suspended shim keeps the city playable */ });
+  }
+
+  function bootstrapEcho(controller: EchoStoryHandle): void {
+    if (!echoBootstrapped) return;
+    if (echoBootScene) controller.setupScene(echoBootScene);
+    controller.setupGuide();
+    controller.restoreAchievements();
+  }
 
   const shared = {
     awardAchievement: options.awardAchievement,
@@ -75,7 +106,7 @@ export function createStoryOrchestration(options: {
   });
 
   const listControllers = () => [
-    ['echo', echo],
+    ['echo', echo.current],
     ['yesterday', yesterday],
     ['magi', magi],
     ['overcoat', overcoat],
@@ -89,25 +120,29 @@ export function createStoryOrchestration(options: {
   });
 
   return {
-    echo,
+    // Live slot: the suspended shim or the lazily loaded real controller.
+    get echo() { return echo.current; },
     yesterday,
     magi,
     overcoat,
     router,
     getActiveStoryActorIds: () => activeStoryActorIds,
     announceGuide() {
-      echo.announceGuide();
+      echo.current.announceGuide();
       yesterday.announceGuide();
       magi.announceGuide();
       overcoat.announceGuide();
     },
-    setupEcho(scene: Parameters<typeof echo.setupScene>[0]) {
-      echo.setupScene(scene);
-      echo.setupGuide();
-      echo.restoreAchievements();
+    setupEcho(scene: Scene) {
+      echoBootScene = scene;
+      echoBootstrapped = true;
+      bootstrapEcho(echo.current);
     },
     dispose() {
-      echo.dispose();
+      echoDisposed = true;
+      echoBootstrapped = false;
+      echoBootScene = null;
+      echo.current.dispose();
       yesterday.dispose();
       magi.dispose();
       overcoat.dispose();

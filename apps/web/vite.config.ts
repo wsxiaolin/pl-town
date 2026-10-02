@@ -38,6 +38,11 @@ export default defineConfig({
     __TOWN_VITE_API_BASE__: JSON.stringify(process.env.VITE_API_BASE ?? ''),
     __TOWN_VITE_SERVER_URL__: JSON.stringify(serverUrl),
     __MINICITY_BUILD_ID__: JSON.stringify(process.env.VITE_BUILD_ID ?? webBuildId()),
+    // 「回声」剧情暂停开关：true 时 esbuild 把 storyOrchestration 里动态加载
+    // 「回声」的分支整体折叠删除——剧情文本（echoStory.ts）与控制器完全不进
+    // 任何构建产物（dev 同样生效），运行时由 echoSuspendedController 占位。
+    // 恢复上线改回 'false'：真控制器转为按需懒加载，主包依然不含剧情文本。
+    __ECHO_STORY_SUSPENDED__: 'true',
   },
   server: {
     host: true,
