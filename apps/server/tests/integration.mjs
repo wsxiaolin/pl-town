@@ -1047,6 +1047,11 @@ try {
   // Shop catalog: admin edits must persist, broadcast, and price purchases live.
   const shopClient = await connect('Alice');
   if (!shopClient.hello.progress.daily.checkInClaimed || !shopClient.hello.progress.daily.claimedMissions.includes('market_walk_3')) throw new Error('Daily check-in and mission claims must survive reconnecting');
+  const shopClientBase = await waitFor(shopClient, 'progress.updated', (message) => !message.event);
+  if (shopClientBase.progress.currency < 107) {
+    send(shopClient, { type: 'progress.shop.buy', productId: 'beef', quantity: 1 });
+    await waitFor(shopClient, 'progress.updated', (message) => message.event?.type === 'shop.purchased' && message.event.productId === 'beef');
+  }
   const shopWorldState = await fetch(`${adminBase}/world`, { headers: { cookie } });
   const shopWorldStatePayload = await shopWorldState.json();
   if (!shopWorldState.ok || shopWorldStatePayload.shop?.length !== 4 || shopWorldStatePayload.shop.find((product) => product.itemId === 'beef')?.unitPrice !== 45) throw new Error('Admin world GET must return the default shop catalog');
