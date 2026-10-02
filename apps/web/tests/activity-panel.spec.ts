@@ -3,7 +3,7 @@ import { waitForCityReady } from './helpers';
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
-  { name: 'phone-portrait', width: 390, height: 844 },
+  { name: 'narrow-landscape', width: 700, height: 600 },
   { name: 'phone-landscape', width: 844, height: 390 },
   { name: 'se-landscape', width: 667, height: 375 },
 ];
