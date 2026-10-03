@@ -28,12 +28,13 @@ export type MountainTerrainHandle = {
 
 // 固定全局种子：与 id 哈希混合，保证任何一次构建结果完全一致。
 const GLOBAL_SEED = 0x1a2b3c4d;
-// 澜溪走廊折线（与河流地形协作方的边界协议一致）：松树散布的安全网，
-// 距折线 < RIVER_CLEARANCE 的树位直接跳过。
+// 晨溪走廊折线 v2（与河流地形协作方的边界协议一致）：松树散布的安全网，
+// 距折线 < RIVER_CLEARANCE 的树位直接跳过。v2 改线后河谷在星语北城背后
+// （z -95..-99），水半宽收窄到 3，clearance 相应从 11 收到 7.5。
 const RIVER_POLYLINE: ReadonlyArray<readonly [number, number]> = [
-  [62, -52], [40, -58], [16, -56], [-8, -64], [-26, -66], [-42, -70], [-54, -72], [-62, -74],
+  [64, -95], [42, -97], [18, -96], [-6, -98], [-28, -97], [-46, -99], [-56, -98],
 ];
-const RIVER_CLEARANCE = 11;
+const RIVER_CLEARANCE = 7.5;
 // 峰体基座埋入深度：保证抖动后的底环永远在地表以下，不露缝隙。
 const BASE_BURY = 0.35;
 // 松树沿坡面放置时的下沉量：底面略埋入地表/坡面，永不悬浮。

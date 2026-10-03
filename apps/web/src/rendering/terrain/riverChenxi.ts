@@ -1,33 +1,35 @@
-// 晨溪（river-chenxi）渲染器 —— 谷地北侧的蜿蜒低多边形河流。
+// 晨溪（river-chenxi）渲染器 —— 城北山谷的蜿蜒低多边形河流。
 //
 // 配置：city/data/terrain/river-chenxi.ts（CHENXI_RIVER，中心线为最终定稿）。
-// 走向：东起山泉 (62,-52)，向西再折向西南，河口 (-62,-74) 整段没入西海
+// 走向：东起山泉 (64,-95)，沿星语北城（NORTH_DISTRICT_AREA，路网 z ≤ -80、
+// 导航可达至 z=-88）背后的山谷向西，河口 (-56,-98) 整段没入西海
 // （西海面 y=0.06、不透明，覆盖 x∈[-139,-43.2±wobble]，见 westBeach.ts）。
+//
+// v2 改线（2026-10）：星语北城（PR #196）并入后占据 x∈[-33.5,33.5]、
+// z∈[-36,-80]，旧线（z -52..-74）穿城且压在 150×150 的 district 平面
+// （y=0.018，±75）上仅差 0.002。新线全程 z ≤ -95，与城区 keep-out 盒
+// （x∈[-41,41], z∈[-88,-33]）、导航区（z ≥ -88）、district 平面（±75）
+// 三者地理脱开，旧隐患一并消除。
 //
 // ── y 层约定（与其他地表保持明确间距；参见 rendering/layers.ts 的
 //    SURFACE_Y 体系与 AGENTS.md 的远镜头 z-fighting 规则）────────────────
 //   河床 RIVERBED_Y = 0.02：高于地面(0) 0.02。与 SURFACE_Y.district(0.018)
-//     名义只差 0.002，但 district 平面只存在于城市导航区 x∈[-50,76]、
-//     z∈[-50,50] 内，而本河所有网格顶点被钳制在 z ≤ -50.2（见 NAV_EDGE_Z），
-//     两者地理上不相交，不存在同屏共面网格，无 z-fighting 风险。
+//     名义只差 0.002，但 district 平面（150×150，±75）与本河全程 z ≤ -95
+//     地理不相交，不存在同屏共面网格，无 z-fighting 风险。
 //   河岸 BANK_Y     = 0.024：高于河床 0.004（层间允许的最小间距），
 //     低于 landscape(0.04) 0.016。
 //   水面 WATER_Y    = 0.048：高于河岸 0.024；低于西海面(0.06) 0.012 ——
-//     河口从海面下方滑入；高于 landscape(0.04) 0.008；低于西沙滩(0.07) 0.022。
+//     河口从海面下方滑入；高于 landscape(0.04) 0.008；远在沙滩(0.07)以南。
 //
 // ── 排除区（硬约束；条带顶点级钳制 + 岸景剔除双保险）──────────────────
-//   - 城市导航区 z∈[-50,50]：全部条带顶点 min(z, -50.2)，网格脚印不进
-//     z > -50。min 对同环内 A≤B 的顶点保序，不会折叠条带。
-//   - 西沙滩盒 x∈[-43,-33]、z∈[-64,64]（y=0.07）：河中心线在该 x 段保持
-//     z ≤ -66 以南；床/岸/水的北缘在 x∈[-46,-32] 全量钳到 z=-64.8（沙滩
-//     南缘 -64 以南留 0.8），两侧各 6 单位 smoothstep 过渡。钳制权重逐环
-//     计算、环内两顶点共用：z' = z + w·(min(z, ZB) - z) 是 z 的单调仿射
-//     组合 → 无折叠、无逐顶点台阶（硬钳制曾在窗口边界产生 ~5 单位跳变）。
-//     已按海岸摆动最坏情况（沙滩盒 x∈[-43.9,-32.5]）数值验证 0 顶点落入。
-//   - 离岛协作区 x < -64：河口条带最西顶点 ≈ -63.2（半宽 4.85 × |P.x|≈0.243），
-//     天然不进入；岸景另加 x - r < -63.4 剔除。
+//   - 星语北城与导航区（z ≥ -88 可步行）：全部条带顶点 min(z, -89.2)，
+//     网格脚印不进 z > -89。min 对同环内 A≤B 的顶点保序，不会折叠条带；
+//     中心线全程 z ≤ -95，北缘最坏 -95 + (3+0.35 抖动 + 2.5 岸) ≈ -89.15，
+//     钳制实际不触发，仅作安全网。
 //   - 西海面（岸线 ≈ -43.2 ± wobble，y=0.06）：岸景一律 x - r ≥ -40，
-//     避免树干/石块立在海面上。
+//     避免树干/石块立在海面上（河口段水面本身在海面之下，无需避让）。
+//   - 离岛协作区 x < -64：河口条带最西顶点 ≈ -56.6（半宽 ≈3.35 × |P.x|≈0.1），
+//     天然不进入；岸景另加 x - r < -63.4 剔除。
 //
 // 动画：水面用 createPondWaterSurface（与海面共享法线贴图的轻量水体着色
 // 器，无镜像渲染目标），update(elapsed) 推进其 time uniform 与昼夜色过渡；
@@ -43,9 +45,9 @@ const BANK_Y = 0.024;
 const WATER_Y = 0.048;
 
 // ── 形状参数 ──────────────────────────────────────────────────────────
-const RING_COUNT = 104; // 曲线采样环数（105 个中心点；河长约 127 → ≈1.2 单位/环）
+const RING_COUNT = 104; // 曲线采样环数（105 个中心点；河长约 121 → ≈1.2 单位/环）
 const SPRING_HALF_WIDTH = 2; // 源头半宽（全宽 4，向上游收细）
-const MOUTH_HALF_WIDTH = 4.5; // 河口半宽（全宽 9）
+const MOUTH_HALF_WIDTH = 3; // 河口半宽（全宽 6，山谷河幅比旧线收窄）
 const MIN_HALF_WIDTH = 0.6; // 抖动下的半宽下限
 const BED_EXTRA = 1.5; // 河床条带每侧比水面外扩
 const BANK_INNER_EXTRA = 0.15; // 河岸内缘：水线外一点，露出窄条湿河床沿
@@ -59,11 +61,7 @@ const PINE_CANDIDATES = 42; // 候选数（剔除后实际布置约 20-24 棵）
 const BOULDER_CANDIDATES = 18; // 候选数（剔除后实际布置约 12-14 块）
 
 // ── 排除区钳制参数（论证见头注释）─────────────────────────────────────
-const NAV_EDGE_Z = -50.2; // 城市导航区 z∈[-50,50] 以南，再留 0.2 边距
-const BEACH_EDGE_Z = -64.8; // 沙滩南缘 -64 以南 0.8：北缘钳制线
-const BEACH_CLAMP_WEST = -46; // 全量钳制的西界（沙滩西缘最坏 -43.9 之外）
-const BEACH_CLAMP_EAST = -32; // 全量钳制的东界（沙滩东缘最坏 -32.5 内侧）
-const BEACH_RAMP = 6; // 钳制两侧 smoothstep 过渡带宽度（世界单位）
+const NAV_EDGE_Z = -89.2; // 星语北城/导航区（可步行至 z=-88）以南，再留 1.2 边距
 const SEA_SCENERY_MIN_X = -40; // 岸景最西界（海岸线 ≈ -43.2±wobble 以东）
 const ISLAND_SCENERY_MIN_X = -63.4; // 离岛协作区 x < -64 以东
 const GROUND_LIMIT = 104; // 地面 ±110 内留边距
@@ -80,13 +78,6 @@ function mulberry32(seed: number): () => number {
     mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
     return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-/** 沙滩盒钳制权重：环心 x ∈ [-46,-32] 全量钳制，两侧 6 单位 smoothstep 过渡。 */
-function beachClampWeight(centerX: number): number {
-  const west = THREE.MathUtils.smoothstep(centerX, BEACH_CLAMP_WEST - BEACH_RAMP, BEACH_CLAMP_WEST);
-  const east = 1 - THREE.MathUtils.smoothstep(centerX, BEACH_CLAMP_EAST, BEACH_CLAMP_EAST + BEACH_RAMP);
-  return west * east;
 }
 
 /** 半宽抖动：固定种子的白噪声经两轮邻域平滑，避免逐环锯齿。 */
@@ -107,7 +98,6 @@ function buildWidthWobble(ringCount: number): number[] {
 type StripInput = {
   centers: readonly THREE.Vector3[];
   perps: readonly THREE.Vector3[];
-  beachWeights: readonly number[];
   /** 环 i 的两条边在 +perp 方向上的偏移（须 offsetA ≤ offsetB，见下）。 */
   offsetA: (index: number) => number;
   offsetB: (index: number) => number;
@@ -120,7 +110,7 @@ type StripInput = {
  * computeVertexNormals，也避免钳制产生的零面积三角形引入退化法线。
  */
 function buildStrip(input: StripInput): THREE.BufferGeometry {
-  const { centers, perps, beachWeights, offsetA, offsetB, y } = input;
+  const { centers, perps, offsetA, offsetB, y } = input;
   const ringCount = centers.length;
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -128,17 +118,13 @@ function buildStrip(input: StripInput): THREE.BufferGeometry {
   for (let i = 0; i < ringCount; i += 1) {
     const center = centers[i]!;
     const perp = perps[i]!;
-    const beachWeight = beachWeights[i]!;
     const v = i / (ringCount - 1);
     const offsets = [offsetA(i), offsetB(i)];
     for (let side = 0; side < 2; side += 1) {
       const offset = offsets[side]!;
       let vz = center.z + perp.z * offset;
-      // 排除区钳制 1：城市导航区以南（对 z 单调，环内 A≤B 保序 → 无折叠）。
+      // 排除区钳制：星语北城/导航区以南（对 z 单调，环内 A≤B 保序 → 无折叠）。
       vz = Math.min(vz, NAV_EDGE_Z);
-      // 排除区钳制 2：沙滩盒北缘，逐环权重缓入缓出（环内两顶点共用权重，
-      // z' = z + w·(min(z, ZB) - z) 仍是 z 的单调函数 → 无折叠、无台阶）。
-      vz += beachWeight * (Math.min(vz, BEACH_EDGE_Z) - vz);
       positions.push(center.x + perp.x * offset, y, vz);
       uvs.push(side, v);
     }
@@ -190,7 +176,7 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   const curve = new THREE.CatmullRomCurve3(
     path.map(([x, z]) => new THREE.Vector3(x, 0, z)),
     false,
-    'centripetal', // 向心参数化：控制点间过冲最小，中心线稳定在 z ≤ -52
+    'centripetal', // 向心参数化：控制点间过冲最小，中心线稳定在 z ≤ -95
   );
   const centers = curve.getSpacedPoints(RING_COUNT);
   const lastRing = centers.length - 1;
@@ -201,9 +187,8 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   });
   // +perp = 行进方向北侧（z 分量恒正：河水全程向西，T.x < 0 → P.z = -T.x > 0）
   const perps = tangents.map((tangent) => new THREE.Vector3(tangent.z, 0, -tangent.x));
-  const beachWeights = centers.map((center) => beachClampWeight(center.x));
 
-  // 半宽：源头 2 → 河口 4.5（smoothstep 缓动）+ 确定性抖动，免得像激光笔直
+  // 半宽：源头 2 → 河口 3（smoothstep 缓动）+ 确定性抖动，免得像激光笔直
   const wobble = buildWidthWobble(centers.length);
   const halfWidths = centers.map((_, i) => {
     const t = i / lastRing;
@@ -236,7 +221,6 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     buildStrip({
       centers,
       perps,
-      beachWeights,
       y: RIVERBED_Y,
       offsetA: (i) => -(halfWidths[i]! + BED_EXTRA) * mouthFades[i]!,
       offsetB: (i) => (halfWidths[i]! + BED_EXTRA) * mouthFades[i]!,
@@ -251,7 +235,6 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     buildStrip({
       centers,
       perps,
-      beachWeights,
       y: BANK_Y,
       offsetA: (i) => (halfWidths[i]! + BANK_INNER_EXTRA) * mouthFades[i]!,
       offsetB: (i) => (halfWidths[i]! + BANK_EXTRA) * mouthFades[i]!,
@@ -263,7 +246,6 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     buildStrip({
       centers,
       perps,
-      beachWeights,
       y: BANK_Y,
       offsetA: (i) => -(halfWidths[i]! + BANK_EXTRA) * mouthFades[i]!,
       offsetB: (i) => -(halfWidths[i]! + BANK_INNER_EXTRA) * mouthFades[i]!,
@@ -277,7 +259,6 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   const waterGeometry = buildStrip({
     centers,
     perps,
-    beachWeights,
     y: WATER_Y,
     offsetA: (i) => -halfWidths[i]!,
     offsetB: (i) => halfWidths[i]!,
@@ -294,7 +275,7 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     sunColorNight: new THREE.Color(0x3a4a6a),
     timeScale: 0.8,
     // pond 着色器按世界坐标采样法线：size 7.5 → 主涟漪 tile ≈ 103/7.5 ≈ 14
-    // 世界单位，在 6-9 宽的河面上能看到流动的细波纹
+    // 世界单位，在 5-6 宽的河面上能看到流动的细波纹
     size: 7.5,
     alpha: 0.9, // 轻微透出下方 0.028 处的深色河床
   });
@@ -335,10 +316,8 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   }
 
   function isScenerySpotClear(x: number, z: number, radius: number): boolean {
-    if (z + radius > NAV_EDGE_Z) return false; // 城市导航区（z > -50 一侧）
+    if (z + radius > NAV_EDGE_Z) return false; // 星语北城/导航区（z > -88 一侧）
     if (x - radius < SEA_SCENERY_MIN_X) return false; // 西海面（树/石不得立在水面上）
-    // 沙滩盒（最坏 x∈[-43.9,-32.5]），含树冠/石块半径边距
-    if (x + radius > -44.5 && x - radius < -31.5 && z + radius > -64.5) return false;
     if (x - radius < ISLAND_SCENERY_MIN_X) return false; // 离岛协作区
     if (Math.abs(x) > GROUND_LIMIT || Math.abs(z) > GROUND_LIMIT) return false; // 地面范围
     return true;
