@@ -548,6 +548,14 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     x: 18,
     z: -59.5,
     storyLocked: false
+  },
+  {
+    id: "north_komorebi",
+    label: "木漏时光",
+    num: "65",
+    x: 27.5,
+    z: -59.5,
+    storyLocked: false
   }
 ]
 );
