@@ -397,8 +397,8 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
 
   // 网格密度按体量分档：主峰更密（棱面更细腻），麓丘更省（总面数可控）。
   const densityFor = (radius: number, height: number): { rings: number; segments: number } => ({
-    rings: height >= 16 ? 10 : height >= 10 ? 9 : 7,
-    segments: radius >= 12 ? 20 : radius >= 8 ? 16 : 14,
+    rings: height >= 24 ? 12 : height >= 16 ? 10 : height >= 10 ? 9 : 7,
+    segments: radius >= 18 ? 24 : radius >= 12 ? 20 : radius >= 8 ? 16 : 14,
   });
 
   function buildMountain(feature: TerrainFeatureConfig): void {
