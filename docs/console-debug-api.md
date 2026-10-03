@@ -2,6 +2,43 @@
 
 城市启动完成后，调试入口统一挂载在 `window._mini`。所有控制台调试代码都使用这个命名空间。
 
+## 视觉验证 dev 门控（`?dev`）
+
+访问 URL 带上 `?dev` 参数即进入开发者视觉验证模式（`apps/web/src/city/devPortal.ts` 判定，本地与云端预览均可用）：
+
+- 跳过登录层与新居民引导，直接以访客身份进入小城（`logo` 显示 `- dev-监工`）；
+- 不发起多人连接——保持离线，避免无凭据 connect 被 auth 拒绝后重新弹出登录层；
+- 入场动画照常运行（这是离线环境下建筑升起的唯一触发点）；
+- 正常玩家不带参数访问零感知，所有分支均以 `isDevPortalRequested()` 门控。
+
+典型用途：云端预览（CF Pages）的视觉验证——
+
+```
+https://<preview-host>.pages.dev/?dev=1
+```
+
+注意：预览环境连不上治理服务（`/town-api`），`pendingBuildings` 为空，因此待建建筑（含星语北城 12 栋作品建筑）会全部渲染；线上有治理服务时它们按筹资进度隐藏。核对线上观感时以治理状态为准。
+
+## 传送与取景（teleport / focus）
+
+```js
+window._mini.teleport(x, z)            // 玩家瞬移到 (x, z)，跟随相机下一帧落位
+window._mini.focus(x, z, zoom?)        // teleport + 可选正交 zoom（越大视野越广）
+```
+
+- 坐标即世界坐标：主城广场 `(0, 0)`，星语北城核心 `(0, -60)`，Echo 天文台 `(65, 0)`。
+- `zoom` 是正交相机半高：默认 10（街景），15 为游戏内上限，19–25 适合整城航拍。
+- `teleport` 会清空当前寻路状态；不会触发导航绕行，可落在任意开阔点（不要放进建筑足印内）。
+- 相机始终跟随玩家（`playerController.updateCamera`），所以「移动相机」就是移动玩家。
+
+常用取景示例：
+
+```js
+window._mini.focus(0, -63, 21)   // 星语北城全景（含两坊与作品街区）
+window._mini.focus(-16, -70, 9)  // 西坊街景近景
+window._mini.focus(0, 0, 12)     // 主城广场
+```
+
 ## 基础对象
 
 ```js
@@ -16,6 +53,8 @@ window._mini.navigation
 window._mini.cameraZoom
 window._mini.getPlayerPath()
 ```
+
+`camera` / `cameraZoom` 为只读视图；改取景请用上面的 `teleport` / `focus`。
 
 ## 建筑、住宅和居民
 
