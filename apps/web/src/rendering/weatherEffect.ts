@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { gsap } from 'gsap';
 import type { Weather } from '../city/weather';
 import { RENDER_ORDER } from './layers';
 import { createRainAudio } from './rainAudio';
@@ -150,7 +149,11 @@ export function createWeatherEffect(options: {
   }
 
   // ── 湿度渐变:0(晴)→ 1(雨),驱动雨丝/涟漪/水洼/雾/灯光的插值 ──
-  const wetness = { v: 0 };
+  // 用帧循环 delta 手写推进而不是 gsap:gsap 的 lagSmoothing 在低帧率
+  // (软件渲染/低端机)下会把秒级 tween 拉长一个量级,渐变会"卡住"。
+  const RAMP_IN_SECONDS = 2.2;
+  const RAMP_OUT_SECONDS = 2.6;
+  const wetness = { v: 0, target: 0, restorePending: false };
   let weather: Weather = 'clear';
   let hadRainAmbient = false;
   const rainAudio = createRainAudio();
@@ -201,34 +204,41 @@ export function createWeatherEffect(options: {
   function set(next: Weather): void {
     weather = next;
     options.onWeatherChanged?.(next);
-    gsap.killTweensOf(wetness);
     if (next === 'rain') {
+      wetness.target = 1;
+      wetness.restorePending = false;
       rain.visible = true;
-      gsap.to(wetness, { v: 1, duration: 2.2, ease: 'power1.inOut' });
       rainAudio.start();
     } else {
-      gsap.to(wetness, {
-        v: 0,
-        duration: 2.6,
-        ease: 'power1.inOut',
-        onComplete: () => {
-          rain.visible = false;
-          if (hadRainAmbient) {
-            hadRainAmbient = false;
-            const base = ambientBase(isNightNow());
-            const amb = scene.getObjectByName('amb') as THREE.Light | null;
-            const dir = scene.getObjectByName('dir') as THREE.Light | null;
-            if (amb) amb.intensity = base.amb;
-            if (dir) dir.intensity = base.dir;
-            options.restoreSky();
-          }
-        },
-      });
+      wetness.target = 0;
+      wetness.restorePending = hadRainAmbient;
       rainAudio.stop();
     }
   }
 
+  function advanceWetness(delta: number): void {
+    if (wetness.v === wetness.target) return;
+    const seconds = wetness.target > wetness.v ? RAMP_IN_SECONDS : RAMP_OUT_SECONDS;
+    const step = delta / seconds;
+    if (wetness.target > wetness.v) wetness.v = Math.min(wetness.target, wetness.v + step);
+    else wetness.v = Math.max(wetness.target, wetness.v - step);
+    if (wetness.v === 0 && wetness.target === 0) {
+      rain.visible = false;
+      if (wetness.restorePending) {
+        wetness.restorePending = false;
+        hadRainAmbient = false;
+        const base = ambientBase(isNightNow());
+        const amb = scene.getObjectByName('amb') as THREE.Light | null;
+        const dir = scene.getObjectByName('dir') as THREE.Light | null;
+        if (amb) amb.intensity = base.amb;
+        if (dir) dir.intensity = base.dir;
+        options.restoreSky();
+      }
+    }
+  }
+
   function update(delta: number): void {
+    advanceWetness(delta);
     if (!rain.visible && wetness.v <= 0.001) return;
     const cursor = options.getCursor();
     const w = wetness.v;
@@ -283,7 +293,6 @@ export function createWeatherEffect(options: {
   }
 
   function dispose(): void {
-    gsap.killTweensOf(wetness);
     rainAudio.dispose();
     rain.visible = false;
     rain.removeFromParent();
