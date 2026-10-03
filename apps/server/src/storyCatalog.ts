@@ -200,6 +200,10 @@ const YESTERDAY_EDGES: StoryEdgeSummary[] = [
 ];
 
 export const STORY_CATALOG: readonly StorySummary[] = Object.freeze([
+  // 'main.echo.act-one' mirrors ECHO_STORY_ID in
+  // apps/web/src/gameplay/content/stories/echo/echoStoryMeta.ts — the server
+  // compiles separately and cannot import from apps/web, so this stays a
+  // literal; keep the two in sync when the id ever changes.
   { id: 'main.echo.act-one', title: '回声', definitionVersion: 13, startNode: 'meeting', nodes: ECHO_NODES, edges: ECHO_EDGES },
   { id: 'side.magi.gift', title: '麦琪的礼物', definitionVersion: 1, startNode: 'magi.start', nodes: MAGI_NODES, edges: MAGI_EDGES },
   { id: 'side.overcoat.tonight', title: '今晚别走那条街', definitionVersion: 1, startNode: 'meeting', nodes: OVERCOAT_NODES, edges: OVERCOAT_EDGES },

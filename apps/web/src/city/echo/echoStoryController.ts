@@ -28,9 +28,8 @@ const ECHO_STORY_ACHIEVEMENTS: Readonly<Record<string, { id: string; name: strin
   'echo.achievement.true-dawn': { id: 'echo_true_dawn', name: '真正的黎明' },
 };
 
-// 「回声」临时下线：尚未触发的玩家无法开启剧情；已在剧情中的玩家可继续。
-// 恢复上线时改回 false 即可。
-const ECHO_STORY_SUSPENDED = true;
+// 「回声」的暂停开关已上移到 vite.config.ts（__ECHO_STORY_SUSPENDED__）：
+// true 时本文件与剧情数据不进任何构建产物，由 echoSuspendedController 占位。
 
 type Cursor = {
   position: THREE.Vector3;
@@ -170,10 +169,8 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
   }
 
   function interactNpc(actorId: string, dialogs: CityDialogController): boolean | 'blocked' {
-    if (actorId === 'linche' && ECHO_STORY_SUSPENDED && getStoryPhase(ECHO_STORY, story.state()) === 'untouched') {
-      options.showToast?.('「回声」正在调整中，暂时无法触发');
-      return 'blocked';
-    }
+    // 暂停期拦截已由 echoSuspendedController 顶包负责；本控制器只在
+    // __ECHO_STORY_SUSPENDED__ = 'false' 时被加载，无需重复判断。
     const cursor = options.getCursor();
     if (actorId === 'linche' && isCabinNode() && cursor) {
       const distance = Math.hypot(
