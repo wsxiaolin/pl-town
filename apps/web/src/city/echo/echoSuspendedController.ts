@@ -1,6 +1,4 @@
-import type * as THREE from 'three';
-import type { CityDialogController } from '../../adapters/ui/cityDialogController';
-import type { StoryPhase } from '../../gameplay/stories/StoryRuntime';
+import type { createEchoStoryController } from './echoStoryController';
 
 // 「回声」暂停占位控制器。
 //
@@ -17,32 +15,22 @@ import type { StoryPhase } from '../../gameplay/stories/StoryRuntime';
 // 恢复上线：无需改动本文件。storyOrchestration 会在开关翻转后按需加载真控制器
 // 并替换掉这个占位。
 
-export type EchoStoryHandle = {
+/** 契约直接派生自真控制器（type-only import 编译期擦除，不会把剧情拉进
+ *  包）：真控制器新增成员时本文件编译即红，不再靠手抄 22 个成员对齐。
+ *  两处收窄：story 只留暂停期被消费的 state().nodeId（完整 dialog flow 面
+ *  由 StoryRuntime 在真控制器内部驱动，暂停期物理上不存在）；interact 从
+ *  句柄删除——router/gate 走 interactNpc/ownsEntry，全仓无 handle.interact
+ *  消费方，删掉入口比再挂一个 toast 出口更不容易误用。 */
+export type EchoStoryHandle = Omit<ReturnType<typeof createEchoStoryController>, 'story' | 'interact'> & {
   story: { state: () => { nodeId: string } };
-  phase: () => StoryPhase;
-  ownsEntry: (kind: 'actor' | 'building', targetId: string) => boolean;
-  setupScene: (scene: THREE.Scene) => void;
-  setupGuide: () => void;
-  restoreAchievements: () => void;
-  isCabinNode: () => boolean;
-  isInteriorView: () => boolean;
-  setInteriorView: (active: boolean) => void;
-  teleportToCabin: () => void;
-  teleportFromCabin: () => void;
-  tryExitCabinFromClick: (raycaster: THREE.Raycaster, cabinDoor: THREE.Object3D) => boolean;
-  navigation: () => unknown;
-  interact: (actorId: string, dialogs: CityDialogController) => boolean | 'blocked';
-  interactBuilding: (buildingId: string, dialogs: CityDialogController) => boolean | 'blocked';
-  interactInterestPoint: (interestPointId: string, dialogs: CityDialogController) => boolean;
-  interactNpc: (actorId: string, dialogs: CityDialogController) => boolean | 'blocked';
-  announceGuide: () => void;
-  syncWorldInteractions: () => void;
-  syncActiveActors: () => void;
-  updateGuide: (camera: THREE.Camera) => void;
-  dispose: () => void;
 };
 
 const SUSPENDED_TOAST = '「回声」正在调整中，暂时无法触发';
+
+// Synthetic nodeId: only 'untouched' 相位下的展示性查询会读它，所有消费方都
+// 只与 'confrontation-active' 这类真 nodeId 做相等比较。若未来有人对 echo 的
+// nodeId 做 startsWith / switch 分派，会读到这个假值——改之前先想清楚。
+const SUSPENDED_NODE_ID = 'echo-suspended';
 
 export function createEchoSuspendedController(options: { showToast?: (message: string) => void }): EchoStoryHandle {
   const interactLinche = (actorId: string): boolean | 'blocked' => {
@@ -54,11 +42,16 @@ export function createEchoSuspendedController(options: { showToast?: (message: s
   };
 
   return {
-    story: { state: () => ({ nodeId: 'echo-suspended' }) },
+    story: { state: () => ({ nodeId: SUSPENDED_NODE_ID }) },
     phase: () => 'untouched',
     ownsEntry: (kind, targetId) => kind === 'actor' && targetId === 'linche',
     setupScene: () => {},
     setupGuide: () => {},
+    // No-op while suspended: achievements live in localStorage-backed
+    // legacyStats, so a pre-suspension save that finished echo but never
+    // persisted the 4 echo achievements will not backfill them during the
+    // suspension window. Self-consistent with "剧情不可推进" — restoring the
+    // story re-runs the real controller's restoreAchievements and they return.
     restoreAchievements: () => {},
     isCabinNode: () => false,
     isInteriorView: () => false,
@@ -67,7 +60,6 @@ export function createEchoSuspendedController(options: { showToast?: (message: s
     teleportFromCabin: () => {},
     tryExitCabinFromClick: () => false,
     navigation: () => null,
-    interact: interactLinche,
     interactBuilding: () => false,
     interactInterestPoint: () => false,
     interactNpc: interactLinche,

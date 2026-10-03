@@ -65,6 +65,10 @@ export function createStoryOrchestration(options: {
   const echo: { current: EchoStoryHandle } = {
     current: createEchoSuspendedController({ showToast: options.showToast }),
   };
+  // No typeof guard here on purpose: any runtime fallback would make the
+  // replaced expression non-foldable for rollup's DCE and the story chunk
+  // could sneak back into the build. Absent-flag node contexts are expected
+  // to throw ReferenceError (see global.d.ts) — the flag is a build contract.
   if (!__ECHO_STORY_SUSPENDED__) {
     void import('./echo/echoStoryController').then(({ createEchoStoryController }) => {
       if (echoDisposed) return;
@@ -121,6 +125,10 @@ export function createStoryOrchestration(options: {
 
   return {
     // Live slot: the suspended shim or the lazily loaded real controller.
+    // Consumers MUST go through this getter — `const { echo } = stories` is
+    // type-legal but pins the shim forever: the lazy swap below only rewrites
+    // echo.current, a destructured copy would silently keep serving the
+    // suspended controller after restore, with no error anywhere.
     get echo() { return echo.current; },
     yesterday,
     magi,

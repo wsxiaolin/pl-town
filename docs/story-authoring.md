@@ -23,3 +23,22 @@ MiniCity 的长篇分支剧情使用独立的 StoryRuntime。普通线性任务�
 客户端先发送 `story.get`，选择后发送 `story.update`。服务端统一返回 `story.updated`。正文不会进入网络或数据库，因此可以独立修订文案；节点结构变化时提高 `definitionVersion`，并保留旧节点迁移或兼容逻辑。
 
 具体剧情内容应放在 `apps/web/src/gameplay/content/` 下的独立目录中。
+
+## 剧情暂停与恢复（以「回声」为例）
+
+「回声」（`main.echo.act-one`）当前处于**暂停态**：剧情正文（1011 行 `echoStory.ts`）、真控制器（`echoStoryController.ts`）与 2.3MB CG 完全不进任何构建产物——不是"运行时不加载"，是产物里物理不存在。编译期开关 `__ECHO_STORY_SUSPENDED__`（`vite.config.ts` define 注入）把 `storyOrchestration` 的动态加载分支折叠删除，运行时由 `echoSuspendedController.ts` 占位：林辙交互弹「调整中」toast，存档保留。
+
+**恢复上线（三处同批提交，清单互见 `vite.config.ts` / `bundledAssets.ts`）**：
+
+1. `vite.config.ts`：`__ECHO_STORY_SUSPENDED__` 改回 `'false'`（或删掉 env 覆盖逻辑）
+2. `bundledAssets.ts`：glob 删除 `!../assets/cg/echo/**` 排除项
+3. `tests/story-gates.spec.ts` 第一个用例改写为恢复态断言
+
+真控制器转懒加载（`import('./echo/echoStoryController')`），主包仍不含剧情文本。注意懒加载 chunk 落地前的窗口期内林辙仍弹「调整中」（见 storyOrchestration 的 bootstrapEcho 时序处理——`echoBootstrapped`/`echoBootScene` 双标志覆盖两种到达顺序）。
+
+**验证命令**：
+
+- 暂停态：`npm run build` —— `scripts/check-story-bundle.mjs` 自动断言零打包（CG 文件探针 + 正文句子探针），任何泄漏构建即红
+- 恢复态：`ECHO_STORY_SUSPENDED=false npm run build` —— 守卫自动跳过，人工核对懒加载 chunk 正常 emit；`ECHO_STORY_SUSPENDED=false npm run dev` 可本地全流程走通恢复态剧情
+
+id 常量 `ECHO_STORY_ID` 在 `gameplay/content/stories/echo/echoStoryMeta.ts`（无正文无资产的微模块，唯一进主包的 echo 文件）；服务端 `storyCatalog.ts` 镜像同一 id（跨包独立编译，注释互指）。

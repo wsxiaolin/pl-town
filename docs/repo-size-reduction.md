@@ -54,4 +54,4 @@ git push --force origin main
 
 - 超过 1 MiB 的单个资产或总量超过 48 MiB 时，`npm run build` / `typecheck` 直接失败。
 - `scripts/split-weather-atlases.py` 产出新纹理后需执行 `pngquant --quality=70-95 --speed 1 --force --skip-if-larger --ext .png` 再提交。
-- 疑似未被引用的资产：`apps/web/src/assets/cg/echo/memory-wall.png` 在代码中无任何 import 或 glob 命中（其余 89 个"疑似未引用"文件实际通过 `import.meta.glob` 命中）。删除前需确认剧情规划，本 PR 暂不处理。
+- 疑似未被引用的资产：`apps/web/src/assets/cg/echo/memory-wall.png` 在代码中无任何 import 或 glob 命中（其余 88 个"疑似未引用"文件实际通过 `import.meta.glob` 命中；echo 的其余 4 张 CG 自「回声」暂停起被 `bundledAssets.ts` 的 glob 排除，同样不进产物——见 docs/story-authoring.md 的「剧情暂停与恢复」）。删除前需确认剧情规划，本 PR 暂不处理。
