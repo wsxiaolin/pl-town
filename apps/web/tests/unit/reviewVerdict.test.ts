@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,24 @@ import test from 'node:test';
 // decorated verdict line silently green-lights a BLOCKER. Pin the shapes models
 // actually emit (bold, list markers, backticks, CRLF) plus the emoji fallback
 // and the deliberate fail-open paths (missing file, missing verdict line).
-const script = join(process.cwd(), '..', '..', 'scripts', 'review-verdict.sh');
+
+// Locate the script independently of the invocation cwd: fast path assumes the
+// `npm run test:unit -w @minicity/web` layout (cwd = apps/web), then falls back
+// to `git rev-parse --show-toplevel`. The fallback matters because Playwright
+// (before the testIgnore fix) imports `tests/unit/**` files with the repo root
+// as cwd inside shard jobs — a cwd-only resolution turns into a module-level
+// throw that fails the whole shard.
+function repoRoot(): string {
+  const cwd = process.cwd();
+  if (existsSync(join(cwd, '..', '..', 'scripts', 'review-verdict.sh'))) return join(cwd, '..', '..');
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+  } catch {
+    return cwd; // let the assertion below emit a diagnostic
+  }
+}
+
+const script = join(repoRoot(), 'scripts', 'review-verdict.sh');
 assert.ok(
   existsSync(script),
   `review-verdict.sh not found at ${script}; run via \`npm run test:unit -w @minicity/web\` (cwd must be apps/web)`,
