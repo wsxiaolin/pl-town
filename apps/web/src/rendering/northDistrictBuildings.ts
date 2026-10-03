@@ -263,11 +263,12 @@ const buildBistro: Builder = (options, cfg) => {
   return finish(options, cfg, g, body, undefined, 0.18 + height + 0.95, { width: width + 0.3, depth: depth + 0.3 });
 };
 
-// ── 不打烊贩卖店：不打烊贩卖店（黑洞 #65）───────────────────────────
-// 外观移植自 lab.lcrworld.xyz/rainy-store/ 的 24H MART 便利店（用户指定
-// 替换），按本城地块尺度缩放并适配 stdMat 材质/天气体系；配置文案与
-// 点击交互保持不变。
-function makeSignTexture(text: string, w: number, h: number, bg: string, fg: string, fontSize: number): THREE.CanvasTexture {
+// ── 24H MART 便利店:rainy-store 移植外观 ────────────────────────────
+// 外观移植自 lab.lcrworld.xyz/rainy-store/(用户指定替换),按本城地块
+// 尺度缩放并适配 stdMat 材质/天气体系。两处消费: north_night_kiosk
+// (不打烊贩卖店,24h 主题契合)与 fried_chicken_shop(炸鸡店,主城
+// 初始建成);配置文案与点击交互保持不变。
+export function makeSignTexture(text: string, w: number, h: number, bg: string, fg: string, fontSize: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -288,7 +289,7 @@ function makeSignTexture(text: string, w: number, h: number, bg: string, fg: str
   return texture;
 }
 
-const buildNightKiosk: Builder = (options, cfg) => {
+export const buildMartStore: Builder = (options, cfg) => {
   const { addPart } = options;
   const g = new THREE.Group();
   const W = 3.3, H = 2.0, D = 2.6;
@@ -375,6 +376,9 @@ const buildNightKiosk: Builder = (options, cfg) => {
   addPart(g, new THREE.BoxGeometry(0.74, 0.04, 0.36), { color: 0x9aa2b0, roughness: 0.4 }, [0.75, FLOOR + 0.57, 0.45], false);
   addPart(g, new THREE.BoxGeometry(0.2, 0.14, 0.16), { color: 0xdde3ea, roughness: 0.4 }, [0.62, FLOOR + 0.66, 0.42], false);
   addPart(g, new THREE.BoxGeometry(0.18, 0.1, 0.02), { color: 0x5ec8a0, emissive: 0x5ec8a0, emissiveIntensity: 0.5, roughness: 0.3 }, [0.62, FLOOR + 0.67, 0.51], false);
+  // 保温灯柜(暖橙灯照着熟食,炸鸡店主题的呼应)
+  addPart(g, new THREE.BoxGeometry(0.34, 0.44, 0.26), { color: 0xd8dde8, roughness: 0.4 }, [0.15, FLOOR + 0.25, 0.95]);
+  addPart(g, new THREE.BoxGeometry(0.28, 0.32, 0.02), { color: 0xffb042, emissive: 0xffb042, emissiveIntensity: 0.8, roughness: 0.3 }, [0.15, FLOOR + 0.27, 1.085], false);
 
   // 店外:门口地垫、自动贩卖机、雨伞架、垃圾桶
   addPart(g, new THREE.BoxGeometry(1.0, 0.03, 0.47), { color: 0x3d4a58, roughness: 0.9 }, [0.7, FLOOR + 0.015, frontZ + 0.35], false);
@@ -490,7 +494,7 @@ export function createNorthDistrictBuilders(options: NorthBuildingOptions): Reco
     monolith: wrap(buildMonolith),
     worry_store: wrap(buildWorryStore),
     bistro: wrap(buildBistro),
-    night_kiosk: wrap(buildNightKiosk),
+    night_kiosk: wrap(buildMartStore),
     jukebox: wrap(buildJukebox),
     backrooms_door: wrap(buildBackroomsDoor),
   };
