@@ -20,6 +20,7 @@ export function createRainAudio(): RainAudio {
 
   function ensure(): boolean {
     if (ctx) return true;
+    if (typeof window === 'undefined') return false;
     const w = window as Window & { webkitAudioContext?: typeof AudioContext };
     const Ctor = window.AudioContext ?? w.webkitAudioContext;
     if (!Ctor) return false;

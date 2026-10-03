@@ -37,7 +37,7 @@ const PUDDLE_CELL = 9;
 const GROUND_Y = [0.058, 0.128] as const;
 
 function isNightNow(): boolean {
-  return document.body.classList.contains('night');
+  return typeof document !== 'undefined' && document.body.classList.contains('night');
 }
 
 const bgColor = new THREE.Color();
