@@ -1,37 +1,45 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 // The AI reviewer's merge gate is shell logic; a parser that fails open on a
 // decorated verdict line silently green-lights a BLOCKER. Pin the shapes models
-// actually emit (bold, list markers, backticks, CRLF) plus the emoji fallback.
+// actually emit (bold, list markers, backticks, CRLF) plus the emoji fallback
+// and the deliberate fail-open paths (missing file, missing verdict line).
 const script = join(process.cwd(), '..', '..', 'scripts', 'review-verdict.sh');
+assert.ok(
+  existsSync(script),
+  `review-verdict.sh not found at ${script}; run via \`npm run test:unit -w @minicity/web\` (cwd must be apps/web)`,
+);
 const dir = mkdtempSync(join(tmpdir(), 'review-verdict-'));
+test.after(() => rmSync(dir, { recursive: true, force: true }));
 
-function verdict(report: string): { code: number; stdout: string } {
+function verdict(report: string): { code: number; stdout: string; stderr: string } {
   const file = join(dir, 'report.md');
   writeFileSync(file, report);
-  try {
-    const stdout = execFileSync('bash', [script, file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    return { code: 0, stdout: stdout.trim() };
-  } catch (error) {
-    const failure = error as { status?: number; stdout?: string };
-    return { code: failure.status ?? -1, stdout: (failure.stdout ?? '').trim() };
-  }
+  return runScript(file);
+}
+
+function runScript(file: string): { code: number; stdout: string; stderr: string } {
+  const result = spawnSync('bash', [script, file], { encoding: 'utf8' });
+  return {
+    code: result.status ?? 1,
+    stdout: String(result.stdout).trim(),
+    stderr: String(result.stderr),
+  };
 }
 
 for (const [label, report, expected] of [
-  ['plain blocker', 'REVIEW_VERDICT: BLOCKER\n', 'BLOCKER'],
   ['plain pass', 'REVIEW_VERDICT: PASS\n', 'PASS'],
-  ['bold blocker', '**REVIEW_VERDICT: BLOCKER**\n', 'BLOCKER'],
-  ['list pass', '- REVIEW_VERDICT: PASS\n', 'PASS'],
-  ['backtick pass', '`REVIEW_VERDICT: PASS`\n', 'PASS'],
-  ['no-space blocker', 'REVIEW_VERDICT:BLOCKER\n', 'BLOCKER'],
-  ['trailing prose blocker', 'REVIEW_VERDICT: BLOCKER: because reasons\n', 'BLOCKER'],
-  ['last line wins', 'REVIEW_VERDICT: BLOCKER\nREVIEW_VERDICT: PASS\n', 'PASS'],
+  ['decorated pass', '**REVIEW_VERDICT: PASS**\n', 'PASS'],
+  ['backticked pass', '`REVIEW_VERDICT: PASS`\n', 'PASS'],
+  ['bold key', '**REVIEW_VERDICT:** PASS\n', 'PASS'],
+  ['blocker verdict', 'REVIEW_VERDICT: BLOCKER\n', 'BLOCKER'],
+  ['decorated blocker', '## REVIEW_VERDICT: BLOCKER\n', 'BLOCKER'],
+  ['verdict with trailing notes', 'REVIEW_VERDICT: PASS — no blockers found\n', 'PASS'],
   ['CRLF pass', 'REVIEW_VERDICT: PASS\r\n', 'PASS'],
   ['emoji fallback', '### 🔴 Blocker\n', 'BLOCKER'],
   ['CJK emoji fallback', '### 🔴 阻断\n', 'BLOCKER'],
@@ -47,3 +55,21 @@ for (const [label, report, expected] of [
     assert.equal(result.code, expected === 'BLOCKER' ? 1 : 0, `${label} exit code`);
   });
 }
+
+// 无 verdict 行的 fail-open 是设计决定：bot 打嗝不应把 required check 变红。
+// stderr 警告保证该路径在 job log 里可见（#205 审查建议 3）。
+test('review verdict: missing verdict line fails open with a stderr warning', () => {
+  const result = verdict('no verdict here\n');
+  assert.equal(result.stdout, 'PASS');
+  assert.equal(result.code, 0);
+  assert.match(result.stderr, /no REVIEW_VERDICT line found/);
+});
+
+// 报告文件缺失（上游步骤失败）时同样 fail-open：exit 0 且仅留 stderr 提示
+// （无 stdout verdict；required check 只看退出码）。
+test('review verdict: missing report file fails open', () => {
+  const result = runScript(join(dir, 'does-not-exist.md'));
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /report file not found/);
+});

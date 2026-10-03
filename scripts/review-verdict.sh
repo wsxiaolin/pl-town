@@ -6,10 +6,17 @@
 # list markers, backticks, leading quotes). Parsing is isolated from the
 # workflow so it can be fixture-tested without spinning up a runner.
 #
+# Requires bash (uses `pipefail`); POSIX sh is not sufficient. Fixture tests
+# live in apps/web/tests/unit/reviewVerdict.test.ts (run via test:unit).
+#
 # Usage: review-verdict.sh <report-file>
 # Exit 0 = pass (no blockers), exit 1 = blockers found. Prints the verdict.
 set -uo pipefail
 
+# A missing input is a bot-side failure (the report step died before writing
+# output), not a review verdict. Failing open here is deliberate: the
+# required check must not go red on infra errors — the comment step reports
+# the failure on the PR instead.
 REPORT="${1:-}"
 if [ -z "$REPORT" ] || [ ! -f "$REPORT" ]; then
   echo "review-verdict: report file not found: $REPORT" >&2
@@ -51,5 +58,8 @@ fi
 if [ -z "$line" ]; then
   echo "review-verdict: no REVIEW_VERDICT line found; defaulting to pass. Review manually." >&2
 fi
+# Fail-open by design: a report with no verdict line (bot hiccup) must not
+# red the required check. The stderr warning above keeps this visible in the
+# job log; the workflow comment step carries the failure context on the PR.
 echo "PASS"
 exit 0

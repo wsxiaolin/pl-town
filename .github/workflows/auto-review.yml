@@ -60,8 +60,10 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -e
-          # 先写入解析后的 PR 上下文（env 变量在此处插值），再追加静态指令
-          {
+          # 先写入解析后的 PR 上下文（env 变量在此处插值），再追加静态指令。
+          # 拼装失败（重定向/磁盘故障等）与其它 bot 故障同等待遇：写
+          # bot_failed 并让 required check 通过，避免把 job 变红卡住 PR。
+          if ! {
             echo "You are a Senior Engineer performing an expert-level Pull Request Code Review for the"
             echo "MiniCity (pl-town) repository — a Vite + TypeScript + Three.js npm workspace"
             echo "(apps/web frontend + apps/server Node.js WebSocket/HTTP server)."
@@ -102,7 +104,12 @@ jobs:
              `REVIEW_VERDICT: BLOCKER`. Use BLOCKER if and only if there is at
              least one 🔴 Blocker finding. Blockers fail the required check.
           EOF
-          } > review_prompt.txt
+          } > review_prompt.txt; then
+            echo "failed to build review_prompt.txt; treating this as a bot failure" >&2
+            printf '%s\n' '自动审查失败' > review_report.md
+            echo "review_status=bot_failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # 缺少任务描述会让 opencode 在无指令下运行，任何非空输出都会被误判为有效审查。
           # 这里保持 #184 的不变量：bot 自身失败时写 bot_failed 并让 required check 通过，
@@ -163,12 +170,11 @@ jobs:
             printf '%s\n' '自动审查失败' > review_report.md
           fi
 
-          # 删除上一轮遗留的 AI 审查评论，避免连续推送时评论堆积
+          # 先收集旧评论 ID，再发新评论、成功后清理旧评论：即便发评论失败，
+          # 旧评论仍在，不会两头落空（本步骤自身 continue-on-error）。
           COMMENT_MARKER="### 🤖 AI Code Review (OpenCode)"
-          for cid in $(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
-                        --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id"); do
-            gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$cid" || true
-          done
+          old_comment_ids=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+                        --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id") || true
 
           # 去除可能残留的 ANSI 转义序列，保证评论渲染干净
           sed -r 's/\x1B\[[0-9;]*[mK]//g' review_report.md > review_report_clean.md
@@ -182,6 +188,11 @@ jobs:
           } > final_comment.md
 
           gh pr comment "$PR_NUMBER" --body-file final_comment.md
+
+          # 新评论已落地，再删除上一轮遗留的 AI 审查评论，避免连续推送时评论堆积
+          for cid in $old_comment_ids; do
+            gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$cid" || true
+          done
 
       - name: Fail job when review has blockers
         # 不依赖评论步骤是否成功（comment 步骤 continue-on-error）
