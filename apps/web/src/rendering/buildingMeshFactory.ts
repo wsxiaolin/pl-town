@@ -5,6 +5,7 @@ import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
+import { buildKomorebiWorkshop } from './komorebiClockworks';
 import { RENDER_ORDER } from './layers';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
@@ -897,7 +898,12 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     screen: buildScreen, shaft: buildShaft, altar: buildAltar, observatory: buildObservatory,
     pagoda: buildPagoda, market: buildMarket, greenhouse: buildGreenhouse,
     clocktower: buildClockTower, temple: buildTemple, factory: buildFactory,
-    mall: buildMall, school: buildSchool, academy: buildAcademy,
+    // 金月店(mall_south)换上 rainy-store 的 24H MART 便利店外观(用户指定;
+    // 自动门/橱窗文案契合)。mall_west 保持原商场造型。
+    mall: (cfg: BuildingDefinition) => cfg.id === 'mall_south'
+      ? buildMartStore({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg)
+      : buildMall(cfg),
+    school: buildSchool, academy: buildAcademy,
     crown: (cfg: BuildingDefinition) => buildIceKingCrownBuilding(cfg, { stdMat, mk, part }),
     banana: buildBanana, qipai: buildQipai,
     television_tower: buildTelevisionTower,
@@ -908,6 +914,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     film_city: buildFilmCity,
     ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
+    komorebi_workshop: (cfg: BuildingDefinition) => buildKomorebiWorkshop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };
