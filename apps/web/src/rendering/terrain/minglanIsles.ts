@@ -6,15 +6,29 @@ import type { TerrainFeatureConfig } from '../../city/data/terrain/_types';
 // 配置契约见 city/data/terrain/sea-minglan.ts（坐标/清空距核对记录在同文件头注释）。
 //
 // 视觉基准是 CG 片头图（assets/cg/echo/mountain-promise.png、observatory-song.png）：
-// 折面平影体块（flatShading + 逐面烘焙色块）、柔和粉彩、远景把雾霾烘进颜色——
+// 折面平影体块（逐面烘焙色块）、柔和粉彩、远景把雾霾烘进颜色——
 // 因此不用 scene.fog（仓库禁用），远处岬角直接用更浅更冷的色阶。
+//
+// 岛体/山丘生成器（径向高度场，替代旧抖动 icosahedron/圆锥）：
+// - 每个岛/丘是一张圆盘高度场网格（环 8..9 × 圆周 14..18），平面轮廓由
+//   角谐波扰动成不规则底缘；离岛用穹顶剖面 h·sqrt(1-(ρ/r)^k)（近椭球、
+//   顶部平缓），岬角用尖峰剖面 h·(1-(ρ/r)^k) + 迎坡不对称 + 山脊角谐波；
+//   叠加 3 阶周期 value-noise fBm 细节，底环埋到外海底面之下。
+// - 几何按 non-indexed 三角形直接发射 + computeVertexNormals()：每三角形
+//   独立法线 = 干净折面。
+// - 逐面顶点色：离岛按绝对高度分带（水线深青 → 沙滩带 → 草甸渐变 →
+//   岩顶，与沙线盘同色的暖沙水线带），岬角按既有三档雾霾色阶分带；
+//   逐面 ±6% 明度抖动 + 北/东坡轻微冷色偏移。
+// - 灯塔、松树、叠石、沙线盘、水下裙、外海平面等道具与坐标契约全部保留；
+//   岛面 props 的落地高度改为直接求值生成器剖面（与网格同一函数），贴面更准。
 //
 // y 体系（对齐 rendering/layers.ts 的 z-fighting 规则，任意水平面与
 // 0 / 0.018 / 0.036 / 0.04 / 0.06 / 0.065 / 0.07 均保持 >0.004 间距）：
 //   海面（westBeach，既有）     y = 0.06
 //   沙线盘（本文件，唯一新增水平面之一） y = 0.085   （与海面差 0.025）
 //   外海底面（本文件，唯一新增水平面之二） y = -0.4   （与地表 y=0 差 0.4）
-//   岛裙/岬角锥底                y = -0.6   （斜面 + 底缘在外海底面之下）
+//   岛穹底环                    y = -0.55  （在外海底面之下，被裙体遮住）
+//   岬角山丘底环                y = -1.35  （坡面斜面延伸到海底面之下收尾）
 //   岛体/山体其余表面均为斜面或折面，不构成水平面。
 // 所有网格 castShadow/receiveShadow = false（覆盖在镜面海上，避免阴影 acne）；
 // 运行时材质统一打 mesh.userData.dynamicMaterial 标记（westBeach.ts 约定）。
@@ -56,7 +70,15 @@ const SAND_RIM_MARGIN = 1.5; // 沙线盘半径 = 岛半径 + 1.5
 const SKIRT_TOP_Y = 0.082; // 裙顶略低于沙线盘（0.003），藏在盘沿之下
 const SKIRT_BOTTOM_Y = -0.6;
 const OCEAN_Y_FALLBACK = -0.4;
-const PROP_SINK = 0.45; // 岛面props下沉量（覆盖顶部抖动的不确定性）
+const PROP_SINK = 0.45; // 岛面props下沉量（覆盖顶部细节噪声的不确定性）
+const ISLE_BURY_Y = -0.55; // 岛穹底环：埋入外海底面（-0.4）之下，被裙体遮住
+const HILL_BURY_Y = -0.75; // 岬角山丘底环：局部埋深，世界底缘 = -0.6 + (-0.75)
+// 水线沙滩分带（绝对高度）：深青 < 0.2 ≤ 沙滩 < 1.25 ≤ 草甸。
+const ISLE_DEEP_BAND_Y = 0.2;
+const ISLE_SAND_BAND_Y = 1.25;
+// fBm 细节噪声格点密度：角向取整数格，噪声沿圆周周期延拓无缝。
+const ISLE_DETAIL_ANGULAR_CELLS = 5;
+const ISLE_DETAIL_RADIAL_CELLS = 3;
 
 type ColorStop = { y: number; color: THREE.Color };
 
@@ -112,27 +134,28 @@ const ISLE_DECOR: Record<string, IsleDecor> = {
   // 螺洲：素面圆岛，无装饰
 };
 
-// 岬角群簇内偏移表（相对配置中心；每丘半径 12-20、高 8-16，与配置包络一致）。
+// 岬角群簇内偏移表（相对配置中心；每丘半径 12-16、高 8-15，与配置包络一致）。
 // 簇内山丘相互交叠成山脊剪影（CG 折面群山画法）；最东两丘与浪花带
-// （westBeach 的 shore-surf，x ≥ -47.4）保持 ≥12 间距。
-type HeadlandHillSpec = { offsetX: number; offsetZ: number; radius: number; height: number; segments: number };
+// （westBeach 的 shore-surf，x ≥ -47.4）保持 ≥12 间距（轮廓谐波幅度 ≤10%
+// 已计入核对：最大东伸 -61.1，距浪花带 ≥13.7）。
+type HeadlandHillSpec = { offsetX: number; offsetZ: number; radius: number; height: number };
 
 const HEADLAND_HILLS: Record<string, readonly HeadlandHillSpec[]> = {
   'headland-nw': [
-    { offsetX: -1.5, offsetZ: 4, radius: 15, height: 13, segments: 7 },
-    { offsetX: 8.5, offsetZ: -2, radius: 13, height: 10, segments: 5 },
-    { offsetX: -12.5, offsetZ: -5, radius: 16, height: 15, segments: 6 },
-    { offsetX: 5.5, offsetZ: 9, radius: 12, height: 9, segments: 6 },
-    { offsetX: -9.5, offsetZ: 7, radius: 14, height: 11, segments: 7 },
-    { offsetX: 9.5, offsetZ: -8, radius: 12, height: 8, segments: 5 },
+    { offsetX: -1.5, offsetZ: 4, radius: 15, height: 13 },
+    { offsetX: 8.5, offsetZ: -2, radius: 13, height: 10 },
+    { offsetX: -12.5, offsetZ: -5, radius: 16, height: 15 },
+    { offsetX: 5.5, offsetZ: 9, radius: 12, height: 9 },
+    { offsetX: -9.5, offsetZ: 7, radius: 14, height: 11 },
+    { offsetX: 9.5, offsetZ: -8, radius: 12, height: 8 },
   ],
   'headland-sw': [
-    { offsetX: 2.5, offsetZ: -5.5, radius: 14, height: 12, segments: 7 },
-    { offsetX: 8.5, offsetZ: 1.5, radius: 12, height: 9, segments: 5 },
-    { offsetX: -8.5, offsetZ: -0.5, radius: 16, height: 14, segments: 6 },
-    { offsetX: -2.5, offsetZ: -10.5, radius: 12, height: 8, segments: 6 },
-    { offsetX: -10.5, offsetZ: 8.5, radius: 13, height: 10, segments: 7 },
-    { offsetX: 9.5, offsetZ: 10.5, radius: 12, height: 8, segments: 5 },
+    { offsetX: 2.5, offsetZ: -5.5, radius: 14, height: 12 },
+    { offsetX: 8.5, offsetZ: 1.5, radius: 12, height: 9 },
+    { offsetX: -8.5, offsetZ: -0.5, radius: 16, height: 14 },
+    { offsetX: -2.5, offsetZ: -10.5, radius: 12, height: 8 },
+    { offsetX: -10.5, offsetZ: 8.5, radius: 13, height: 10 },
+    { offsetX: 9.5, offsetZ: 10.5, radius: 12, height: 8 },
   ],
 };
 
@@ -163,9 +186,69 @@ function hashString(text: string): number {
   return hash >>> 0;
 }
 
+// ── 确定性噪声工具（整数格点哈希 → 周期 value noise → fBm）───────────
+
+/** 整数格点哈希，返回 [0,1)。同格点同种子永远同值。 */
+function latticeNoise(ix: number, iy: number, seed: number): number {
+  let hash = (Math.imul(ix, 0x27d4eb2f) ^ Math.imul(iy, 0x165667b1) ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 15), 0x85ebca6b) >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35) >>> 0;
+  hash = (hash ^ (hash >>> 16)) >>> 0;
+  return hash / 4294967296;
+}
+
+/** 二维 value noise；x 方向按 periodX 取模回绕，沿圆周采样时天然无缝。 */
+function valueNoise2(x: number, y: number, seed: number, periodX: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const x0 = ((ix % periodX) + periodX) % periodX;
+  const x1 = (x0 + 1) % periodX;
+  const n00 = latticeNoise(x0, iy, seed);
+  const n10 = latticeNoise(x1, iy, seed);
+  const n01 = latticeNoise(x0, iy + 1, seed);
+  const n11 = latticeNoise(x1, iy + 1, seed);
+  return (n00 * (1 - ux) + n10 * ux) * (1 - uy) + (n01 * (1 - ux) + n11 * ux) * uy;
+}
+
+/** 2~3 阶 fBm，返回约 [-1,1]。角向频率逐阶翻倍且保持整数周期。 */
+function fbm2(x: number, y: number, seed: number, periodX: number, octaves: number): number {
+  let amplitude = 1;
+  let sum = 0;
+  let norm = 0;
+  let frequency = 1;
+  for (let octave = 0; octave < octaves; octave += 1) {
+    sum += amplitude * (valueNoise2(x * frequency, y * frequency, seed + octave * 40503, periodX * frequency) * 2 - 1);
+    norm += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  return sum / norm;
+}
+
+/** 角谐波（2/3/5 倍频正弦叠加，相位由种子哈希）：轮廓与带界扰动的基底。 */
+function angularHarmonics(angle: number, seed: number): number {
+  const phase2 = latticeNoise(101, 7, seed) * Math.PI * 2;
+  const phase3 = latticeNoise(233, 13, seed) * Math.PI * 2;
+  const phase5 = latticeNoise(701, 29, seed) * Math.PI * 2;
+  return 0.55 * Math.sin(angle * 2 + phase2) + 0.3 * Math.sin(angle * 3 + phase3) + 0.15 * Math.sin(angle * 5 + phase5);
+}
+
+function smoothStep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function clamp01(x: number): number {
+  return Math.min(1, Math.max(0, x));
+}
+
 // 折面顶点抖动：偏移按"量化坐标 + 种子"哈希取值，因此共享/重合顶点
 // （索引接缝、PolyhedronGeometry 的逐面复制）获得相同偏移，不会撕开网格。
-// topTaper 让顶部抖动衰减，保证岛顶 props 的落地估算稳定。
+// 保留给道具类小网格（沙线盘/水下裙/松树/叠石）继续使用。
 function jitterGeometry(
   geometry: THREE.BufferGeometry,
   amountXZ: number,
@@ -209,7 +292,7 @@ function jitterGeometry(
 }
 
 // 逐面烘焙色阶：面平均高度在 stops 之间取色，再乘每面 ±5% 明度抖动——
-// CG 图里那种"一块一块"的折面色斑即由此而来。
+// CG 图里那种"一块一块"的折面色斑即由此而来（道具类小网格继续使用）。
 function applyFacetGradient(
   geometry: THREE.BufferGeometry,
   stops: readonly ColorStop[],
@@ -265,6 +348,269 @@ function facetize(geometry: THREE.BufferGeometry, stops: readonly ColorStop[], s
   return applyFacetGradient(faceted, stops, seed);
 }
 
+// ── 径向高度场（离岛穹顶 / 岬角山丘共用）─────────────────────────
+
+type HillLobe = {
+  offsetX: number; // 归一化（除以 radius）的 lobe 圆心
+  offsetZ: number;
+  radius: number; // 归一化
+  k: number; // 剖面指数：穹顶 2.0..2.35，尖峰 1.55..1.95
+  leanAngle: number; // 迎坡不对称方向（穹顶为 0）
+  lean: number;
+  silhouetteAmp: number; // 平面底缘不规则度
+  silSeed: number;
+  ridgeAmp: number; // 山脊角谐波幅度
+  ridgeSeed: number;
+};
+
+type HillShape = {
+  height: number;
+  bury: number; // 底环局部 y（负值 = 埋入海底面之下）
+  mode: 'dome' | 'peak';
+  detailAmp: number;
+  detailSeed: number;
+  lobe: HillLobe;
+};
+
+/** lobe 在归一化坐标 (xn, zn) 处的高度占比（0..约1.1）。 */
+function lobeFraction(lobe: HillLobe, mode: 'dome' | 'peak', xn: number, zn: number): number {
+  const dx = xn - lobe.offsetX;
+  const dz = zn - lobe.offsetZ;
+  const rho = Math.hypot(dx, dz);
+  const angle = Math.atan2(dz, dx);
+  const silhouette = 1 + lobe.silhouetteAmp * angularHarmonics(angle, lobe.silSeed);
+  const rhoN = rho / silhouette;
+  if (rhoN >= 1) return 0;
+  let profile: number;
+  if (mode === 'dome') {
+    // 穹顶：sqrt(1-(ρ/r)^k)≈椭球，顶部平缓、水线处收进沙线盘。
+    profile = Math.sqrt(Math.max(0, 1 - Math.pow(rhoN, lobe.k)));
+  } else {
+    // 尖峰：迎坡方向剖面半径拉长 → 缓坡长脊；背坡收短 → 陡峭反坡。
+    const stretched = rhoN / (1 + lobe.lean * Math.cos(angle - lobe.leanAngle));
+    profile = 1 - Math.pow(stretched, lobe.k);
+  }
+  if (profile <= 0) return 0;
+  // 山脊角谐波：不同方位坡面整体隆起/凹陷，折面投影成放射状脊线。
+  return profile * (1 + lobe.ridgeAmp * angularHarmonics(angle, lobe.ridgeSeed));
+}
+
+/** 岛/丘表面世界高度：剖面 + fBm 细节 + 底缘埋地过渡。 */
+function hillSurfaceY(shape: HillShape, xn: number, zn: number): number {
+  const rho = Math.min(Math.hypot(xn, zn), 1);
+  const fraction = lobeFraction(shape.lobe, shape.mode, xn, zn);
+  const angle = Math.atan2(zn, xn);
+  const rimFade = 1 - smoothStep(0.7, 1, rho); // 近底缘细节渐隐，底环干净
+  const detail = fbm2(
+    (angle / (Math.PI * 2)) * ISLE_DETAIL_ANGULAR_CELLS,
+    rho * ISLE_DETAIL_RADIAL_CELLS,
+    shape.detailSeed,
+    ISLE_DETAIL_ANGULAR_CELLS,
+    3,
+  ) * shape.detailAmp * rimFade;
+  const surfaced = Math.max(0, fraction + detail);
+  const buryBlend = Math.pow(rho, 7); // 底环精确落在 bury，向内光滑过渡
+  return shape.height * surfaced * (1 - buryBlend) + shape.bury * buryBlend;
+}
+
+type RadialFieldParams = {
+  radius: number;
+  rings: number;
+  segments: number;
+  /** 归一化平面轮廓（角谐波不规则底缘），与表面函数共用同一谐波。 */
+  planRadius: (angle: number) => number;
+  /** 归一化坐标 (xn, zn) → 局部世界高度（含埋地）。 */
+  surfaceY: (xn: number, zn: number) => number;
+};
+
+function radialFieldVertex(params: RadialFieldParams, ring: number, segment: number, out: THREE.Vector3): void {
+  if (ring <= 0) {
+    out.set(0, params.surfaceY(0, 0), 0);
+    return;
+  }
+  const rhoN = ring / params.rings;
+  const angularOffset = ring % 2 === 0 ? 0 : 0.5; // 奇数环错开半扇区，棱面呈菱形交织
+  const wrapped = ((segment % params.segments) + params.segments) % params.segments;
+  const angle = ((wrapped + angularOffset) / params.segments) * Math.PI * 2;
+  const radial = rhoN * params.radius * params.planRadius(angle);
+  const x = Math.cos(angle) * radial;
+  const z = Math.sin(angle) * radial;
+  out.set(x, params.surfaceY(x / params.radius, z / params.radius), z);
+}
+
+/**
+ * 圆盘高度场 → non-indexed 三角形网格。逐三角形直接发射顶点（不共享），
+ * computeVertexNormals 得到真正的逐面法线：每个三角形都是一块干净折面。
+ */
+function buildRadialFieldGeometry(params: RadialFieldParams): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const apex = new THREE.Vector3();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const d = new THREE.Vector3();
+  const emit = (p: THREE.Vector3, q: THREE.Vector3, r: THREE.Vector3): void => {
+    positions.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
+  };
+  radialFieldVertex(params, 0, 0, apex);
+  for (let segment = 0; segment < params.segments; segment += 1) {
+    radialFieldVertex(params, 1, segment, a);
+    radialFieldVertex(params, 1, segment + 1, b);
+    emit(apex, b, a); // 中心扇面（绕向朝外）
+  }
+  for (let ring = 1; ring < params.rings; ring += 1) {
+    for (let segment = 0; segment < params.segments; segment += 1) {
+      radialFieldVertex(params, ring, segment, a);
+      radialFieldVertex(params, ring, segment + 1, b);
+      radialFieldVertex(params, ring + 1, segment, c);
+      radialFieldVertex(params, ring + 1, segment + 1, d);
+      emit(a, d, c); // 环间四边形 → 两三角形（绕向朝外）
+      emit(a, b, d);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+// ── 逐面顶点色（分带 + 抖动 + 冷色偏移）─────────────────────────
+
+type FacetBandPaint = (
+  target: THREE.Color,
+  centroidX: number,
+  centroidY: number,
+  centroidZ: number,
+  normalX: number,
+  normalY: number,
+  normalZ: number,
+) => void;
+
+/**
+ * 逐面烘焙顶点色：bandColor 决定基色，再统一叠加 ±6% 明度抖动与北/东坡面
+ * 的轻微冷色偏移（r/b 通道小幅反向移动，模拟大气散射的背光面）。
+ */
+function paintFacets(geometry: THREE.BufferGeometry, bandColor: FacetBandPaint, jitterSeed: number): void {
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
+  const faceCount = Math.floor(position.count / 3);
+  const colors = new Float32Array(position.count * 3);
+  const random = mulberry32(jitterSeed);
+  const tint = new THREE.Color();
+  for (let face = 0; face < faceCount; face += 1) {
+    const first = face * 3;
+    const centroidX = (position.getX(first) + position.getX(first + 1) + position.getX(first + 2)) / 3;
+    const centroidY = (position.getY(first) + position.getY(first + 1) + position.getY(first + 2)) / 3;
+    const centroidZ = (position.getZ(first) + position.getZ(first + 1) + position.getZ(first + 2)) / 3;
+    // non-indexed：同一三角形三顶点法线一致，取第一顶点即面法线。
+    const normalX = normal.getX(first);
+    const normalY = normal.getY(first);
+    const normalZ = normal.getZ(first);
+    tint.setRGB(0, 0, 0);
+    bandColor(tint, centroidX, centroidY, centroidZ, normalX, normalY, normalZ);
+    const brightness = 0.94 + random() * 0.12; // ±6% 逐面明度色斑（CG 折面色块）
+    const north = smoothStep(0.15, 0.8, -normalZ);
+    const east = smoothStep(0.15, 0.8, normalX) * 0.6;
+    const cool = Math.min(1, north + east);
+    tint.setRGB(
+      Math.min(1, tint.r * brightness * (1 - 0.05 * cool)),
+      Math.min(1, tint.g * brightness),
+      Math.min(1, tint.b * brightness * (1 + 0.05 * cool)),
+    );
+    for (let corner = 0; corner < 3; corner += 1) {
+      const offset = (first + corner) * 3;
+      colors[offset] = tint.r;
+      colors[offset + 1] = tint.g;
+      colors[offset + 2] = tint.b;
+    }
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+function createIsleProfile(height: number, seed: number): HillShape {
+  const random = mulberry32(seed);
+  return {
+    height,
+    bury: ISLE_BURY_Y,
+    mode: 'dome',
+    detailAmp: 0.035 + random() * 0.02,
+    detailSeed: Math.floor(random() * 0x7fffffff),
+    lobe: {
+      offsetX: 0,
+      offsetZ: 0,
+      radius: 1,
+      k: 2.0 + random() * 0.35, // 穹顶剖面：近椭球、顶部平缓
+      leanAngle: 0,
+      lean: 0,
+      silhouetteAmp: 0.05 + random() * 0.02, // 收敛：水线轮廓不越出沙线盘
+      silSeed: Math.floor(random() * 0x7fffffff),
+      ridgeAmp: 0.04 + random() * 0.02,
+      ridgeSeed: Math.floor(random() * 0x7fffffff),
+    },
+  };
+}
+
+function createHillProfile(height: number, seed: number): HillShape {
+  const random = mulberry32(seed);
+  return {
+    height,
+    bury: HILL_BURY_Y,
+    mode: 'peak',
+    detailAmp: 0.03 + random() * 0.015,
+    detailSeed: Math.floor(random() * 0x7fffffff),
+    lobe: {
+      offsetX: 0,
+      offsetZ: 0,
+      radius: 1,
+      k: 1.55 + random() * 0.4, // 尖峰剖面：凹坡向山脚展开裙摆
+      leanAngle: random() * Math.PI * 2,
+      lean: random() * 0.16,
+      silhouetteAmp: 0.07 + random() * 0.03, // ≤10%：与浪花带间距核对已计入
+      silSeed: Math.floor(random() * 0x7fffffff),
+      ridgeAmp: 0.06 + random() * 0.04,
+      ridgeSeed: Math.floor(random() * 0x7fffffff),
+    },
+  };
+}
+
+// 离岛分带：水线深青 → 沙滩（与沙线盘同色）→ 草甸渐变 → 岩顶。
+function isleBandColor(height: number, bandSeed: number): FacetBandPaint {
+  const rockLine = Math.max(1.9, height * 0.74);
+  return (target, centroidX, centroidY, centroidZ) => {
+    const wobble = 0.12 * angularHarmonics(Math.atan2(centroidZ, centroidX), bandSeed);
+    const y = centroidY + wobble;
+    if (y < ISLE_DEEP_BAND_Y) {
+      target.copy(ISLE_DEEP);
+    } else if (y < ISLE_SAND_BAND_Y) {
+      target.copy(SAND_RIM);
+    } else if (y < rockLine) {
+      target.copy(ISLE_VEGETATION).lerp(ISLE_SAGE, clamp01((y - ISLE_SAND_BAND_Y) / (rockLine - ISLE_SAND_BAND_Y)));
+    } else {
+      target.copy(ISLE_ROCK);
+    }
+  };
+}
+
+// 岬角分带：既有三档雾霾色阶按归一化高度过渡（带界谐波扰动）。
+function headlandBandColor(
+  palette: readonly [THREE.Color, THREE.Color, THREE.Color],
+  buryY: number,
+  height: number,
+  bandSeed: number,
+): FacetBandPaint {
+  const [low, mid, high] = palette;
+  return (target, centroidX, centroidY, centroidZ, _normalX, normalY) => {
+    const wobble = 0.04 * angularHarmonics(Math.atan2(centroidZ, centroidX), bandSeed);
+    const steep = 1 - clamp01(normalY);
+    const band = clamp01((centroidY - buryY) / height + steep * 0.1 + wobble);
+    if (band <= 0.5) {
+      target.copy(low).lerp(mid, band * 2);
+    } else {
+      target.copy(mid).lerp(high, (band - 0.5) * 2);
+    }
+  };
+}
+
 type BuildContext = {
   group: THREE.Group;
   geometries: Set<THREE.BufferGeometry>;
@@ -286,24 +632,6 @@ function addMesh(
   context.geometries.add(geometry);
   context.materials.add(material);
   return mesh;
-}
-
-// 岛面高度估算（未抖动椭球解析值；props 下沉 PROP_SINK 抵消顶部抖动）。
-function isleSurfaceY(height: number, radius: number, distance: number): number {
-  const t = Math.min(distance / radius, 0.9);
-  return height * Math.sqrt(1 - t * t);
-}
-
-function buildIslandDomeGeometry(radius: number, height: number, seed: number): THREE.BufferGeometry {
-  const dome = new THREE.IcosahedronGeometry(1, 1);
-  jitterGeometry(dome, 0.07, 0.035, seed, 1, 0.6);
-  dome.scale(radius, height, radius);
-  return facetize(dome, [
-    { y: -height * 0.3, color: ISLE_DEEP },
-    { y: height * 0.1, color: ISLE_VEGETATION },
-    { y: height * 0.45, color: ISLE_SAGE },
-    { y: height * 0.85, color: ISLE_ROCK },
-  ], seed + 1);
 }
 
 function buildSandRimGeometry(radius: number, seed: number): THREE.BufferGeometry {
@@ -371,7 +699,18 @@ function buildIsland(
   const centerX = feature.x;
   const centerZ = feature.z;
 
-  const dome = addMesh(context, buildIslandDomeGeometry(radius, height, seed), shared.facet, feature.id);
+  const profile = createIsleProfile(height, seed);
+  const rings = radius >= 9 ? 9 : 8;
+  const segments = radius >= 9 ? 18 : radius >= 6 ? 16 : 14;
+  const domeGeometry = buildRadialFieldGeometry({
+    radius,
+    rings,
+    segments,
+    planRadius: (angle) => 1 + profile.lobe.silhouetteAmp * angularHarmonics(angle, profile.lobe.silSeed),
+    surfaceY: (xn, zn) => hillSurfaceY(profile, xn, zn),
+  });
+  paintFacets(domeGeometry, isleBandColor(height, (seed + 0x68bc21) >>> 0), (seed ^ 0x9e3779b9) >>> 0);
+  const dome = addMesh(context, domeGeometry, shared.facet, feature.id);
   dome.position.set(centerX, 0, centerZ);
 
   const rim = addMesh(context, buildSandRimGeometry(radius, seed), shared.facet, `${feature.id}-sand-rim`);
@@ -382,26 +721,26 @@ function buildIsland(
 
   const decor = ISLE_DECOR[feature.id];
   if (!decor) return;
+  // 岛面高度：直接求值生成器剖面（与网格同一函数），props 精确贴面。
+  const surfaceAt = (offsetX: number, offsetZ: number): number =>
+    hillSurfaceY(profile, offsetX / radius, offsetZ / radius);
   (decor.pines ?? []).forEach((pine, index) => {
-    const distance = Math.hypot(pine.offsetX, pine.offsetZ);
-    const baseY = isleSurfaceY(height, radius, distance) - PROP_SINK;
+    const baseY = surfaceAt(pine.offsetX, pine.offsetZ) - PROP_SINK;
     buildPine(context, { facet: shared.facet }, centerX + pine.offsetX, baseY, centerZ + pine.offsetZ, pine.scale, seed + 100 + index * 10);
   });
   (decor.boulders ?? []).forEach((boulder, index) => {
-    const distance = Math.hypot(boulder.offsetX, boulder.offsetZ);
     buildBoulder(
       context,
       shared.facet,
       centerX + boulder.offsetX,
-      isleSurfaceY(height, radius, distance),
+      surfaceAt(boulder.offsetX, boulder.offsetZ),
       centerZ + boulder.offsetZ,
       boulder,
       seed + 200 + index * 10,
     );
   });
   if (decor.lighthouse) {
-    const distance = Math.hypot(decor.lighthouse.offsetX, decor.lighthouse.offsetZ);
-    const baseY = isleSurfaceY(height, radius, distance) - PROP_SINK + 0.05;
+    const baseY = surfaceAt(decor.lighthouse.offsetX, decor.lighthouse.offsetZ) - PROP_SINK + 0.05;
     const x = centerX + decor.lighthouse.offsetX;
     const z = centerZ + decor.lighthouse.offsetZ;
     const shaftGeometry = new THREE.CylinderGeometry(0.34, 0.46, 2.4, 8);
@@ -420,21 +759,28 @@ function buildHeadland(context: BuildContext, feature: TerrainFeatureConfig, sha
   const hills = HEADLAND_HILLS[feature.id];
   if (!hills) return;
   // 雾霾烘焙进色阶：山脚冷灰绿 → 山腰浅雾 → 峰顶淡岩色（比离岛更浅更冷）。
-  const palette = feature.id === 'headland-nw'
+  const palette: readonly [THREE.Color, THREE.Color, THREE.Color] = feature.id === 'headland-nw'
     ? [HILL_NW_LOW, HILL_NW_MID, HILL_NW_HIGH]
     : [HILL_SW_LOW, HILL_SW_MID, HILL_SW_HIGH];
   const seedBase = hashString(feature.id);
   hills.forEach((hill, index) => {
-    const cone = new THREE.ConeGeometry(hill.radius, hill.height, hill.segments, 1, true);
-    jitterGeometry(cone, hill.radius * 0.05, hill.height * 0.035, seedBase + index, hill.height / 2, 0.25);
-    // 锥体局部 y ∈ [-h/2, h/2]：三档色阶均布其上。
-    const stops: ColorStop[] = palette.map((color, stopIndex) => ({
-      y: -hill.height / 2 + (hill.height * stopIndex) / (palette.length - 1),
-      color,
-    }));
-    const geometry = facetize(cone, stops, seedBase + 50 + index);
+    const profile = createHillProfile(hill.height, seedBase + index * 7919);
+    const rings = hill.radius >= 14 ? 9 : 8;
+    const segments = hill.radius >= 14 ? 18 : 16;
+    const geometry = buildRadialFieldGeometry({
+      radius: hill.radius,
+      rings,
+      segments,
+      planRadius: (angle) => 1 + profile.lobe.silhouetteAmp * angularHarmonics(angle, profile.lobe.silSeed),
+      surfaceY: (xn, zn) => hillSurfaceY(profile, xn, zn),
+    });
+    const bandSeed = (seedBase + index * 104729) >>> 0;
+    const jitterSeed = (seedBase + index * 104729 + 0x9e3779b9) >>> 0;
+    paintFacets(geometry, headlandBandColor(palette, profile.bury, hill.height, bandSeed), jitterSeed);
+    // 底环局部 y=-0.75、mesh 挂在 SKIRT_BOTTOM_Y：峰顶世界高度 ≈ h-0.6，
+    // 与旧圆锥可见峰高一致；底缘深藏在外海底面（-0.4）之下。
     const mesh = addMesh(context, geometry, shared.facet, `${feature.id}-hill-${index}`);
-    mesh.position.set(feature.x + hill.offsetX, SKIRT_BOTTOM_Y + hill.height / 2, feature.z + hill.offsetZ);
+    mesh.position.set(feature.x + hill.offsetX, SKIRT_BOTTOM_Y, feature.z + hill.offsetZ);
   });
 }
 
