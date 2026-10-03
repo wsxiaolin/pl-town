@@ -62,7 +62,9 @@ jobs:
           {
             echo "### Issue Title: $ISSUE_TITLE"
             echo "### Issue Description:"
-            echo "$ISSUE_BODY"
+            # printf（而非 echo）承载 Issue 正文：echo 对反斜杠序列、
+            # 首字符为 -n/-e 的正文的处理因实现而异，printf 恒定原样输出。
+            printf '%s\n' "$ISSUE_BODY"
             echo ""
           } > issue_prompt.txt
 

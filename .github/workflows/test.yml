@@ -59,7 +59,7 @@ jobs:
       # can. Pin the image digest so an upstream release can't turn this red on
       # unrelated files.
       - name: Run actionlint
-        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+        run: docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
 
   # The admin console is plain DOM (no WebGL), so it only needs a headless
   # Chromium. Runs on PRs too: the shop editor and sidebar assertions in

@@ -39,7 +39,7 @@ npm run test:server
 npm test                 # 前端 Playwright + 服务端集成
 ```
 
-工作流文件（`.github/workflows/*.yml`）改动后额外跑一次 actionlint：CI 的 `actionlint` job 会用固定 digest 的 `rhysd/actionlint` 镜像校验全部 workflow，能发现 YAML 解析看不到的非法表达式（如误写的 `${{ secrets.X }}`）与非 ASCII 同形字符。本地可用 `docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint -color`。
+工作流文件（`.github/workflows/*.yml`）改动后额外跑一次 actionlint：CI 的 `actionlint` job 会用固定 digest 的 `rhysd/actionlint` 镜像校验全部 workflow，能发现 YAML 解析看不到的非法表达式（如误写的 `${{ secrets.X }}`）与非 ASCII 同形字符。本地复现用与 CI 相同的 digest：`docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color`（当前对应 v1.7.7 + shellcheck 0.9.0）。更换 digest 时同步更新本行。
 
 前端 Playwright 配置使用 Chromium、单 worker，并自动启动 `4173` 端口的 Vite 服务。`apps/web/tests/diagnostics/` 下的诊断脚本是按需运行的性能/视觉检查，不属于默认烟雾套件。
 

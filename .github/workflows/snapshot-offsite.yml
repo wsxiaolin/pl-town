@@ -42,7 +42,14 @@ jobs:
               bash scripts/snapshot-offsite.sh
               ;;
             fail)
-              echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are required" >&2
+              # Name what is actually missing: a partially-rotated or typo'd
+              # secret (exactly one of the pair set) is the realistic way
+              # backups silently stop, and it must not hide behind a generic
+              # "not configured" message.
+              missing=""
+              [ -z "$RENDER_SNAPSHOT_URL" ] && missing="RENDER_SNAPSHOT_URL"
+              [ -z "$DEPLOY_SNAPSHOT_TOKEN" ] && missing="${missing:+$missing }DEPLOY_SNAPSHOT_TOKEN"
+              echo "Snapshot secrets missing: ${missing:-unknown}" >&2
               exit 1
               ;;
             skip)
@@ -50,6 +57,9 @@ jobs:
               # looked like a healthy backup. Surface it in the run UI and the
               # step summary instead of failing the push by default; set the
               # SNAPSHOT_REQUIRED repository variable to make it hard-fail.
+              # (Visibility is the run page annotation + job summary; with the
+              # common "failed workflows only" notification setting a green
+              # run sends no email — use SNAPSHOT_REQUIRED=true for that.)
               echo "::warning::Skipping snapshot: RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured"
               {
                 echo "### Snapshot skipped"
