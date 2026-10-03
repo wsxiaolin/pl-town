@@ -29,6 +29,7 @@ import nightStep2Url from '../../assets/moments/night-step2.webp';
 import nightStep3Url from '../../assets/moments/night-step3.webp';
 import nightStep4Url from '../../assets/moments/night-step4.webp';
 import { momentForHour, type MomentName } from '../../core/momentClock';
+import { MOMENT_LAYER_IDS, tierDecision, type TierDecision } from './momentTiers';
 
 type ViewMoment = { name: MomentName; caption: string; levels: readonly string[] };
 
@@ -38,15 +39,6 @@ const IMAGE_BY_NAME: Record<MomentName, readonly string[]> = {
   dusk: [duskStep1Url, duskStep2Url, duskStep3Url, duskStep4Url, duskUrl],
   night: [nightStep1Url, nightStep2Url, nightStep3Url, nightStep4Url, nightUrl],
 };
-
-/** Layer element ids, coarsest → sharpest (index = level - 1). */
-const MOMENT_LAYER_IDS = [
-  'bootMomentStep1',
-  'bootMomentStep2',
-  'bootMomentStep3',
-  'bootMomentStep4',
-  'bootMomentImg',
-] as const;
 
 function viewMoment(hour: number): ViewMoment {
   const moment = momentForHour(hour);
@@ -81,25 +73,60 @@ export function configureMomentSplash(options: { reduced: boolean }): void {
 // that arrives AFTER a faster one stays hidden underneath (network jitter
 // must never make the picture go backwards).
 let shownMomentLevel = 0;
+// Bumped on every paintMoment: decode callbacks carry their paint's token,
+// so a decode that resolves after a NEWER paint (e.g. splash → heavy repaint
+// with a different moment) can never flip layers the newer paint owns.
+let paintToken = 0;
+
+function applyTierDecision(
+  layer: HTMLImageElement,
+  level: number,
+  decision: TierDecision,
+): number {
+  if (decision === 'reveal') {
+    layer.classList.remove('is-retired');
+    layer.classList.add('is-front');
+    return level;
+  }
+  if (decision === 'retire') {
+    layer.classList.remove('is-front');
+    layer.classList.add('is-retired');
+  }
+  return 0;
+}
 
 function paintMoment(moment: ViewMoment): void {
+  const token = ++paintToken;
   shownMomentLevel = 0;
+  if (moment.levels.length !== MOMENT_LAYER_IDS.length) {
+    // Ladder invariant: every moment must feed exactly five layers. A short
+    // ladder would silently drop the top; a long one would never show.
+    console.warn(
+      `[moment-splash] level count ${moment.levels.length} != layer count ${MOMENT_LAYER_IDS.length}`,
+    );
+  }
   moment.levels.forEach((levelUrl, index) => {
     const layerId = MOMENT_LAYER_IDS[index];
-    if (!layerId) return; // levels and layers are both fixed at five
+    if (!layerId) return;
     const layer = document.getElementById(layerId) as HTMLImageElement | null;
     if (!layer) return;
     const level = index + 1;
     if (layer.getAttribute('src') !== levelUrl) {
-      layer.classList.remove('is-front');
+      layer.classList.remove('is-front', 'is-retired');
       layer.src = levelUrl;
     }
     // decode() gates the fade so a tier never shows a half-decoded bitmap.
-    // A tier that fails to decode is simply skipped — the coarser layers
-    // underneath keep the screen from going bare.
-    layer.decode()
-      .then(() => { if (level > shownMomentLevel) { shownMomentLevel = level; layer.classList.add('is-front'); } })
-      .catch(() => { /* coarser tiers remain as the fallback */ });
+    // Not every engine exposes decode() (Safari < 14); without it the tier
+    // simply reveals on load-complete via the is-front swap below — the
+    // worst case is one frame of browser-native progressive draw.
+    const decoded = typeof layer.decode === 'function' ? layer.decode() : Promise.resolve();
+    decoded
+      .then(() => {
+        if (token !== paintToken) return; // a newer paint owns the layers now
+        const decision = tierDecision(level, true, shownMomentLevel);
+        shownMomentLevel = Math.max(shownMomentLevel, applyTierDecision(layer, level, decision));
+      })
+      .catch(() => { /* keep: coarser tiers remain as the fallback */ });
   });
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {

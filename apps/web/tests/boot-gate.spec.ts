@@ -34,6 +34,9 @@ test('light boot shows the current real-world moment still and enters', async ({
   // still, then pin the coarsest tier — its inline data URI / dev URL proves
   // the ladder is wired (soft → sharp boot, never a black flash).
   await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  // The full tier must actually take the screen (decode-gated reveal), not
+  // merely have its src queued.
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 20_000 });
   const step1Src = await page.locator('#bootMomentStep1').getAttribute('src');
   expect(step1Src).toMatch(/moments\/(dawn|noon|dusk|night)-step1\.webp|data:image\/webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());

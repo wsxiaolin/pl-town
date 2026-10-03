@@ -22,17 +22,6 @@
    (position / cover / drift / opacity gate) and adds a shrinking blur; tiers
    load independently and fade in only when sharper than what is showing. */
 .boot-moment { position: absolute; inset: 0; }
-.boot-moment-step {
-  /* Tier fade is quick (0.45s) — the final full still keeps .boot-moment-img's
-     1.6s reveal as the settling beat. */
-  transition: opacity 0.45s ease;
-  filter: blur(24px) saturate(1.08);
-  user-select: none;
-  pointer-events: none;
-}
-.boot-moment-step-2 { filter: blur(12px) saturate(1.05); }
-.boot-moment-step-3 { filter: blur(6px) saturate(1.02); }
-.boot-moment-step-4 { filter: blur(2.5px); }
 .boot-moment-img {
   position: absolute;
   inset: 0;
@@ -46,6 +35,25 @@
   user-select: none;
 }
 .boot-moment-img.is-front { opacity: 1; }
+/* Retired tiers: a sharper tier has taken the screen, so drop the coarser
+   layer from compositing (and stop its drift) instead of animating five
+   fullscreen layers for the whole splash. Kept in the DOM — a re-paint of
+   the same moment un-retires it without refetching. */
+.boot-moment-img.is-retired { visibility: hidden; animation: none; }
+/* Tier rules MUST stay after .boot-moment-img: equal specificity, so an
+   earlier placement would let the 1.6s base transition override the quick
+   0.45s tier fade (both in this stylesheet and over the inline critical
+   CSS, which loads first and mirrors this order). */
+.boot-moment-step {
+  /* Tier fade is quick (0.45s) — the final full still keeps .boot-moment-img's
+     1.6s reveal as the settling beat. */
+  transition: opacity 0.45s ease;
+  filter: blur(24px) saturate(1.08);
+  pointer-events: none;
+}
+.boot-moment-step-2 { filter: blur(12px) saturate(1.05); }
+.boot-moment-step-3 { filter: blur(6px) saturate(1.02); }
+.boot-moment-step-4 { filter: blur(2.5px); }
 .boot-moment-shade {
   position: absolute;
   inset: 0;
