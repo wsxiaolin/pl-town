@@ -13,9 +13,10 @@ import test from 'node:test';
 // Locate the script independently of the invocation cwd: fast path assumes the
 // `npm run test:unit -w @minicity/web` layout (cwd = apps/web), then falls back
 // to `git rev-parse --show-toplevel`. The fallback matters because Playwright
-// (before the testIgnore fix) imports `tests/unit/**` files with the repo root
-// as cwd inside shard jobs — a cwd-only resolution turns into a module-level
-// throw that fails the whole shard.
+// (before the follow-up PR that adds testIgnore to playwright.config.ts)
+// imports `tests/unit/**` files with the repo root as cwd inside shard jobs —
+// a cwd-only resolution turns into a module-level throw that fails the whole
+// shard.
 function repoRoot(): string {
   const cwd = process.cwd();
   if (existsSync(join(cwd, '..', '..', 'scripts', 'review-verdict.sh'))) return join(cwd, '..', '..');
@@ -60,6 +61,7 @@ for (const [label, report, expected] of [
   ['CRLF pass', 'REVIEW_VERDICT: PASS\r\n', 'PASS'],
   ['emoji fallback', '### 🔴 Blocker\n', 'BLOCKER'],
   ['CJK emoji fallback', '### 🔴 阻断\n', 'BLOCKER'],
+  ['prose emoji mention is not a blocker', 'No 🔴 Blocker findings — all clear.\n', 'PASS'],
   ['missing verdict defaults to pass', 'no verdict here\n', 'PASS'],
   ['numbered blocker', '1. REVIEW_VERDICT: BLOCKER\n', 'BLOCKER'],
   ['numbered pass', '10) REVIEW_VERDICT: PASS\n', 'PASS'],
@@ -89,4 +91,13 @@ test('review verdict: missing report file fails open', () => {
   assert.equal(result.code, 0);
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /report file not found/);
+});
+
+// 判定行被匹配但 token 不是 PASS/BLOCKER（如 REVIEW_VERDICT: PENDING）：
+// 保持 fail-open，但 stderr 告警保证该路径在 job log 里可见。
+test('review verdict: unrecognized verdict token warns and fails open', () => {
+  const result = verdict('REVIEW_VERDICT: PENDING\n');
+  assert.equal(result.stdout, 'PASS');
+  assert.equal(result.code, 0);
+  assert.match(result.stderr, /no PASS\/BLOCKER token/);
 });

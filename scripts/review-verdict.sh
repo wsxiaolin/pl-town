@@ -6,8 +6,10 @@
 # list markers, backticks, leading quotes). Parsing is isolated from the
 # workflow so it can be fixture-tested without spinning up a runner.
 #
-# Requires bash (uses `pipefail`); POSIX sh is not sufficient. Fixture tests
-# live in apps/web/tests/unit/reviewVerdict.test.ts (run via test:unit).
+# Requires bash (uses `pipefail`) and GNU sed/grep (the `I` flag on s/// and
+# the `\x1B` escape are not BSD); CI is ubuntu-latest, and the fixture tests
+# document this dependency. POSIX sh is not sufficient. Fixture tests live in
+# apps/web/tests/unit/reviewVerdict.test.ts (run via test:unit).
 #
 # Usage: review-verdict.sh <report-file>
 # Exit 0 = pass (no blockers), exit 1 = blockers found. Prints the verdict.
@@ -48,9 +50,17 @@ case "$verdict" in
     ;;
 esac
 
+# A matched line whose token is neither PASS nor BLOCKER (e.g. "REVIEW_VERDICT:
+# PENDING") used to fall through to the emoji heuristic silently. Keep the
+# fail-open default but make the path visible in the job log.
+if [ -n "$line" ]; then
+  echo "review-verdict: verdict line matched but no PASS/BLOCKER token: $line" >&2
+fi
+
 # No explicit verdict (or an unrecognized token): fall back to the emoji
-# heuristic, matching the report's own section labels.
-if printf '%s\n' "$raw" | grep -qiE '🔴[[:space:]]*(blocker|阻断)'; then
+# heuristic. Anchored to the report's section headings (`### 🔴 Blocker`) so
+# prose like "No 🔴 Blocker findings — all clear." cannot produce a false red.
+if printf '%s\n' "$raw" | grep -qiE '^#{1,6}[[:space:]]*🔴[[:space:]]*(blocker|阻断)'; then
   echo "BLOCKER"
   exit 1
 fi
