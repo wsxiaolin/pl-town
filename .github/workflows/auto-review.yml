@@ -21,7 +21,9 @@ jobs:
     # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # 3 × (15m + 30s kill-after) 回退链约 46.5 分钟，必须给启动/评论留出余量，
+    # 否则回退耗尽会在循环内被硬杀，bot_failed 分支与评论步骤永不执行。
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,12 +39,17 @@ jobs:
       - name: Configure npm network retries
         run: npm config set registry https://registry.npmjs.org/ && npm config set fetch-retries 3 && npm config set fetch-retry-mintimeout 1000 && npm config set fetch-retry-maxtimeout 10000 && npm config set fetch-timeout 120000
 
+      # 以下两步是纯基础设施（CLI 安装/技能更新/基线 fetch），网络抖动
+      # 不应把 job 变红卡住 PR：Execute 步骤对 CLI 缺失已降级为
+      # bot_failed（#184 不变量），这里保持同样的容错语义。
       - name: Install OpenCode CLI & update skills
+        continue-on-error: true
         run: |
           npm install -g opencode-ai
           npx skills update
 
       - name: Fetch target base branch
+        continue-on-error: true
         run: |
           # fetch-depth: 0 已提供 origin/<base_ref>；这里只更新远端引用，不创建同名本地分支
           # （直接 fetch <base> 会写入 FETCH_HEAD 并更新 origin/<base>，避免本地分支冲突）
@@ -57,9 +64,11 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          set +e
-          # 先写入解析后的 PR 上下文（env 变量在此处插值），再追加静态指令
-          {
+          set -e
+          # 先写入解析后的 PR 上下文（env 变量在此处插值），再追加静态指令。
+          # 拼装失败（重定向/磁盘故障等）与其它 bot 故障同等待遇：写
+          # bot_failed 并让 required check 通过，避免把 job 变红卡住 PR。
+          if ! {
             echo "You are a Senior Engineer performing an expert-level Pull Request Code Review for the"
             echo "MiniCity (pl-town) repository — a Vite + TypeScript + Three.js npm workspace"
             echo "(apps/web frontend + apps/server Node.js WebSocket/HTTP server)."
@@ -100,19 +109,38 @@ jobs:
              `REVIEW_VERDICT: BLOCKER`. Use BLOCKER if and only if there is at
              least one 🔴 Blocker finding. Blockers fail the required check.
           EOF
-          } > review_prompt.txt
+          } > review_prompt.txt; then
+            echo "failed to build review_prompt.txt; treating this as a bot failure" >&2
+            printf '%s\n' '自动审查失败' > review_report.md
+            echo "review_status=bot_failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 缺少任务描述会让 opencode 在无指令下运行，任何非空输出都会被误判为有效审查。
+          # 拼装的 if 组只观察最后一条命令的退出码，中途失败可能留下被截断的 prompt；
+          # 用任务书末尾的固定句做哨兵比 [ -s ] 更精确（空文件同样过不了 grep）。
+          # 这里保持 #184 的不变量：bot 自身失败时写 bot_failed 并让 required check 通过，
+          # 只在评论中说明失败，而不是把 job 变红卡住 PR。
+          if ! grep -q 'Blockers fail the required check' review_prompt.txt; then
+            echo "review_prompt.txt is empty or truncated; treating this as a bot failure" >&2
+            printf '%s\n' '自动审查失败' > review_report.md
+            echo "review_status=bot_failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # 代理运行期间移除令牌，避免模型自行下发评论或修改 PR；评论步骤单独注入 GH_TOKEN
           unset GITHUB_TOKEN GH_TOKEN
           review_succeeded=false
+          # 模型调用需要容错：单个模型超时/失败后继续回退，只在循环内部关闭 -e
+          set +e
           for model in \
             opencode/big-pickle \
             opencode/deepseek-v4-flash-free \
             opencode/hy3-free; do
             echo "Running OpenCode review with $model"
-            # Free models can occasionally hang without returning an error. Bound each
-            # attempt so the fallback chain can advance and the job cannot stay
-            # pending indefinitely.
+            # Any attempt (paid primary or free fallback) can hang without
+            # returning an error. Bound each one so the fallback chain can
+            # advance and the job cannot stay pending indefinitely.
             if timeout --signal=TERM --kill-after=30s 15m opencode run \
               --model "$model" \
               --variant high \
@@ -129,6 +157,9 @@ jobs:
             fi
           done
 
+          # 恢复 errexit：状态写入与输出文件生成必须成功，否则 verdict
+          # 步骤会被静默跳过（fail-open 的最后一个洞）。
+          set -e
           if [ "$review_succeeded" != true ]; then
             echo "All configured OpenCode review models failed." >&2
             printf '%s\n' '自动审查失败' > review_report.md
@@ -138,6 +169,8 @@ jobs:
           fi
 
       - name: Post PR review comment
+        # 评论投递失败不应掩盖审查结论：结论由下一个步骤独立判定
+        continue-on-error: true
         if: always() && !cancelled()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,12 +180,11 @@ jobs:
             printf '%s\n' '自动审查失败' > review_report.md
           fi
 
-          # 删除上一轮遗留的 AI 审查评论，避免连续推送时评论堆积
+          # 先收集旧评论 ID，再发新评论、成功后清理旧评论：即便发评论失败，
+          # 旧评论仍在，不会两头落空（本步骤自身 continue-on-error）。
           COMMENT_MARKER="### 🤖 AI Code Review (OpenCode)"
-          for cid in $(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
-                        --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id"); do
-            gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$cid" || true
-          done
+          old_comment_ids=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+                        --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id") || true
 
           # 去除可能残留的 ANSI 转义序列，保证评论渲染干净
           sed -r 's/\x1B\[[0-9;]*[mK]//g' review_report.md > review_report_clean.md
@@ -160,29 +192,23 @@ jobs:
             echo "### 🤖 AI Code Review (OpenCode)"
             echo "> 💡 Autonomous AI reviewer inspecting git history and code quality against \`AGENTS.md\`."
             echo ""
-            grep -vE '^REVIEW_VERDICT:' review_report_clean.md || true
+            # 只删除判定行本身（与 review-verdict.sh 的行匹配同形），保留
+            # 正文中解释判定机制的句子，避免评论内容被静默丢句。
+            grep -vE '^[[:space:]]*([0-9]+[.)][[:space:]]*)?[^[:alnum:]]*REVIEW[ _-]*VERDICT' review_report_clean.md || true
             echo ""
             echo "_This review was generated by an AI agent (Auto-Review workflow) on behalf of the maintainer._"
           } > final_comment.md
 
-          gh pr comment "$PR_NUMBER" --body-file final_comment.md
+          # 发评论失败必须在此终止：继续执行会走到“删除旧评论”，
+          # 造成新旧评论两头落空。
+          gh pr comment "$PR_NUMBER" --body-file final_comment.md || exit 1
+
+          # 新评论已落地，再删除上一轮遗留的 AI 审查评论，避免连续推送时评论堆积
+          for cid in $old_comment_ids; do
+            gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$cid" || true
+          done
 
       - name: Fail job when review has blockers
-        if: success() && steps.review.outputs.review_status == 'ok'
-        run: |
-          set +e
-          report=$(sed -r 's/\x1B\[[0-9;]*[mK]//g' review_report.md)
-          verdict=$(printf '%s\n' "$report" | grep -E '^REVIEW_VERDICT:' | tail -1 | awk -F: '{print toupper($2)}' | tr -d '[:space:]')
-          if [ "$verdict" = "BLOCKER" ]; then
-            echo "Review verdict is BLOCKER; failing the check." >&2
-            exit 1
-          fi
-          if [ "$verdict" = "PASS" ]; then
-            echo "Review verdict is PASS"
-            exit 0
-          fi
-          if printf '%s\n' "$report" | grep -qiE '🔴[[:space:]]*blocker'; then
-            echo "Review report contains blocker findings; failing the check." >&2
-            exit 1
-          fi
-          echo "No blockers in the review report."
+        # 不依赖评论步骤是否成功（comment 步骤 continue-on-error）
+        if: always() && !cancelled() && steps.review.outputs.review_status == 'ok'
+        run: bash scripts/review-verdict.sh review_report.md
