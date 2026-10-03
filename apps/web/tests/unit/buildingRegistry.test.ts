@@ -18,7 +18,14 @@ test('building registry keeps unique ids and resolvable GLB assets', () => {
     ids.add(config.id);
   }
 
+  // 测试依赖仓库布局：模型目录不存在说明 cwd 不对（应经
+  // `npm run test:unit -w @minicity/web` 从 apps/web 运行），
+  // 直接失败并指明路径，比逐个报“模型缺失”更可诊断。
   const modelsDir = join(process.cwd(), 'src', 'assets', 'models');
+  assert.ok(
+    existsSync(modelsDir),
+    `models dir not found at ${modelsDir}; run via \`npm run test:unit -w @minicity/web\` (cwd must be apps/web)`,
+  );
   for (const config of BUILDING_REGISTRY) {
     if (!config.glbFile) continue;
     assert.ok(

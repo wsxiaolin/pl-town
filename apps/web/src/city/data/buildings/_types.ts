@@ -5,7 +5,7 @@
 // 新增建筑的标准步骤：
 // 1. 在本目录新建 `<building_id>.ts`，`export default defineBuilding({ ... })`；
 // 2. 在 `_registry.ts` 按城市空间顺序（大致从小坐标到大坐标）插入该文件；
-// 3. 如使用 GLB 模型，把 `glbUrl` 指向 `src/assets/models/` 下的文件名；
+// 3. 如使用 GLB 模型，把 `glbFile` 指向 `src/assets/models/` 下的文件名；
 // 4. 运行 `npm run gen:building-catalog -w @minicity/server` 同步服务端目录，
 //    并按 AGENTS.md 检查治理配置版本要求。
 //
