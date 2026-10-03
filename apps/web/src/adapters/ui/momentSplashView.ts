@@ -9,32 +9,48 @@
 // outside, so there is no day-passing cycle; the progress bar carries time.
 
 import dawnUrl from '../../assets/moments/dawn.webp';
-import dawnPreviewUrl from '../../assets/moments/dawn-preview.webp';
+import dawnStep1Url from '../../assets/moments/dawn-step1.webp';
+import dawnStep2Url from '../../assets/moments/dawn-step2.webp';
+import dawnStep3Url from '../../assets/moments/dawn-step3.webp';
+import dawnStep4Url from '../../assets/moments/dawn-step4.webp';
 import noonUrl from '../../assets/moments/noon.webp';
-import noonPreviewUrl from '../../assets/moments/noon-preview.webp';
+import noonStep1Url from '../../assets/moments/noon-step1.webp';
+import noonStep2Url from '../../assets/moments/noon-step2.webp';
+import noonStep3Url from '../../assets/moments/noon-step3.webp';
+import noonStep4Url from '../../assets/moments/noon-step4.webp';
 import duskUrl from '../../assets/moments/dusk.webp';
-import duskPreviewUrl from '../../assets/moments/dusk-preview.webp';
+import duskStep1Url from '../../assets/moments/dusk-step1.webp';
+import duskStep2Url from '../../assets/moments/dusk-step2.webp';
+import duskStep3Url from '../../assets/moments/dusk-step3.webp';
+import duskStep4Url from '../../assets/moments/dusk-step4.webp';
 import nightUrl from '../../assets/moments/night.webp';
-import nightPreviewUrl from '../../assets/moments/night-preview.webp';
+import nightStep1Url from '../../assets/moments/night-step1.webp';
+import nightStep2Url from '../../assets/moments/night-step2.webp';
+import nightStep3Url from '../../assets/moments/night-step3.webp';
+import nightStep4Url from '../../assets/moments/night-step4.webp';
 import { momentForHour, type MomentName } from '../../core/momentClock';
 
-type ViewMoment = { name: MomentName; caption: string; url: string; previewUrl: string };
+type ViewMoment = { name: MomentName; caption: string; levels: readonly string[] };
 
-const IMAGE_BY_NAME: Record<MomentName, { url: string; previewUrl: string }> = {
-  dawn: { url: dawnUrl, previewUrl: dawnPreviewUrl },
-  noon: { url: noonUrl, previewUrl: noonPreviewUrl },
-  dusk: { url: duskUrl, previewUrl: duskPreviewUrl },
-  night: { url: nightUrl, previewUrl: nightPreviewUrl },
+const IMAGE_BY_NAME: Record<MomentName, readonly string[]> = {
+  dawn: [dawnStep1Url, dawnStep2Url, dawnStep3Url, dawnStep4Url, dawnUrl],
+  noon: [noonStep1Url, noonStep2Url, noonStep3Url, noonStep4Url, noonUrl],
+  dusk: [duskStep1Url, duskStep2Url, duskStep3Url, duskStep4Url, duskUrl],
+  night: [nightStep1Url, nightStep2Url, nightStep3Url, nightStep4Url, nightUrl],
 };
+
+/** Layer element ids, coarsest → sharpest (index = level - 1). */
+const MOMENT_LAYER_IDS = [
+  'bootMomentStep1',
+  'bootMomentStep2',
+  'bootMomentStep3',
+  'bootMomentStep4',
+  'bootMomentImg',
+] as const;
 
 function viewMoment(hour: number): ViewMoment {
   const moment = momentForHour(hour);
-  return {
-    name: moment.name,
-    caption: moment.caption,
-    url: IMAGE_BY_NAME[moment.name].url,
-    previewUrl: IMAGE_BY_NAME[moment.name].previewUrl,
-  };
+  return { name: moment.name, caption: moment.caption, levels: IMAGE_BY_NAME[moment.name] };
 }
 
 // ─── boot screen gate state ──────────────────────────────────────────────────
@@ -60,31 +76,31 @@ export function configureMomentSplash(options: { reduced: boolean }): void {
   reducedMotion = options.reduced;
 }
 
-function paintMoment(moment: ViewMoment): void {
-  // Progressive reveal in two layers: the ~1 KB preview webp lands almost
-  // instantly and shows blurred (CSS blur + scale hides its softness), then
-  // the full still fades in over it once the browser has decoded it — the
-  // picture goes soft → sharp instead of popping in from a black frame.
-  const preview = document.getElementById('bootMomentPreview') as HTMLImageElement | null;
-  if (preview && preview.getAttribute('src') !== moment.previewUrl) preview.src = moment.previewUrl;
-  if (preview) preview.classList.add('is-front');
+// Highest tier currently on screen. Reveals are monotonic: a layer only ever
+// fades in when it is sharper than whatever is already showing — a slow tier
+// that arrives AFTER a faster one stays hidden underneath (network jitter
+// must never make the picture go backwards).
+let shownMomentLevel = 0;
 
-  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (img) {
-    if (img.getAttribute('src') !== moment.url) {
-      // Fade the full still in from zero: decode() first so the crossfade
-      // never exposes a half-decoded bitmap. On decode failure (corrupt
-      // fetch) still flip is-front — the blurred preview keeps the screen
-      // from falling back to bare black.
-      img.classList.remove('is-front');
-      img.src = moment.url;
-      img.decode().then(() => img.classList.add('is-front')).catch(() => img.classList.add('is-front'));
-    } else if (!img.classList.contains('is-front')) {
-      // Same still re-painted (heavy retargets the splash): already loading
-      // or loaded — just make sure it sits in front.
-      img.decode().then(() => img.classList.add('is-front')).catch(() => img.classList.add('is-front'));
+function paintMoment(moment: ViewMoment): void {
+  shownMomentLevel = 0;
+  moment.levels.forEach((levelUrl, index) => {
+    const layerId = MOMENT_LAYER_IDS[index];
+    if (!layerId) return; // levels and layers are both fixed at five
+    const layer = document.getElementById(layerId) as HTMLImageElement | null;
+    if (!layer) return;
+    const level = index + 1;
+    if (layer.getAttribute('src') !== levelUrl) {
+      layer.classList.remove('is-front');
+      layer.src = levelUrl;
     }
-  }
+    // decode() gates the fade so a tier never shows a half-decoded bitmap.
+    // A tier that fails to decode is simply skipped — the coarser layers
+    // underneath keep the screen from going bare.
+    layer.decode()
+      .then(() => { if (level > shownMomentLevel) { shownMomentLevel = level; layer.classList.add('is-front'); } })
+      .catch(() => { /* coarser tiers remain as the fallback */ });
+  });
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {
     caption.textContent = moment.caption;
@@ -156,16 +172,15 @@ function scheduleMinimumElapsed(): void {
  * memory from idling on an invisible 60fps transform for the whole session.
  */
 function freezeMomentPresentation(): void {
-  const preview = document.getElementById('bootMomentPreview') as HTMLImageElement | null;
-  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (!preview && !img) return;
-  if (preview) preview.style.animation = 'none';
-  if (img) img.style.animation = 'none';
+  const layers = MOMENT_LAYER_IDS
+    .map((id) => document.getElementById(id) as HTMLImageElement | null)
+    .filter((layer): layer is HTMLImageElement => layer !== null);
+  if (layers.length === 0) return;
+  for (const layer of layers) layer.style.animation = 'none';
   // Clear only after the boot fade has fully finished — clearing earlier
   // would flash a blank frame during the fade-out.
   window.setTimeout(() => {
-    preview?.removeAttribute('src');
-    img?.removeAttribute('src');
+    for (const layer of layers) layer.removeAttribute('src');
   }, REVEAL_CLEANUP_DELAY_MS);
 }
 

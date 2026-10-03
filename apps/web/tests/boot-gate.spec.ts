@@ -29,12 +29,13 @@ test('light boot shows the current real-world moment still and enters', async ({
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
-  // Progressive reveal: the ~1 KB preview lands first, the full still's src
-  // appears once the browser decode resolves — wait for it, then check the
-  // preview layer is fed too (soft → sharp boot, never a black flash).
+  // Five-sharpness progressive reveal: every tier's src is set up front (its
+  // fade is decode-gated), the levels climb monotonically. Wait for the full
+  // still, then pin the coarsest tier — its inline data URI / dev URL proves
+  // the ladder is wired (soft → sharp boot, never a black flash).
   await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
-  const previewSrc = await page.locator('#bootMomentPreview').getAttribute('src');
-  expect(previewSrc).toMatch(/moments\/(dawn|noon|dusk|night)-preview\.webp/);
+  const step1Src = await page.locator('#bootMomentStep1').getAttribute('src');
+  expect(step1Src).toMatch(/moments\/(dawn|noon|dusk|night)-step1\.webp|data:image\/webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
   // Skip interaction (r8 nit: click-skip had no coverage): the splash binds a
   // capture-phase pointerdown listener; exercising THAT path via a real

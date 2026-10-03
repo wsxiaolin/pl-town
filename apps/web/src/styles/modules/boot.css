@@ -18,24 +18,21 @@
 }
 
 /* Moment still — the city at the visitor's time of day, one image, slow drift.
-   Progressive reveal: a ~1 KB blurred preview sits underneath, the full still
-   fades in over it once decoded (see #bootMomentPreview in index.html). */
+   Five-sharpness progressive reveal: every tier layer reuses .boot-moment-img
+   (position / cover / drift / opacity gate) and adds a shrinking blur; tiers
+   load independently and fade in only when sharper than what is showing. */
 .boot-moment { position: absolute; inset: 0; }
-.boot-moment-preview {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  /* Scale past 1.0 so the blur's feathered edges stay out of frame. */
-  transform: scale(1.12);
-  filter: blur(20px) saturate(1.05);
-  transition: opacity 1.6s ease;
+.boot-moment-step {
+  /* Tier fade is quick (0.45s) — the final full still keeps .boot-moment-img's
+     1.6s reveal as the settling beat. */
+  transition: opacity 0.45s ease;
+  filter: blur(24px) saturate(1.08);
   user-select: none;
   pointer-events: none;
 }
-.boot-moment-preview.is-front { opacity: 1; }
+.boot-moment-step-2 { filter: blur(12px) saturate(1.05); }
+.boot-moment-step-3 { filter: blur(6px) saturate(1.02); }
+.boot-moment-step-4 { filter: blur(2.5px); }
 .boot-moment-img {
   position: absolute;
   inset: 0;
@@ -154,7 +151,7 @@
 @media (prefers-reduced-motion: reduce) {
   .boot-screen { transition-duration: 0.2s; }
   .boot-moment-img { animation: none; }
-  .boot-moment-preview { transition-duration: 0.2s; }
+  .boot-moment-step { transition-duration: 0.2s; }
   .boot-live i { animation: none; }
 }
 
