@@ -29,9 +29,16 @@ test('light boot shows the current real-world moment still and enters', async ({
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
-  // Only the FRONT layer carries a src (the back one is the swap buffer).
-  const src = await page.locator('#bootMomentImg').getAttribute('src');
-  expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
+  // Five-sharpness progressive reveal: every tier's src is set up front (its
+  // fade is decode-gated), the levels climb monotonically. Wait for the full
+  // still, then pin the coarsest tier — its inline data URI / dev URL proves
+  // the ladder is wired (soft → sharp boot, never a black flash).
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  // The full tier must actually take the screen (decode-gated reveal), not
+  // merely have its src queued.
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 20_000 });
+  const step1Src = await page.locator('#bootMomentStep1').getAttribute('src');
+  expect(step1Src).toMatch(/moments\/(dawn|noon|dusk|night)-step1\.webp|data:image\/webp/);
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
   // Skip interaction (r8 nit: click-skip had no coverage): the splash binds a
   // capture-phase pointerdown listener; exercising THAT path via a real
@@ -72,8 +79,8 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootPipeline')).toHaveClass(/is-active/);
   // The still behind the pipeline is the CURRENT moment, not a day cycle.
   // (The caption is display:none in heavy mode — assert what is visible.)
-  const heavySrc = await page.locator('#bootMomentImg').getAttribute('src');
-  expect(heavySrc).toMatch(new RegExp(`moments/(dawn|noon|dusk|night)\\.webp`));
+  // Same decode-gated src as the light path: wait instead of a sync read.
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
 
   // Full pipeline: download → scene → precompile → ready → reveal.
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });

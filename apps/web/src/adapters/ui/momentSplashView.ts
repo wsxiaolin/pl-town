@@ -9,23 +9,40 @@
 // outside, so there is no day-passing cycle; the progress bar carries time.
 
 import dawnUrl from '../../assets/moments/dawn.webp';
+import dawnStep1Url from '../../assets/moments/dawn-step1.webp';
+import dawnStep2Url from '../../assets/moments/dawn-step2.webp';
+import dawnStep3Url from '../../assets/moments/dawn-step3.webp';
+import dawnStep4Url from '../../assets/moments/dawn-step4.webp';
 import noonUrl from '../../assets/moments/noon.webp';
+import noonStep1Url from '../../assets/moments/noon-step1.webp';
+import noonStep2Url from '../../assets/moments/noon-step2.webp';
+import noonStep3Url from '../../assets/moments/noon-step3.webp';
+import noonStep4Url from '../../assets/moments/noon-step4.webp';
 import duskUrl from '../../assets/moments/dusk.webp';
+import duskStep1Url from '../../assets/moments/dusk-step1.webp';
+import duskStep2Url from '../../assets/moments/dusk-step2.webp';
+import duskStep3Url from '../../assets/moments/dusk-step3.webp';
+import duskStep4Url from '../../assets/moments/dusk-step4.webp';
 import nightUrl from '../../assets/moments/night.webp';
+import nightStep1Url from '../../assets/moments/night-step1.webp';
+import nightStep2Url from '../../assets/moments/night-step2.webp';
+import nightStep3Url from '../../assets/moments/night-step3.webp';
+import nightStep4Url from '../../assets/moments/night-step4.webp';
 import { momentForHour, type MomentName } from '../../core/momentClock';
+import { MOMENT_LAYER_IDS, tierDecision, type TierDecision } from './momentTiers';
 
-type ViewMoment = { name: MomentName; caption: string; url: string };
+type ViewMoment = { name: MomentName; caption: string; levels: readonly string[] };
 
-const IMAGE_BY_NAME: Record<MomentName, string> = {
-  dawn: dawnUrl,
-  noon: noonUrl,
-  dusk: duskUrl,
-  night: nightUrl,
+const IMAGE_BY_NAME: Record<MomentName, readonly string[]> = {
+  dawn: [dawnStep1Url, dawnStep2Url, dawnStep3Url, dawnStep4Url, dawnUrl],
+  noon: [noonStep1Url, noonStep2Url, noonStep3Url, noonStep4Url, noonUrl],
+  dusk: [duskStep1Url, duskStep2Url, duskStep3Url, duskStep4Url, duskUrl],
+  night: [nightStep1Url, nightStep2Url, nightStep3Url, nightStep4Url, nightUrl],
 };
 
 function viewMoment(hour: number): ViewMoment {
   const moment = momentForHour(hour);
-  return { name: moment.name, caption: moment.caption, url: IMAGE_BY_NAME[moment.name] };
+  return { name: moment.name, caption: moment.caption, levels: IMAGE_BY_NAME[moment.name] };
 }
 
 // ─── boot screen gate state ──────────────────────────────────────────────────
@@ -51,12 +68,66 @@ export function configureMomentSplash(options: { reduced: boolean }): void {
   reducedMotion = options.reduced;
 }
 
+// Highest tier currently on screen. Reveals are monotonic: a layer only ever
+// fades in when it is sharper than whatever is already showing — a slow tier
+// that arrives AFTER a faster one stays hidden underneath (network jitter
+// must never make the picture go backwards).
+let shownMomentLevel = 0;
+// Bumped on every paintMoment: decode callbacks carry their paint's token,
+// so a decode that resolves after a NEWER paint (e.g. splash → heavy repaint
+// with a different moment) can never flip layers the newer paint owns.
+let paintToken = 0;
+
+function applyTierDecision(
+  layer: HTMLImageElement,
+  level: number,
+  decision: TierDecision,
+): number {
+  if (decision === 'reveal') {
+    layer.classList.remove('is-retired');
+    layer.classList.add('is-front');
+    return level;
+  }
+  if (decision === 'retire') {
+    layer.classList.remove('is-front');
+    layer.classList.add('is-retired');
+  }
+  return 0;
+}
+
 function paintMoment(moment: ViewMoment): void {
-  // Single <img>: there is no crossfade target anymore (the day-cycle was
-  // removed), so a two-layer swap buffer is pure dead weight — one image
-  // element, set directly.
-  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (img) img.src = moment.url;
+  const token = ++paintToken;
+  shownMomentLevel = 0;
+  if (moment.levels.length !== MOMENT_LAYER_IDS.length) {
+    // Ladder invariant: every moment must feed exactly five layers. A short
+    // ladder would silently drop the top; a long one would never show.
+    console.warn(
+      `[moment-splash] level count ${moment.levels.length} != layer count ${MOMENT_LAYER_IDS.length}`,
+    );
+  }
+  moment.levels.forEach((levelUrl, index) => {
+    const layerId = MOMENT_LAYER_IDS[index];
+    if (!layerId) return;
+    const layer = document.getElementById(layerId) as HTMLImageElement | null;
+    if (!layer) return;
+    const level = index + 1;
+    if (layer.getAttribute('src') !== levelUrl) {
+      layer.classList.remove('is-front', 'is-retired');
+      layer.src = levelUrl;
+    }
+    // decode() gates the fade so a tier never shows a half-decoded bitmap.
+    // Not every engine exposes decode() (Safari < 14); without it the tier
+    // simply reveals on load-complete via the is-front swap below — the
+    // worst case is one frame of browser-native progressive draw.
+    const decoded = typeof layer.decode === 'function' ? layer.decode() : Promise.resolve();
+    decoded
+      .then(() => {
+        if (token !== paintToken) return; // a newer paint owns the layers now
+        const decision = tierDecision(level, true, shownMomentLevel);
+        shownMomentLevel = Math.max(shownMomentLevel, applyTierDecision(layer, level, decision));
+      })
+      .catch(() => { /* keep: coarser tiers remain as the fallback */ });
+  });
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {
     caption.textContent = moment.caption;
@@ -128,12 +199,16 @@ function scheduleMinimumElapsed(): void {
  * memory from idling on an invisible 60fps transform for the whole session.
  */
 function freezeMomentPresentation(): void {
-  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (!img) return;
-  img.style.animation = 'none';
+  const layers = MOMENT_LAYER_IDS
+    .map((id) => document.getElementById(id) as HTMLImageElement | null)
+    .filter((layer): layer is HTMLImageElement => layer !== null);
+  if (layers.length === 0) return;
+  for (const layer of layers) layer.style.animation = 'none';
   // Clear only after the boot fade has fully finished — clearing earlier
   // would flash a blank frame during the fade-out.
-  window.setTimeout(() => { img.removeAttribute('src'); }, REVEAL_CLEANUP_DELAY_MS);
+  window.setTimeout(() => {
+    for (const layer of layers) layer.removeAttribute('src');
+  }, REVEAL_CLEANUP_DELAY_MS);
 }
 
 export function stopMomentPresentation(): void {

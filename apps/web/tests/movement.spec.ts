@@ -29,7 +29,9 @@ async function enterCity(page: import('@playwright/test').Page) {
   });
   await page.goto('/');
   await page.waitForFunction(() => Boolean((window as any)._mini?.player));
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
+  // 60 s is-ready budget: heavy boot on software-GL CI runners outlives the
+  // 5 s default (same call as smoke.spec / boot-gate.spec).
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
   // Let the boot-screen fade settle before interacting (see helpers.waitForCityBooted).
   await page.waitForTimeout(1_000);
 }
