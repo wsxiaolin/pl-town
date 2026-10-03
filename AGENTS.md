@@ -39,6 +39,8 @@ npm run test:server
 npm test                 # 前端 Playwright + 服务端集成测试
 ```
 
+新增 `apps/web/tests/unit/*.test.ts` 单测时，必须同步把对应 `.test.js` 追加到 `apps/web/package.json` 的 `test:unit`（或 `test:unit:story-sentences`）脚本：`test:domain`（required CI job）只执行登记过的文件，漏登记不会报错、只是静默不跑。`unit/testRegistration.test.ts` 在 CI 中同时拦截漏登记与过期残留。浏览器套件文件一律用 `*.spec.ts` 命名（`playwright.config.ts` 的 `testMatch` 固定该约定，`testIgnore` 排除 `tests/unit/**`）。
+
 前端 Playwright 配置使用 Chromium、单 worker，并自动启动 `4173` 端口的 Vite 服务。`apps/web/tests/diagnostics/` 下的诊断脚本是按需运行的性能/视觉检查，不属于默认烟雾套件。
 
 ### WebGL / Headless 与 CI 并发
