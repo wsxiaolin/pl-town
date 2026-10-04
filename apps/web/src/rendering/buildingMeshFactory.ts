@@ -869,11 +869,13 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const upper = part(g, new THREE.BoxGeometry(upW, upperH, upD), {color:0x8a6a4f, roughness:0.66, tex:'residence_wood', rx:2, ry:1}, [0, floorTop + 0.12 + upperH / 2, 0]);
     upper.castShadow = true;
     const upTop = floorTop + 0.12 + upperH;
-    // Balustrade for the guest-room gallery. Centre each rail one half-height
-    // (0.15) above the gallery slab top so its underside meets the slab at
-    // floorTop + 0.12 with no dark gap.
-    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(upW + 0.26, 0.3, 0.06), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [0, floorTop + 0.12 + 0.15, s * (upD / 2 + 0.08)], false));
-    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(0.06, 0.3, upD + 0.14), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [s * (upW / 2 + 0.08), floorTop + 0.12 + 0.15, 0], false));
+    // Balustrade for the guest-room gallery. Each rail's centre sits one
+    // half-height (0.15) above the gallery slab top (floorTop + 0.12) plus a
+    // 0.002 epsilon: closing the old 0.09 gap without putting the rail's
+    // underside coplanar with the slab top, which z-fights at far camera
+    // distances (AGENTS.md: same-height surfaces need a Y separation).
+    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(upW + 0.26, 0.3, 0.06), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [0, floorTop + 0.12 + 0.002 + 0.15, s * (upD / 2 + 0.08)], false));
+    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(0.06, 0.3, upD + 0.14), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [s * (upW / 2 + 0.08), floorTop + 0.12 + 0.002 + 0.15, 0], false));
     const roof = part(g, new THREE.ConeGeometry(2.1, 1.02, 4), {color:0x47433a, roughness:0.66, tex:'residence_tile', rx:3, ry:1}, [0, upTop + 0.51, 0]);
     roof.rotation.y = Math.PI / 4;
     // Structural beams across the worn facade.
