@@ -5,9 +5,6 @@ const roots = ['apps/web/src', 'apps/server/src'];
 const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
 const dataDirectories = new Set(['content', 'data']);
 const defaultLimit = 1_000;
-const transitionalLimits = new Map([
-  ['apps/web/src/city/MiniCityApp.ts', 1_000],
-]);
 
 function collectSourceFiles(directory) {
   const files = [];
@@ -25,8 +22,7 @@ for (const root of roots) {
   for (const path of collectSourceFiles(root)) {
     const normalizedPath = relative('.', path).split(sep).join('/');
     const lines = readFileSync(path, 'utf8').split(/\r?\n/).length;
-    const limit = transitionalLimits.get(normalizedPath) ?? defaultLimit;
-    if (lines > limit) violations.push({ path: normalizedPath, lines, limit });
+    if (lines > defaultLimit) violations.push({ path: normalizedPath, lines, limit: defaultLimit });
   }
 }
 

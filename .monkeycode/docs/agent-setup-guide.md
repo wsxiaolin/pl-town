@@ -83,7 +83,7 @@ git submodule update --init --recursive --depth 1
 依赖安装较慢时，不要让代理空等。标准动作：
 
 1. 用后台终端启动 `scripts/setup-deps.sh`（见下方"长任务后台运行"）。
-2. 安装进行的同时，并行阅读项目 README / Agents.md / 文档，确定构建、测试、启动命令。
+2. 安装进行的同时，并行阅读项目 README / AGENTS.md / 文档，确定构建、测试、启动命令。
 3. 准备好 `npm run build`、`npm run typecheck`、`npm run test` 等校验脚本及其所需环境（如 Xvfb、Playwright 浏览器、系统库）。
 4. 依赖装好后立即验证：先跑一次构建或类型检查，确认环境可用再开始改代码。
 

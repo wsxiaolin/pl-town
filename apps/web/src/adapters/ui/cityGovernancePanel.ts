@@ -1,11 +1,9 @@
 import { donateCity, getCityConfig, getCityState, isCityGovernanceLoading, loadCityGovernance, refreshCityGovernanceSession, subscribeCityGovernance, type CityMutationResult, type CityProject, type CityState } from '../../city/cityGovernanceClient';
-import { clearCityConstructionDrafts, renderCityPersonalBlocks } from './cityGovernanceAreas';
 import { actionButton as button, card, money, trackPendingActionFocus, withPanelFocusRestoration } from './cityGovernanceDom';
 import { getCityVotingSessionId, loadCityVotes, voteCity, type CityVotes } from '../../city/cityVotingClient';
 
 let root: HTMLDialogElement | null = null;
 let unsubscribe: (() => void) | null = null;
-let activeTab: 'collective' | 'personal' = 'collective';
 let activeBuilding = '';
 let operationError = '';
 let errorActionKey = '';
@@ -13,7 +11,11 @@ let operationNotice = '';
 let rendering = false;
 const pendingActions = new Map<string, symbol>();
 const donationDrafts = new Map<string, string>();
-const tabScrollTop = new Map<string, number>();
+// The single construction list keeps its scroll position across rerenders. The
+// short loading/unavailable fallback is not a real list, so its clamped zero is
+// never captured; only the last list-backed scroll is restored.
+let bodyScrollTop = 0;
+let bodyHasList = false;
 let returnFocus: HTMLElement | null = null;
 let myVotes: CityVotes | null = null;
 let votesUnavailableSession: number | null = null;
@@ -25,18 +27,17 @@ let votesEpoch: string | null = null;
 let unavailableFocus: { key: string; projectId?: string; fallback: Element | null } | null = null;
 const voting = new Map<string, { sessionId: number | null }>();
 let votesLoadSequence = 0;
-// Only the donation input is restored from the previous DOM value. Block cards
-// have no free inputs: one card is one immutable purchase, and rerenders keep
-// their pending state from the retained receipt keys instead of DOM values.
+// Only the donation input is restored from the previous DOM value; every other
+// control is a button that rerenders from the trusted state.
 const INPUT_SELECTOR = '[data-city-input]';
 const FOCUS_SELECTOR = '[data-city-focus],[aria-label]';
-const CARD_SELECTOR = '[data-city-project],[data-city-block]';
+const CARD_SELECTOR = '[data-city-project]';
 
 export function isCityGovernancePanelOpen(): boolean { return root?.open ?? false; }
 
 function focusedCardKey(element: HTMLElement | null): string | undefined {
   const card = element?.closest<HTMLElement>(CARD_SELECTOR);
-  return card?.dataset.cityProject ?? card?.dataset.cityBlock;
+  return card?.dataset.cityProject;
 }
 
 function handleLoginRequired(): void {
@@ -44,11 +45,10 @@ function handleLoginRequired(): void {
   closeCityGovernancePanel();
 }
 
-function focusAction(dataKey: 'projectId' | 'cityBlock', id: string): void {
-  const prefix = dataKey === 'projectId' ? 'donate' : 'block-build';
+function focusAction(id: string): void {
   const action = [...root?.querySelectorAll<HTMLButtonElement>('button[data-city-focus]') ?? []]
-    .find((element) => element.dataset.cityFocus === `${prefix}:${id}` && !element.disabled);
-  const fallback = root?.querySelector<HTMLButtonElement>('.city-governance-tabs button.active');
+    .find((element) => element.dataset.cityFocus === `donate:${id}` && !element.disabled);
+  const fallback = root?.querySelector<HTMLButtonElement>('.city-governance-head button');
   (action ?? fallback)?.focus({ preventScroll: true });
 }
 
@@ -56,12 +56,9 @@ function updateFeedback(): void {
   for (const [selector, message] of [
     ['[data-city-feedback]', operationError],
     ['[data-city-notice]', operationNotice],
-    // Vote failures only make sense on the collective tab; switching away
-    // collapses the alert, and returning reannounces the pending error so the
-    // retry context is not lost. Unlike success (see below), the live region
-    // is intentionally cleared while the failure cannot be acted upon.
-    ['[data-city-vote-feedback]', activeTab === 'collective' ? voteError : ''],
-    // Tab changes are not new results; retain success without reannouncing it.
+    // Vote failures belong to the collective construction view, which is the
+    // only view the panel shows now.
+    ['[data-city-vote-feedback]', voteError],
     ['[data-city-vote-notice]', voteNotice],
   ] as const) {
     const region = root?.querySelector<HTMLElement>(selector);
@@ -71,11 +68,6 @@ function updateFeedback(): void {
     if (region.getAttribute('role') !== 'status') region.hidden = !message;
     if (region.textContent !== message) region.textContent = message;
   }
-}
-
-function saveTabScroll(): void {
-  const body = root?.querySelector<HTMLElement>('.city-governance-body');
-  if (root?.open && body?.dataset.cityTab) tabScrollTop.set(body.dataset.cityTab, body.scrollTop);
 }
 
 function acceptVotes(result: CityVotes): void {
@@ -103,7 +95,6 @@ function renderContents(preferredFocusKey?: string): void {
   const resumedFocus = focused && unavailableFocus?.fallback === focused ? unavailableFocus : null;
   const focusKey = preferredFocusKey ?? resumedFocus?.key ?? focused?.dataset.cityFocus ?? focused?.getAttribute('aria-label');
   const focusProject = resumedFocus?.projectId ?? focusedCardKey(focused);
-  saveTabScroll();
   const values = new Map([...root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)].map((input) => [input.dataset.cityInput ?? input.getAttribute('aria-label'), input.value]));
   const config = getCityConfig();
   const state = getCityState();
@@ -118,23 +109,14 @@ function renderContents(preferredFocusKey?: string): void {
   // deployed configs that may still attach a project to the opened building.
   title.textContent = activeProject ? `众议院 · ${activeProject.name}` : '众议院';
   header.replaceChildren(title, button('关闭', closeCityGovernancePanel, false, 'close'));
-  const tabs = root.querySelector<HTMLElement>('.city-governance-tabs')!;
-  tabs.replaceChildren();
-  for (const [tab, label] of [['collective', '城市集体建设'], ['personal', '个人建设']] as const) {
-    const tabButton = button(label, () => { activeTab = tab; render(); }, false, `tab:${tab}`);
-    tabButton.classList.toggle('active', activeTab === tab);
-    tabButton.setAttribute('aria-pressed', String(activeTab === tab));
-    tabs.append(tabButton);
-  }
   const status = root.querySelector<HTMLElement>('[data-city-status]')!;
   status.textContent = state ? `云端进度 #${state.revision}` : loading ? '正在加载建设进度…' : '城市建设数据暂时不可用';
   updateFeedback();
   const body = root.querySelector<HTMLElement>('.city-governance-body')!;
+  if (bodyHasList) bodyScrollTop = body.scrollTop;
   body.replaceChildren();
   if (!config || !state) {
-    // A short fallback is not the tab's scrollable content. Repeated refreshes
-    // must not replace its last real scroll position with zero.
-    delete body.dataset.cityTab;
+    bodyHasList = false;
     if (loading) {
       body.append(document.createTextNode('正在加载建设进度，请稍候…'));
     } else {
@@ -155,11 +137,10 @@ function renderContents(preferredFocusKey?: string): void {
   unavailableFocus = null;
   const list = document.createElement('div');
   list.className = 'city-governance-list';
-  if (activeTab === 'collective') renderCollective(list, config.projects, state);
-  else renderPersonal(list, config, state);
+  renderCollective(list, config.projects, state);
   body.append(list);
-  body.dataset.cityTab = activeTab;
-  body.scrollTop = tabScrollTop.get(activeTab) ?? 0;
+  bodyHasList = true;
+  body.scrollTop = bodyScrollTop;
   for (const input of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>(INPUT_SELECTOR)) {
     const previous = values.get(input.dataset.cityInput ?? input.getAttribute('aria-label'));
     if (previous !== undefined) input.value = previous;
@@ -185,8 +166,7 @@ function restorePanelFocus(focusKey: string | null | undefined, projectId?: stri
     const project = projectId ? [...root.querySelectorAll<HTMLElement>(CARD_SELECTOR)]
       .find((element) => focusedCardKey(element) === projectId) : undefined;
     const nextAction = project?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
-    (nextAction ?? root.querySelector<HTMLButtonElement>('.city-governance-tabs button.active')
-      ?? root.querySelector<HTMLButtonElement>('.city-governance-head button'))?.focus({ preventScroll: true });
+    (nextAction ?? root.querySelector<HTMLButtonElement>('.city-governance-head button'))?.focus({ preventScroll: true });
   }
 }
 
@@ -223,7 +203,7 @@ async function submitDonation(id: string, mutation: () => Promise<CityMutationRe
     if (root === submittedPanel && root?.open && refreshCityGovernanceSession() === session) {
       const restoreActionFocus = focus.shouldRestore(failed);
       render();
-      if (restoreActionFocus) focusAction('projectId', id);
+      if (restoreActionFocus) focusAction(id);
     }
   }
 }
@@ -241,7 +221,7 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
     const notice = document.createElement('p');
     notice.className = 'city-governance-intro';
     notice.dataset.cityVotesUnavailable = 'true';
-    notice.append('当前服务端暂不支持投票，仍可参与捐款和个人建设。',
+    notice.append('当前服务端暂不支持投票，仍可参与捐款。',
       button('重新检测投票', () => { void refreshVotes(); render(); }, Boolean(votesLoading), 'votes-reload'));
     list.append(notice);
   }
@@ -350,22 +330,6 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
   }
 }
 
-function renderPersonal(list: HTMLElement, config: NonNullable<ReturnType<typeof getCityConfig>>, state: NonNullable<ReturnType<typeof getCityState>>): void {
-  renderCityPersonalBlocks(list, config, state, {
-    rerender: () => { if (root?.open) render(); },
-    reportError: (message, actionKey) => {
-      if (message || errorActionKey === actionKey) {
-        operationError = message;
-        errorActionKey = message ? actionKey : '';
-      }
-      operationNotice = '';
-      updateFeedback();
-    },
-    reportNotice: (message) => { operationNotice = message; updateFeedback(); },
-    focusAction: (dataKey, id) => { if (root?.open) focusAction(dataKey, id); },
-  });
-}
-
 function containTabFocus(event: KeyboardEvent): void {
   if (event.key !== 'Tab' || !root) return;
   const focusable = [...root.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]')]
@@ -398,8 +362,6 @@ export function openCityGovernancePanel(buildingId = ''): void {
     root.setAttribute('aria-modal', 'true');
     const header = document.createElement('header');
     header.className = 'city-governance-head';
-    const tabs = document.createElement('nav');
-    tabs.className = 'city-governance-tabs';
     const status = document.createElement('p');
     status.dataset.cityStatus = 'true';
     const feedback = document.createElement('p');
@@ -426,7 +388,7 @@ export function openCityGovernancePanel(buildingId = ''): void {
     voteStatus.setAttribute('aria-atomic', 'true');
     const body = document.createElement('main');
     body.className = 'city-governance-body';
-    root.append(header, tabs, status, feedback, notice, voteFeedback, voteStatus, body);
+    root.append(header, status, feedback, notice, voteFeedback, voteStatus, body);
     document.body.append(root);
     root.addEventListener('cancel', (event) => { event.preventDefault(); closeCityGovernancePanel(); });
     root.addEventListener('keydown', (event) => {
@@ -442,7 +404,6 @@ export function openCityGovernancePanel(buildingId = ''): void {
         session = nextSession;
         pendingActions.clear();
         donationDrafts.clear();
-        clearCityConstructionDrafts();
         operationError = '';
         errorActionKey = '';
         operationNotice = '';
@@ -467,7 +428,6 @@ export function openCityGovernancePanel(buildingId = ''): void {
   }
   if (!root.open) {
     returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    activeTab = 'collective';
   }
   voteError = '';
   if (!root.open) root.showModal();
@@ -516,13 +476,8 @@ async function refreshVotes(): Promise<void> {
 
 export function closeCityGovernancePanel(): void {
   if (!root?.open) return;
-  saveTabScroll();
-  const body = root.querySelector<HTMLElement>('.city-governance-body');
-  if (body) delete body.dataset.cityTab;
   unavailableFocus = null;
   root.close();
-  // Reopening starts on voting; selecting personal construction again restores
-  // its saved scroll. Disposal starts a new city session and clears both tabs.
   votesLoading?.abort();
   votesLoading = null;
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
@@ -544,14 +499,13 @@ export function disposeCityGovernancePanel(): void {
   root = null;
   unavailableFocus = null;
   activeBuilding = '';
-  activeTab = 'collective';
+  bodyScrollTop = 0;
+  bodyHasList = false;
   errorActionKey = '';
   operationError = '';
   operationNotice = '';
   pendingActions.clear();
   donationDrafts.clear();
-  tabScrollTop.clear();
-  clearCityConstructionDrafts();
   myVotes = null;
   votesUnavailableSession = null;
   voteError = '';

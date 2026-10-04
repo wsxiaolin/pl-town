@@ -13,7 +13,6 @@ export type CityPersonalBlock = {
 export type CityConfig = {
   schemaVersion: number; version: string; projects: CityProject[];
   personalPlots: Array<{ id: string; name: string; x: number; z: number; options: string[] }>;
-  personalAreas?: Array<{ id: string; name: string; plotIds: string[] }>;
   personalBlocks?: CityPersonalBlock[];
   decorations: CityDecoration[]; initialBuiltBuildingIds: string[];
 };
@@ -250,9 +249,7 @@ export function disposeCityGovernance(): void {
 }
 
 function cityOperationKey(path: string, body: Record<string, unknown>): string {
-  const target = body.blockId !== undefined ? ['blockId', body.blockId]
-    : body.projectId !== undefined ? ['projectId', body.projectId] : ['plotId', body.plotId];
-  return `${path}:${JSON.stringify(target)}`;
+  return `${path}:${JSON.stringify(['projectId', body.projectId])}`;
 }
 
 async function mutate(path: string, body: Record<string, unknown>): Promise<CityMutationResult> {
@@ -271,13 +268,8 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
   if (retained && JSON.stringify(retained.body) !== JSON.stringify(body)) {
     // A changed amount is a new payment, not a retry. Resolve the target's
     // uncertain operation before accepting another set of parameters.
-    // Block purchases have no free parameters: same block, same body.
-    if (retained.body.projectId !== undefined) {
-      const project = config.projects.find((entry) => entry.id === retained.body.projectId);
-      throw new Error(`${project ? `「${project.name}」` : '该项目'}上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
-    }
-    const block = config.personalBlocks?.find((entry) => entry.id === retained.body.blockId);
-    throw new Error(`${block ? `「${block.name}」` : '该小区块'}上一笔投建结果尚未确认，请先重试确认后再继续。`);
+    const project = config.projects.find((entry) => entry.id === retained.body.projectId);
+    throw new Error(`${project ? `「${project.name}」` : '该项目'}上一笔 ${retained.body.amount} 金币捐款结果尚未确认，请恢复原金额重试，确认结果后再修改。`);
   }
   const operation = retained
     ?? { requestId: makeRequestId(), configVersion: config.version, body: { ...body } };
@@ -321,6 +313,8 @@ async function mutate(path: string, body: Record<string, unknown>): Promise<City
 // These keys are the city HttpBodyError contract. Keep them aligned with
 // cityGovernance.ts and cityGovernanceRouter.ts; the integration suite checks it.
 const cityOperationMessages: Record<string, string> = {
+  // The ledger still accepts legacy decorate-block requests, so its rejections
+  // keep localized mappings even though the player UI no longer offers them.
   'Unknown construction block': '该小区块不存在，请刷新后重试。',
   'Block plot already occupied': '该小区块的部分地块已有装饰，暂时无法整块投建。',
   'Personal decorations are sold as complete blocks': '个人装饰以小区块整体投建，请在小区块列表中选择一片。',
@@ -366,8 +360,3 @@ export function makeRequestId() {
   return `city-${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
 }
 export function donateCity(projectId: string, amount: number) { return mutate('/town-api/city/donate', { projectId, amount }); }
-export function decorateCityBlock(blockId: string) { return mutate('/town-api/city/decorate', { blockId }); }
-export function getPendingCityBlockOperation(blockId: string): boolean {
-  refreshCityGovernanceSession();
-  return mutationSession?.requests.has(cityOperationKey('/town-api/city/decorate', { blockId })) ?? false;
-}

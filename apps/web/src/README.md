@@ -24,7 +24,8 @@ its existing responsibilities are migrated incrementally.
 - `city/navigation/interiorNavigation.ts`: feature-neutral interior walk bounds, obstacle discovery, and pathfinding shared by narrative scenes.
 - `city/progression/`: legacy `minicityStats` compatibility and time-tracking boundary.
 - `city/cityGovernanceClient.ts` and `city/cityVotingClient.ts`: browser transport facades for governance snapshots, session isolation, and mutation receipts. They are adapters, not pure gameplay dependencies.
-- `adapters/ui/cityGovernancePanel.ts`: construction and voting dialog; `cityGovernanceAreas.ts` owns personal construction controls, while `cityGovernanceDom.ts` owns shared DOM and focus helpers.
+- `city/cityConstructionLayout.ts`: derives the default city decorations from the curated `personalBlocks` catalog now that personal construction is retired.
+- `adapters/ui/cityGovernancePanel.ts`: collective construction and voting dialog; `cityGovernanceDom.ts` owns shared DOM and focus helpers.
 - `rendering/buildingMeshFactory.ts`: building shape catalog; `proceduralTextureLibrary.ts`: canvas textures; `worldDecorations.ts`: trees, lamps, houses, ponds, and street props.
 - `adapters/ui/cityDialogController.ts`: building/NPC dialog DOM; `communityPanelController.ts`: Physics Lab panels; `multiplayerHousingController.ts`: WebSocket presence and housing UI.
 
