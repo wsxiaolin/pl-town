@@ -18,9 +18,10 @@
 }
 
 /* Moment still — the city at the visitor's time of day, one image, slow drift.
-   Five-sharpness progressive reveal: every tier layer reuses .boot-moment-img
-   (position / cover / drift / opacity gate) and adds a shrinking blur; tiers
-   load independently and fade in only when sharper than what is showing. */
+   Three-sharpness progressive reveal (heavy boots only): every tier layer
+   reuses .boot-moment-img (position / cover / drift / opacity gate) and adds
+   a shrinking blur; tiers load independently and fade in only when sharper
+   than what is showing. Cached visits paint the full still directly. */
 .boot-moment { position: absolute; inset: 0; }
 .boot-moment-img {
   position: absolute;
@@ -36,7 +37,7 @@
 }
 .boot-moment-img.is-front { opacity: 1; }
 /* Retired tiers: a sharper tier has taken the screen, so drop the coarser
-   layer from compositing (and stop its drift) instead of animating five
+   layer from compositing (and stop its drift) instead of animating three
    fullscreen layers for the whole splash. Kept in the DOM — a re-paint of
    the same moment un-retires it without refetching. */
 .boot-moment-img.is-retired { visibility: hidden; animation: none; }
@@ -51,9 +52,7 @@
   filter: blur(24px) saturate(1.08);
   pointer-events: none;
 }
-.boot-moment-step-2 { filter: blur(12px) saturate(1.05); }
-.boot-moment-step-3 { filter: blur(6px) saturate(1.02); }
-.boot-moment-step-4 { filter: blur(2.5px); }
+.boot-moment-step-2 { filter: blur(6px) saturate(1.02); }
 .boot-moment-shade {
   position: absolute;
   inset: 0;

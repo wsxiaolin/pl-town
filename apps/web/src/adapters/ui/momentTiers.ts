@@ -6,15 +6,13 @@
 export const MOMENT_LAYER_IDS = [
   'bootMomentStep1',
   'bootMomentStep2',
-  'bootMomentStep3',
-  'bootMomentStep4',
   'bootMomentImg',
 ] as const;
 
 export type TierDecision = 'reveal' | 'retire' | 'keep';
 
 /**
- * Reveal decision for one tier of the five-sharpness ladder:
+ * Reveal decision for one tier of the three-sharpness ladder:
  * - decodeOk && level > shown  → 'reveal': this tier takes the screen
  * - decodeOk && level ≤ shown  → 'retire':  a sharper tier already won; hide
  *   this layer (stops compositing/drifting under the winner)

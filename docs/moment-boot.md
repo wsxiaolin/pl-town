@@ -38,23 +38,23 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 
 图片位于 `apps/web/src/assets/moments/`（sin 提供的原画 1671×941，WebP q95 重编码，约 525-593KB/张，普通 git 对象托管——曾尝试 Git LFS，但 GitHub 禁止向 public fork 上传新 LFS 对象，回退）。重/轻路径都只显示**当前现实时刻**一张（按访客本地时钟映射），不轮播——启动画面必须与窗外时间一致。揭幕完成后时刻图停止漂移动画并释放位图，不空耗 GPU。
 
-## 五级清晰度渐进（时刻图加载）
+## 三级清晰度渐进（时刻图加载，仅重型启动）
 
-每张时刻图配套四级缩图，与原图构成**五级清晰度阶梯**：32px → 96px → 256px → 672px → 1671px 原图。五层并行请求、独立 decode，**揭示单调**——`momentTiers.tierDecision()`（有单测钉住）保证级层只在比当前显示更清晰时淡入：慢级晚到安静垫底（`is-retired`），网络抖动下画面只变清晰、不倒退；decode 失败跳级、粗级兜底不黑屏。
+每张时刻图配套两级缩图，与原图构成**三级清晰度阶梯**：32px → 256px → 1671px 原图。渐进揭示**只在重型启动（本次进入需要下载资源）时运行**——首次进入 / 构建变更 / 预编译缓存丢失的判定只读本地标记、微任务级返回，冷访问几乎瞬间进入阶梯；日常轻路径（资源已缓存）走**直出**：splash 先于 boot 决策绘制，只设原图 src、decode 门控 1.6s 淡入，一张缩图请求都不发（`boot-gate.spec` 钉住）。
+
+阶梯重画（`showMomentHeavy` → ladder 模式）只发生在 heavy 判定落地后：L1 内联 data URI 零请求瞬时首帧，三级并行请求、独立 decode，**揭示单调**——`momentTiers.tierDecision()`（有单测钉住）保证级层只在比当前显示更清晰时淡入：慢级晚到安静垫底（`is-retired`），网络抖动下画面只变清晰、不倒退；decode 失败跳级、粗级兜底不黑屏。边缘：server-changed 判定（探测期间缓存原图已直出）重画时检测到原图已揭示，跳过阶梯保留直出画面。
 
 | 级 | 分辨率 | 体积/张 | 传输 |
 |---|---|---|---|
 | L1 | 32px | 176–240B | 内联 data URI（零请求，首帧瞬时） |
-| L2 | 96px | 1.1–1.5KB | 内联 data URI（零请求） |
-| L3 | 256px | 6–8.6KB | 独立文件（fetchpriority=high） |
-| L4 | 672px | 41–56KB | 独立文件（fetchpriority=high） |
-| L5 | 原图 | ~540KB | 独立文件，1.6s 淡入收尾 |
+| L2 | 256px | 6–8.6KB | 独立文件（fetchpriority=high） |
+| L3 | 原图 | ~535–607KB | 独立文件，1.6s 淡入收尾 |
 
-级间淡入 0.45s + 递减 blur（24/12/6/2.5px，CSS `boot-moment-step-1..4`）；五层共用 drift keyframes 保持像素级同步；`.boot-moment-img` 基础规则与 `.boot-moment-step` 覆盖规则的**层叠顺序**（step 必须在后，否则 1.6s 基础过渡覆盖 0.45s 级间过渡）在内联 `bootCritical` 与外链 `boot.css` 中互为镜像——两处修改需同步。内联阈值 4KB（Vite `assetsInlineLimit`），故 L1/L2 内联、L3 起走网络；更高级的层揭示后低级层 `is-retired`（visibility:hidden + 停动画）退出合成。`paintToken` 代际隔离防止旧 decode 回调翻动新 paint 的层。
+级间淡入 0.45s + 递减 blur（24px / 6px，CSS `boot-moment-step`、`boot-moment-step-2`）；三层共用 drift keyframes 保持像素级同步；`.boot-moment-img` 基础规则与 `.boot-moment-step` 覆盖规则的**层叠顺序**（step 必须在后，否则 1.6s 基础过渡覆盖 0.45s 级间过渡）在内联 `bootCritical` 与外链 `boot.css` 中互为镜像——两处修改需同步。内联阈值 4KB（Vite `assetsInlineLimit`），故仅 L1 内联、L2 起走网络；更高级的层揭示后低级层 `is-retired`（visibility:hidden + 停动画）退出合成。`paintToken` 代际隔离防止旧 decode 回调翻动新 paint 的层。
 
-缩图由 PIL 生成（`moments/` 下的 `*-step1..4.webp`）：`LANCZOS` 缩放至 32/96/256/672 宽，quality 50/55/60/72，method 6。原图更新时需重新生成四级。
+缩图由 PIL 生成（`moments/` 下的 `*-step1..2.webp`）：`LANCZOS` 缩放至 32/256 宽，quality 50/60，method 6。原图更新时需重新生成两级。
 
-**资产预算**：`check:asset-size` 上限 48MiB，当前 45.6MiB（含 16 张缩图约 219KB），只剩 ~2.4MiB 余量——下一张大图入库前先考虑压缩或减重。
+**资产预算**：`check:asset-size` 上限 48MiB，当前 ~45.4MiB（含 8 张缩图约 29KB），只剩 ~2.6MiB 余量——下一张大图入库前先考虑压缩或减重。
 
 ## 开场 CG 的临时下线与恢复
 
