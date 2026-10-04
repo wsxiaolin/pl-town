@@ -125,8 +125,8 @@ test.describe('Physics Lab verification gate', () => {
 
     await expect(page.locator('#loginOverlay')).toBeHidden({ timeout: 15_000 });
     await expect(page.locator('#logoUser')).toContainText('故事里的人');
-    await expect(page.locator('#logoUser .verified-badge')).toHaveAttribute('title', '已认证');
-    await expect(page.locator('#phoneOwner .verified-badge')).toHaveAttribute('title', '已认证');
+    await expect(page.locator('#logoUser .verified-badge')).toHaveAttribute('title', '已认证 · 物实社区核验');
+    await expect(page.locator('#phoneOwner .verified-badge')).toHaveAttribute('title', '已认证 · 物实社区核验');
   });
 
   test('signs straight in when no verification is required', async ({ page }) => {

@@ -12,8 +12,8 @@ export function renderVerifiedName(
   const badge = document.createElement('i');
   if (verified) {
     badge.className = 'verified-badge';
-    badge.title = '已认证';
-    badge.setAttribute('aria-label', '已认证');
+    badge.title = '已认证 · 物实社区核验';
+    badge.setAttribute('aria-label', '已认证 · 物实社区核验');
     element.appendChild(badge);
   }
   if (options.suffix) {
