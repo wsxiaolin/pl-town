@@ -224,6 +224,14 @@ export function createWeatherEffect(options: {
     else wetness.v = Math.max(wetness.target, wetness.v - step);
     if (wetness.v === 0 && wetness.target === 0) {
       rain.visible = false;
+      // 渐出落定后把雾参数精确归位到晴天档:插值最后一帧 w 已低于可见
+      // 阈值,fog 不再被写入,若不归位 far 会停在残差值上。
+      const fog = scene.fog as THREE.Fog | null;
+      if (fog) {
+        fog.near = CLEAR_FOG_NEAR;
+        fog.far = CLEAR_FOG_FAR;
+        fog.color.setHex(0xffffff);
+      }
       if (wetness.restorePending) {
         wetness.restorePending = false;
         hadRainAmbient = false;

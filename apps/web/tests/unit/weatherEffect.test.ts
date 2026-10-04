@@ -42,7 +42,7 @@ test('rain ramps a full ambience stack in and restores the sky on clear', () => 
   assert.equal(rain.visible, false, 'streaks hide once the ramp-out settles');
   assert.equal(scene.background, sky, 'restoreSky hands the sky back after the rain');
   assert.equal(restoreCount, 1);
-  assert.ok((scene.fog as THREE.Fog).far >= 3000, 'fog returns to the invisible clear-day distance');
+  assert.equal((scene.fog as THREE.Fog).far, 4000, 'fog distance lands exactly back on the clear-day value (no lerp residue)');
 
   effect.dispose();
   assert.equal(dataset.cityWeather, undefined);
