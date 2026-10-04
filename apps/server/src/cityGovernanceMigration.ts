@@ -29,6 +29,19 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
 ]);
 
+// 2026-10-04 default-standing policy: 参议院与星语北城 11 栋作品建筑在
+// boot 时由赠礼补全直接建成（见 cityGovernanceSchema 的补全步骤），对
+// 新城镇与既有城镇一视同仁。north_pigeon_square（鸽子广场）刻意不在
+// 名单内——它保持为需要居民在众议院共同筹建的工程。项目定义与 ID 保持
+// 不可变：解锁通过完成对应 city_projects 行表达，历史部分募捐进度被
+// 补满为政策赠礼，不向任何居民收费。
+export const DEFAULT_COMPLETED_BUILDING_IDS = Object.freeze([
+  'senate',
+  'north_chat_plaza', 'north_stellar_hall', 'north_singularity', 'north_binary_garden',
+  'north_maya_grove', 'north_api_memorial', 'north_worry_store', 'north_bistro',
+  'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
+]);
+
 // Read-only reconciliation runs inside initializeCityGovernance's caller-owned
 // transaction, so this snapshot and the subsequent migration writes are atomic.
 export function reconcileInitialBuildings(db: Database.Database, config: CityConstructionConfig): {

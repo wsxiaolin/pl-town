@@ -1,5 +1,6 @@
 import { townApiUrl } from '../core/townApi';
 import { getResidentToken } from '../core/residentToken';
+import { combineAbortSignals } from '../core/abortable';
 import { applyCityState, getCityConfig, getCityState, loadCityGovernance, makeRequestId, validState, type CityState } from './cityGovernanceClient';
 
 type VoteRecords = { epoch: string; projectIds: string[] };
@@ -62,8 +63,9 @@ export async function loadCityVotes(signal?: AbortSignal): Promise<CityVotesRead
   try {
     // GET has no JSON body; Bearer authentication keeps the token out of URLs.
     // POST below follows the existing construction mutation body's token field.
+    // combineAbortSignals covers browsers without AbortSignal.any (Chromium <116).
     const response = await request('/town-api/city/votes', {
-      cache: 'no-store', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
+      cache: 'no-store', signal: signal ? combineAbortSignals([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
       headers: { accept: 'application/json', authorization: `Bearer ${owner.token}` },
     });
     if (!isCurrent()) return null;

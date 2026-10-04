@@ -93,7 +93,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('button', { name: '关闭' })).toBeFocused();
     expect(await panel.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
-    expect(await panel.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(247, 245, 237)');
+    expect(await panel.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(245, 236, 216)');
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     const notice = panel.getByRole('status', { name: '投票结果', exact: true });
     await expect(notice).toHaveText('');
@@ -193,7 +193,7 @@ test('reopening skips a redundant votes read while votes stay confirmed and repe
   expect(api.requests).toHaveLength(1);
 });
 
-test('close and unavailable snapshots preserve the last real tab scroll', async ({ page }) => {
+test('close and unavailable snapshots preserve the last real scroll position', async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await fixture(page, false, 24);
   const panel = page.getByRole('dialog', { name: '众议院', exact: true });
@@ -297,9 +297,6 @@ test('commons keeps the scrolled project and nearby focus across refreshes and v
   const scrollTop = await body.evaluate((element) => element.scrollTop);
   expect(scrollTop).toBeGreaterThan(100);
   await api.pushVoteCount();
-  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeCloseTo(scrollTop, 0);
-  await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-  await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
   await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeCloseTo(scrollTop, 0);
   api.holdNextVote();
   await vote.focus();

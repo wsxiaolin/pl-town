@@ -647,6 +647,10 @@ try {
 
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
+  // Far-north walks (星语北城 ground reaches z=-86.5) must stay valid; the old
+  // ±80 bound rejected them as "Invalid position".
+  send(bob, { type: 'position', position: { x: 0, y: 0, z: -84 } });
+  await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.z === -84);
 
   send(alice, { type: 'chat', text: 'a'.repeat(501) });
   await waitFor(alice, 'error', (message) => message.message === 'Invalid chat message');

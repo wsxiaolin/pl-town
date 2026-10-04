@@ -36,8 +36,12 @@ npm run typecheck
 npm run build
 npm run test:web
 npm run test:server
-npm test                 # 前端 Playwright + 服务端集成测试
+npm test                 # 前端 Playwright + 服务端集成
 ```
+
+工作流文件（`.github/workflows/*.yml`）改动后额外跑一次 actionlint：CI 的 `actionlint` job 会用固定 digest 的 `rhysd/actionlint` 镜像校验全部 workflow，能发现 YAML 解析看不到的非法表达式（如误写的 `${{ secrets.X }}`）与非 ASCII 同形字符。本地复现用与 CI 相同的 digest：`docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color`（当前对应 v1.7.7 + shellcheck 0.9.0）。更换 digest 时同步更新本行。
+
+新增 `apps/web/tests/unit/*.test.ts` 单测时，必须同步把对应 `.test.js` 追加到 `apps/web/package.json` 的 `test:unit`（或 `test:unit:story-sentences`）脚本：`test:domain`（required CI job）只执行登记过的文件，漏登记不会报错、只是静默不跑。`unit/testRegistration.test.ts` 在 CI 中同时拦截漏登记与过期残留。浏览器套件文件一律用 `*.spec.ts` 命名（`playwright.config.ts` 的 `testMatch` 固定该约定，`testIgnore` 排除 `tests/unit/**`）。
 
 前端 Playwright 配置使用 Chromium、单 worker，并自动启动 `4173` 端口的 Vite 服务。`apps/web/tests/diagnostics/` 下的诊断脚本是按需运行的性能/视觉检查，不属于默认烟雾套件。
 
@@ -121,7 +125,8 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 仓库包含两个移植自 `NetLogo-Mobile/plweb2` 的 AI 自动化工作流，均使用 OpenCode CLI（`opencode-ai`）与 `skills` 工具（`npx skills update` 读取根目录 `skills-lock.json`）。两者在 CI 中独立运行，不依赖本地开发环境。
 
 - **Auto-Fix（`.github/workflows/autofix.yml`）**：当 Issue 被打上 `autofix` 标签时触发。AI 代理按本指南修改代码、运行校验（`npm run typecheck` / `build` / `test:domain` / `test:server`，必要时 `test:web`），生成根目录 `conclusion.md`，随后由工作流自动创建 `autofix/issue-<n>-<run_id>` 分支、提交并以 `Resolves #<n>` 打开 PR。代理本身不得执行 `git commit` / `git push` / 创建 PR，这些由工作流统一完成。
-- **AI PR Reviewer（`.github/workflows/auto-review.yml`）**：PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。BOT 自身失败时工作流仍标记通过，仅在 PR 评论中说明「自动审查失败」。审查报告含 blocker 时先发评论，再将 required check 标为失败。
+- **AI PR Reviewer（`.github/workflows/auto-review.yml`）**：PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。BOT 自身失败时工作流仍标记通过，仅在 PR 评论中说明「自动审查失败」。审查报告含 blocker 时先发评论，再将 required check 标为失败。判定解析由 `scripts/review-verdict.sh` 完成（依赖 bash 的 `pipefail`，非 POSIX sh），fixture 测试位于 `apps/web/tests/unit/reviewVerdict.test.ts`，经 `npm run test:unit -w @minicity/web` 从 `apps/web` 目录运行。审查报告正文使用简体中文，代码标识符、路径与既定技术术语保留英文；`REVIEW_VERDICT` 判定行保持英文标记，供解析脚本使用。
+- **Dependabot Auto-Merge（`.github/workflows/dependabot-auto-merge.yml`）**：Dependabot 开启或更新依赖 PR 时触发，为其启用 GitHub 原生 auto-merge（squash）。安全修复与常规版本更新一律适用；真正的合并仍以全部 required check 通过为前提，CI 失败时 GitHub 会自动取消 auto-merge。前置条件：仓库设置中已开启 "Allow auto-merge"。
 
 `skills-lock.json` 声明了 `plweb-skill`（Physics Lab 社区 API 文档，来自 `NetLogo-Mobile/plweb-skill`）和 `code-review-skill`（来自 `awesome-skills/code-review-skill`）两个只读技能，为上述代理提供上下文。AI PR Reviewer 按 `opencode/big-pickle`、`opencode/deepseek-v4-flash-free`、`opencode/hy3-free` 的顺序尝试模型，统一使用 `variant high`；如需更换模型，应同步修改对应工作流，并保持只读技能的来源不变。
 
@@ -181,7 +186,7 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 
 - 任何新增或修改的平面、贴地网格、道路标记或覆盖层，不要与其他表面共用完全相同的 `y` 高度。`apps/web/src/rendering/layers.ts` 的 `SURFACE_Y` 各层之间必须保留明确、足够的 Y 差（例如 plaza 与 landscape 至少相差 0.004）。
 - 当多个表面在同一高度或极近高度叠加、且都依赖 `renderOrder` 或 `depthWrite=false` 时，远镜头拉远或相机移动过程中会出现帧间闪烁的正方形 / 覆盖层重影。
-- 修改贴地覆盖层前，先在脑中模拟全图视野（`cameraZoom` 拉大到 15 左右）与接近地面视野两种情况，确认不会出现上述闪烁；涉及可见改动的提交建议至少手动拉一次远视图核对。
+- 修改贴地覆盖层前，先在脑中模拟全图视野（`cameraZoom` 拉大到 15 左右）与接近地面视野两种情况，确认不会出现上述闪烁；涉及可见改动的提交建议至少手动拉一次远视图核对。游戏内滚轮上限是 zoom 15，需要更远时用控制台 `window._mini.focus(x, z, 21)` 拉远（见 `docs/console-debug-api.md`）。
 - 排查疑似 z-fighting 时，优先检查是否存在 `y` 完全相等或差值小于 0.001 的共面网格，而不只是改纹理或颜色。
 
 ## CSS 模块化

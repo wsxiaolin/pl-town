@@ -1,0 +1,35 @@
+# Dependabot 依赖与 Actions 自动更新。
+# 漏洞（安全）类升级 PR 由仓库的 Dependabot security updates 自动创建，
+# 不受下方 schedule 限制；本文件只控制常规版本更新的排期与分组。
+version: 2
+updates:
+  # npm workspace：apps/web 与 apps/server 共用根目录锁文件
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    # minor/patch 合并成一个 PR，降低 PR 噪音；major 单独开 PR 便于逐个验证
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # GitHub Actions 版本更新（checkout/setup-node/cache 等）
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: chore
+      include: scope

@@ -2,8 +2,6 @@ import { expect, test, type Route } from '@playwright/test';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 
-type NoticeWindow = Window & { voteStatusWrites: string[]; voteStatusObserver: MutationObserver };
-
 for (const first of ['vote', 'donation'] as const) {
   test(`concurrent vote and donation keep both notices when ${first} finishes first`, async ({ page }) => {
     const config: CityConfig = {
@@ -86,26 +84,6 @@ for (const first of ['vote', 'donation'] as const) {
     }
     await expect(cafe.getByRole('button', { name: '已投票' })).toBeDisabled();
     await expect(donate).toBeEnabled();
-    await expect(voteStatus).toHaveText(voteNotice);
-    await expect(paymentStatus).toHaveText(paymentNotice);
-    await voteStatus.evaluate((region) => {
-      const target = window as unknown as NoticeWindow;
-      target.voteStatusWrites = [];
-      target.voteStatusObserver = new MutationObserver(() => {
-        target.voteStatusWrites.push(region.textContent ?? '');
-      });
-      target.voteStatusObserver.observe(region, { childList: true, characterData: true, subtree: true });
-    });
-    await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    await panel.getByRole('button', { name: '城市集体建设', exact: true }).click();
-    const repeatedAnnouncements = await page.evaluate(() => {
-      const target = window as unknown as NoticeWindow;
-      target.voteStatusObserver.disconnect();
-      return target.voteStatusWrites;
-    });
-    // A tab switch is not a new operation result: do not clear/reinsert the
-    // same success text into the live region, which can announce it again.
-    expect(repeatedAnnouncements).toEqual([]);
     await expect(voteStatus).toHaveText(voteNotice);
     await expect(paymentStatus).toHaveText(paymentNotice);
     await expect(panel.locator('[data-city-feedback]')).toHaveAttribute('aria-label', '建设错误');
