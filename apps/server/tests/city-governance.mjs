@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 import { BUILDING_CATALOG } from '../dist/buildingCatalog.js';
+import { DEFAULT_COMPLETED_BUILDING_IDS } from '../dist/cityGovernanceMigration.js';
 import './city-area-layout.mjs';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'minicity-city-'));
@@ -146,7 +147,27 @@ try {
   assert.equal((await fetch(`${base}/town-api/city/config`, { headers: { 'if-none-match': '"old"' } })).status, 200);
   assert.deepEqual(config.initialBuiltBuildingIds, ['commons']);
   const freshState = await (await fetch(`${base}/town-api/city/state`)).json();
-  assert.ok(freshState.projects.every((entry) => !entry.built && entry.funded === 0));
+  // 2026-10-04 unlock policy: senate + the north district (pigeon square
+  // excepted) are standing by default — the boot-time gift completes their
+  // project rows at full funding without debiting anyone. Everything else
+  // still starts at zero, and the fresh-row reset in the fixture above proves
+  // the gift is reapplied on every boot rather than relying on this snapshot.
+  const defaultStanding = new Set(DEFAULT_COMPLETED_BUILDING_IDS);
+  const projectById = new Map(config.projects.map((entry) => [entry.id, entry]));
+  assert.deepEqual(
+    freshState.projects.filter((entry) => entry.built).map((entry) => entry.id).sort(),
+    config.projects.filter((entry) => entry.buildingId && defaultStanding.has(entry.buildingId)).map((entry) => entry.id).sort(),
+  );
+  for (const entry of freshState.projects) {
+    const project = projectById.get(entry.id);
+    if (project?.buildingId && defaultStanding.has(project.buildingId)) {
+      assert.ok(entry.built && entry.funded === project.cost, `default-standing project must be gifted to completion: ${entry.id}`);
+    } else {
+      assert.ok(!entry.built && entry.funded === 0, `non-gifted project must start fresh: ${entry.id}`);
+    }
+  }
+  assert.ok(defaultStanding.has('senate'));
+  assert.ok(!defaultStanding.has('north_pigeon_square'));
   // Typecheck verifies this generated catalog mirrors every client building,
   // including special interaction entrypoints. Every entry needs a city policy.
   for (const { id } of BUILDING_CATALOG) {
