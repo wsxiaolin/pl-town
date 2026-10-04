@@ -255,7 +255,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   woodWindow(cx + 1.10, 8.48, 1.33, 0.43, 0.57, 0);
   woodWindow(-3.14, 5.47, -1.40, 0.71, 0.88, -Math.PI / 2);
 
-  // ── 陡屋面：两侧各 9 排长瓦板 + 人字山墙 + 脊梁 + 雕叶脊饰 ─────────
+  // ── 陡屋面：两侧整坡瓦面板 + 人字山墙 + 脊梁 + 雕叶脊饰 ─────────
   const gableShape = new THREE.Shape();
   gableShape.moveTo(-3.19, 7.43);
   gableShape.lineTo(1.89, 7.43);
@@ -271,14 +271,18 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   addPart(g, new THREE.ExtrudeGeometry(gableShape, { depth: 0.055, bevelEnabled: false }), wood(CHERRY, 3, 3), [0, 0, 1.22]);
   triangle([-3.19, 7.43, -2.60], [cx, 10.03, -2.60], [1.89, 7.43, -2.60], wood(CHERRY, 3, 3));
   const slopeAngle = Math.atan(0.97);
+  // 坡面板：每侧一整块。原移植为每侧 9 排叠瓦 box——所有板中心精确落在
+  // 同一条坡线上且旋转同角，相邻板的上/下表面严格共面，整片屋顶大面积
+  // z-fighting（远观闪烁）。城市视距下叠瓦细节本不可辨，故简化为单板：
+  // 坡长盖至原叠瓦外缘（s≈6.19），SHINGLES 中间色 + 坡向重复木纹近似原观感。
   for (const side of [-1, 1]) {
-    for (let row = 0; row < 9; row++) {
-      const mid = (row + 0.5) * 0.326;
-      const y = 10.18 - mid * 0.97;
-      const w = (10.02 - y) / 1.02 * 2;
-      const tile = box(cx + side * mid, y, -0.645, w + 0.035, 0.076, 4.66, wood(SHINGLES[row % 3]!, 1, 8));
-      tile.rotation.z = -side * slopeAngle;
-    }
+    const slopeLen = 6.2;
+    const panel = box(
+      cx + side * Math.cos(slopeAngle) * slopeLen / 2,
+      10.18 - Math.sin(slopeAngle) * slopeLen / 2,
+      -0.645, slopeLen, 0.09, 4.66, wood(SHINGLES[1]!, 3, 8),
+    );
+    panel.rotation.z = -side * slopeAngle;
     beam([cx + side * 3.02, 7.32, 1.85], [cx + side * 3.02, 7.32, -3.1], 0.075, woodPlain(WALNUT));
     for (const ez of [1.88, -3.17]) beam([cx, 10.24, ez], [cx + side * 3.09, 7.25, ez], 0.11, wood(WALNUT, 1, 2));
   }
@@ -317,7 +321,9 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   torus(dialX, dialY, dialZ + 0.17, 1.54, 0.055, wood(CHERRY, 2, 1), g, 0, 0, 64);
   for (let j = 0; j < 12; j++) {
     const a = j * Math.PI / 6;
-    const tick = box(dialX + Math.sin(a) * 1.30, dialY + Math.cos(a) * 1.30, dialZ + 0.203, 0.037, 0.125, 0.013, woodPlain(BIRCH), g, false);
+    // 刻度前缘与瓦盘面保持 ~0.03 间隙（z-fighting 安全距；0.203 时仅
+    // 0.0115，×SCALE 0.62 后远观贴近深度缓冲精度）。
+    const tick = box(dialX + Math.sin(a) * 1.30, dialY + Math.cos(a) * 1.30, dialZ + 0.215, 0.037, 0.125, 0.013, woodPlain(BIRCH), g, false);
     tick.rotation.z = -a;
   }
   // 罗马数字镶嵌：四个基准位（XII/III/VI/IX）。
@@ -340,7 +346,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   for (let j = 0; j < 12; j++) {
     const a = j * Math.PI / 6;
     if (j % 3 !== 0) continue;
-    roman(romans[j / 3]!, dialX + Math.sin(a) * 1.08, dialY + Math.cos(a) * 1.08, dialZ + 0.219);
+    roman(romans[j / 3]!, dialX + Math.sin(a) * 1.08, dialY + Math.cos(a) * 1.08, dialZ + 0.231);
   }
   const clockHand = (length: number, w: number, mat: MaterialParameters, z: number) => {
     const shape = new THREE.Shape();
