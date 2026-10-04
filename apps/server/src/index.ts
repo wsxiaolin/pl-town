@@ -115,8 +115,12 @@ function broadcastWorldCatalog() {
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;
+  // North district ground spans z=-44..-86.5 (cityConfig NORTH_DISTRICT_AREA
+  // .ground) with walkable lots to ≈-84; 96 leaves margin without reopening
+  // the "far-north walks rejected as Invalid position" regression. x stays 80:
+  // both districts live within ±42.
   return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z)
-    && Math.abs(Number(value.x)) <= 80 && Math.abs(Number(value.y)) <= 10 && Math.abs(Number(value.z)) <= 80
+    && Math.abs(Number(value.x)) <= 80 && Math.abs(Number(value.y)) <= 10 && Math.abs(Number(value.z)) <= 96
     && (value.rotation === undefined || (Number.isFinite(value.rotation) && Math.abs(Number(value.rotation)) <= Math.PI * 4));
 };
 const validId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 100;
