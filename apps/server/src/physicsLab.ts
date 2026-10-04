@@ -182,7 +182,7 @@ const QUERY_KEYS = new Set(['Category','Languages','ExcludeLanguages','Tags','Ex
 export async function queryPublicWorks(input: unknown) {
   const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {};
   const query: Record<string, unknown> = {};
-  for (const key of QUERY_KEYS) if (key in raw) query[key] = raw[key];
+  for (const key of QUERY_KEYS) if (Object.hasOwn(raw, key)) query[key] = raw[key];
   query.Category = query.Category === 'Discussion' ? 'Discussion' : 'Experiment';
   for (const key of ['Languages', 'ExcludeLanguages', 'Tags', 'ExcludeTags', 'ModelTags']) query[key] = safeStringList(query[key]);
   for (const key of ['ModelID', 'ParentID', 'UserID', 'Special', 'From']) query[key] = safeString(query[key], 100);
