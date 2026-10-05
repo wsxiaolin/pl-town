@@ -21,11 +21,14 @@ import nightUrl from '../../assets/moments/night.webp';
 import nightStep1Url from '../../assets/moments/night-step1.webp';
 import nightStep2Url from '../../assets/moments/night-step2.webp';
 import { momentForHour, type MomentName } from '../../core/momentClock';
-import { MOMENT_LAYER_IDS, tierDecision, type TierDecision } from './momentTiers';
+import { MOMENT_LAYER_IDS, applyDecodeEvent, type LayerState } from './momentTiers';
 
-type ViewMoment = { name: MomentName; caption: string; levels: readonly string[] };
+// The ladder length is pinned at the type level (S2): every moment feeds
+// exactly three layers, so a short ladder that would silently drop the top or
+// a long one that would never show cannot compile.
+type ViewMoment = { name: MomentName; caption: string; levels: readonly [string, string, string] };
 
-const IMAGE_BY_NAME: Record<MomentName, readonly string[]> = {
+const IMAGE_BY_NAME: Record<MomentName, readonly [string, string, string]> = {
   dawn: [dawnStep1Url, dawnStep2Url, dawnUrl],
   noon: [noonStep1Url, noonStep2Url, noonUrl],
   dusk: [duskStep1Url, duskStep2Url, duskUrl],
@@ -60,11 +63,45 @@ export function configureMomentSplash(options: { reduced: boolean }): void {
   reducedMotion = options.reduced;
 }
 
-// Highest tier currently on screen. Reveals are monotonic: a layer only ever
-// fades in when it is sharper than whatever is already showing — a slow tier
-// that arrives AFTER a faster one stays hidden underneath (network jitter
-// must never make the picture go backwards).
-let shownMomentLevel = 0;
+// Layer screen state, coarsest → sharpest (index = level - 1). The DOM
+// classes are the visible truth; every decode completion reads them, folds
+// the event through the pure applyDecodeEvent, and writes them back. This
+// keeps the ladder monotonic (a slow tier arriving after a faster one stays
+// under the winner) AND retires coarser layers the moment a sharper tier
+// reveals (review #201 B1: the old code never retired in the normal in-order
+// climb, so blurred fullscreen layers kept compositing and drifting for the
+// whole heavy splash).
+function readLayerStates(): LayerState[] {
+  return MOMENT_LAYER_IDS.map((id) => {
+    const layer = document.getElementById(id);
+    // is-retired dominates: a retired-from-front layer keeps is-front (its
+    // opacity crossfades under the incoming tier) but is out of the race.
+    if (layer?.classList.contains('is-retired')) return 'retired';
+    if (layer?.classList.contains('is-front')) return 'front';
+    return 'hidden';
+  });
+}
+
+// 'retired' only ADDS is-retired and deliberately leaves is-front as it was:
+// a retiree that was front keeps its opacity so the incoming tier crossfades
+// OVER it (no dark bleed while the winner is still fading in — the full
+// still's fade is 1.6s); a retiree that was hidden stays hidden. CSS drops
+// visibility (and with it compositing) 1.6s after the class flips, and stops
+// the 26s drift immediately.
+function writeLayerStates(states: readonly LayerState[]): void {
+  MOMENT_LAYER_IDS.forEach((id, index) => {
+    const layer = document.getElementById(id);
+    if (!layer) return;
+    const state = states[index];
+    if (state === 'retired') {
+      layer.classList.add('is-retired');
+    } else {
+      layer.classList.remove('is-retired');
+      layer.classList.toggle('is-front', state === 'front');
+    }
+  });
+}
+
 // Bumped on every paintMoment: decode callbacks carry their paint's token,
 // so a decode that resolves after a NEWER paint (e.g. splash → heavy repaint
 // with a different moment) can never flip layers the newer paint owns.
@@ -76,35 +113,12 @@ let paintToken = 0;
 // that actually have to download the stills (sin: 渐进式只服务于首次下载).
 type PaintMode = 'direct' | 'ladder';
 
-function applyTierDecision(
-  layer: HTMLImageElement,
-  level: number,
-  decision: TierDecision,
-): number {
-  if (decision === 'reveal') {
-    layer.classList.remove('is-retired');
-    layer.classList.add('is-front');
-    return level;
-  }
-  if (decision === 'retire') {
-    layer.classList.remove('is-front');
-    layer.classList.add('is-retired');
-  }
-  return 0;
-}
-
 function paintMoment(moment: ViewMoment, mode: PaintMode): void {
   const token = ++paintToken;
-  shownMomentLevel = 0;
-  if (moment.levels.length !== MOMENT_LAYER_IDS.length) {
-    // Ladder invariant: every moment must feed exactly three layers. A short
-    // ladder would silently drop the top; a long one would never show.
-    console.warn(
-      `[moment-splash] level count ${moment.levels.length} != layer count ${MOMENT_LAYER_IDS.length}`,
-    );
-  }
-  const fullUrl = moment.levels[moment.levels.length - 1];
-  if (!fullUrl) return; // an empty levels array has nothing to paint
+  // Literal index (not length-1): the tuple type pins the full still at rung
+  // 3, and a computed index would drag in noUncheckedIndexedAccess's
+  // string | undefined.
+  const fullUrl = moment.levels[2];
   const fullLayerId = MOMENT_LAYER_IDS[MOMENT_LAYER_IDS.length - 1];
   const fullLayer = fullLayerId
     ? (document.getElementById(fullLayerId) as HTMLImageElement | null)
@@ -143,8 +157,9 @@ function paintMoment(moment: ViewMoment, mode: PaintMode): void {
     decoded
       .then(() => {
         if (token !== paintToken) return; // a newer paint owns the layers now
-        const decision = tierDecision(level, true, shownMomentLevel);
-        shownMomentLevel = Math.max(shownMomentLevel, applyTierDecision(layer, level, decision));
+        // decodeOk=true here; the .catch path is the decodeOk=false case and
+        // leaves the ladder exactly as-is (coarser tiers remain the fallback).
+        writeLayerStates(applyDecodeEvent(readLayerStates(), level, true));
       })
       .catch(() => { /* keep: coarser tiers remain as the fallback */ });
   });

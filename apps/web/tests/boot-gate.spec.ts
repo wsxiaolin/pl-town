@@ -82,6 +82,17 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   // coarsest tier's src set; inline data URI in prod, dev URL in dev).
   await expect(page.locator('#bootMomentStep1')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)-step1\.webp|data:image\/webp/, { timeout: 15_000 });
   await expect(page.locator('#bootMomentStep2')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)-step2\.webp/, { timeout: 15_000 });
+  // Ladder settle (B1): once the full still has revealed, the coarse tiers
+  // must be retired — one fullscreen layer compositing, not three drifting
+  // for the whole pipeline. The is-retired class and the img's is-front
+  // flip in the same write, so the class check is deterministic; the
+  // visibility flip lands 1.6s later (crossfade window), which the
+  // not-to-be-visible assertion waits through.
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 60_000 });
+  await expect(page.locator('#bootMomentStep1')).toHaveClass(/is-retired/, { timeout: 2_500 });
+  await expect(page.locator('#bootMomentStep2')).toHaveClass(/is-retired/, { timeout: 2_500 });
+  await expect(page.locator('#bootMomentStep1')).not.toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#bootMomentStep2')).not.toBeVisible({ timeout: 5_000 });
 
   // Full pipeline: download → scene → precompile → ready → reveal.
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });

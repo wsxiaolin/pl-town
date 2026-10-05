@@ -50,9 +50,28 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 | L2 | 256px | 6–8.6KB | 独立文件（fetchpriority=high） |
 | L3 | 原图 | ~535–607KB | 独立文件，1.6s 淡入收尾 |
 
-级间淡入 0.45s + 递减 blur（24px / 6px，CSS `boot-moment-step`、`boot-moment-step-2`）；三层共用 drift keyframes 保持像素级同步；`.boot-moment-img` 基础规则与 `.boot-moment-step` 覆盖规则的**层叠顺序**（step 必须在后，否则 1.6s 基础过渡覆盖 0.45s 级间过渡）在内联 `bootCritical` 与外链 `boot.css` 中互为镜像——两处修改需同步。内联阈值 4KB（Vite `assetsInlineLimit`），故仅 L1 内联、L2 起走网络；更高级的层揭示后低级层 `is-retired`（visibility:hidden + 停动画）退出合成。`paintToken` 代际隔离防止旧 decode 回调翻动新 paint 的层。
+级间淡入 0.45s + 递减 blur（24px / 6px，CSS `boot-moment-step`、`boot-moment-step-2`）；三层共用 drift keyframes 保持像素级同步；`.boot-moment-img` 基础规则与 `.boot-moment-step` 覆盖规则的**层叠顺序**（step 必须在后，否则 1.6s 基础过渡覆盖 0.45s 级间过渡）在内联 `bootCritical` 与外链 `boot.css` 中互为镜像——两处修改需同步。内联阈值 4KB（Vite `assetsInlineLimit`），故仅 L1 内联、L2 起走网络。`paintToken` 代际隔离防止旧 decode 回调翻动新 paint 的层。
 
-缩图由 PIL 生成（`moments/` 下的 `*-step1..2.webp`）：`LANCZOS` 缩放至 32/256 宽，quality 50/60，method 6。原图更新时需重新生成两级。
+**揭示即退役**（#201 B1 修复）：`momentTiers.applyDecodeEvent()` 把每次 decode 完成折叠成整梯状态（纯函数，单测钉住）——更高级层揭示的**同一写**里，所有在屏的粗级层标记 `is-retired`。正常到达顺序（L1→L2→L3）也会退役，不再出现三层全屏模糊层伴随整条重型管线合成/漂移的情况。退役的视觉语义（#201 S1 修复）：退役层**保留 opacity**（`is-front` 不摘，新层在其上淡入 = 交叉淡化，无黑帧），漂移动画立即停止，`visibility` 经基础过渡的 `visibility 0s linear 1.6s` 延迟 1.6s 翻转——恰好等于原图收尾淡入时长，淡入完成即退出合成。慢级晚到则自退休垫底（`tierDecision` 保证揭示单调，网络抖动下画面只变清晰、不倒退）；decode 失败跳级、粗级兜底不黑屏。边缘：server-changed 判定（探测期间缓存原图已直出）重画时检测到原图已揭示，跳过阶梯保留直出画面。层状态（hidden/front/retired）的 DOM 读取-折叠-写回全部经由该纯函数，视图不再自持 `shownMomentLevel` 计数；梯级数量由 `Record<MomentName, readonly [string, string, string]>` 在编译期钉死为三。
+
+缩图由 PIL 生成（`moments/` 下的 `*-step1..2.webp`）：`LANCZOS` 缩放至 32/256 宽，quality 50/60，method 6。原图更新时需重新生成两级，在 `apps/web/` 下执行（#201 N3，可直接复制）：
+
+```bash
+python3 - <<'PY'
+from PIL import Image
+from pathlib import Path
+
+for src in sorted(Path('src/assets/moments').glob('*.webp')):
+    if '-step' in src.stem:
+        continue  # regenerate from originals only
+    for width, quality, suffix in [(32, 50, 'step1'), (256, 60, 'step2')]:
+        img = Image.open(src)
+        height = round(img.height * width / img.width)
+        out = src.with_name(f'{src.stem}-{suffix}.webp')
+        img.resize((width, height), Image.LANCZOS).save(out, 'WEBP', quality=quality, method=6)
+        print(f'{src.name} -> {out.name} ({width}x{height}px q{quality}, {out.stat().st_size}B)')
+PY
+```
 
 **资产预算**：`check:asset-size` 上限 48MiB，当前 ~45.4MiB（含 8 张缩图约 29KB），只剩 ~2.6MiB 余量——下一张大图入库前先考虑压缩或减重。
 

@@ -31,15 +31,22 @@
   object-fit: cover;
   opacity: 0;
   transform: scale(1.06);
-  transition: opacity 1.6s ease;
+  /* visibility is transitioned ONLY as the retire mechanism: the flip is
+     delayed by the slowest fade (the full still's 1.6s reveal) so a retired
+     layer keeps crossfading under the incoming tier until that fade is
+     done — an earlier flip would let the dark background bleed through. */
+  transition: opacity 1.6s ease, visibility 0s linear 1.6s;
   animation: boot-moment-drift 26s ease-in-out infinite alternate;
   user-select: none;
 }
 .boot-moment-img.is-front { opacity: 1; }
 /* Retired tiers: a sharper tier has taken the screen, so drop the coarser
-   layer from compositing (and stop its drift) instead of animating three
-   fullscreen layers for the whole splash. Kept in the DOM — a re-paint of
-   the same moment un-retires it without refetching. */
+   layer from compositing instead of animating three fullscreen layers for
+   the whole splash. Retirement keeps the layer's opacity (is-front stays —
+   the incoming tier fades in OVER it, no dark frame in between), stops the
+   drift immediately, and flips visibility 1.6s later via the base
+   transition (review #201 B1/S1). Kept in the DOM — a re-paint of the same
+   moment un-retires it without refetching. */
 .boot-moment-img.is-retired { visibility: hidden; animation: none; }
 /* Tier rules MUST stay after .boot-moment-img: equal specificity, so an
    earlier placement would let the 1.6s base transition override the quick
@@ -47,8 +54,9 @@
    CSS, which loads first and mirrors this order). */
 .boot-moment-step {
   /* Tier fade is quick (0.45s) — the final full still keeps .boot-moment-img's
-     1.6s reveal as the settling beat. */
-  transition: opacity 0.45s ease;
+     1.6s reveal as the settling beat. The visibility leg inherits the base
+     1.6s delay so a retired step also lingers under the incoming fade. */
+  transition: opacity 0.45s ease, visibility 0s linear 1.6s;
   filter: blur(24px) saturate(1.08);
   pointer-events: none;
 }
