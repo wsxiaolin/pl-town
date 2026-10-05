@@ -2,6 +2,45 @@
 
 城市启动完成后，调试入口统一挂载在 `window._mini`。所有控制台调试代码都使用这个命名空间。
 
+## 视觉验证 dev 门控（`?dev`）
+
+访问 URL 带上 `?dev` 参数即进入开发者视觉验证模式（`apps/web/src/city/devPortal.ts` 判定，本地与云端预览均可用）：
+
+- 跳过登录层与新居民引导，直接进入小城；仅在本地没有已存 `minicityUser` 时 `logo` 才显示 `- dev-监工`（本机登录过的开发机会沿用真实昵称，标签不符不代表门控失效）；
+- 不发起多人连接——保持离线，避免无凭据 connect 被 auth 拒绝后重新弹出登录层；
+- 入场动画照常运行（这是离线环境下建筑升起的唯一触发点）；
+- 正常玩家不带参数访问零感知，所有分支均以 `isDevPortalRequested()` 门控。
+- `?dev` 不新增任何数据访问或特权：不发起多人连接、没有居民 token，只读取免鉴权的只读端点（`/town-api/city/config`、`/city/state`）；治理写入（`/town-api/city/donate|decorate|vote`）仍会 401。
+
+典型用途：云端预览（CF Pages）的视觉验证——
+
+```
+https://<branch>.pl-town.pages.dev/?dev=1
+```
+
+注意：**渲染是否全量取决于治理服务是否可达，而非 `?dev` 本身**。预览环境连不上治理服务（`/town-api`）时 `config` 为空、`pendingBuildings` 为空，待建建筑（含星语北城 12 栋作品建筑）会全部渲染；本地同时起了服务端时治理快照照样可达（`/town-api/city/config`、`/city/state` 是免鉴权只读端点），`?dev` 的渲染与线上一致（已建成显示、未建成按筹资进度隐藏）。核对筹资观感请以治理状态为准。
+
+## 传送与取景（teleport / focus）
+
+```js
+window._mini.teleport(x, z)            // 玩家瞬移到 (x, z)，跟随相机下一帧落位
+window._mini.focus(x, z, zoom?)        // teleport + 可选正交 zoom（越大视野越广）
+```
+
+- 坐标即世界坐标：主城广场 `(0, 0)`，星语北城核心约 `(0, -60)`，Echo 区中心 `(68, 0)`（天文台在 `(72, -4.55)`）。
+- `zoom` 是正交相机半高（`camera.top = zoom`），实际覆盖宽度还要乘以视口宽高比：默认 10（街景），15 为游戏内上限，19–25 适合区域级航拍（16:9 下 zoom 21 约取 74×42 世界单位，是北城或主城核心的量级，并非整张地图；整图需要 zoom 65+，但相机 `far = 120` 起会开始裁掉远处地面）。
+- `teleport` 会清空当前寻路状态（`clearPlayerPath()`），但不会清除导航目标标记（那是 `clearNavigationTarget()`）；不要放进建筑足印内。
+- `teleport`/`focus` 会立即把相机瞬移到玩家（`setTarget(x, z, instant)` 直接改写相机位置），所以「移动相机」通常就是移动玩家；但之后是否继续跟随取决于 `playerController.updateCamera`：CG/运镜激活、纸质地图打开、对话打开，或拖拽平移已 detach 跟随时，相机不再逐帧跟随——此时 `focus()` 只做一次瞬移。注意该瞬移内部会 `gsap.killTweensOf(target)`，在 CG/运镜进行中调用会打断它们。
+- `focus` 的 `zoom` 不走游戏内的 15 上限（`view.applyZoom` 不做 clamp），会一直保留到本次会话的滚轮/捏合重新夹取；拍完航拍用 `focus(x, z, 10)` 回到街景。
+
+常用取景示例：
+
+```js
+window._mini.focus(0, -63, 21)   // 星语北城全景（含两坊与作品街区）
+window._mini.focus(-16, -70, 9)  // 西坊街景近景
+window._mini.focus(0, 0, 12)     // 主城广场
+```
+
 ## 基础对象
 
 ```js
@@ -16,6 +55,8 @@ window._mini.navigation
 window._mini.cameraZoom
 window._mini.getPlayerPath()
 ```
+
+`cameraZoom` 为只读数值快照，`camera` 是实时 `THREE.Camera` 对象（直接改它只影响本帧观感，会被下一帧跟随覆盖）；改取景请用上面的 `teleport` / `focus`。
 
 ## 建筑、住宅和居民
 

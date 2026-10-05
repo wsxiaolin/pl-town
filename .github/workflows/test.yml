@@ -11,6 +11,9 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   # Static checks + unit/domain + server tests run on the runner directly; none
   # of them need WebGL, so they stay fast and shard-free.
@@ -44,6 +47,19 @@ jobs:
 
       - name: Server integration tests
         run: npm run test:server
+
+  actionlint:
+    name: Lint workflows (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # YAML parsing cannot catch invalid expressions like a mistyped
+      # `${{ secrets.X }}` or non-ASCII homoglyphs in workflow files; actionlint
+      # can. Pin the image digest so an upstream release can't turn this red on
+      # unrelated files.
+      - name: Run actionlint
+        run: docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
 
   # The admin console is plain DOM (no WebGL), so it only needs a headless
   # Chromium. Runs on PRs too: the shop editor and sidebar assertions in

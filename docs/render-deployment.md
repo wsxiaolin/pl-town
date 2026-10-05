@@ -54,6 +54,12 @@ DEPLOY_SNAPSHOT_TOKEN=<与 Render 环境变量相同的令牌>
 RENDER_DEPLOY_HOOK_URL=<Render Deploy Hook，可选>
 ```
 
+凭据校验分三种情况：
+
+- **两个 secret 都缺失**：默认（`SNAPSHOT_REQUIRED` 未设置或非真值）保持 warning 并跳过，避免一次配置疏漏卡死已合入 main 的 push；设置仓库变量 `SNAPSHOT_REQUIRED=true` 可改为直接失败。跳过只对 Run 页面可见（annotation + job summary），发送邮件通知需要配合 `SNAPSHOT_REQUIRED=true` 让运行变红。
+- **只配置了其中一个**：视为配置错误（半轮换/拼写错误的密钥），任何触发方式下工作流都会直接失败，失败信息会点名缺失的变量——这是备份静默停止的最常见形态，不允许降级为跳过。
+- **两个都配置**：正常执行快照。
+
 `DEPLOY_SNAPSHOT_TOKEN` 至少 32 字符，只用于 CI；不要把它写进仓库。空库会返回 HTTP 409，工作流按跳过处理，不会覆盖 OSS 上已有快照。首次部署没有远端备份时，服务以空库启动。测试账号和密码不得与生产复用。
 
 Render 的负载均衡器终止 TLS 并将请求转发给服务；其官方安全说明建议应用从 `X-Forwarded-For` 读取真实客户端 IP。因此此单层测试拓扑设置 `TRUST_PROXY_HOPS=1`。[Render Web Services](https://render.com/docs/web-services) [Render DDoS guidance](https://render.com/articles/how-render-handles-ddos-attacks)

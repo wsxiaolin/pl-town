@@ -57,7 +57,12 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // 2026-10-02.north.1: 星语北城（黑洞热门作品 Top100 城市化）——新增
   // 12 栋 north_* 作品建筑（BUILDING_CATALOG 重新生成后自动追加为治理
   // 项目）。既有项目与 initialBuiltBuildingIds 零改动。
-  version: '2026-10-02.north.1',
+  // 2026-10-04.unlock.1: 默认解锁策略——参议院与北城 11 栋作品建筑
+  // （鸽子广场除外）由 boot 时的赠礼补全直接建成（见
+  // cityGovernanceMigration.DEFAULT_COMPLETED_BUILDING_IDS 与
+  // cityGovernanceSchema 的赠礼补全步骤）。项目定义保持不可变，鸽子
+  // 广场仍是需要居民共同筹建的工程。
+  version: '2026-10-04.unlock.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))
