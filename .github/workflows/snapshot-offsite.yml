@@ -15,6 +15,9 @@ concurrency:
   group: snapshot-offsite
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   snapshot:
     name: Snapshot live Render SQLite to OSS
@@ -29,13 +32,44 @@ jobs:
           RENDER_SNAPSHOT_URL: ${{ secrets.RENDER_SNAPSHOT_URL }}
           DEPLOY_SNAPSHOT_TOKEN: ${{ secrets.DEPLOY_SNAPSHOT_TOKEN }}
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          # Set the SNAPSHOT_REQUIRED repository variable to 'true' to make a
+          # missing secret a hard failure on every trigger (including push).
+          SNAPSHOT_REQUIRED: ${{ vars.SNAPSHOT_REQUIRED }}
         run: |
-          if [ -z "${RENDER_SNAPSHOT_URL}" ] || [ -z "${DEPLOY_SNAPSHOT_TOKEN}" ]; then
-            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-              echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are required" >&2
+          decision="$(bash scripts/snapshot-gate.sh)"
+          case "$decision" in
+            run)
+              bash scripts/snapshot-offsite.sh
+              ;;
+            fail)
+              # Name what is actually missing: a partially-rotated or typo'd
+              # secret (exactly one of the pair set) is the realistic way
+              # backups silently stop, and it must not hide behind a generic
+              # "not configured" message.
+              missing=""
+              [ -z "$RENDER_SNAPSHOT_URL" ] && missing="RENDER_SNAPSHOT_URL"
+              [ -z "$DEPLOY_SNAPSHOT_TOKEN" ] && missing="${missing:+$missing }DEPLOY_SNAPSHOT_TOKEN"
+              echo "Snapshot secrets missing: ${missing:-unknown}" >&2
               exit 1
-            fi
-            echo "Skipping snapshot: configure RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN repository secrets"
-            exit 0
-          fi
-          bash scripts/snapshot-offsite.sh
+              ;;
+            skip)
+              # A skipped push used to be a silent success, so a missing secret
+              # looked like a healthy backup. Surface it in the run UI and the
+              # step summary instead of failing the push by default; set the
+              # SNAPSHOT_REQUIRED repository variable to make it hard-fail.
+              # (Visibility is the run page annotation + job summary; with the
+              # common "failed workflows only" notification setting a green
+              # run sends no email — use SNAPSHOT_REQUIRED=true for that.)
+              echo "::warning::Skipping snapshot: RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured"
+              {
+                echo "### Snapshot skipped"
+                echo "RENDER_SNAPSHOT_URL and DEPLOY_SNAPSHOT_TOKEN are not configured; no offsite backup was taken and the Render deploy hook was not triggered for this push."
+                echo "Set the SNAPSHOT_REQUIRED repository variable to true to fail instead of warning."
+              } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              ;;
+            *)
+              # Never silently degrade an unexpected gate result into "skip".
+              echo "snapshot-gate.sh returned an unexpected decision: $decision" >&2
+              exit 1
+              ;;
+          esac

@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { RENDER_SETTINGS, seedCityStorage, stubNewsstandWebSocket, waitForCityBooted } from './helpers';
 
+// SUSPENDED-MODE TEST — when the echo story is restored (flip the checklist
+// in apps/web/vite.config.ts), this case must be rewritten to assert the
+// restored behaviour (linche opens the real dialog, guide header appears
+// after entry), not deleted: it is the only e2e pin on the echo gate.
 test('echo story entry stays suspended and the guide header stays hidden', async ({ page }) => {
   await page.addInitScript(({ settings }) => {
     localStorage.setItem('minicityCGSeenV3', 'true');
