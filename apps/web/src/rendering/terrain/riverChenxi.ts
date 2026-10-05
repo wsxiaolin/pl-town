@@ -5,6 +5,16 @@
 // 导航可达至 z=-88）背后的山谷向西，河口 (-56,-98) 整段没入西海
 // （西海面 y=0.06、不透明，覆盖 x∈[-139,-43.2±wobble]，见 westBeach.ts）。
 //
+// v3 河口重做（2026-10-04，sin 反馈「河流入海处不符合规律」）：
+// - 宽度规律：源头 1.6 → 中游 2.8 → 河口 6.0（半宽，分段 smoothstep），
+//   下游持续展宽，不再是等宽水渠；
+// - 河口湾（estuary）：可见入海点（西海面东缘 ≈ x -42.6、沙滩带内）铺
+//   喇叭形湾面（y=0.08，高于沙滩 0.07 与海面 0.06，整湾可见）：西端
+//   开口朝海、东端收窄尖灭叠在河道上方；湾内 3 座破水沙洲 + 湾缘
+//   礁石；湾水色向海色偏移 35%（河水入海的过渡感）；
+// - 西北岬群（sea-minglan headland-nw）同步北移让出河口湾外的开阔
+//   海面——河流入海不再正对山体。
+//
 // v2 改线（2026-10）：星语北城（PR #196）并入后占据 x∈[-33.5,33.5]、
 // z∈[-36,-80]，旧线（z -52..-74）穿城且压在 150×150 的 district 平面
 // （y=0.018，±75）上仅差 0.002。新线全程 z ≤ -95，与城区 keep-out 盒
@@ -37,7 +47,7 @@
 // westBeach / sceneInterestPoints 的 userData.dynamicMaterial 约定。
 import * as THREE from 'three';
 import { createPondWaterSurface } from '../animatedWater';
-import { CHENXI_RIVER } from '../../city/data/terrain/river-chenxi';
+import { CHENXI_RIVER, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../city/data/terrain/river-chenxi';
 
 // ── y 层（本文件唯一事实来源，间距论证见头注释）───────────────────────
 const RIVERBED_Y = 0.02;
@@ -45,9 +55,10 @@ const BANK_Y = 0.024;
 const WATER_Y = 0.048;
 
 // ── 形状参数 ──────────────────────────────────────────────────────────
-const RING_COUNT = 104; // 曲线采样环数（105 个中心点；河长约 121 → ≈1.2 单位/环）
-const SPRING_HALF_WIDTH = 2; // 源头半宽（全宽 4，向上游收细）
-const MOUTH_HALF_WIDTH = 3; // 河口半宽（全宽 6，山谷河幅比旧线收窄）
+const RING_COUNT = 140; // 曲线采样环数（141 个中心点；河长约 121 → ≈0.86 单位/环）
+const SPRING_HALF_WIDTH = 1.6; // 源头半宽（全宽 3.2，向上游收细）
+const MID_HALF_WIDTH = 2.8; // 中游半宽（全宽 5.6）
+const MOUTH_HALF_WIDTH = 6; // 河口半宽（全宽 12，向河口持续展宽）
 const MIN_HALF_WIDTH = 0.6; // 抖动下的半宽下限
 const BED_EXTRA = 1.5; // 河床条带每侧比水面外扩
 const BANK_INNER_EXTRA = 0.15; // 河岸内缘：水线外一点，露出窄条湿河床沿
@@ -59,6 +70,16 @@ const WOBBLE_SEED = 20261002; // 固定种子——宽度抖动必须确定性�
 const SCENERY_SEED = 7041991; // 岸景布置种子（同上）
 const PINE_CANDIDATES = 42; // 候选数（剔除后实际布置约 20-24 棵）
 const BOULDER_CANDIDATES = 18; // 候选数（剔除后实际布置约 12-14 块）
+
+// ── 河口湾（estuary）──────────────────────────────────────────────────
+// v3（sin 反馈「河流入海处不符合规律」）：河流不再以等宽细条「插进」海面，
+// 而是在可见入海点（西海面东缘 x ≈ -42.6 以东、沙滩带内）铺一片喇叭形
+// 河口湾水面——西端开口朝海（半宽 6.4+），向东收窄尖灭（1.5）叠在河道
+// 上游上方，读作「河道入海前展宽成湾」。y = 0.08：高于沙滩（0.07）
+// 与海面（0.06），整湾可见；湾内沙洲破水而出。喇叭最大半宽 7 → 北缘
+// z ≈ -90.3，仍在 WORLD_BOUNDS（可步行 z ≥ -88）之外。
+// 几何参数（中轴/半宽表、排除盒）在 data 层 river-chenxi.ts（配置先行）。
+const ESTUARY_Y = 0.08;
 
 // ── 排除区钳制参数（论证见头注释）─────────────────────────────────────
 const NAV_EDGE_Z = -89.2; // 星语北城/导航区（可步行至 z=-88）以南，再留 1.2 边距
@@ -188,12 +209,15 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   // +perp = 行进方向北侧（z 分量恒正：河水全程向西，T.x < 0 → P.z = -T.x > 0）
   const perps = tangents.map((tangent) => new THREE.Vector3(tangent.z, 0, -tangent.x));
 
-  // 半宽：源头 2 → 河口 3（smoothstep 缓动）+ 确定性抖动，免得像激光笔直
+  // 半宽：源头 1.6 → 中游 2.8（t 0.55）→ 河口 6.0（t 1）分段 smoothstep，
+  // + 确定性抖动。v3：下游持续展宽（旧版河口仅 3），入海前河道自然变宽。
   const wobble = buildWidthWobble(centers.length);
   const halfWidths = centers.map((_, i) => {
     const t = i / lastRing;
-    const ease = t * t * (3 - 2 * t);
-    return Math.max(MIN_HALF_WIDTH, THREE.MathUtils.lerp(SPRING_HALF_WIDTH, MOUTH_HALF_WIDTH, ease) + wobble[i]!);
+    const width = t < 0.55
+      ? THREE.MathUtils.lerp(SPRING_HALF_WIDTH, MID_HALF_WIDTH, THREE.MathUtils.smoothstep(t, 0, 0.55))
+      : THREE.MathUtils.lerp(MID_HALF_WIDTH, MOUTH_HALF_WIDTH, THREE.MathUtils.smoothstep(t, 0.55, 1));
+    return Math.max(MIN_HALF_WIDTH, width + wobble[i]!);
   });
   // 河口段河床/岸按弧长收窄消失；水面不收窄，继续伸到路径终点（在海面下）
   const mouthFades = centers.map((_, i) => (
@@ -283,6 +307,79 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   object.add(waterSurface.water);
   disposables.push(waterGeometry, waterSurface.water.material as THREE.Material);
 
+  // ── 河口湾（estuary）：喇叭形湾面 + 破水沙洲 + 湾缘砾石 ──────────────
+  // 几何：手写三角条带（法线 ±z 向），中轴/半宽按 ESTUARY_PROFILE
+  // smoothstep 插值细分，边缘 ±12% 确定性扰动——绝不读作等宽水渠。
+  const estuaryRand = mulberry32(0x65737475); // 'estu'
+  const estuaryRings: Array<{ x: number; z: number; half: number }> = [];
+  for (let segment = 0; segment + 1 < ESTUARY_PROFILE.length; segment += 1) {
+    const a = ESTUARY_PROFILE[segment]!;
+    const b = ESTUARY_PROFILE[segment + 1]!;
+    const subdivisions = 4;
+    for (let step = 0; step < subdivisions; step += 1) {
+      const t = step / subdivisions;
+      const ease = t * t * (3 - 2 * t);
+      const x = THREE.MathUtils.lerp(a[0], b[0], ease);
+      const z = THREE.MathUtils.lerp(a[1], b[1], ease);
+      const half = THREE.MathUtils.lerp(a[2], b[2], ease) * (1 + (estuaryRand() - 0.5) * 0.24);
+      estuaryRings.push({ x, z, half });
+    }
+  }
+  estuaryRings.push({ x: ESTUARY_PROFILE[ESTUARY_PROFILE.length - 1]![0], z: ESTUARY_PROFILE[ESTUARY_PROFILE.length - 1]![1], half: ESTUARY_PROFILE[ESTUARY_PROFILE.length - 1]![2] });
+
+  const estuaryPositions: number[] = [];
+  for (let ring = 0; ring + 1 < estuaryRings.length; ring += 1) {
+    const current = estuaryRings[ring]!;
+    const next = estuaryRings[ring + 1]!;
+    // 逆时针绕向（从上看）：北边(-z) → 南边(+z)……水面单面朝上即可：
+    // 顶点序 (北current, 北next, 南current) + (南current, 北next, 南next)。
+    const nc = [current.x, ESTUARY_Y, current.z - current.half];
+    const nn = [next.x, ESTUARY_Y, next.z - next.half];
+    const sc = [current.x, ESTUARY_Y, current.z + current.half];
+    const sn = [next.x, ESTUARY_Y, next.z + next.half];
+    estuaryPositions.push(...nc, ...nn, ...sc, ...sc, ...nn, ...sn);
+  }
+  const estuaryGeometry = new THREE.BufferGeometry();
+  estuaryGeometry.setAttribute('position', new THREE.Float32BufferAttribute(estuaryPositions, 3));
+  estuaryGeometry.computeVertexNormals();
+  const estuarySurface = createPondWaterSurface(estuaryGeometry, {
+    sunDirection: new THREE.Vector3(0.5, 0.8, 0.35),
+    waterColorDay: waterColorDay.clone().lerp(new THREE.Color(0x5f93ad), 0.35), // 向海色偏移：河水入海的过渡感
+    waterColorNight: new THREE.Color(0x1c3b46),
+    sunColorDay: new THREE.Color(0xbdd4e6),
+    sunColorNight: new THREE.Color(0x3a4a6a),
+    timeScale: 0.8,
+    size: 6, // 湾面更宽，波纹 tile 略小
+    alpha: 0.9,
+  });
+  estuarySurface.water.name = 'river-chenxi-estuary';
+  object.add(estuarySurface.water);
+  disposables.push(estuaryGeometry, estuarySurface.water.material as THREE.Material);
+
+  // 湾内沙洲：低多边形沙锥破水而出（顶 y ≈ 0.2..0.5 > 湾面 0.08），
+  // 位置/尺寸全确定性。读作入海口淤积的河口沙洲。
+  const barMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c8a2, roughness: 0.97, metalness: 0, flatShading: true });
+  disposables.push(barMaterial);
+  const SANDBARS: ReadonlyArray<readonly [number, number, number, number]> = [
+    // [x, z, 底半径, 高]
+    [-42.6, -100.2, 2.0, 0.5],
+    [-39.4, -95.8, 1.6, 0.42],
+    [-36.8, -99.2, 2.3, 0.6],
+  ];
+  for (const [barX, barZ, barRadius, barHeight] of SANDBARS) {
+    const barGeometry = new THREE.ConeGeometry(barRadius, barHeight, 7);
+    disposables.push(barGeometry);
+    const bar = new THREE.Mesh(barGeometry, barMaterial);
+    bar.name = `river-chenxi-sandbar:${barX}`;
+    // 锥底沉到湾面之下（y = -0.3），锥顶破水而出
+    bar.position.set(barX, -0.3 + barHeight / 2, barZ);
+    bar.rotation.y = estuaryRand() * Math.PI * 2;
+    bar.castShadow = true;
+    bar.receiveShadow = true;
+    object.add(bar);
+  }
+
+
   // ── 岸景：低多边形松林与砾石（固定种子确定性布置；落入排除区/海面的
   //    候选直接剔除，几何共享以控制 draw call 与 dispose 次数）──────────
   const pineTrunkGeometry = new THREE.CylinderGeometry(0.07, 0.12, 0.5, 6);
@@ -310,6 +407,25 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
 
   const sceneryRand = mulberry32(SCENERY_SEED);
 
+  // 湾缘砾石：湾口两侧的水线礁石，打破几何边缘（boulder 几何/材质与
+  // 岸景共享，因此放在岸景材质创建之后布置）。
+  for (let index = 0; index < 4; index += 1) {
+    const ringIndex = Math.floor(estuaryRand() * estuaryRings.length);
+    const ring = estuaryRings[ringIndex]!;
+    const side = estuaryRand() < 0.5 ? 1 : -1;
+    const stoneX = ring.x + (estuaryRand() - 0.5) * 2.4;
+    const stoneZ = ring.z + side * (ring.half + 0.5 + estuaryRand() * 1.4);
+    const scale = 0.4 + estuaryRand() * 0.9;
+    const stone = new THREE.Mesh(boulderGeometry, boulderMaterials[Math.floor(estuaryRand() * boulderMaterials.length)]!);
+    stone.name = `river-chenxi-estuary-stone-${index}`;
+    stone.position.set(stoneX, scale * 0.38, stoneZ);
+    stone.scale.setScalar(scale);
+    stone.rotation.set(estuaryRand() * Math.PI, estuaryRand() * Math.PI, estuaryRand() * Math.PI);
+    stone.castShadow = true;
+    stone.receiveShadow = true;
+    object.add(stone);
+  }
+
   function frameAt(t: number): { center: THREE.Vector3; perp: THREE.Vector3; tangent: THREE.Vector3; index: number } {
     const index = Math.min(lastRing, Math.max(0, Math.round(t * lastRing)));
     return { center: centers[index]!, perp: perps[index]!, tangent: tangents[index]!, index };
@@ -320,6 +436,9 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     if (x - radius < SEA_SCENERY_MIN_X) return false; // 西海面（树/石不得立在水面上）
     if (x - radius < ISLAND_SCENERY_MIN_X) return false; // 离岛协作区
     if (Math.abs(x) > GROUND_LIMIT || Math.abs(z) > GROUND_LIMIT) return false; // 地面范围
+    // 河口湾：湾面/沙洲一带不放岸景（那里是水面与沙滩）
+    if (x + radius > ESTUARY_BBOX.x0 && x - radius < ESTUARY_BBOX.x1
+      && z + radius > ESTUARY_BBOX.z0 && z - radius < ESTUARY_BBOX.z1) return false;
     return true;
   }
 
@@ -363,13 +482,22 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     return boulder;
   }
 
-  // 松树：沿河两岸疏林，距中心线 ≥5（岸外缘之外），整株下沉 0.05 入地
+  // 松树：沿河两岸疏林，距中心线 ≥ halfWidth+1.2（岸外缘之外），整株下沉 0.05 入地。
+  // v3：两岸 offset 按边界动态封顶——「z+ 侧」（朝导航边 z=-88）以
+  // NAV_EDGE_Z 含树半径为 cap，「z- 侧」（朝地面边界 -110）以
+  // GROUND_LIMIT 含树半径为 cap。v2 改线后河紧贴导航边，固定 offset
+  // 会让南岸树全灭（布 3 棵触发 console.warn）、北岸树大量出界。
   let placedPines = 0;
   for (let i = 0; i < PINE_CANDIDATES; i += 1) {
     const t = (i + sceneryRand() * 0.9 + 0.05) / PINE_CANDIDATES;
     const side = sceneryRand() < 0.5 ? 1 : -1;
     const { center, perp, tangent, index } = frameAt(t);
-    const offset = Math.max(5, halfWidths[index]! + BANK_EXTRA + 0.8 + sceneryRand() * 3.2);
+    const minOffset = halfWidths[index]! + 1.2;
+    const base = halfWidths[index]! + BANK_EXTRA + 0.8 + sceneryRand() * 3.2;
+    const towardNav = perp.z * side > 0;
+    const cap = towardNav ? (NAV_EDGE_Z - 1.6) - center.z : center.z + (GROUND_LIMIT - 1.6);
+    const offset = Math.min(Math.max(minOffset, base), Math.max(minOffset, cap));
+    if (offset > cap) continue;
     const along = (sceneryRand() - 0.5) * 2.4;
     const x = center.x + perp.x * offset * side + tangent.x * along;
     const z = center.z + perp.z * offset * side + tangent.z * along;
@@ -409,11 +537,13 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     object,
     update(elapsedSeconds: number) {
       // 水面动画：pond 水体着色器的 time uniform（四层法线贴图漂移）+
-      // 日/夜水色与日光色的缓动过渡
+      // 日/夜水色与日光色的缓动过渡（河面 + 河口湾面）
       waterSurface.update(elapsedSeconds);
+      estuarySurface.update(elapsedSeconds);
     },
     setDaylight(value: number, instant = false) {
       waterSurface.setDaylight(value, instant);
+      estuarySurface.setDaylight(value, instant);
     },
     dispose() {
       object.removeFromParent();

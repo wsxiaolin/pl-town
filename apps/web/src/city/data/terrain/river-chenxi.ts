@@ -31,6 +31,27 @@ const CHENXI_RIVER_PATH: Array<[number, number]> = [
  * - forest：两岸疏林带（渲染器以固定种子沿 path 两侧散布低多边形松树，
  *   距中心线 ≥5；描述的是实际渲染的岸林，非导航阻挡）。
  */
+
+/**
+ * 河口湾（estuary）中轴采样（v3，2026-10-04）：[x, 中心 z, 半宽]，
+ * 自海侧开口（x -44.2）至上游尖灭（x -33.2）。河流不再以等宽细条
+ * 「插进」海面，而是在可见入海点（西海面东缘 ≈ x -42.6、沙滩带内）
+ * 铺喇叭形湾面：西端开口朝海，向东收窄叠在河道上方。渲染实现
+ * riverChenxi.ts 按 y = 0.08（高于沙滩 0.07 / 海面 0.06）铺面，
+ * 喇叭最大半宽 7 → 北缘 z ≈ -90.3，仍在 WORLD_BOUNDS（z ≥ -88）之外。
+ * 数值审计见 tests/unit/worldTerrainAudit.test.ts。
+ */
+export const ESTUARY_PROFILE: ReadonlyArray<readonly [number, number, number]> = [
+  [-44.2, -97.8, 6.4],
+  [-41.5, -97.4, 7.0],
+  [-38.5, -97.0, 5.6],
+  [-35.5, -96.6, 3.6],
+  [-33.2, -96.4, 1.5],
+];
+
+/** 湾水舌 + 沙洲的包围盒（岸景排除用，含边缘扰动余量）。 */
+export const ESTUARY_BBOX = { x0: -46, x1: -31.5, z0: -106, z1: -89 };
+
 export const CHENXI_RIVER: readonly TerrainFeatureConfig[] = [
   {
     id: 'river-chenxi',

@@ -9,6 +9,19 @@
 // 远脊条目自带的浅冷雾霾色阶因此保留）。山体按「麓丘 → 主脊 → 远脊」
 // 三排纵深排布；山麓裙摆散布 observatory-song 式叠锥针叶松。
 //
+// v5 精细化（2026-10-04，sin 反馈「太粗糙、太小、山脚地面缺处理」）：
+// - 多峰 massif：主峰外按体量融合 1..3 座沿链轴偏移的副峰（逐点 max），
+//   一条配置 = 一段连绵山脉，剪影不再孤立；
+// - 网格密度分级翻倍（主脊 22 环 × 40 段）+ 山脊角谐波加 7 倍频小项
+//   + fBm 细节格点加密（角 10 / 径 6）+ 纹理尺度 5 → 3.2：同体量下
+//   折面数量约 4×，棱线细腻度质变；
+// - 麓原裙（piedmont）：每座山脚生成朝城收束（半径 = 审计半径 r，不进
+//   城区/导航盒）、背城展开（1.5r）的缓坡基座（最高 1.2..7 单位），
+//   山体从麓原上拔起而非「切」进平地；麓原网格进 raycast 集，
+//   松树/碎石可贴坡；
+// - 坡脚碎石带（talus）：每座山脚散布 3..7 块 flatShading 砾石，
+//   打破底缘的几何切割线。
+//
 // 山体生成器（径向高度场 massif）：
 // - 每座峰是一张圆盘高度场网格，半径 r = width/2。平面底盘由 3..5 瓣
 //   低频角向噪声扰动（±22..30%，永不圆/椭圆），并沿 id 种子轴拉伸
@@ -63,26 +76,22 @@ const RIVER_POLYLINE: ReadonlyArray<readonly [number, number]> = [
   [64, -95], [42, -97], [18, -96], [-6, -98], [-28, -97], [-46, -99], [-56, -98],
 ];
 const RIVER_CLEARANCE = 7.5;
-// 峰体基座埋入深度：底环永远在地表以下，不露缝隙。
-const BASE_BURY = 0.35;
-// 松树沿坡面放置时的下沉量：底面略埋入地表/坡面，永不悬浮。
 const PINE_SINK = 0.06;
-// 松树只落在坡脚带：地表高度超过该值的候选点跳过。v4 巨型化后麓丘
-// h 15..35（旧 8..12），坡面在 ~40% 半径外即超过旧阈值 6.5，树会全部
-// 落空——按新体量放宽到 12（树群配置点已对准裙摆，落在坡脚带）。
-const MAX_PINE_GROUND_Y = 12;
-// 双峰变体的确定性阈值（概率/最小主峰半径沿用旧版；半径按新规模天然覆盖）。
-const TWIN_SUMMIT_PROBABILITY = 0.3;
-const TWIN_MIN_RADIUS = 9;
-// 雪带下限：只有海拔达到该值的峰出雪。v4 主脊 h 70..140、麓丘 h 15..35，
-// 旧阈值 14 会让每座麓丘都积雪——抬高到 26（溪谷侧丘 8..16 永不出雪，
-// 麓丘基本保持草甸-岩壁，主脊全面雪冠）。
-const SNOW_MIN_PEAK_HEIGHT = 26;
-// fBm 细节噪声格点密度：角向取整数格，噪声沿圆周周期延拓无缝。
-const DETAIL_ANGULAR_CELLS = 6;
-const DETAIL_RADIAL_CELLS = 3;
-// 三平面纹理世界尺度：≈5 世界单位/格（规格 4..6）。
-const TERRAIN_TEXTURE_SCALE = 5;
+// 松树只落在坡脚带：地表高度超过该值的候选点跳过。v5 麓丘 h 32..58，
+// 麓原最高抬 7——坡面在 ~55% 半径外即超过旧阈值 12，放宽到 22
+// （树群配置点已对准麓原缓坡带）。
+const MAX_PINE_GROUND_Y = 22;
+// 多峰 massif：主峰外按体量融合 1..3 座副峰（沿主峰拉伸轴 ± 偏移，
+// 逐点 max，鞍部连续）。副峰包络被主峰半径 r 完全包含（偏移 + 副半径
+// ≤ 0.75 + 0.64 < 1.0，审计安全不变）。
+const MULTI_SUMMIT_MAX_RADIUS = 40; // 主峰 r ≥ 40：2..3 副峰
+const MULTI_SUMMIT_MIN_RADIUS = 18; // 主峰 r ≥ 18：1..2 副峰
+const MULTI_SUMMIT_SMALL_PROBABILITY = 0.3; // 小丘：30% 概率单副峰
+// 雪带下限：只有海拔达到该值的峰出雪。v5 主脊 h 104..208、麓丘 h 32..58，
+// 抬高到 44（溪谷侧丘 13..24 永不出雪，麓丘保持草甸-岩壁，主脊全面雪冠）。
+const SNOW_MIN_PEAK_HEIGHT = 44;
+// 三平面纹理世界尺度：v5 从 5 收到 3.2（单位面积纹理格数 ×2.4）。
+const TERRAIN_TEXTURE_SCALE = 3.2;
 // aBand.y 的「无雪带」哨兵值：雪线 smoothstep 永远达不到。
 const NO_SNOW_BAND = 99;
 
@@ -104,243 +113,24 @@ const APRON_LOBES: ReadonlyArray<readonly [number, number, number, number]> = [
   [520, 310, 0, 265], // 南瓣 x∈[-260,260] z∈[110,420]
 ];
 
-type Vec2 = readonly [number, number];
+import {
+  BASE_BURY,
+  DETAIL_ANGULAR_CELLS,
+  DETAIL_RADIAL_CELLS,
+  hashString,
+  mulberry32,
+  hashNoise,
+  angularHarmonics,
+  angularLobes,
+  smoothStep,
+  clamp01,
+  type Vec2,
+  type MassifLobe,
+  type MassifShape,
+  massifSurfaceY,
+  buildRadialFieldGeometry,
+} from './massifGeometry';
 
-function hashString(text: string): number {
-  // FNV-1a 32bit
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** 旧抖动锥遗留的纯位置哈希噪声：松树锥面微抖动仍复用（确定性）。 */
-function hashNoise(angle: number, ring: number, seed: number): number {
-  const value = Math.sin(angle * 127.1 + ring * 311.7 + seed * 74.7) * 43758.5453;
-  return (value - Math.floor(value)) * 2 - 1;
-}
-
-// ── 确定性噪声工具（整数格点哈希 → 周期 value noise → fBm）───────────
-
-/** 整数格点哈希，返回 [0,1)。同格点同种子永远同值。 */
-function latticeNoise(ix: number, iy: number, seed: number): number {
-  let hash = (Math.imul(ix, 0x27d4eb2f) ^ Math.imul(iy, 0x165667b1) ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
-  hash = Math.imul(hash ^ (hash >>> 15), 0x85ebca6b) >>> 0;
-  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35) >>> 0;
-  hash = (hash ^ (hash >>> 16)) >>> 0;
-  return hash / 4294967296;
-}
-
-/** 二维 value noise；x 方向按 periodX 取模回绕，沿圆周采样时天然无缝。 */
-function valueNoise2(x: number, y: number, seed: number, periodX: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const x0 = ((ix % periodX) + periodX) % periodX;
-  const x1 = (x0 + 1) % periodX;
-  const n00 = latticeNoise(x0, iy, seed);
-  const n10 = latticeNoise(x1, iy, seed);
-  const n01 = latticeNoise(x0, iy + 1, seed);
-  const n11 = latticeNoise(x1, iy + 1, seed);
-  return (n00 * (1 - ux) + n10 * ux) * (1 - uy) + (n01 * (1 - ux) + n11 * ux) * uy;
-}
-
-/** 2~3 阶 fBm，返回约 [-1,1]。角向频率逐阶翻倍且保持整数周期。 */
-function fbm2(x: number, y: number, seed: number, periodX: number, octaves: number): number {
-  let amplitude = 1;
-  let sum = 0;
-  let norm = 0;
-  let frequency = 1;
-  for (let octave = 0; octave < octaves; octave += 1) {
-    sum += amplitude * (valueNoise2(x * frequency, y * frequency, seed + octave * 40503, periodX * frequency) * 2 - 1);
-    norm += amplitude;
-    amplitude *= 0.5;
-    frequency *= 2;
-  }
-  return sum / norm;
-}
-
-/** 角谐波（2/3/5 倍频正弦叠加，相位由种子哈希）：山脊折线的基底。 */
-function angularHarmonics(angle: number, seed: number): number {
-  const phase2 = latticeNoise(101, 7, seed) * Math.PI * 2;
-  const phase3 = latticeNoise(233, 13, seed) * Math.PI * 2;
-  const phase5 = latticeNoise(701, 29, seed) * Math.PI * 2;
-  return 0.55 * Math.sin(angle * 2 + phase2) + 0.3 * Math.sin(angle * 3 + phase3) + 0.15 * Math.sin(angle * 5 + phase5);
-}
-
-/** 3..5 瓣低频角向轮廓噪声（约 ±1 归一化）：底盘裂瓣形底缘，永不圆/椭圆。 */
-function angularLobes(angle: number, seed: number): number {
-  const phase3 = latticeNoise(37, 11, seed) * Math.PI * 2;
-  const phase4 = latticeNoise(53, 19, seed) * Math.PI * 2;
-  const phase5 = latticeNoise(97, 31, seed) * Math.PI * 2;
-  return 0.5 * Math.sin(angle * 3 + phase3) + 0.32 * Math.sin(angle * 4 + phase4) + 0.18 * Math.sin(angle * 5 + phase5);
-}
-
-function smoothStep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-function clamp01(x: number): number {
-  return Math.min(1, Math.max(0, x));
-}
-
-// ── 径向高度场 massif ───────────────────────────────────────────
-
-/** 单个山体 lobe（主峰或双峰副瓣）。偏移/半径按主峰半径归一化。 */
-type MassifLobe = {
-  offsetX: number;
-  offsetZ: number;
-  radius: number;
-  heightFraction: number; // 相对 shape.height 的高度比
-  k: number; // 峰型剖面指数（2.2..2.9，陡壁凹坡）
-  elongAxis: number; // 拉伸轴方向（弧度）
-  elongation: number; // 拉伸比 1.25..1.6（横轴收窄 1/拉伸比）
-  leanAngle: number; // 迎坡不对称方向
-  lean: number; // 迎坡拉伸量（0..0.12）
-  silhouetteAmp: number; // 裂瓣底缘不规则度（0.2..0.3）
-  silSeed: number;
-  ridgeAmp: number; // 主脊角谐波幅度（0.12..0.18·h）
-  ridgeSeed: number;
-  ridgeAmp2: number; // 偏轴副脊幅度（0.05..0.09·h）
-  crest2Shift: number; // 副脊相位偏移（离开主轴）
-  crest2Seed: number;
-};
-
-type MassifShape = {
-  height: number;
-  bury: number; // 底环 y（负值 = 埋地）
-  detailAmp: number; // fBm 细节幅度（相对 height）
-  detailSeed: number;
-  main: MassifLobe;
-  twin: MassifLobe | null;
-};
-
-/** lobe 在归一化坐标 (xn, zn) 处的高度占比（0..约1.2）。 */
-function lobeFraction(lobe: MassifLobe, xn: number, zn: number): number {
-  const dx = xn - lobe.offsetX;
-  const dz = zn - lobe.offsetZ;
-  const rho = Math.hypot(dx, dz);
-  const angle = Math.atan2(dz, dx);
-  // 定向拉伸：沿 elongAxis 保持半径，垂直方向收窄 1/elongation——
-  // 剪影读作岭链而非圆顶；包络仍被半径 r 完全包含（审计安全）。
-  const delta = angle - lobe.elongAxis;
-  const rhoElong = rho * Math.hypot(Math.cos(delta), Math.sin(delta) * lobe.elongation);
-  // 裂瓣底缘：3..5 瓣低频角向噪声（±silhouetteAmp）。
-  const silhouette = 1 + lobe.silhouetteAmp * angularLobes(angle, lobe.silSeed);
-  const rhoN = rhoElong / silhouette;
-  if (rhoN >= 1) return 0;
-  // 迎坡方向剖面半径拉长 → 缓坡长脊；背坡收短 → 陡峭反坡（不对称 massif）。
-  const stretched = rhoN / (1 + lobe.lean * Math.cos(angle - lobe.leanAngle));
-  const profile = 1 - Math.pow(stretched, lobe.k);
-  if (profile <= 0) return 0;
-  // 双频山脊：主脊角谐波 + 偏轴副脊，折面投影成放射状棱线。
-  const ridge = 1
-    + lobe.ridgeAmp * angularHarmonics(angle, lobe.ridgeSeed)
-    + lobe.ridgeAmp2 * angularHarmonics(angle + lobe.crest2Shift, lobe.crest2Seed);
-  return profile * ridge;
-}
-
-/** massif 表面世界高度：双 lobe max 融合 + fBm 细节 + 底缘埋地过渡。 */
-function massifSurfaceY(shape: MassifShape, xn: number, zn: number): number {
-  const rho = Math.min(Math.hypot(xn, zn), 1);
-  let fraction = lobeFraction(shape.main, xn, zn);
-  if (shape.twin) {
-    const twinFraction = lobeFraction(shape.twin, xn, zn) * shape.twin.heightFraction;
-    if (twinFraction > fraction) fraction = twinFraction;
-  }
-  const angle = Math.atan2(zn, xn);
-  const rimFade = 1 - smoothStep(0.72, 1, rho); // 近底缘细节渐隐，底环干净
-  const detail = fbm2(
-    (angle / (Math.PI * 2)) * DETAIL_ANGULAR_CELLS,
-    rho * DETAIL_RADIAL_CELLS,
-    shape.detailSeed,
-    DETAIL_ANGULAR_CELLS,
-    3,
-  ) * shape.detailAmp * rimFade;
-  const surfaced = Math.max(0, fraction + detail);
-  const buryBlend = Math.pow(rho, 6); // 底环精确落在 bury，向内光滑过渡
-  return shape.height * surfaced * (1 - buryBlend) + shape.bury * buryBlend;
-}
-
-// ── 圆盘高度场 → non-indexed 折面网格 ───────────────────────────
-
-type RadialFieldParams = {
-  radius: number;
-  rings: number;
-  segments: number;
-  /** 归一化平面轮廓（裂瓣底缘 + 拉伸包络的外接界），与表面函数共用谐波。 */
-  planRadius: (angle: number) => number;
-  /** 归一化坐标 (xn, zn) → 局部世界高度（含埋地）。 */
-  surfaceY: (xn: number, zn: number) => number;
-};
-
-function radialFieldVertex(params: RadialFieldParams, ring: number, segment: number, out: THREE.Vector3): void {
-  if (ring <= 0) {
-    out.set(0, params.surfaceY(0, 0), 0);
-    return;
-  }
-  const rhoN = ring / params.rings;
-  const angularOffset = ring % 2 === 0 ? 0 : 0.5; // 奇数环错开半扇区，棱面呈菱形交织
-  const wrapped = ((segment % params.segments) + params.segments) % params.segments;
-  const angle = ((wrapped + angularOffset) / params.segments) * Math.PI * 2;
-  const radial = rhoN * params.radius * params.planRadius(angle);
-  const x = Math.cos(angle) * radial;
-  const z = Math.sin(angle) * radial;
-  out.set(x, params.surfaceY(x / params.radius, z / params.radius), z);
-}
-
-/**
- * 圆盘高度场 → non-indexed 三角形网格。逐三角形直接发射顶点（不共享），
- * computeVertexNormals 得到真正的逐面法线：每个三角形都是一块干净棱面。
- */
-function buildRadialFieldGeometry(params: RadialFieldParams): THREE.BufferGeometry {
-  const positions: number[] = [];
-  const apex = new THREE.Vector3();
-  const a = new THREE.Vector3();
-  const b = new THREE.Vector3();
-  const c = new THREE.Vector3();
-  const d = new THREE.Vector3();
-  const emit = (p: THREE.Vector3, q: THREE.Vector3, r: THREE.Vector3): void => {
-    positions.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
-  };
-  radialFieldVertex(params, 0, 0, apex);
-  for (let segment = 0; segment < params.segments; segment += 1) {
-    radialFieldVertex(params, 1, segment, a);
-    radialFieldVertex(params, 1, segment + 1, b);
-    emit(apex, b, a); // 中心扇面（绕向朝外）
-  }
-  for (let ring = 1; ring < params.rings; ring += 1) {
-    for (let segment = 0; segment < params.segments; segment += 1) {
-      radialFieldVertex(params, ring, segment, a);
-      radialFieldVertex(params, ring, segment + 1, b);
-      radialFieldVertex(params, ring + 1, segment, c);
-      radialFieldVertex(params, ring + 1, segment + 1, d);
-      emit(a, d, c); // 环间四边形 → 两三角形（绕向朝外）
-      emit(a, b, d);
-    }
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-}
 
 // ── 逐面顶点色（链级色调 + AO 式明度抖动 + 冷色偏移）+ 着色器分带参数 ──
 
@@ -582,8 +372,9 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
 
   // 网格密度按体量分档：主脊更密（棱面更细腻），麓丘/侧丘更省（总面数可控）。
   const densityFor = (radius: number, height: number): { rings: number; segments: number } => ({
-    rings: height >= 60 ? 13 : height >= 30 ? 12 : height >= 15 ? 10 : 8,
-    segments: radius >= 45 ? 28 : radius >= 22 ? 24 : radius >= 12 ? 18 : 14,
+    // v5 密度分级翻倍：主脊 22×40（折面 ≈ 4×），麓丘 14×24，侧丘 10×18。
+    rings: height >= 60 ? 22 : height >= 30 ? 14 : height >= 15 ? 10 : 8,
+    segments: radius >= 45 ? 40 : radius >= 22 ? 24 : radius >= 12 ? 18 : 14,
   });
 
   function buildMassifShape(height: number, rng: () => number, cliff: boolean): MassifShape {
@@ -597,15 +388,15 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
       elongation: cliff ? 1.3 + rng() * 0.2 : 1.25 + rng() * 0.35,
       leanAngle: rng() * Math.PI * 2,
       lean: rng() * (cliff ? 0.1 : 0.12),
-      silhouetteAmp: cliff ? 0.2 + rng() * 0.06 : 0.22 + rng() * 0.08,
+      silhouetteAmp: cliff ? 0.2 + rng() * 0.06 : 0.26 + rng() * 0.08,
       silSeed: Math.floor(rng() * 0x7fffffff),
-      ridgeAmp: cliff ? 0.08 + rng() * 0.05 : 0.12 + rng() * 0.06,
+      ridgeAmp: cliff ? 0.08 + rng() * 0.05 : 0.16 + rng() * 0.08,
       ridgeSeed: Math.floor(rng() * 0x7fffffff),
-      ridgeAmp2: (cliff ? 0.04 : 0.05) + rng() * 0.04,
+      ridgeAmp2: (cliff ? 0.04 : 0.08) + rng() * 0.05,
       crest2Shift: 0.5 + rng() * 0.9,
       crest2Seed: Math.floor(rng() * 0x7fffffff),
     };
-    return { height, bury: -BASE_BURY, detailAmp: 0.035 + rng() * 0.02, detailSeed: Math.floor(rng() * 0x7fffffff), main, twin: null };
+    return { height, bury: -BASE_BURY, detailAmp: 0.06 + rng() * 0.04, detailSeed: Math.floor(rng() * 0x7fffffff), main, extraLobes: [] };
   }
 
   function buildMountain(feature: TerrainFeatureConfig): void {
@@ -622,28 +413,35 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
 
     const shape = buildMassifShape(height, rng, false);
 
-    // 双峰：id 哈希决定（概率/门槛同旧版）；副瓣融进同一高度场（max），
-    // 鞍部连续，不再是两个相交圆锥。
-    if (rng() < TWIN_SUMMIT_PROBABILITY && radius >= TWIN_MIN_RADIUS) {
-      const azimuth = rng() * Math.PI * 2;
-      shape.twin = {
-        offsetX: Math.cos(azimuth) * 0.42,
-        offsetZ: Math.sin(azimuth) * 0.42,
-        radius: 0.6,
-        heightFraction: 0.7,
-        k: 2.3 + rng() * 0.5,
+    // 多峰链：副峰沿主峰拉伸轴 ± 偏移（一条配置 = 一段连绵山脉），
+    // 逐点 max 融进同一高度场，鞍部连续。副峰包络（偏移 + 副半径
+    // ≤ 0.75 + 0.64）被主峰半径 r 完全包含——审计包围盒不变。
+    let extraCount = 0;
+    if (radius >= MULTI_SUMMIT_MAX_RADIUS) extraCount = 2 + Math.floor(rng() * 2);
+    else if (radius >= MULTI_SUMMIT_MIN_RADIUS) extraCount = 1 + Math.floor(rng() * 2);
+    else if (rng() < MULTI_SUMMIT_SMALL_PROBABILITY) extraCount = 1;
+    for (let index = 0; index < extraCount; index += 1) {
+      const along = (index % 2 === 0 ? 1 : -1) * (0.36 + rng() * 0.34);
+      const side = (rng() - 0.5) * 0.24;
+      const axis = shape.main.elongAxis;
+      shape.extraLobes.push({
+        offsetX: Math.cos(axis) * along - Math.sin(axis) * side,
+        offsetZ: Math.sin(axis) * along + Math.cos(axis) * side,
+        radius: 0.42 + rng() * 0.22,
+        heightFraction: 0.55 + rng() * 0.3,
+        k: 2.2 + rng() * 0.6,
         elongAxis: rng() * Math.PI * 2,
-        elongation: 1.25 + rng() * 0.2,
+        elongation: 1.25 + rng() * 0.3,
         leanAngle: rng() * Math.PI * 2,
         lean: rng() * 0.1,
         silhouetteAmp: 0.18 + rng() * 0.08,
         silSeed: Math.floor(rng() * 0x7fffffff),
-        ridgeAmp: 0.1 + rng() * 0.05,
+        ridgeAmp: 0.12 + rng() * 0.07,
         ridgeSeed: Math.floor(rng() * 0x7fffffff),
-        ridgeAmp2: 0.04 + rng() * 0.03,
+        ridgeAmp2: 0.05 + rng() * 0.04,
         crest2Shift: 0.5 + rng() * 0.9,
         crest2Seed: Math.floor(rng() * 0x7fffffff),
-      };
+      });
     }
 
     const density = densityFor(radius, height);
@@ -658,7 +456,8 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     }));
 
     // 雪线：仅高峰出雪，阈值按种子浮动；带界扰动在片元着色器里完成。
-    const snowLine = height >= SNOW_MIN_PEAK_HEIGHT ? 0.55 + rng() * 0.17 : null;
+    // v5：更高的山 → 更厚的雪（0.38..0.55 起步，v4 为 0.55..0.72）。
+    const snowLine = height >= SNOW_MIN_PEAK_HEIGHT ? 0.38 + rng() * 0.17 : null;
     const jitterSeed = Math.floor(rng() * 0x7fffffff);
     bakeFacetTintAndBand(geometry, { height, snowLine, tint: chainTint(colorHex) }, jitterSeed);
 
@@ -701,6 +500,108 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     crag.receiveShadow = false;
     object.add(crag);
     solidMeshes.push(crag);
+  }
+
+  // ── 麓原裙（piedmont）：山脚缓坡基座 ─────────────────────────────
+  // 「山附近地面也要处理」——每座山（h ≥ 14）脚下一圈缓坡草甸：朝城方向
+  // （城心 ≈ (17, -23)）plan 半径收束到 1.0r（审计包围盒零外溢），背城
+  // 方向展开到 1.5r；高度 lift = clamp(h×0.035, 1.2, 7) 自山脚（0.55r
+  // 内）向外缘（1.05r）smoothstep 缓降，最外一环压到 -0.3 埋地防露边。
+  // aBand.x 按 lift×3 归一 → 全部低于草甸/岩壁分界（0.34），纯草甸。
+  const PIEDMONT_MIN_HEIGHT = 14;
+  const CITY_CENTER: readonly [number, number] = [17, -23];
+  const PIEDMONT_GRASS = new THREE.Color(0x86a56a);
+  // 河谷带（晨溪河床 + 岸景 + 河口湾，x 含 wobble 余量）：麓原裙不得
+  // 铺进河谷——北麓丘/溪谷侧丘的 piedmont 缓坡（y 可达 7）会把河床
+  // （y 0.02）/ 河岸（0.024）/ 河面（0.048）整段盖在下面。这些贴谷
+  // 的山由 talus 碎石带 + 岸林做山脚衔接，无需麓原。
+  const RIVER_VALLEY_BOX = { x0: -62, x1: 68, z0: -110, z1: -86 };
+
+  function buildPiedmont(feature: TerrainFeatureConfig): void {
+    const radius = (feature.width ?? 20) / 2;
+    const depthRadius = (feature.depth ?? feature.width ?? 20) / 2;
+    // 包围盒与河谷带相交 → 跳过（主脊链 z ≤ -135 之外，天然不触发）。
+    if (feature.x + radius > RIVER_VALLEY_BOX.x0 && feature.x - radius < RIVER_VALLEY_BOX.x1
+      && feature.z + radius > RIVER_VALLEY_BOX.z0 && feature.z - radius < RIVER_VALLEY_BOX.z1) {
+      return;
+    }
+    const rng = mulberry32((hashString(feature.id) ^ 0x70696564) >>> 0); // 'pied'
+    const height = feature.height ?? 12;
+    const lift = Math.min(7, Math.max(1.2, height * 0.035));
+    // 麓原外缘裂瓣：独立种子，±0.16（比山体底缘弱——麓原是柔和过渡）。
+    const lobesAmp = 0.1 + rng() * 0.06;
+    const lobesSeed = Math.floor(rng() * 0x7fffffff);
+    // 朝城收束（cos² 权重）：城向 = 1.0r（审计线，裂瓣幅度随收束归零
+    // ——城向半径严格 ≤ r，审计包围盒零外溢），背城 = 1.5r（全幅裂瓣）。
+    const squashAngle = Math.atan2(CITY_CENTER[1] - feature.z, CITY_CENTER[0] - feature.x);
+    const planRadius = (angle: number): number => {
+      const toward = Math.max(0, Math.cos(angle - squashAngle));
+      const base = 1.5 - 0.5 * toward * toward;
+      return base * (1 + lobesAmp * angularLobes(angle, lobesSeed) * (base - 1) * 2);
+    };
+    const geometry = track(buildRadialFieldGeometry({
+      radius: radius * 1.5,
+      rings: 5,
+      segments: 22,
+      planRadius,
+      // xn/zn 以 1.5r 归一：ρ（以 r 计）= hypot(xn,zn) × 1.5。
+      surfaceY: (xn, zn) => {
+        const rhoR = Math.hypot(xn, zn) * 1.5;
+        return lift * (1 - smoothStep(0.55, 1.05, rhoR))
+          - 0.3 * smoothStep(0.92, 1.02, rhoR);
+      },
+    }));
+    const jitterSeed = Math.floor(rng() * 0x7fffffff);
+    // tint：配置色调向草绿偏 45%——主脊灰青 × 草绿 = 苔原色，麓丘 = 草绿。
+    const tint = chainTint(feature.renderHint?.color ?? 0x648a84).lerp(PIEDMONT_GRASS, 0.45);
+    bakeFacetTintAndBand(geometry, { height: lift * 3, snowLine: null, tint }, jitterSeed);
+    const mesh = new THREE.Mesh(geometry, facetMaterial);
+    mesh.name = `${feature.id}:piedmont`;
+    // 修复（2026-10-05）：麓原几何以峰心为原点构建，必须摆到 feature 位置
+    // ——此前漏了 position，全部 piedmont 堆在世界原点，盖住整个城区与河谷。
+    mesh.position.set(feature.x, 0, feature.z);
+    mesh.scale.z = depthRadius / radius;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    object.add(mesh);
+    solidMeshes.push(mesh); // 松树/碎石可贴麓原坡面
+  }
+
+  // ── 坡脚碎石带（talus）：山脚环形散布的砾石 ──────────────────────
+  // 打破山体底缘与麓原之间的几何切割线。贴地用与松树相同的向下 raycast
+  // （在山体 + 麓原全部入列后执行）。rho 0.74..0.99 r，全部在审计
+  // 包围盒之内，无导航影响（砾石不进 raycast 集）。
+  const TALUS_COLORS = [0x8d8679, 0x9d968a] as const;
+
+  function buildTalus(feature: TerrainFeatureConfig, boulderGeometry: THREE.BufferGeometry): void {
+    const rng = mulberry32((hashString(feature.id) ^ 0x74616c75) >>> 0); // 'talu'
+    const radius = (feature.width ?? 20) / 2;
+    const depthRadius = (feature.depth ?? feature.width ?? 20) / 2;
+    const count = 3 + Math.floor(rng() * 5);
+    const raycaster = new THREE.Raycaster();
+    raycaster.far = 160;
+    const down = new THREE.Vector3(0, -1, 0);
+    const origin = new THREE.Vector3();
+    for (let index = 0; index < count; index += 1) {
+      const angle = rng() * Math.PI * 2;
+      const distR = 0.74 + rng() * 0.25;
+      const worldX = feature.x + Math.cos(angle) * distR * radius;
+      const worldZ = feature.z + Math.sin(angle) * distR * depthRadius;
+      origin.set(worldX, 80, worldZ);
+      raycaster.set(origin, down);
+      const hit = raycaster.intersectObjects(solidMeshes, false)[0];
+      const groundY = hit ? hit.point.y : 0;
+      const scale = 0.5 + rng() * 1.7;
+      const talusColor = TALUS_COLORS[Math.floor(rng() * TALUS_COLORS.length)] ?? TALUS_COLORS[0]!;
+      const boulder = new THREE.Mesh(boulderGeometry, materialFor(talusColor));
+      boulder.name = `${feature.id}:talus-${index}`;
+      boulder.position.set(worldX, groundY + scale * 0.32, worldZ);
+      boulder.scale.set(scale * (0.8 + rng() * 0.5), scale * (0.55 + rng() * 0.4), scale * (0.8 + rng() * 0.5));
+      boulder.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+      boulder.castShadow = true;
+      boulder.receiveShadow = true;
+      object.add(boulder);
+    }
   }
 
   // ── 世界裙板：±110 之外的草地延伸，承接外移后的山链基座 ─────────
@@ -859,13 +760,23 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     object.add(group);
   }
 
-  // 先山体与崖壁（构成可 raycast 的地表），再裙板，最后森林贴坡。
+  // 先山体与崖壁，再麓原裙（贴着山脚长出来，同一遍 raycast 集），
+  // 然后裙板，再坡脚碎石（山体+麓原都在 raycast 集后才能贴地），
+  // 最后森林贴坡。
   for (const feature of LANPING_RANGE) {
-    if (feature.kind === 'mountain') buildMountain(feature);
-    else if (feature.kind === 'cliff') buildCliff(feature);
+    if (feature.kind === 'mountain') {
+      buildMountain(feature);
+      if ((feature.height ?? 12) >= PIEDMONT_MIN_HEIGHT) buildPiedmont(feature);
+    } else if (feature.kind === 'cliff') {
+      buildCliff(feature);
+    }
   }
   buildApron();
   object.updateMatrixWorld(true);
+  const talusGeometry = track(new THREE.IcosahedronGeometry(1, 0)); // flatShading 碎石块
+  for (const feature of LANPING_RANGE) {
+    if (feature.kind === 'mountain' && (feature.height ?? 12) >= PIEDMONT_MIN_HEIGHT) buildTalus(feature, talusGeometry);
+  }
   const pineVariants = [0, 1, 2].map((variant) => buildPineGeometry(variant));
   for (const feature of LANPING_RANGE) {
     if (feature.kind === 'forest') buildForest(feature, pineVariants);
