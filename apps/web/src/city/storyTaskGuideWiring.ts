@@ -1,6 +1,6 @@
 import { initStoryTaskGuide } from '../adapters/ui/storyTaskGuide';
 import { ECHO_OBSERVATORY_AREA } from './data/cityConfig';
-import { ECHO_STORY } from '../gameplay/content/stories/echo/echoStory';
+import { ECHO_STORY_ID } from '../gameplay/content/stories/echo/echoStoryMeta';
 import { YESTERDAY_SONG } from '../gameplay/content/stories/yesterday/yesterdaySong';
 import { MAGI_STORY } from '../gameplay/content/stories/magi/magiStory';
 import { OVERCOAT_STORY } from '../gameplay/content/stories/overcoat/overcoatStory';
@@ -42,7 +42,10 @@ export function initStoryTaskGuideWiring(options: {
 
   initStoryTaskGuide(options.document, {
     onNavigate: (storyId) => {
-      if (storyId === ECHO_STORY.id) {
+      // Echo's id via the shared constant (echoStoryMeta — deliberately free of
+      // story text and assets so it stays tiny): 「回声」暂停期间剧情数据
+      // （echoStory.ts）不进打包产物，这里不能静态引用 ECHO_STORY，但常量可以。
+      if (storyId === ECHO_STORY_ID) {
         const echo = options.getEchoController();
         if (echo?.story.state().nodeId === 'confrontation-active') echo.teleportFromCabin();
         else panTo(ECHO_OBSERVATORY_AREA.center[0], ECHO_OBSERVATORY_AREA.center[1]);

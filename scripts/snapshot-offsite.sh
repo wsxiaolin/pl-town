@@ -43,6 +43,7 @@ else
   # to deploy would keep the instance down until a human intervenes. The
   # last successful OSS snapshot remains the restore point for the next
   # boot, so the deploy below is what delivers the fix.
+  echo "::warning::Off-site snapshot failed (status: ${STATUS:-unreachable}); deploying anyway. Last successful snapshot remains the restore point."
   echo "Off-site snapshot failed (status: ${STATUS:-unreachable}); deploying anyway so a boot fix can reach the instance. Last successful snapshot remains the restore point." >&2
 fi
 

@@ -263,28 +263,170 @@ const buildBistro: Builder = (options, cfg) => {
   return finish(options, cfg, g, body, undefined, 0.18 + height + 0.95, { width: width + 0.3, depth: depth + 0.3 });
 };
 
-// ── 不打烊贩卖店：不打烊贩卖店（黑洞 #65）───────────────────────────
-const buildNightKiosk: Builder = (options, cfg) => {
+// ── 24H MART 便利店:rainy-store 移植外观 ────────────────────────────
+// 外观移植自 lab.lcrworld.xyz/rainy-store/(用户指定替换),按本城地块
+// 尺度缩放并适配 stdMat 材质/天气体系。两处消费: north_night_kiosk
+// (不打烊贩卖店,24h 主题契合)与 fried_chicken_shop(炸鸡店,主城
+// 初始建成);配置文案与点击交互保持不变。
+export function makeSignTexture(text: string, w: number, h: number, bg: string, fg: string, fontSize: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = bg;
+  g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(0,0,0,0.12)';
+  g.lineWidth = 8;
+  g.strokeRect(4, 4, w - 8, h - 8);
+  g.fillStyle = fg;
+  g.font = `bold ${fontSize}px "Hiragino Sans","Noto Sans JP",Arial,sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, w / 2, h / 2 + h * 0.03);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+export const buildMartStore: Builder = (options, cfg) => {
   const { addPart } = options;
   const g = new THREE.Group();
-  const width = 1.95, height = 1.75, depth = 1.85;
-  addPart(g, new THREE.BoxGeometry(width + 0.45, 0.16, depth + 0.45), { color: 0xd6c9b9, roughness: 0.82, tex: 'pavement', rx: 2, ry: 2 }, [0, 0.08, 0]);
-  // 玻璃盒体（夜里透着暖光）
-  const body = addPart(g, new THREE.BoxGeometry(width, height, depth), { color: 0xf6dfae, roughness: 0.1, metalness: 0.15, emissive: 0xf1c46d, emissiveIntensity: 0.26, tex: 'mallglass', rx: 1, ry: 1 }, [0, 0.16 + height / 2 + 0.012, 0]);
-  addPart(g, new THREE.BoxGeometry(width + 0.2, 0.13, depth + 0.2), { color: 0x4a4a52, roughness: 0.35, metalness: 0.4 }, [0, 0.16 + height + 0.077, 0]);
-  // 雨棚
-  addPart(g, new THREE.BoxGeometry(width + 0.3, 0.06, 0.5), { color: 0xe8a838, roughness: 0.45 }, [0, 1.6, depth / 2 + 0.2]);
-  // 柜台与货架
-  addPart(g, new THREE.BoxGeometry(width - 0.35, 0.4, 0.32), { color: 0x9b6b3f, roughness: 0.72, tex: 'wood', rx: 2, ry: 1 }, [0, 0.62, depth / 2 - 0.1]);
-  [-0.45, 0, 0.45].forEach((x) => addPart(g, new THREE.BoxGeometry(0.28, 0.34, 0.24), { color: 0xd8d7d2, roughness: 0.6 }, [x, 1.05, -depth / 2 + 0.3], false));
-  // 屋顶灯箱「24h」意象（不熄的小灯）
-  addPart(g, new THREE.BoxGeometry(1.15, 0.36, 0.1), { color: 0xf8f7f5, roughness: 0.3, emissive: 0xf1c46d, emissiveIntensity: 0.4 }, [0, 0.16 + height + 0.32, depth / 2 - 0.15], false);
-  [-0.3, 0.3].forEach((x) => addPart(g, new THREE.CylinderGeometry(0.03, 0.03, 0.22, 6), { color: 0x4a4a52, roughness: 0.4 }, [x, 0.16 + height + 0.16, depth / 2 - 0.15], false));
-  // 风铃立柱（店门口的泠泠轻响）
-  addPart(g, new THREE.CylinderGeometry(0.035, 0.05, 1.85, 8), { color: 0x9b6b3f, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [width / 2 + 0.62, 1.08, depth / 2 + 0.4]);
-  addPart(g, new THREE.BoxGeometry(0.3, 0.045, 0.045), { color: 0x9b6b3f, roughness: 0.7 }, [width / 2 + 0.62, 2.05, depth / 2 + 0.4], false);
-  [0.1, 0.2, 0.3].forEach((d, i) => addPart(g, new THREE.CylinderGeometry(0.022, 0.022, 0.16 + i * 0.05, 6), { color: i % 2 === 0 ? GOLD : 0xd8d7d2, roughness: 0.3, metalness: 0.4 }, [width / 2 + 0.52 + d, 1.96, depth / 2 + 0.4 + (i - 1) * 0.07], false));
-  return finish(options, cfg, g, body, undefined, 0.16 + height + 0.85, { width: width + 0.7, depth: depth + 0.6 });
+  const W = 3.3, H = 2.0, D = 2.6;
+  const FLOOR = 0.14;   // 台基顶(地块 plot 之上)
+  const frontZ = D / 2;
+
+  // 人行道台基 + 店内地板
+  addPart(g, new THREE.BoxGeometry(3.9, 0.14, 3.3), { color: 0x353a46, roughness: 0.85, tex: 'pavement', rx: 3, ry: 3 }, [0, 0.07, 0]);
+  addPart(g, new THREE.BoxGeometry(W, 0.06, D), { color: 0xcfc8b8, roughness: 0.7 }, [0, FLOOR + 0.028, 0], false);
+
+  // 侧墙 / 后墙 / 屋顶 + 屋顶设备箱
+  const wallMat = { color: 0xd6d0c4, roughness: 0.6, tex: 'wall', rx: 3, ry: 1 };
+  const wallMat2 = { color: 0xc9c2b4, roughness: 0.6, tex: 'wall', rx: 3, ry: 1 };
+  addPart(g, new THREE.BoxGeometry(0.14, H, D), wallMat, [-W / 2 + 0.07, FLOOR + H / 2 + 0.03, 0]);
+  addPart(g, new THREE.BoxGeometry(0.14, H, D), wallMat, [W / 2 - 0.07, FLOOR + H / 2 + 0.03, 0]);
+  const body = addPart(g, new THREE.BoxGeometry(W, H, 0.14), wallMat2, [0, FLOOR + H / 2 + 0.03, -D / 2 + 0.07]);
+  addPart(g, new THREE.BoxGeometry(W + 0.3, 0.14, D + 0.3), { color: 0x454a56, roughness: 0.4, metalness: 0.15 }, [0, FLOOR + H + 0.07, 0]);
+  addPart(g, new THREE.BoxGeometry(0.55, 0.3, 0.42), { color: 0x5a6070, roughness: 0.5 }, [0.8, FLOOR + H + 0.28, -0.7]);
+  addPart(g, new THREE.BoxGeometry(0.38, 0.22, 0.36), { color: 0x6a7080, roughness: 0.5 }, [-0.95, FLOOR + H + 0.25, 0.55]);
+
+  // 前立面:台基条、顶横梁、三柱(布局按原模型比例换算)
+  addPart(g, new THREE.BoxGeometry(W, 0.12, 0.1), { color: 0x8d94a4, roughness: 0.5 }, [0, FLOOR + 0.06, frontZ], false);
+  addPart(g, new THREE.BoxGeometry(W, 0.48, 0.1), wallMat, [0, FLOOR + H - 0.21, frontZ]);
+  addPart(g, new THREE.BoxGeometry(0.22, H, 0.12), wallMat, [-1.54, FLOOR + H / 2 + 0.03, frontZ]);
+  addPart(g, new THREE.BoxGeometry(0.22, H, 0.12), wallMat, [0.11, FLOOR + H / 2 + 0.03, frontZ]);
+  addPart(g, new THREE.BoxGeometry(0.44, H, 0.12), wallMat, [1.43, FLOOR + H / 2 + 0.03, frontZ]);
+
+  // 橱窗玻璃 + 反光条
+  addPart(g, new THREE.BoxGeometry(1.43, 1.25, 0.02), { color: 0xbfe0ff, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false }, [-0.72, FLOOR + 0.65, frontZ], false);
+  addPart(g, new THREE.BoxGeometry(1.43, 1.25, 0.015), { color: 0x7fb4e8, roughness: 0.1, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false }, [-0.72, FLOOR + 0.65, frontZ + 0.02], false);
+
+  // 自动门(双开玻璃 + 门框)
+  addPart(g, new THREE.BoxGeometry(0.44, 1.25, 0.015), { color: 0xcde8ff, roughness: 0.05, transparent: true, opacity: 0.16, depthWrite: false }, [0.47, FLOOR + 0.65, frontZ + 0.01], false);
+  addPart(g, new THREE.BoxGeometry(0.44, 1.25, 0.015), { color: 0xcde8ff, roughness: 0.05, transparent: true, opacity: 0.16, depthWrite: false }, [0.96, FLOOR + 0.65, frontZ + 0.01], false);
+  [-0.28, 0.28].forEach((dx) => addPart(g, new THREE.BoxGeometry(0.05, 1.3, 0.05), { color: 0xa8b0c0, roughness: 0.4, metalness: 0.3 }, [0.71 + dx, FLOOR + 0.67, frontZ + 0.03], false));
+
+  // 雨棚 + 前缘 + 支撑
+  addPart(g, new THREE.BoxGeometry(3.4, 0.06, 0.52), { color: 0x2f3746, roughness: 0.5 }, [0, FLOOR + H - 0.36, frontZ + 0.28]);
+  addPart(g, new THREE.BoxGeometry(3.4, 0.09, 0.06), { color: 0x1f2530, roughness: 0.5 }, [0, FLOOR + H - 0.39, frontZ + 0.53], false);
+  [-1.5, 0.55].forEach((x) => {
+    const sup = addPart(g, new THREE.BoxGeometry(0.05, 0.05, 0.42), { color: 0x555b68, roughness: 0.5 }, [x, FLOOR + H - 0.3, frontZ + 0.22], false);
+    sup.rotation.x = -0.25;
+  });
+
+  // 「24H MART」店招牌 + 灯带
+  const signTexture = makeSignTexture('24H  MART', 1024, 176, '#f4f7f2', '#1f9c5a', 96);
+  const sign = addPart(g, new THREE.BoxGeometry(3.1, 0.5, 0.12), new THREE.MeshStandardMaterial({
+    map: signTexture,
+    roughness: 0.35,
+    emissive: new THREE.Color(0xf2fff4),
+    emissiveMap: signTexture,
+    emissiveIntensity: 0.55,
+  }), [0, FLOOR + H + 0.18, frontZ - 0.02]);
+  sign.castShadow = true;
+  addPart(g, new THREE.BoxGeometry(3.0, 0.14, 0.02), { color: 0xbfffd8, roughness: 0.2, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }, [0, FLOOR + H - 0.13, frontZ + 0.005], false);
+
+  // 侧墙 OPEN 小牌
+  const openTexture = makeSignTexture('OPEN', 256, 128, '#152238', '#7fe3a8', 62);
+  addPart(g, new THREE.BoxGeometry(0.09, 0.28, 0.56), { color: 0x152238, roughness: 0.4 }, [W / 2 + 0.02, FLOOR + 1.32, 0.1], false);
+  const openPanel = addPart(g, new THREE.PlaneGeometry(0.5, 0.24), new THREE.MeshBasicMaterial({ map: openTexture, transparent: true }), [W / 2 + 0.075, FLOOR + 1.32, 0.1], false);
+  openPanel.rotation.y = Math.PI / 2;
+
+  // 店内:天花灯板、饮料冷藏柜、货架、收银台
+  [-0.9, -0.1, 0.7].forEach((x) => [-0.7, 0.2].forEach((z) =>
+    addPart(g, new THREE.BoxGeometry(0.66, 0.02, 0.14), { color: 0xfff6e2, emissive: 0xfff6e2, emissiveIntensity: 0.85, roughness: 0.4 }, [x, FLOOR + H - 0.04, z], false)));
+  addPart(g, new THREE.BoxGeometry(1.5, 1.07, 0.3), { color: 0xe6e9ee, roughness: 0.35 }, [-0.85, FLOOR + 0.56, -1.02]);
+  addPart(g, new THREE.BoxGeometry(1.38, 0.92, 0.02), { color: 0xdaf0ff, emissive: 0xdaf0ff, emissiveIntensity: 0.75, roughness: 0.2 }, [-0.85, FLOOR + 0.56, -0.86], false);
+  const drinkColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0x8ecae6, 0xffb4a2, 0xb8e0a0];
+  for (let row = 0; row < 2; row += 1) {
+    for (let col = 0; col < 6; col += 1) {
+      addPart(g, new THREE.BoxGeometry(0.09, 0.14, 0.03), { color: drinkColors[(row * 6 + col) % drinkColors.length], roughness: 0.3, emissive: drinkColors[(row * 6 + col) % drinkColors.length], emissiveIntensity: 0.18 }, [-1.42 + col * 0.22, FLOOR + 0.36 + row * 0.4, -0.84], false);
+    }
+  }
+  [-0.45, 0.05].forEach((z) => {
+    addPart(g, new THREE.BoxGeometry(1.5, 0.03, 0.24), { color: 0xd2d6de, roughness: 0.5 }, [-0.85, FLOOR + 0.5, z], false);
+    addPart(g, new THREE.BoxGeometry(1.5, 0.03, 0.24), { color: 0xd2d6de, roughness: 0.5 }, [-0.85, FLOOR + 0.9, z], false);
+    const goodsColors = [0xff9f7f, 0x7fd4c1, 0xffe07a, 0x9fc0ff, 0xf2a0c0];
+    for (let i = 0; i < 5; i += 1) {
+      addPart(g, new THREE.BoxGeometry(0.1, 0.14, 0.12), { color: goodsColors[i], roughness: 0.6 }, [-1.38 + i * 0.26, FLOOR + 0.59, z], false);
+      addPart(g, new THREE.BoxGeometry(0.1, 0.12, 0.12), { color: goodsColors[(i + 2) % 5], roughness: 0.6 }, [-1.38 + i * 0.26, FLOOR + 0.99, z], false);
+    }
+  });
+  addPart(g, new THREE.BoxGeometry(0.68, 0.52, 0.32), { color: 0xe0dcd2, roughness: 0.6 }, [0.75, FLOOR + 0.29, 0.45]);
+  addPart(g, new THREE.BoxGeometry(0.74, 0.04, 0.36), { color: 0x9aa2b0, roughness: 0.4 }, [0.75, FLOOR + 0.57, 0.45], false);
+  addPart(g, new THREE.BoxGeometry(0.2, 0.14, 0.16), { color: 0xdde3ea, roughness: 0.4 }, [0.62, FLOOR + 0.66, 0.42], false);
+  addPart(g, new THREE.BoxGeometry(0.18, 0.1, 0.02), { color: 0x5ec8a0, emissive: 0x5ec8a0, emissiveIntensity: 0.5, roughness: 0.3 }, [0.62, FLOOR + 0.67, 0.51], false);
+  // 保温灯柜(暖橙灯照着熟食,炸鸡店主题的呼应)
+  addPart(g, new THREE.BoxGeometry(0.34, 0.44, 0.26), { color: 0xd8dde8, roughness: 0.4 }, [0.15, FLOOR + 0.25, 0.95]);
+  addPart(g, new THREE.BoxGeometry(0.28, 0.32, 0.02), { color: 0xffb042, emissive: 0xffb042, emissiveIntensity: 0.8, roughness: 0.3 }, [0.15, FLOOR + 0.27, 1.085], false);
+
+  // 店外:门口地垫、自动贩卖机、雨伞架、垃圾桶
+  addPart(g, new THREE.BoxGeometry(1.0, 0.03, 0.47), { color: 0x3d4a58, roughness: 0.9 }, [0.7, FLOOR + 0.015, frontZ + 0.35], false);
+  addPart(g, new THREE.BoxGeometry(0.55, 1.07, 0.4), { color: 0xd8dde8, roughness: 0.4 }, [1.55, FLOOR + 0.57, 0.5]);
+  addPart(g, new THREE.BoxGeometry(0.44, 0.8, 0.02), { color: 0xfff0c8, emissive: 0xfff0c8, emissiveIntensity: 0.8, roughness: 0.3 }, [1.55, FLOOR + 0.68, 0.71], false);
+  const vmColors = [0xff5f5f, 0x5fd0ff, 0xffe05f, 0x7fff9f, 0xff8fd0, 0xa08fff];
+  for (let row = 0; row < 3; row += 1) {
+    for (let col = 0; col < 4; col += 1) {
+      addPart(g, new THREE.BoxGeometry(0.07, 0.1, 0.02), { color: vmColors[(row * 4 + col) % vmColors.length], roughness: 0.3 }, [1.55 - 0.16 + col * 0.11, FLOOR + 0.94 - row * 0.18, 0.72], false);
+    }
+  }
+  addPart(g, new THREE.BoxGeometry(0.38, 0.12, 0.03), { color: 0x3a4250, roughness: 0.5 }, [1.55, FLOOR + 0.22, 0.71], false);
+  addPart(g, new THREE.BoxGeometry(0.56, 0.1, 0.41), { color: 0xff5a5a, roughness: 0.4 }, [1.55, FLOOR + 1.13, 0.5], false);
+  addPart(g, new THREE.BoxGeometry(0.22, 0.28, 0.22), { color: 0x6a7280, roughness: 0.6 }, [-0.85, FLOOR + 0.17, frontZ + 0.42], false);
+  const umbrellaColors = [0x3a7bd5, 0xd54b4b, 0x2fa36b, 0xd9a441];
+  umbrellaColors.forEach((color, i) => {
+    const umbrella = addPart(g, new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), { color, roughness: 0.5 }, [-0.92 + i * 0.055, FLOOR + 0.4, frontZ + 0.4 + (i % 2) * 0.06], false);
+    umbrella.rotation.z = (i - 1.5) * 0.05;
+  });
+  addPart(g, new THREE.BoxGeometry(0.2, 0.33, 0.2), { color: 0x5c6472, roughness: 0.6 }, [1.3, FLOOR + 0.2, -0.9]);
+  addPart(g, new THREE.BoxGeometry(0.24, 0.04, 0.24), { color: 0x3d4450, roughness: 0.5 }, [1.3, FLOOR + 0.39, -0.9], false);
+
+  // 自行车(店前一辆)
+  const bike = new THREE.Group();
+  bike.position.set(-1.5, FLOOR, 1.75);
+  bike.rotation.y = Math.PI * 0.06;
+  g.add(bike);
+  const tireMat = { color: 0x1a1e26, roughness: 0.7 };
+  const frameMat = { color: 0x2e3a4a, roughness: 0.5, metalness: 0.3 };
+  [-0.28, 0.28].forEach((x) => {
+    addPart(bike, new THREE.TorusGeometry(0.15, 0.02, 8, 18), tireMat, [x, 0.15, 0], false);
+  });
+  const bar1 = addPart(bike, new THREE.CylinderGeometry(0.014, 0.014, 0.47, 6), frameMat, [0, 0.28, 0], false);
+  bar1.rotation.z = Math.PI / 2;
+  const bar2 = addPart(bike, new THREE.CylinderGeometry(0.014, 0.014, 0.38, 6), frameMat, [-0.1, 0.24, 0], false);
+  bar2.rotation.z = 0.7;
+  const bar3 = addPart(bike, new THREE.CylinderGeometry(0.014, 0.014, 0.36, 6), frameMat, [0.14, 0.23, 0], false);
+  bar3.rotation.z = -0.6;
+  const handle = addPart(bike, new THREE.CylinderGeometry(0.012, 0.012, 0.26, 6), frameMat, [0.28, 0.5, 0], false);
+  handle.rotation.x = Math.PI / 2;
+  addPart(bike, new THREE.BoxGeometry(0.12, 0.03, 0.08), { color: 0x1e242e, roughness: 0.7 }, [-0.12, 0.47, 0], false);
+
+  // 门口风铃木柱(保留原「泠泠轻响」文案意象)
+  addPart(g, new THREE.CylinderGeometry(0.035, 0.05, 1.85, 8), { color: 0x9b6b3f, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [2.0, FLOOR + 0.925, -1.55]);
+  addPart(g, new THREE.BoxGeometry(0.06, 0.045, 0.62), { color: 0x9b6b3f, roughness: 0.7 }, [1.72, FLOOR + 1.86, -1.55], false);
+  [0.1, 0.2, 0.3].forEach((d, i) => addPart(g, new THREE.CylinderGeometry(0.018, 0.018, 0.09 + i * 0.03, 6), { color: i % 2 === 0 ? GOLD : 0xd8d7d2, roughness: 0.3, metalness: 0.4 }, [1.72, FLOOR + 1.78, -1.78 + d], false));
+
+  return finish(options, cfg, g, body, undefined, FLOOR + H + 0.9, { width: 4.0, depth: 3.4 });
 };
 
 // ── 音乐盒：Never Gonna Give You Up（黑洞 #11）─────────────────────
@@ -352,7 +494,7 @@ export function createNorthDistrictBuilders(options: NorthBuildingOptions): Reco
     monolith: wrap(buildMonolith),
     worry_store: wrap(buildWorryStore),
     bistro: wrap(buildBistro),
-    night_kiosk: wrap(buildNightKiosk),
+    night_kiosk: wrap(buildMartStore),
     jukebox: wrap(buildJukebox),
     backrooms_door: wrap(buildBackroomsDoor),
   };

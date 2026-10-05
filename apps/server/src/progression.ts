@@ -142,7 +142,9 @@ export const MAX_ACTIVE_MARKET_LISTINGS = 6;
 
 /** Tradeable goods = whatever the shop currently sells plus crafted outputs. */
 export function isMarketTradeableItemId(itemId: string): boolean {
-  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || itemId in SHOP_PRODUCTS;
+  // Object.hasOwn keeps inherited Object.prototype keys ('toString',
+  // 'constructor', 'valueOf') out of the tradeable set.
+  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || Object.hasOwn(SHOP_PRODUCTS, itemId);
 }
 
 export function getMarketTradeableItemIds(): string[] {
@@ -268,7 +270,7 @@ export type BuildingUnlockResolution = {
 export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
   const overrides = getBuildingOverrides();
   return BUILDING_CATALOG
-    .filter((building) => building.id in BUILDING_PRICES)
+    .filter((building) => Object.hasOwn(BUILDING_PRICES, building.id))
     .map((building) => {
       const override = overrides[building.id] ?? null;
       const defaultState: ResolvedBuildingState = STORY_LOCKED_BUILDING_IDS.has(building.id) || BUILDING_UNLOCKABLE[building.id] !== true ? 'locked' : 'unlockable';

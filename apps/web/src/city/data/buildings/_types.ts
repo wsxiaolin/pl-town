@@ -5,7 +5,7 @@
 // 新增建筑的标准步骤：
 // 1. 在本目录新建 `<building_id>.ts`，`export default defineBuilding({ ... })`；
 // 2. 在 `_registry.ts` 按城市空间顺序（大致从小坐标到大坐标）插入该文件；
-// 3. 如使用 GLB 模型，把 `glbUrl` 指向 `src/assets/models/` 下的文件名；
+// 3. 如使用 GLB 模型，把 `glbFile` 指向 `src/assets/models/` 下的文件名；
 // 4. 运行 `npm run gen:building-catalog -w @minicity/server` 同步服务端目录，
 //    并按 AGENTS.md 检查治理配置版本要求。
 //
@@ -72,7 +72,7 @@ export interface BuildingConfig {
   /** 覆盖门面纹理 key；缺省用 `_shapeDefaults.ts` 里该 shape 的默认门面。 */
   facade?: string;
   /** GLB 文件名（`src/assets/models/` 下）。配置后渲染时用模型替换程序化网格。 */
-  glbUrl?: string;
+  glbFile?: string;
 
   // ── 地块（可选）────────────────────────────────
   /** 覆盖地块纹理 / 半径 / 颜色；缺省用 shape 级默认（见 inferPlot）。 */
