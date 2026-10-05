@@ -56,6 +56,9 @@ const KNOWN_ITEM_ICONS: Readonly<Record<string, string>> = Object.freeze({
   [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.icon,
 });
 const itemIcon = (itemId: string, name: string): string => KNOWN_ITEM_ICONS[itemId] ?? name.charAt(0) ?? '册';
+// The server settles listings at unit price × quantity (db.ts buyMarketListing);
+// a single helper keeps label, disabled rule and click guard from drifting apart.
+const listingTotal = (listing: MarketListingView): number => listing.price * listing.quantity;
 const repeatableRewardIds: ReadonlySet<string> = new Set(Object.values(ICE_KING_REWARDS).map((reward) => reward.id));
 const iceRewardById = new Map(Object.values(ICE_KING_REWARDS).map((reward) => [reward.id, reward]));
 
@@ -581,7 +584,7 @@ export function createCloudProgressionController(options: Options) {
     name.textContent = `${itemName(listing.itemId)} ×${listing.quantity}`;
     const detail = options.document.createElement('small');
     detail.textContent = listing.status === 'active'
-      ? `${listing.sellerNickname} · 单价 ${listing.price} 币 · 合计 ${listing.price * listing.quantity} 币${own ? ' · 在售中' : ''}`
+      ? `${listing.sellerNickname} · 单价 ${listing.price} 币 · 合计 ${listingTotal(listing)} 币${own ? ' · 在售中' : ''}`
       : `${listing.sellerNickname} · ${listing.status === 'sold' ? '已售出' : '已取消'} · 单价 ${listing.price} 币`;
     copy.append(name, detail);
     if (own && listing.status === 'active') {
@@ -599,8 +602,8 @@ export function createCloudProgressionController(options: Options) {
       buy.type = 'button';
       buy.className = 'market-claim-button';
       buy.dataset.listingBuy = listing.id;
-      buy.textContent = `购买 · ${listing.price * listing.quantity} 币`;
-      buy.disabled = !online || progress.currency < listing.price * listing.quantity || pendingMarketActions.has(`listing:${listing.id}`);
+      buy.textContent = `购买 · ${listingTotal(listing)} 币`;
+      buy.disabled = !online || progress.currency < listingTotal(listing) || pendingMarketActions.has(`listing:${listing.id}`);
       row.append(icon, copy, buy);
       return row;
     }
@@ -676,7 +679,7 @@ export function createCloudProgressionController(options: Options) {
       const key = `listing:${listingBuy}`;
       const listing = listings.active.find((entry) => entry.id === listingBuy);
       if (!listing || pendingMarketActions.has(key) || !online) return;
-      if (progress.currency < listing.price) { options.showToast('余额不足，买不下这份挂单'); return; }
+      if (progress.currency < listingTotal(listing)) { options.showToast('余额不足，买不下这份挂单'); return; }
       pendingMarketActions.add(key);
       renderExchange();
       if (!options.send({ type: 'market.listing.buy', listingId: listingBuy })) { pendingMarketActions.delete(key); renderExchange(); }

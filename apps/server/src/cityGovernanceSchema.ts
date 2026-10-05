@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { CITY_CONSTRUCTION_CONFIG as config, COLLECTIVE_STORY_BUILDING_IDS, type CityProject } from './data/cityConstructionConfig.js';
 import { BUILDING_CATALOG } from './buildingCatalog.js';
 import { reconcileAreaCatalog } from './cityAreaMigration.js';
-import { reconcileInitialBuildings } from './cityGovernanceMigration.js';
+import { reconcileInitialBuildings, DEFAULT_COMPLETED_BUILDING_IDS } from './cityGovernanceMigration.js';
 import { initializeCityVoting } from './cityVotingSchema.js';
 import { reconcileLegacyAreaProjectLayout } from './cityAreaLayoutMigration.js';
 import { validateCityAreaPlacement } from './cityAreaPlacement.js';
@@ -101,6 +101,16 @@ export function initializeCityGovernance(db: Database.Database): void {
       if (progress.funded !== 0) throw new Error(`Preserved city building has funded progress: ${project.id}; use explicit reconciliation`);
       db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
     }
+  }
+  // 2026-10-04 default-standing policy (2026-10-04.unlock.1): complete the
+  // DEFAULT_COMPLETED_BUILDING_IDS rows the same way the preserve path does —
+  // without debiting residents or inventing payment/idempotency records. Unlike
+  // preserve, partial historical donations are acceptable here: completion is
+  // the policy gift, not a replayed legacy receipt, so funded is topped up to
+  // cost. Idempotent: rows already built (including by residents) are skipped.
+  for (const project of config.projects) {
+    if (!project.buildingId || !DEFAULT_COMPLETED_BUILDING_IDS.includes(project.buildingId)) continue;
+    db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ? AND built = 0').run(project.cost, project.id);
   }
   if (healedProjects.length) {
     // Leave a trace in the Render boot log so display-only heals are visible
