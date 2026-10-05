@@ -16,7 +16,7 @@ export type MapControllerOptions = {
   getScene: () => THREE.Scene | null;
   getBuildings: () => readonly BuildingEntity[];
   getCursor: () => Cursor | null;
-  getStats: () => { achievements?: readonly string[] };
+  canTeleport: () => boolean;
   getCamera: () => THREE.Camera | null;
   getBuildingContent: (buildingId: string) => MapContent | undefined;
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
@@ -203,7 +203,7 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function canTeleport(): boolean {
-    return (options.getStats().achievements ?? []).includes('walker_100');
+    return options.canTeleport();
   }
 
   function openTip(building: BuildingEntity): void {

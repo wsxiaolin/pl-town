@@ -29,7 +29,7 @@
 
 - `facade`：覆盖 shape 默认门面纹理。
 - `plot` / `hasPlot`：覆盖地块纹理/尺寸/颜色，或关闭地块。
-- `glbUrl`：`src/assets/models/` 下的 GLB 文件名，配置后渲染时替换程序化网格。
+- `glbFile`：`src/assets/models/` 下的 GLB 文件名，配置后渲染时用模型替换程序化网格。
 - `contentQuery`：Physics Lab 社区作品查询（点击开作品面板）。
 - `content`：对话（线性 `dialog` 或树状 `dialogTree`）。
 - `decorations`：建筑自带装饰（**预留槽位，渲染接线尚未实现**；

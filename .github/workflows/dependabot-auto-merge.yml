@@ -1,0 +1,36 @@
+name: Dependabot Auto-Merge
+
+# Dependabot 的依赖更新 PR（含安全修复）在全部 required check 通过后自动合并。
+# GitHub 原生 auto-merge 的前提：仓库设置已开启 "Allow auto-merge"。
+# 若某 PR 的 CI 失败，auto-merge 会被 GitHub 自动取消，不会误合。
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write # 启用 auto-merge 所需
+  pull-requests: write # 操作 PR 状态所需
+
+jobs:
+  dependabot-auto-merge:
+    # 仅处理本仓库分支上的 Dependabot PR（fork PR 的 GITHUB_TOKEN 只读，无法操作）
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Enable auto-merge (squash)
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          echo "Dependabot update type: ${UPDATE_TYPE:-grouped/unknown}"
+          gh pr merge --auto --squash "$PR_URL"

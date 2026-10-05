@@ -3,7 +3,6 @@ export interface LegacyStats {
   buildingsVisited: string[];
   joinDate: number | null;
   unlockLevel: number;
-  achievements: string[];
   npcsMet: string[];
   npcsTalked: number;
   distance: number;
@@ -15,7 +14,6 @@ const emptyStats = (): LegacyStats => ({
   buildingsVisited: [],
   joinDate: null,
   unlockLevel: 0,
-  achievements: [],
   npcsMet: [],
   npcsTalked: 0,
   distance: 0,
@@ -42,7 +40,6 @@ export function getStats(storage: Pick<Storage, 'getItem'> = window.localStorage
       buildingsVisited: asStrings(value.buildingsVisited),
       joinDate: typeof value.joinDate === 'number' ? value.joinDate : null,
       unlockLevel: asNumber(value.unlockLevel),
-      achievements: asStrings(value.achievements),
       npcsMet: asStrings(value.npcsMet),
       npcsTalked: asNumber(value.npcsTalked),
       distance: asNumber(value.distance),

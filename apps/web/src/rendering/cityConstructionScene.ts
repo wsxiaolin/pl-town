@@ -3,6 +3,7 @@ import { gsap } from 'gsap';
 import type { BuildingEntity } from '../city/buildingEntity';
 import { restoreBuildingPresentation } from '../city/buildingDamage';
 import { getCityConfig, getCityState, isConstructionPending, subscribeCityGovernance } from '../city/cityGovernanceClient';
+import { collectDefaultDecorations } from '../city/cityConstructionLayout';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ResourcePool } from '../core/ResourcePool';
 import { createConstructionDecorations } from './constructionDecorations';
@@ -101,14 +102,20 @@ export function createCityConstructionScene(options: {
         lamps.push(visual);
       }
     }
-    // Keep the shader light count constant across dusk/day transitions. Allocate
-    // the pool only once a lamp exists, then retarget it near the resident.
-    if (lamps.length && !lights.length) {
+    // The default layout ships 11 lamps, so allocating the pool on first sight
+    // would tax every lit material day and night. Allocate it only at night,
+    // and release it at dawn so the shader light count stays zero while the
+    // construction lamps (and their glow) are unlit. The count is constant
+    // within each phase, so dusk/day transitions never recompile mid-frame.
+    if (night && lamps.length && !lights.length) {
       for (let index = 0; index < MAX_CONSTRUCTION_POINT_LIGHTS; index++) {
         const light = new THREE.PointLight(0xffd9a1, 0, 4, 2);
         lights.push(light);
         root.add(light);
       }
+    } else if (!night && lights.length) {
+      for (const light of lights) { light.dispose(); light.removeFromParent(); }
+      lights.length = 0;
     }
     lamps.sort((a, b) => a.root.position.distanceToSquared(lightingPosition) - b.root.position.distanceToSquared(lightingPosition));
     lights.forEach((light, index) => {
@@ -190,6 +197,14 @@ export function createCityConstructionScene(options: {
         const plot = config.personalPlots.find((entry) => entry.id === placed.plotId);
         const decoration = config.decorations.find((entry) => entry.id === placed.decorationId);
         if (plot && decoration) items.push({ key: `plot:${plot.id}`, kind: decoration.kind, x: plot.x, z: plot.z });
+      }
+      // Personal construction is gone; the curated block layout ships as the
+      // default scenery. A legacy per-plot record still wins over the preset on
+      // its own plot so previously built decorations remain visible.
+      const occupiedPlots = new Set(state.decorations.map((entry) => entry.plotId));
+      for (const preset of collectDefaultDecorations(config)) {
+        if (occupiedPlots.has(preset.plotId)) continue;
+        items.push({ key: `plot:${preset.plotId}`, kind: preset.kind, x: preset.x, z: preset.z });
       }
       const wanted = new Set(items.map((item) => item.key));
       for (const [key, visual] of visuals) {

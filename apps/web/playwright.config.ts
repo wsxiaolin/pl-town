@@ -20,6 +20,15 @@ const webglChromiumArgs = [
 
 export default defineConfig({
   testDir: './tests',
+  // Unit tests use node:test and are compiled/run by `test:unit`, never by
+  // Playwright. Keep them out of discovery explicitly so a future default
+  // testMatch change (or a global grep) can't boot WebGL-less node tests here.
+  // The browser suite's naming convention is `*.spec.ts`; declaring testMatch
+  // pins that (every existing spec complies) so a stray
+  // `tests/unit/foo.spec.ts` cannot re-collide the two runners either.
+  // testIgnore stays as the second line of defense.
+  testMatch: '**/*.spec.ts',
+  testIgnore: '**/unit/**',
   // Tests are page-scoped: each one boots its own city via addInitScript and a
   // mocked WebSocket, so they can run in parallel against the shared dev server.
   fullyParallel: true,

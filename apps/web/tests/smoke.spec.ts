@@ -166,20 +166,32 @@ test('weather debug API updates the visible weather state', async ({ page }) => 
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
   for (const weather of ['rain', 'snow', 'snow-deep', 'clear']) {
-    const state = await page.evaluate((next) => {
-      const mini = (window as any)._mini;
-      const sky = mini.scene.background;
-      mini.weather.set(next);
-      return {
-        skyTexture: mini.scene.background?.isTexture === true,
-        sameSky: mini.scene.background === sky,
-        fog: mini.scene.fog,
-        globalTint: getComputedStyle(document.body, '::after').content,
-      };
-    }, weather);
-    expect(state).toEqual({ skyTexture: true, sameSky: true, fog: null, globalTint: 'none' });
+    await page.evaluate((next) => (window as any)._mini.weather.set(next), weather);
     await expect(page.locator('body')).toHaveAttribute('data-weather', weather);
+    // The ambience ramps through wetness on the frame loop, so mid-ramp sky
+    // and fog values are not stable assertion points. The fog object itself
+    // stays resident across every switch (its distance ramps, it never gets
+    // swapped for null — that keeps shaders fog-aware without a rebuild), and
+    // the data attributes flip synchronously.
+    expect(await page.evaluate(() => ({
+      fogPersistent: (window as any)._mini.scene.fog?.isFog === true,
+      globalTint: getComputedStyle(document.body, '::after').content,
+    }))).toEqual({ fogPersistent: true, globalTint: 'none' });
   }
+  // Once the ramp-out settles, the sky texture is handed back and the fog
+  // distance lands exactly on the invisible clear-day value.
+  await expect.poll(async () => page.evaluate(() => {
+    const scene = (window as any)._mini.scene;
+    return { skyTexture: scene.background?.isTexture === true, fogFar: scene.fog?.far ?? 0 };
+  }), { timeout: 15_000 }).toEqual({ skyTexture: true, fogFar: 4000 });
+  // Repeating a weather must not rebuild the sky or the fog object.
+  expect(await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    const sky = mini.scene.background;
+    const fog = mini.scene.fog;
+    mini.weather.set('clear');
+    return { sameSky: mini.scene.background === sky, sameFog: mini.scene.fog === fog };
+  })).toEqual({ sameSky: true, sameFog: true });
 });
 
 test('server weather messages update the visible weather state', async ({ page }) => {
@@ -187,10 +199,12 @@ test('server weather messages update the visible weather state', async ({ page }
   await waitForCityReady(page, 'weather-network-tester');
   await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
-  expect(await page.evaluate(() => {
+  // Rain ramps in on the frame loop: the sky swaps to the overcast color and
+  // the fog pulls in to the rain distance (lerp endpoint far=215).
+  await expect.poll(async () => page.evaluate(() => {
     const scene = (window as any)._mini.scene;
-    return { skyTexture: scene.background?.isTexture === true, fog: scene.fog };
-  })).toEqual({ skyTexture: true, fog: null });
+    return { rainSky: scene.background?.isColor === true, fogFar: scene.fog?.far ?? 0 };
+  }), { timeout: 15_000 }).toEqual({ rainSky: true, fogFar: 215 });
 });
 
 test('cloud inventory and scene discoveries work in the rendered city', async ({ page }) => {
@@ -623,10 +637,10 @@ test('a world.catalog override unlocks a story-locked building for an online res
 });
 
 test('map search fuzzily finds a building and keeps the existing teleport flow', async ({ page }) => {
+  // Teleport unlocks from cloud progress (5 visited buildings), so the stub must
+  // report enough visited buildings instead of seeding a legacy achievement.
+  stubCityWebSocket(page, { user: 'map-search-tester', unlockedBuildings: ['newsstand', 'mall', 'plaza'] });
   await seedCityStorage(page, 'map-search-tester');
-  await page.addInitScript(() => {
-    localStorage.setItem('minicityStats', JSON.stringify({ achievements: ['walker_100'] }));
-  });
   await waitForCityBooted(page);
   const before = await page.evaluate(() => {
     const position = (window as any)._mini.player.position;
@@ -1252,6 +1266,12 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
           };
         } else if (request.type === 'progress.building.visit') {
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
+        } else if (request.type === 'progress.achievement.unlock') {
+          // Achievements now live in cloud progress: mirror the server so the
+          // test can assert on the unlock command the client sends.
+          if (!this.progress.achievements.includes(request.achievementId)) this.progress.achievements.push(request.achievementId);
+          (window as any).__unlockedAchievements = [...this.progress.achievements];
+          response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'achievement.unlocked', achievementId: request.achievementId, reward: 0 } };
         }
         if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
       }
@@ -1265,10 +1285,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
   await waitForCityBooted(page);
 
   const interact = () => page.evaluate(() => (window as any)._mini.interactBuilding('writingclub_outer'));
-  const unlocked = () => page.evaluate(() => {
-    const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { achievements?: string[] };
-    return stats.achievements ?? [];
-  });
+  const unlocked = () => page.evaluate(() => ((window as any).__unlockedAchievements ?? []) as string[]);
   const interactionCount = () => page.evaluate(() => {
     const stats = JSON.parse(localStorage.getItem('minicityStats') || '{}') as { interactions?: number };
     return stats.interactions ?? 0;
