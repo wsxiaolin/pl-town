@@ -17,45 +17,14 @@ body.camera-pan-active #c { cursor: grabbing; }
   transition: opacity 180ms ease;
   overflow: hidden;
 }
-/* Rain: keep the atmosphere static and animate only transform/opacity so the
-   overlay stays on the compositor. Animating background-position or filter
-   forces a full-screen repaint every frame and makes both the rain and the
-   whole city stutter. */
+/* Rain: rain streaks and ground ripples live in the 3D scene
+   (rendering/weatherEffect.ts). The DOM overlay only adds a faint cool wash —
+   animating 2D rain streaks on top of real 3D rain reads as double rain. */
 body[data-weather="rain"] .weather-overlay {
-  opacity: 0.26;
+  opacity: 0.18;
   background:
     radial-gradient(ellipse at 50% -8%, rgba(206, 222, 240, 0.2), transparent 54%),
     radial-gradient(ellipse at 50% 106%, rgba(80, 112, 142, 0.16), transparent 58%);
-}
-body[data-weather="rain"] .weather-overlay::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -12%;
-  right: -12%;
-  height: calc(100% + 260px);
-  opacity: 0.72;
-  will-change: transform;
-  background-image:
-    radial-gradient(ellipse 1px 12px at 12% 18%, rgba(220, 235, 250, 0.28) 0 28%, transparent 62%),
-    radial-gradient(ellipse 1px 19px at 46% 66%, rgba(208, 228, 248, 0.34) 0 24%, transparent 61%),
-    radial-gradient(ellipse 2px 27px at 78% 34%, rgba(225, 239, 253, 0.22) 0 18%, transparent 59%),
-    radial-gradient(ellipse 1px 8px at 91% 82%, rgba(210, 229, 248, 0.3) 0 30%, transparent 64%);
-  background-size: 170px 260px, 250px 260px, 310px 260px, 205px 260px;
-  transform: translate3d(0, -260px, 0) skewX(-7deg);
-  animation: weatherRainFall 0.9s linear infinite;
-}
-body[data-weather="rain"] .weather-overlay::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.5;
-  will-change: opacity;
-  background-image:
-    radial-gradient(ellipse 28px 5px at 14% 96%, transparent 35%, rgba(196, 222, 246, 0.17) 38% 42%, transparent 46%),
-    radial-gradient(ellipse 42px 6px at 58% 101%, transparent 35%, rgba(196, 222, 246, 0.13) 38% 42%, transparent 46%),
-    radial-gradient(ellipse 22px 4px at 91% 91%, transparent 35%, rgba(196, 222, 246, 0.15) 38% 43%, transparent 48%);
-  animation: weatherSplash 1.9s ease-in-out infinite;
 }
 /* Snow: shift the whole tile by exactly one tile height with transform, so it
    keeps falling even while the main thread is busy walking the character. */
@@ -80,14 +49,6 @@ body[data-weather="snow-deep"] .weather-overlay {
     radial-gradient(circle at 35% 80%, rgba(255,255,255,0.82) 0 3px, transparent 4px);
   background-size: 145px 180px, 200px 180px, 165px 180px;
   animation: weatherSnowFall 2.4s linear infinite;
-}
-@keyframes weatherRainFall {
-  from { transform: translate3d(0, -260px, 0) skewX(-7deg); }
-  to { transform: translate3d(0, 0, 0) skewX(-7deg); }
-}
-@keyframes weatherSplash {
-  0%, 100% { opacity: 0.34; }
-  50% { opacity: 0.58; }
 }
 @keyframes weatherSnowFall {
   from { transform: translate3d(0, -180px, 0); }

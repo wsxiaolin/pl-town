@@ -62,6 +62,9 @@ export function mutateCity(user: User, kind: 'donate' | 'decorate', body: Record
       acceptedAmount = Math.min(body.amount as number, project.cost - row.funded);
       db.prepare('UPDATE city_projects SET funded = funded + ?, built = (funded + ? = ?) WHERE id = ?').run(acceptedAmount, acceptedAmount, project.cost, target);
     } else {
+      // Personal construction is retired in the player-facing UI and the web
+      // client no longer calls this path. The ledger branch stays so historical
+      // backups and their idempotent decorate-block receipts keep replaying.
       const block = CITY_CONSTRUCTION_CONFIG.personalBlocks?.find((entry) => entry.id === target);
       if (!block) throw new HttpBodyError('Unknown construction block', 404);
       const occupiedPlot = db.prepare('SELECT 1 FROM city_decorations WHERE plot_id = ?');

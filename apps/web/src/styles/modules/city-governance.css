@@ -1,4 +1,35 @@
+/* ════════════════════════════════════════════════════════════════════════════ */
+/* HOUSE OF COMMONS — parchment civic ledger                                    */
+/* Full-screen construction panel styled as an aged paper register: a wax-seal  */
+/* masthead, an italic epigraph, a sticky category rail and one proposal slip   */
+/* per project. Palette matches the paper map / building modal (see city-map.css */
+/* and modal.css) so the governance view reads as part of the same world.       */
+/* ════════════════════════════════════════════════════════════════════════════ */
+
 .city-governance-panel {
+  --gp-pad: max(1.25rem, env(safe-area-inset-left), env(safe-area-inset-right));
+  /* Inline inset shared by the masthead, response strips and the register
+     column, so every row lines up on the same centered 900px axis. Uses vw
+     rather than % so the value resolves to a length in both padding and
+     margin computed styles. */
+  --gp-gutter: max(var(--gp-pad), calc((100vw - 900px) / 2));
+  --gp-paper: #f5ecd8;
+  --gp-card: #fdfaf0;
+  --gp-card-deep: #f8f1de;
+  --gp-ink: #38301f;
+  --gp-ink-soft: #6f5e42;
+  --gp-line: #cdba8f;
+  --gp-line-soft: #ded0aa;
+  --gp-gold: #a8823f;
+  --gp-gold-deep: #7d5f2b;
+  --gp-green: #3d6b50;
+  --gp-green-deep: #2c4e3a;
+  --gp-seal: #a1492f;
+  --gp-danger: #9c3c28;
+  --gp-danger-bg: #f7e3d8;
+  --gp-ok-bg: #e5efe2;
+  --gp-ok-ink: #2c543c;
+
   position: fixed;
   inset: 0;
   z-index: 230;
@@ -12,79 +43,111 @@
   border: 0;
   display: none;
   flex-direction: column;
-  background: #f7f5ed;
-  color: #233f34;
+  background-color: var(--gp-paper);
+  color: var(--gp-ink);
   color-scheme: light;
   overflow: hidden;
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
 }
-.city-governance-panel[open] {
-  display: flex;
+.city-governance-panel[open] { display: flex; }
+.city-governance-panel::backdrop { background: var(--gp-paper); }
+
+/* Aged-paper grain and corner shading, painted behind every child. */
+.city-governance-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 18% 12%, rgba(168, 130, 63, .11), transparent 55%),
+    radial-gradient(ellipse at 84% 88%, rgba(168, 130, 63, .09), transparent 55%),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(125, 95, 43, .022) 3px 4px);
 }
-.city-governance-panel::backdrop {
-  background: #f7f5ed;
-}
+.city-governance-panel > * { position: relative; z-index: 1; }
+
+/* ── Masthead ─────────────────────────────────────────────────────────────── */
 .city-governance-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 1rem;
-  padding: max(1.3rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) 1.3rem max(1.5rem, env(safe-area-inset-left));
-  border-bottom: 1px solid #cdd8ca;
-  background: #fffdf7;
+  gap: .9rem;
+  padding: max(1rem, env(safe-area-inset-top)) var(--gp-gutter) .85rem;
+  border-bottom: 1px solid var(--gp-line);
+  background: linear-gradient(180deg, rgba(255, 253, 245, .7), rgba(255, 253, 245, 0));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55);
+}
+/* Wax seal emblem. */
+.city-governance-head::before {
+  content: '';
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #c26849, var(--gp-seal) 68%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 240, 220, .5),
+    inset 0 0 0 5px rgba(120, 40, 25, .22),
+    0 1px 4px rgba(80, 30, 15, .38);
 }
 .city-governance-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  font: 500 clamp(1.3rem, 4vw, 1.8rem)/1.2 Georgia, serif;
+  font: 600 clamp(1.35rem, 4vw, 1.85rem)/1.15 Georgia, 'Songti SC', 'Noto Serif SC', serif;
+  letter-spacing: .1em;
+  color: var(--gp-ink);
 }
-.city-governance-panel button {
-  min-height: 44px;
-  border: 1px solid #899f88;
-  border-radius: .5rem;
-  padding: .6rem 1rem;
-  background: #fffef9;
-  color: inherit;
-  cursor: pointer;
+.city-governance-head button {
+  flex: none;
+  min-height: 40px;
+  padding: .45rem 1.15rem;
+  border: 1px solid var(--gp-gold);
+  border-radius: 999px;
+  background: rgba(255, 253, 245, .65);
+  color: var(--gp-gold-deep);
   font: inherit;
+  font-size: .84rem;
+  letter-spacing: .14em;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
 }
+.city-governance-head button:hover { background: var(--gp-gold); border-color: var(--gp-gold-deep); color: #fff; }
+
 .city-governance-panel :is(button, input, select):focus-visible {
-  outline: 3px solid #55783d;
-  outline-offset: 3px;
+  outline: 3px solid var(--gp-green);
+  outline-offset: 2px;
 }
-.city-governance-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .5rem;
-  padding: .9rem 1.5rem 0;
-}
-.city-governance-tabs button.active {
-  background: #315e45;
-  border-color: #315e45;
-  color: #fff;
-}
+
+/* ── Ledger meta and responses ────────────────────────────────────────────── */
 .city-governance-panel [data-city-status] {
-  margin: .7rem 1.5rem 0;
-  color: #5b705d;
-  font-size: .78rem;
+  margin: .55rem var(--gp-gutter) 0;
+  color: var(--gp-ink-soft);
+  font-size: .74rem;
+  letter-spacing: .1em;
 }
-.city-governance-panel [role="alert"] {
-  flex-shrink: 0;
-  margin: .7rem 1.5rem 0;
-  padding: .7rem 1rem;
-  border: 1px solid #c48976;
-  border-radius: .5rem;
-  background: #fff0e8;
-  color: #873c27;
-}
+.city-governance-panel [role="alert"],
 .city-governance-panel [role="status"] {
   flex-shrink: 0;
-  margin: .7rem 1.5rem 0;
-  padding: .7rem 1rem;
-  border: 1px solid #8cc4b0;
-  border-radius: .5rem;
-  background: #e8f5ef;
-  color: #24543e;
-  line-height: 1.5;
+  margin: .6rem var(--gp-gutter) 0;
+  padding: .7rem .95rem;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: .85rem;
+  line-height: 1.55;
 }
+.city-governance-panel [role="alert"] {
+  border-color: #d9a58f;
+  border-left: 4px solid var(--gp-seal);
+  background: var(--gp-danger-bg);
+  color: var(--gp-danger);
+}
+.city-governance-panel [role="status"] {
+  border-color: #a9c8ad;
+  border-left: 4px solid var(--gp-green);
+  background: var(--gp-ok-bg);
+  color: var(--gp-ok-ink);
+}
+/* Empty status regions stay in the accessibility tree but collapse to 1x1. */
 .city-governance-panel [role="status"]:empty {
   position: absolute;
   inset: 0 auto auto 0;
@@ -97,102 +160,256 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ── Scrolling register ───────────────────────────────────────────────────── */
 .city-governance-body {
   flex: 1;
   min-height: 0;
+  width: 100%;
+  max-width: calc(900px + 2 * var(--gp-pad));
+  margin-inline: auto;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 1rem 1.5rem max(2rem, env(safe-area-inset-bottom));
+  padding: 1.1rem var(--gp-pad) max(2.4rem, env(safe-area-inset-bottom));
+  scrollbar-width: thin;
+  scrollbar-color: var(--gp-line) transparent;
 }
+.city-governance-body::-webkit-scrollbar { width: 8px; }
+.city-governance-body::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--gp-line); }
+.city-governance-body::-webkit-scrollbar-track { background: transparent; }
+
 .city-governance-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-  align-items: start;
-  gap: 1rem;
-  max-width: 1400px;
-  margin: 0 auto;
+  display: block;
 }
+
+/* Standalone actions in the fallback state (e.g. the retry button). */
+.city-governance-body > button {
+  min-height: 40px;
+  margin-top: .7rem;
+  padding: .45rem 1.15rem;
+  border: 1px solid var(--gp-gold);
+  border-radius: 999px;
+  background: rgba(255, 253, 245, .6);
+  color: var(--gp-gold-deep);
+  font: inherit;
+  font-size: .85rem;
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+.city-governance-body > button:hover { background: var(--gp-gold); border-color: var(--gp-gold-deep); color: #fff; }
+
+/* Italic epigraph with a gold rule, reused by the votes-unavailable notice. */
 .city-governance-intro {
-  grid-column: 1 / -1;
-  margin: 0 0 .25rem;
-  color: #526750;
+  margin: 0 0 1rem;
+  padding: .1rem 0 .1rem .9rem;
+  border-left: 3px solid var(--gp-gold);
+  color: var(--gp-ink-soft);
+  font-size: .95rem;
+  font-style: italic;
+  line-height: 1.75;
+}
+.city-governance-intro button {
+  margin-left: .6rem;
+  padding: .35rem .9rem;
+  border: 1px solid var(--gp-gold);
+  border-radius: 999px;
+  background: rgba(255, 253, 245, .6);
+  color: var(--gp-gold-deep);
+  font: inherit;
+  font-style: normal;
+  font-size: .8rem;
+  letter-spacing: .06em;
+  cursor: pointer;
+}
+
+/* Sticky category rail. */
+.city-governance-group-links {
+  position: sticky;
+  top: -.1rem;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: 0 0 1.1rem;
+  padding: .5rem 0 .6rem;
+  border-bottom: 1px solid var(--gp-line-soft);
+  background: var(--gp-paper);
+}
+.city-governance-group-links button {
+  min-height: 36px;
+  padding: .35rem 1.05rem;
+  border: 1px solid var(--gp-line);
+  border-radius: 999px;
+  background: rgba(255, 253, 245, .55);
+  color: var(--gp-ink-soft);
+  font: inherit;
+  font-size: .82rem;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: border-color .16s ease, color .16s ease, background .16s ease;
+}
+.city-governance-group-links button:hover { border-color: var(--gp-gold); color: var(--gp-gold-deep); }
+
+/* Section headings. */
+.city-governance-group-note { margin: 1.5rem 0 .7rem; }
+.city-governance-group-note h2 {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  margin: 0 0 .3rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--gp-ink);
+}
+.city-governance-group-note h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gp-line), transparent);
+}
+.city-governance-group-note h2:focus-visible { outline: 3px solid var(--gp-green); outline-offset: 4px; border-radius: 4px; }
+.city-governance-group-note p {
+  margin: 0;
+  color: var(--gp-ink-soft);
+  font-size: .86rem;
   line-height: 1.6;
 }
-.city-governance-group-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .5rem; }
-.city-governance-group-note { grid-column: 1 / -1; }
-.city-governance-group-note h2 { margin: .8rem 0 .4rem; font-size: 1.2rem; }
-.city-governance-group-note p { margin: 0 0 .25rem; color: #52634f; font-size: .9rem; line-height: 1.6; }
+
+/* ── Proposal slip ────────────────────────────────────────────────────────── */
 .city-governance-card {
-  min-width: 0;
-  padding: 1.2rem;
-  border: 1px solid #d4dccc;
-  border-radius: .8rem;
-  background: #fffef9;
-  box-shadow: 0 3px 12px #30453308;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem .7rem;
+  padding: 1rem 1.15rem 1.05rem;
+  margin: 0 0 .85rem;
+  border: 1px solid var(--gp-line-soft);
+  border-left: 4px solid transparent;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--gp-card), var(--gp-card-deep));
+  box-shadow: 0 2px 8px rgba(90, 70, 35, .07), inset 0 1px 0 rgba(255, 255, 255, .6);
   overflow-wrap: anywhere;
+  transition: border-color .16s ease, box-shadow .16s ease;
 }
+.city-governance-card:hover { border-color: var(--gp-line); box-shadow: 0 4px 14px rgba(90, 70, 35, .11); }
 .city-governance-card.active {
-  border-color: #7f9b65;
-  box-shadow: inset 3px 0 #7f9b65;
+  border-color: var(--gp-gold);
+  border-left-color: var(--gp-gold);
+  box-shadow: 0 3px 12px rgba(168, 130, 63, .2);
 }
 .city-governance-card h3 {
-  margin: 0 0 .45rem;
-  font-size: 1.05rem;
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  color: var(--gp-ink);
 }
 .city-governance-card p {
-  margin: .45rem 0;
-  color: #52634f;
-  font-size: .9rem;
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--gp-ink-soft);
+  font-size: .86rem;
   line-height: 1.6;
 }
+/* Funding line: second paragraph, set apart by a dashed ledger rule. */
+.city-governance-card > p:nth-of-type(2) {
+  margin-top: .15rem;
+  padding-top: .55rem;
+  border-top: 1px dashed var(--gp-line-soft);
+  color: var(--gp-ink);
+  font-size: .84rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+/* Support count badge. */
 .city-governance-card [data-city-vote-count] {
-  color: #315e45;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: .22rem .65rem;
+  border: 1px solid #a9c8ad;
+  border-radius: 999px;
+  background: var(--gp-ok-bg);
+  color: var(--gp-ok-ink);
+  font-size: .78rem;
   font-weight: 600;
 }
+
 .city-governance-card button {
-  margin: .65rem .5rem 0 0;
-  background: #e9efdf;
-}
-.city-governance-panel button:disabled {
-  opacity: .65;
-  cursor: default;
-}
-.city-governance-card :is(select, input) {
-  box-sizing: border-box;
+  flex: 0 0 auto;
   min-height: 44px;
-  max-width: 100%;
-  margin: .65rem .5rem 0 0;
-  padding: .55rem;
-  border: 1px solid #9fab92;
-  border-radius: .45rem;
-  background: #fff;
-  color: inherit;
+  padding: .5rem 1.15rem;
+  border: 1px solid var(--gp-line);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, .7);
+  color: var(--gp-ink);
   font: inherit;
+  font-size: .85rem;
+  letter-spacing: .06em;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
 }
-.city-governance-card input {
-  width: min(11rem, 100%);
+.city-governance-card button:hover:not(:disabled) { border-color: var(--gp-gold); color: var(--gp-gold-deep); }
+.city-governance-card button[data-city-focus^="vote:"] {
+  border-color: #9bbfa4;
+  background: #e9f1e6;
+  color: var(--gp-green-deep);
 }
+.city-governance-card button[data-city-focus^="vote:"]:disabled { opacity: .9; }
+.city-governance-card button[data-city-focus^="donate:"] {
+  border-color: var(--gp-green-deep);
+  background: var(--gp-green);
+  color: #f7f3e6;
+  font-weight: 600;
+}
+.city-governance-card button[data-city-focus^="donate:"]:hover:not(:disabled) {
+  background: var(--gp-green-deep);
+  color: #fff;
+}
+
+.city-governance-card input[data-city-input] {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 7rem;
+  min-height: 44px;
+  margin: 0;
+  padding: .5rem .7rem;
+  border: 1px solid var(--gp-line);
+  border-radius: 8px;
+  background: #fffdf6;
+  color: var(--gp-ink);
+  font: inherit;
+  font-size: .85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.city-governance-panel button:disabled { opacity: .6; cursor: default; }
+
+/* The register is deliberately light at night too: it stands in for a lamp-lit
+   civic hall and the commons test pins this light contract. */
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
-  .city-governance-panel :is([data-city-status], [role="alert"], [role="status"]) {
-    margin-left: max(1rem, env(safe-area-inset-left));
-    margin-right: max(1rem, env(safe-area-inset-right));
-  }
+  .city-governance-panel { --gp-pad: max(.9rem, env(safe-area-inset-left), env(safe-area-inset-right)); }
+  .city-governance-head { padding-top: max(.75rem, env(safe-area-inset-top)); padding-bottom: .7rem; }
+  .city-governance-head::before { width: 2rem; height: 2rem; }
+  .city-governance-body { padding-top: .9rem; }
+  .city-governance-card { padding: .9rem .95rem; }
+  .city-governance-card input[data-city-input] { width: 5.5rem; }
+  .city-governance-card button { padding: .5rem .9rem; }
+  /* The donate action owns the trailing row once the badge, vote and amount
+     wrap on a narrow screen. */
+  .city-governance-card button[data-city-focus^="donate:"] { flex: 1 1 auto; }
+}
 
-  .city-governance-head, .city-governance-tabs, .city-governance-body {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
-  }
-
-  .city-governance-head {
-    padding-top: max(.8rem, env(safe-area-inset-top));
-    padding-bottom: .8rem;
-  }
-
-  .city-governance-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .city-governance-card {
-    padding: 1rem;
-  }
+/* Landscape phones: reclaim vertical space from the masthead. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .city-governance-head { padding-top: .5rem; padding-bottom: .45rem; }
+  .city-governance-head::before { width: 1.7rem; height: 1.7rem; }
+  .city-governance-head h2 { font-size: 1.15rem; }
+  .city-governance-body { padding-top: .7rem; }
 }

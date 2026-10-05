@@ -115,8 +115,12 @@ function broadcastWorldCatalog() {
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;
+  // North district ground spans z=-44..-86.5 (cityConfig NORTH_DISTRICT_AREA
+  // .ground) with walkable lots to ≈-84; 96 leaves margin without reopening
+  // the "far-north walks rejected as Invalid position" regression. x stays 80:
+  // both districts live within ±42.
   return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z)
-    && Math.abs(Number(value.x)) <= 80 && Math.abs(Number(value.y)) <= 10 && Math.abs(Number(value.z)) <= 80
+    && Math.abs(Number(value.x)) <= 80 && Math.abs(Number(value.y)) <= 10 && Math.abs(Number(value.z)) <= 96
     && (value.rotation === undefined || (Number.isFinite(value.rotation) && Math.abs(Number(value.rotation)) <= Math.PI * 4));
 };
 const validId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 100;
@@ -238,7 +242,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
-      if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
+      if (!validId(message.buildingId) || !Object.hasOwn(BUILDING_PRICES, message.buildingId)) return fail(client.socket, 'Building is not available');
       if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       const progress = db.getPlayerProgress(userId);
@@ -248,7 +252,7 @@ async function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'progress.building.unlock') {
-      if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
+      if (!validId(message.buildingId) || !Object.hasOwn(BUILDING_PRICES, message.buildingId)) return fail(client.socket, 'Building cannot be unlocked');
       if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       try {
@@ -258,14 +262,14 @@ async function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'progress.achievement.unlock') {
-      if (!validId(message.achievementId) || !(message.achievementId in ACHIEVEMENT_REWARDS)) return fail(client.socket, 'Achievement is not available');
+      if (!validId(message.achievementId) || !Object.hasOwn(ACHIEVEMENT_REWARDS, message.achievementId)) return fail(client.socket, 'Achievement is not available');
       const reward = verifiedAchievementReward(db.getPlayerProgress(userId), message.achievementId);
       const result = db.unlockAchievement(userId, message.achievementId, reward);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'achievement.unlocked', achievementId: message.achievementId, reward: result.rewardGranted } });
       return;
     }
     if (message.type === 'progress.shop.buy') {
-      if (!validId(message.productId) || !(message.productId in SHOP_PRODUCTS)) return fail(client.socket, 'Product is not available');
+      if (!validId(message.productId) || !Object.hasOwn(SHOP_PRODUCTS, message.productId)) return fail(client.socket, 'Product is not available');
       const quantity = message.quantity ?? 1;
       if (!validQuantity(quantity)) return fail(client.socket, 'Invalid quantity');
       const product = SHOP_PRODUCTS[message.productId as keyof typeof SHOP_PRODUCTS];

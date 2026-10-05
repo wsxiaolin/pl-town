@@ -1,4 +1,0 @@
-.city-area-preview { display: grid; gap: .2rem; margin: .75rem 0; max-width: 24rem; }
-.city-area-cell { min-width: 0; padding: .3rem .15rem; border: 1px solid currentColor; border-radius: .2rem; text-align: center; font-size: .7rem; opacity: .65; }
-.city-area-cell.occupied { background: #776242; color: #fff; opacity: 1; }
-.city-governance-card [data-city-block-total] { font-weight: 600; }
