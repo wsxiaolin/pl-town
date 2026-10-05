@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { stubCityWebSocket, waitForCityReady } from './helpers';
 
-test('city governance retries donations idempotently and renders both tabs', async ({ page }) => {
+test('city governance retries donations idempotently without personal construction', async ({ page }) => {
   const config = {
     schemaVersion: 1,
     version: 'test-city-v1',
@@ -73,7 +73,7 @@ test('city governance retries donations idempotently and renders both tabs', asy
 
   const panel = page.locator('.city-governance-panel');
   await expect(panel).toHaveAttribute('open', '');
-  await expect(panel.getByRole('button', { name: '城市集体建设' })).toHaveClass(/active/);
+  await expect(panel.locator('.city-governance-tabs')).toHaveCount(0);
   const project = panel.locator('.city-governance-card').first();
   await expect(project).toContainText('募捐进度 0 金币 / 3,000 金币');
 
@@ -83,8 +83,4 @@ test('city governance retries donations idempotently and renders both tabs', asy
   await expect(project).toContainText('募捐进度 100 金币 / 3,000 金币');
   expect(requestIds).toHaveLength(2);
   expect(requestIds[1]).toBe(requestIds[0]);
-
-  await panel.getByRole('button', { name: '个人建设' }).click();
-  await expect(panel.getByText('北侧花园')).toBeVisible();
-  await expect(panel.getByRole('button', { name: '投建这片', exact: true })).toBeVisible();
 });

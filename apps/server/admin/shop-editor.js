@@ -1,7 +1,9 @@
 /**
  * 世界配置页的商品目录编辑器（名称 / 单价 / 上下架 / 新增 / 移除）。
  *
- * 从 app.js 拆出：app.js 已接近 AGENTS.md 的 1000 行红线，商品面板的草稿、
+ * 从 app.js 拆出：app.js 已接近 AGENTS.md 建议的 1000 行逻辑文件红线（注意
+ * check-source-size.mjs 只扫描 apps/web/src 与 apps/server/src，admin/ 不在其
+ * 强制范围内），商品面板的草稿、
  * 校验与保存自成闭环，只依赖 app.js 注入的 state / node / showNotice /
  * confirmAction / api。
  */

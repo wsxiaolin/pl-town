@@ -20,23 +20,19 @@ async function reloadCityState(page: Page): Promise<void> {
 
 const scenarios = [
   ['donate', 'insufficient coins'], ['donate', 'lost response'],
-  ['donate', 'invalid response'], ['decorate', 'insufficient coins'], ['decorate', 'lost response'],
-  ['decorate', 'invalid response'],
+  ['donate', 'invalid response'],
   ['donate', 'sign in'], ['donate', 'unknown error'],
 ] as const;
 for (const [action, failure] of scenarios) {
-  test(`${action} preserves the draft across ${failure} and tab changes before retry`, async ({ page }) => {
-    if (action === 'decorate') await page.setViewportSize({ width: 600, height: 390 });
+  test(`${action} preserves the draft across ${failure} and reopening before retry`, async ({ page }) => {
     const config = {
       schemaVersion: 1, version: 'error-fixture',
       projects: [
         { id: 'build-catcafe', buildingId: 'catcafe', name: '猫猫咖啡厅', description: '共同筹建', kind: 'building', cost: 3000 },
         { id: 'build-library', buildingId: 'library', name: '图书馆', description: '共同筹建图书馆', kind: 'building', cost: 2000 },
       ],
-      personalPlots: [{ id: 'garden', name: '测试花园', x: 30, z: -40, options: ['flowers', 'pine'] }],
-      personalBlocks: [{ id: 'garden-block', name: '测试花园', areaId: null, description: '独享小花园，一次投建。', cost: 120,
-        placements: [{ plotId: 'garden', decorationId: 'pine' }] }],
-      decorations: [{ id: 'flowers', name: '花坛', kind: 'flowers', cost: 80 }, { id: 'pine', name: '松树', kind: 'pine', cost: 120 }],
+      personalPlots: [],
+      decorations: [],
       initialBuiltBuildingIds: ['commons'],
     };
     let state = {
@@ -82,7 +78,7 @@ for (const [action, failure] of scenarios) {
         if (attempts === 1 && failure === 'insufficient coins') return route.fulfill({ status: 409, json: { error: 'Insufficient currency' } });
         if (attempts === 1 && failure === 'sign in') return route.fulfill({ status: 401, json: { error: 'Please sign in' } });
         const requestId = String(body.requestId);
-        const fingerprint = JSON.stringify([body.projectId ?? body.blockId, body.amount ?? null, body.configVersion]);
+        const fingerprint = JSON.stringify([body.projectId, body.amount ?? null, body.configVersion]);
         const replayed = committedRequests.has(requestId);
         if (replayed && committedRequests.get(requestId) !== fingerprint) {
           return route.fulfill({ status: 409, json: { error: 'requestId already used with different parameters' } });
@@ -92,16 +88,13 @@ for (const [action, failure] of scenarios) {
             return route.fulfill({ status: 409, json: { error: 'City config changed; reload config' } });
           }
           committedRequests.set(requestId, fingerprint);
-          funded += action === 'donate' ? Number(body.amount) : 0;
+          funded += Number(body.amount);
           state = {
             ...state, revision: state.revision + 1,
             projects: [
               { id: 'build-catcafe', funded, built: false, votes: 0 },
               { id: 'build-library', funded: 0, built: false, votes: 0 },
             ],
-            decorations: action === 'decorate'
-              ? [{ plotId: 'garden', decorationId: 'pine', ownerId: 'stub-user', ownerNickname: 'error-tester' }]
-              : state.decorations,
           };
         }
         // The server committed, but the browser received either no response or an unusable payload.
@@ -118,24 +111,11 @@ for (const [action, failure] of scenarios) {
     await waitForCityReady(page, 'error-tester');
     await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
     const panel = page.locator('.city-governance-panel');
-    if (action === 'decorate') {
-      expect(await panel.locator('.city-governance-head').evaluate((header) => {
-        const panelBounds = header.parentElement!.getBoundingClientRect();
-        const headerBounds = header.getBoundingClientRect();
-        return Math.abs(headerBounds.left - panelBounds.left) < 1 && Math.abs(headerBounds.right - panelBounds.right) < 1;
-      })).toBe(true);
-    }
     const feedback = await panel.locator('[data-city-feedback]').elementHandle();
-    if (action === 'decorate') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    const targetCard = panel.locator(action === 'donate' ? '[data-city-project="build-catcafe"]' : '[data-city-block="garden-block"]');
-    // Block purchases have no free parameters: the retained receipt is the draft.
-    const input = action === 'donate' ? targetCard.getByRole('spinbutton') : null;
-    if (input) await input.fill('500');
-    // Project cards carry both 投票建设 and 捐款 buttons; block cards have exactly
-    // one action button whose label follows the receipt state (投建这片/确认投建结果).
-    const actionButton = action === 'donate'
-      ? targetCard.getByRole('button', { name: '捐款', exact: true })
-      : targetCard.getByRole('button');
+    const targetCard = panel.locator('[data-city-project="build-catcafe"]');
+    const input = targetCard.getByRole('spinbutton');
+    await input.fill('500');
+    const actionButton = targetCard.getByRole('button', { name: '捐款', exact: true });
     await actionButton.click();
     await expect.poll(() => attempts).toBe(1);
     await expect(actionButton).toBeDisabled();
@@ -145,9 +125,7 @@ for (const [action, failure] of scenarios) {
     await panel.getByRole('button', { name: '关闭', exact: true }).click();
     await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
     await expect(panel).toHaveAttribute('open', '');
-    if (action === 'decorate') await panel.getByRole('button', { name: '个人建设', exact: true }).click();
-    if (input) await expect(input).toHaveValue('500');
-    else await expect(targetCard.locator('[data-city-block-total]')).toContainText('结果待确认');
+    await expect(input).toHaveValue('500');
     await expect(actionButton).toBeDisabled();
     expect(attempts).toBe(1);
     releaseMutation();
@@ -166,20 +144,17 @@ for (const [action, failure] of scenarios) {
     await expect(panel.getByRole('alert')).toContainText(message);
     if (failure === 'unknown error') await expect(panel.getByRole('alert')).not.toContainText('unmapped internal server detail');
     await expect(actionButton).toBeEnabled();
-    // Reopening focuses Close; selecting personal construction moves to that
-    // tab. A late failure must preserve whichever control the resident chose.
-    const resumedFocus = action === 'decorate' ? '个人建设' : '关闭';
-    await expect(panel.getByRole('button', { name: resumedFocus, exact: true })).toBeFocused();
-    if (input) await expect(input).toHaveValue('500');
-    else if (failure !== 'insufficient coins') await expect(targetCard.locator('[data-city-block-total]')).toContainText('结果待确认');
+    // Reopening focuses Close. A late failure must preserve whichever control
+    // the resident chose after the panel was rebuilt.
+    await expect(panel.getByRole('button', { name: '关闭', exact: true })).toBeFocused();
+    await expect(input).toHaveValue('500');
     if (failure === 'insufficient coins') {
       // The alert must appear while the 409 refresh is still blocked.
       await expect.poll(() => stateReads).toBeGreaterThanOrEqual(2);
-      if (input) await input.focus();
-      else await actionButton.focus();
+      await input.focus();
       state = { ...state, revision: state.revision + 1 };
       const latestRevision = state.revision;
-      const focusedInput = input ? await input.elementHandle() : null;
+      const focusedInput = await input.elementHandle();
       await broadcastCityState(page, state);
       // Capture this exact in-flight load before releasing its stale response;
       // starting another load afterwards could conceal a temporary rollback.
@@ -195,45 +170,29 @@ for (const [action, failure] of scenarios) {
         delete loading.pendingCityRefresh;
       });
       await expect(panel.locator('[data-city-status]')).toHaveText(`云端进度 #${latestRevision}`);
-      const focusTarget = input ?? actionButton;
-      await expect(focusTarget).toBeFocused();
+      await expect(input).toBeFocused();
       state = { ...state, revision: state.revision + 1 };
       await broadcastCityState(page, state);
-      await expect(focusTarget).toBeFocused();
+      await expect(input).toBeFocused();
       await expect(panel.getByRole('alert')).toContainText(message);
-      if (action === 'donate') expect(await focusedInput?.evaluate((node) => node === document.activeElement)).toBe(true);
+      expect(await focusedInput?.evaluate((node) => node === document.activeElement)).toBe(true);
     }
     if (failure !== 'insufficient coins') {
-      if (action === 'donate') {
-        await input.fill('600');
-        await input.fill('500');
-        await panel.getByRole('spinbutton').nth(1).fill('250');
-        config.version = 'error-fixture-v2';
-        state = { ...state, configVersion: config.version };
-        await reloadCityState(page);
-      } else {
-        // Blocks have no draft parameters; roll the config to prove the
-        // uncertain receipt still replays the original request afterwards.
-        config.version = 'error-fixture-v2';
-        state = { ...state, configVersion: config.version };
-        await reloadCityState(page);
-      }
+      await input.fill('600');
+      await input.fill('500');
+      await panel.getByRole('spinbutton').nth(1).fill('250');
+      config.version = 'error-fixture-v2';
+      state = { ...state, configVersion: config.version };
+      await reloadCityState(page);
     }
-    // Drafts must survive removal of their controls, not just an immediate refresh.
-    const currentTab = action === 'donate' ? '城市集体建设' : '个人建设';
-    const otherTab = action === 'donate' ? '个人建设' : '城市集体建设';
-    const targetName = action === 'donate' ? '猫猫咖啡厅' : '测试花园';
-    await panel.getByRole('button', { name: otherTab, exact: true }).click();
+    // The draft must survive removal of its control, not just an immediate refresh.
     await expect(panel.getByRole('alert')).toContainText(message);
-    await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
-    await panel.getByRole('button', { name: currentTab, exact: true }).click();
-    await expect(panel.getByRole('alert')).toContainText(`「${targetName}」`);
+    await expect(panel.getByRole('alert')).toContainText('「猫猫咖啡厅」');
     expect(await feedback?.evaluate((node) => node === document.querySelector('[data-city-feedback]'))).toBe(true);
-    if (input) await expect(input).toHaveValue('500');
-    else if (failure !== 'insufficient coins') await expect(targetCard.locator('[data-city-block-total]')).toContainText('结果待确认');
+    await expect(input).toHaveValue('500');
     await actionButton.click();
     await expect(panel.getByRole('alert')).toHaveCount(0);
-    await expect(panel).toContainText(action === 'donate' ? '500 金币 / 3,000 金币' : '已由 error-tester 投建');
+    await expect(panel).toContainText('500 金币 / 3,000 金币');
     expect(attempts).toBe(2);
     const { requestId: firstId, ...first } = requests[0]!;
     const { requestId: retryId, ...retry } = requests[1]!;
@@ -241,28 +200,26 @@ for (const [action, failure] of scenarios) {
     if (failure !== 'insufficient coins') expect(retryId).toBe(firstId);
     else expect(retryId).not.toBe(firstId);
     if (failure !== 'insufficient coins') await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('上一笔已成功，未重复扣费。');
-    if (action === 'donate') {
-      // A confirmed replay releases the old ID; another donation is a new charge.
+    // A confirmed replay releases the old ID; another donation is a new charge.
+    await actionButton.click();
+    await expect(targetCard).toContainText('1,000 金币 / 3,000 金币');
+    expect(requests[2]!.requestId).not.toBe(retryId);
+    expect(requests[2]!.configVersion).toBe(config.version);
+    expect(committedRequests.size).toBe(2);
+    await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('');
+    if (failure === 'insufficient coins') {
+      // After focus restoration, the action's original input may be detached.
+      await input.fill('450');
+      state = { ...state, revision: state.revision + 1 };
+      await broadcastCityState(page, state);
+      await input.fill('475');
       await actionButton.click();
-      await expect(targetCard).toContainText('1,000 金币 / 3,000 金币');
-      expect(requests[2]!.requestId).not.toBe(retryId);
-      expect(requests[2]!.configVersion).toBe(config.version);
-      expect(committedRequests.size).toBe(2);
-      await expect(panel.getByRole('status', { name: '建设结果', exact: true })).toHaveText('');
-      if (failure === 'insufficient coins') {
-        // After focus restoration, the action's original input may be detached.
-        await input.fill('450');
-        state = { ...state, revision: state.revision + 1 };
-        await broadcastCityState(page, state);
-        await input.fill('475');
-        await actionButton.click();
-        await expect(targetCard).toContainText('1,475 金币 / 3,000 金币');
-        expect(requests[3]!.amount).toBe(475);
-        config.version = 'error-fixture-restored';
-        state = { ...state, configVersion: config.version, epoch: 'restored-epoch', revision: 0 };
-        await reloadCityState(page);
-        await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #0');
-      }
+      await expect(targetCard).toContainText('1,475 金币 / 3,000 金币');
+      expect(requests[3]!.amount).toBe(475);
+      config.version = 'error-fixture-restored';
+      state = { ...state, configVersion: config.version, epoch: 'restored-epoch', revision: 0 };
+      await reloadCityState(page);
+      await expect(panel.locator('[data-city-status]')).toHaveText('云端进度 #0');
     }
     expect(pageErrors).toEqual([]);
     expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);

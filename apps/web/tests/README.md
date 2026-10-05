@@ -6,7 +6,9 @@
   `waitForCityReady`, `RENDER_SETTINGS`) used by both specs. Always go through
   `waitForCityBooted` before clicking UI — it waits for the Three.js scene +
   boot screen to settle, which is required on software-GL runners.
-- `unit/`: pure TypeScript domain tests (quest engine, navigation, stats).
+- `unit/`: pure TypeScript domain tests (quest engine, navigation, stats). New
+  files here must be appended to `test:unit` (or `test:unit:story-sentences`) in
+  `apps/web/package.json`; `unit/testRegistration.test.ts` enforces it.
 - `diagnostics/`: opt-in visual and performance diagnostics; these are not part
   of the default smoke suite.
 - `pending-construction.spec.ts`: pending buildings, plots, labels, and attached

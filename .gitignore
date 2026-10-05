@@ -17,3 +17,9 @@ todo.txt
 texture-batch-4k.png
 texture-batch-response.json
 weather-atlas-*.png
+# AI review workflow scratch files (written to the repo root at runtime)
+review_prompt.txt
+review_report.md
+review_report_clean.md
+final_comment.md
+conclusion.md

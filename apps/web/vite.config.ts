@@ -38,6 +38,19 @@ export default defineConfig({
     __TOWN_VITE_API_BASE__: JSON.stringify(process.env.VITE_API_BASE ?? ''),
     __TOWN_VITE_SERVER_URL__: JSON.stringify(serverUrl),
     __MINICITY_BUILD_ID__: JSON.stringify(process.env.VITE_BUILD_ID ?? webBuildId()),
+    // 「回声」剧情暂停开关：true 时 esbuild 把 storyOrchestration 里动态加载
+    // 「回声」的分支整体折叠（dev 下 esbuild 会改写成 if (false)——源码仍物理
+    // 存在，但分支永不执行、模块永不请求；生产构建则整段删除），运行时由
+    // echoSuspendedController 占位。
+    // ECHO_STORY_SUSPENDED=false npm run build 可本地/CI 构建恢复态验证。
+    //
+    // ── 恢复上线清单（三处同批翻转）──
+    // 1. 本开关改回默认 'false'（或构建时传 ECHO_STORY_SUSPENDED=false）；
+    //    scripts/check-story-bundle.mjs 会自动跳过（它只在暂停态断言零打包）。
+    // 2. apps/web/src/core/bundledAssets.ts 的 glob 排除项同步删除。
+    // 3. apps/web/tests/story-gates.spec.ts 第一个用例（"entry stays
+    //    suspended and the guide header stays hidden"）同步改写为恢复态断言。
+    __ECHO_STORY_SUSPENDED__: JSON.stringify(process.env.ECHO_STORY_SUSPENDED !== 'false'),
   },
   server: {
     host: true,

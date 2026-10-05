@@ -138,7 +138,9 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     const night = hour === 21;
     await expect.poll(async () => (await inspect()).activeLights).toBe(night ? 8 : 0);
     const scene = await inspect();
-    expect(scene).toMatchObject({ lamps: 88, meshes: 176, totalLights: 8, globes: 88, illuminatedGlobes: night ? 88 : 0, contextLost: false, contextLosses: 0 });
+    // The pool exists only at night: the default layout's lamps would otherwise
+    // keep eight always-resident point lights in every lit shader by day.
+    expect(scene).toMatchObject({ lamps: 88, meshes: 176, totalLights: night ? 8 : 0, globes: 88, illuminatedGlobes: night ? 88 : 0, contextLost: false, contextLosses: 0 });
     // Verify the renderer keeps producing frames across dusk/day transitions.
     await expect.poll(async () => (await inspect()).frame).toBeGreaterThan(scene.frame);
     expect((await inspect()).contextLost).toBe(false);
