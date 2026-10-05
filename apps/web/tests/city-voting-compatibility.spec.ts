@@ -35,7 +35,10 @@ test('pre-voting server snapshots preserve construction while mutation receipts 
   await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
   const panel = page.locator('.city-governance-panel');
   const project = panel.locator('[data-city-project="library"]');
-  await expect(project).toContainText('已建成');
+  // Built projects leave the House agenda (nothing left to vote or donate)
+  // and a fully built town shows the friendly empty note instead.
+  await expect(project).toHaveCount(0);
+  await expect(panel.locator('[data-city-agenda-empty]')).toBeVisible();
   await expect(project.locator('[data-city-vote-count]')).toHaveCount(0);
   const visibleLibrary = () => page.evaluate(() => {
     let found = false;
@@ -49,6 +52,7 @@ test('pre-voting server snapshots preserve construction while mutation receipts 
   state = { ...state, revision: 2, projects: [{ id: 'library', funded: 0, built: false }] };
   await pushCityState(page, state);
   await expect(project.getByRole('button', { name: '捐款', exact: true })).toBeVisible();
+  await expect(panel.locator('[data-city-agenda-empty]')).toHaveCount(0);
   await expect.poll(visibleLibrary).toBe(false);
   for (const votes of ['invalid', -1]) {
     await pushCityState(page, { ...state, revision: 3, projects: [{ ...state.projects[0], votes }] });

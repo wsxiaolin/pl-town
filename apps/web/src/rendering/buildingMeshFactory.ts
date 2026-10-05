@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
-import { createNorthDistrictBuilders } from './northDistrictBuildings';
+import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
 import { RENDER_ORDER } from './layers';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
@@ -824,32 +824,6 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:antennaBase + 2.7};
   }
 
-  function buildFriedChickenShop(cfg: BuildingDefinition): BuildingEntity {
-    const g = new THREE.Group();
-    const width = 3.25, depth = 2.35, height = 1.52, baseY = 0.2;
-    part(g, new THREE.BoxGeometry(width + 0.55, baseY, depth + 0.55), {color:0xd6c9b9, roughness:0.82, tex:'pavement', rx:2, ry:2}, [0, baseY / 2, 0]);
-    const bodyMat = stdMat({color:0xe95e3f, roughness:0.42, tex:'wall', rx:2, ry:1});
-    bodyMat.emissive = new THREE.Color(0xc83f2d); bodyMat.emissiveIntensity = 0;
-    const body = mk(new THREE.BoxGeometry(width, height, depth), bodyMat);
-    body.position.y = baseY + height / 2 + 0.012; body.castShadow = body.receiveShadow = true; g.add(body);
-    const top = baseY + height;
-    part(g, new THREE.BoxGeometry(width + 0.24, 0.16, depth + 0.24), {color:0xf1c54a, roughness:0.38, tex:'metal', rx:2, ry:2}, [0, top + 0.08, 0]);
-    const glass = {color:0x9ac7dc, emissive:0x5b92bd, emissiveIntensity:0.08, roughness:0.14, metalness:0.25, tex:'glass', rx:1, ry:1};
-    [-0.92, 0.92].forEach((x) => part(g, new THREE.BoxGeometry(0.64, 0.66, 0.035), glass, [x, baseY + 0.88, depth / 2 + 0.022], false));
-    part(g, new THREE.BoxGeometry(0.5, 1.05, 0.04), {color:0x394d55, roughness:0.35, tex:'metal', rx:1, ry:1}, [0, baseY + 0.525, depth / 2 + 0.025], false);
-    for (let index = 0; index < 7; index += 1) {
-      part(g, new THREE.BoxGeometry(0.42, 0.18, 0.42), {color:index % 2 ? 0xf7e7bd : 0xd64032, roughness:0.66, tex:'fabric', rx:1, ry:1}, [-1.26 + index * 0.42, top - 0.02, depth / 2 + 0.22], false);
-    }
-    part(g, new THREE.CylinderGeometry(0.42, 0.5, 0.62, 16), {color:0xf1c54a, roughness:0.4, metalness:0.1, tex:'metal', rx:1, ry:1}, [0, top + 0.45, 0]);
-    part(g, new THREE.TorusGeometry(0.25, 0.07, 8, 16), {color:0xd64032, roughness:0.35, tex:'metal', rx:1, ry:1}, [0, top + 0.75, 0], false).rotation.x = Math.PI / 2;
-    [-0.18, 0, 0.18].forEach((x) => part(g, new THREE.SphereGeometry(0.095, 10, 8), {color:0xb96e2a, roughness:0.78}, [x, top + 0.75, 0.12], false));
-    [-1.3, 1.3].forEach((x) => part(g, new THREE.CylinderGeometry(0.06, 0.08, 1.0, 8), {color:0x4d5d61, roughness:0.45, metalness:0.46, tex:'metal', rx:1, ry:1}, [x, baseY + 0.5, depth / 2 + 0.38], false));
-    part(g, new THREE.BoxGeometry(2.75, 0.42, 0.06), {color:0xf4cf5b, emissive:0xf1b93c, emissiveIntensity:0.12, roughness:0.34, tex:'metal', rx:2, ry:1}, [0, top + 0.33, depth / 2 + 0.32], false);
-    part(g, new THREE.CylinderGeometry(0.16, 0.16, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, baseY + 0.05, 0], false);
-    g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
-    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top + 1.3};
-  }
-
   // 科特维酒馆 — a run-down waystation between death and the dungeon: tavern
   // hall below, freshly renovated guest rooms above, dim oil lamps, a
   // self-playing piano in the corner, and the heavy dungeon door up front.
@@ -923,10 +897,18 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     screen: buildScreen, shaft: buildShaft, altar: buildAltar, observatory: buildObservatory,
     pagoda: buildPagoda, market: buildMarket, greenhouse: buildGreenhouse,
     clocktower: buildClockTower, temple: buildTemple, factory: buildFactory,
-    mall: buildMall, school: buildSchool, academy: buildAcademy,
+    // 金月店(mall_south)换上 rainy-store 的 24H MART 便利店外观(用户指定;
+    // 自动门/橱窗文案契合)。mall_west 保持原商场造型。
+    mall: (cfg: BuildingDefinition) => cfg.id === 'mall_south'
+      ? buildMartStore({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg)
+      : buildMall(cfg),
+    school: buildSchool, academy: buildAcademy,
     crown: (cfg: BuildingDefinition) => buildIceKingCrownBuilding(cfg, { stdMat, mk, part }),
     banana: buildBanana, qipai: buildQipai,
-    television_tower: buildTelevisionTower, fried_chicken_shop: buildFriedChickenShop, tavern: buildTavern,
+    television_tower: buildTelevisionTower,
+    // 炸鸡店换上 rainy-store 的 24H MART 便利店外观(用户指定;文案保留炸鸡主题)。
+    fried_chicken_shop: (cfg: BuildingDefinition) => buildMartStore({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    tavern: buildTavern,
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     film_city: buildFilmCity,

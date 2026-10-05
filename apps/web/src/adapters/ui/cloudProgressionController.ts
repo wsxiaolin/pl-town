@@ -56,6 +56,9 @@ const KNOWN_ITEM_ICONS: Readonly<Record<string, string>> = Object.freeze({
   [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.icon,
 });
 const itemIcon = (itemId: string, name: string): string => KNOWN_ITEM_ICONS[itemId] ?? name.charAt(0) ?? '册';
+// The server settles listings at unit price × quantity (db.ts buyMarketListing);
+// a single helper keeps label, disabled rule and click guard from drifting apart.
+const listingTotal = (listing: MarketListingView): number => listing.price * listing.quantity;
 const repeatableRewardIds: ReadonlySet<string> = new Set(Object.values(ICE_KING_REWARDS).map((reward) => reward.id));
 const iceRewardById = new Map(Object.values(ICE_KING_REWARDS).map((reward) => [reward.id, reward]));
 
@@ -165,6 +168,7 @@ export function createCloudProgressionController(options: Options) {
     }
     if (event?.type === 'market.listing.sold' && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
     if (event?.type === 'market.listing.sold') requestListings();
+    evaluateStatAchievements();
     render();
     describeEvent(event);
     if (event?.type === 'item.consumed' && event.itemId) {
@@ -581,7 +585,7 @@ export function createCloudProgressionController(options: Options) {
     name.textContent = `${itemName(listing.itemId)} ×${listing.quantity}`;
     const detail = options.document.createElement('small');
     detail.textContent = listing.status === 'active'
-      ? `${listing.sellerNickname} · 单价 ${listing.price} 币 · 合计 ${listing.price * listing.quantity} 币${own ? ' · 在售中' : ''}`
+      ? `${listing.sellerNickname} · 单价 ${listing.price} 币 · 合计 ${listingTotal(listing)} 币${own ? ' · 在售中' : ''}`
       : `${listing.sellerNickname} · ${listing.status === 'sold' ? '已售出' : '已取消'} · 单价 ${listing.price} 币`;
     copy.append(name, detail);
     if (own && listing.status === 'active') {
@@ -599,8 +603,8 @@ export function createCloudProgressionController(options: Options) {
       buy.type = 'button';
       buy.className = 'market-claim-button';
       buy.dataset.listingBuy = listing.id;
-      buy.textContent = `购买 · ${listing.price * listing.quantity} 币`;
-      buy.disabled = !online || progress.currency < listing.price * listing.quantity || pendingMarketActions.has(`listing:${listing.id}`);
+      buy.textContent = `购买 · ${listingTotal(listing)} 币`;
+      buy.disabled = !online || progress.currency < listingTotal(listing) || pendingMarketActions.has(`listing:${listing.id}`);
       row.append(icon, copy, buy);
       return row;
     }
@@ -676,7 +680,7 @@ export function createCloudProgressionController(options: Options) {
       const key = `listing:${listingBuy}`;
       const listing = listings.active.find((entry) => entry.id === listingBuy);
       if (!listing || pendingMarketActions.has(key) || !online) return;
-      if (progress.currency < listing.price) { options.showToast('余额不足，买不下这份挂单'); return; }
+      if (progress.currency < listingTotal(listing)) { options.showToast('余额不足，买不下这份挂单'); return; }
       pendingMarketActions.add(key);
       renderExchange();
       if (!options.send({ type: 'market.listing.buy', listingId: listingBuy })) { pendingMarketActions.delete(key); renderExchange(); }
@@ -777,12 +781,26 @@ export function createCloudProgressionController(options: Options) {
     return options.send({ type: 'progress.achievement.unlock', achievementId });
   }
 
-  function syncAchievements(achievementIds: readonly string[]): void {
+  // Stat achievements are evaluated from cloud progress after every snapshot;
+  // the server re-verifies each claim, so this only ever sends eligible unlocks.
+  const STAT_ACHIEVEMENT_CHECKS: ReadonlyArray<{ id: string; met: () => boolean }> = [
+    { id: 'citizen', met: () => true },
+    { id: 'first_building', met: () => progress.visitedBuildings.length >= 1 },
+    { id: 'explorer_5', met: () => progress.visitedBuildings.length >= 5 },
+    { id: 'explorer_10', met: () => progress.visitedBuildings.length >= 10 },
+    { id: 'unlock_3', met: () => progress.unlockedBuildings.length >= 3 },
+  ];
+  // Claims that were sent but not yet confirmed, so intermediate snapshots do
+  // not re-send them before the server echoes the unlock back.
+  const pendingStatAchievements = new Set<string>();
+
+  function evaluateStatAchievements(): void {
     if (!online) return;
-    achievementIds.forEach((achievementId) => {
-      if (achievementId in catalog.achievementRewards && !progress.achievements.includes(achievementId)) {
-        options.send({ type: 'progress.achievement.unlock', achievementId });
-      }
+    progress.achievements.forEach((id) => pendingStatAchievements.delete(id));
+    STAT_ACHIEVEMENT_CHECKS.forEach(({ id, met }) => {
+      if (!met() || !(id in catalog.achievementRewards)) return;
+      if (progress.achievements.includes(id) || pendingStatAchievements.has(id)) return;
+      if (options.send({ type: 'progress.achievement.unlock', achievementId: id })) pendingStatAchievements.add(id);
     });
   }
 
@@ -864,6 +882,7 @@ export function createCloudProgressionController(options: Options) {
     pendingShopProducts.clear();
     pendingDailyClaims.clear();
     pendingMarketActions.clear();
+    pendingStatAchievements.clear();
     pendingFilmCity?.(false);
     pendingFilmCity = null;
     render();
@@ -872,7 +891,7 @@ export function createCloudProgressionController(options: Options) {
   function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
-    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement, syncAchievements,
+    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement,
  buyProduct, consumeItem, purchaseFilmCityExperience, nextRewardClaimSequence, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),

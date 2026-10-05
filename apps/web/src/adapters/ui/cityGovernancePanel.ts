@@ -212,6 +212,13 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
   const sessionId = getCityVotingSessionId();
   const votesUnavailable = sessionId !== null && votesUnavailableSession === sessionId;
   const currentVotes = myVotes?.sessionId === sessionId && myVotes?.epoch === state.epoch ? myVotes : null;
+  // Built projects (resident-funded or default-standing gifts) have no vote,
+  // donation or progress to offer, so they leave the agenda instead of idling
+  // as "已建成" cards. A town that finished everything keeps a friendly note.
+  const agenda = projects.filter((project) => {
+    const saved = state.projects.find((entry) => entry.id === project.id);
+    return !saved?.built;
+  });
   const explanation = document.createElement('p');
   explanation.className = 'city-governance-intro';
   explanation.textContent = '新城从众议院起步，建筑由居民共同捐建，建成后开放对应的剧情、商店等功能。'
@@ -225,14 +232,22 @@ function renderCollective(list: HTMLElement, projects: CityProject[], state: Cit
       button('重新检测投票', () => { void refreshVotes(); render(); }, Boolean(votesLoading), 'votes-reload'));
     list.append(notice);
   }
+  if (!agenda.length) {
+    const empty = document.createElement('p');
+    empty.className = 'city-governance-intro';
+    empty.dataset.cityAgendaEmpty = 'true';
+    empty.textContent = '当前没有待筹建的工程——已建成的建筑由全城居民共享。';
+    list.append(empty);
+    return;
+  }
   const groups = [
-    { id: 'buildings', title: '公共建筑', description: '选择希望共同筹建的公共建筑，查看进度并参与捐款。', projects: projects.filter((project) => project.kind === 'building') },
-    { id: 'landscape', title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: projects.filter((project) => project.kind !== 'building') },
+    { id: 'buildings', title: '公共建筑', description: '选择希望共同筹建的公共建筑，查看进度并参与捐款。', projects: agenda.filter((project) => project.kind === 'building') },
+    { id: 'landscape', title: '道路与绿化', description: '共同建设道路、灯光和公共装饰。', projects: agenda.filter((project) => project.kind !== 'building') },
   ];
   const navigation = document.createElement('nav');
   navigation.className = 'city-governance-group-links';
   navigation.setAttribute('aria-label', '建设项目分类');
-  if (projects.length) list.append(navigation);
+  if (agenda.length) list.append(navigation);
   for (const group of groups) {
     if (!group.projects.length) continue;
     const heading = document.createElement('div');

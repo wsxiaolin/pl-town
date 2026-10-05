@@ -44,35 +44,33 @@ const STORY_LOCKED_BUILDING_IDS: ReadonlySet<string> = new Set(
   BUILDING_CATALOG.filter((building) => building.storyLocked).map((building) => building.id),
 );
 
+// Cloud-verified stat achievements keep their currency rewards; story
+// achievements are unlock markers only, so their rewards are intentionally 0
+// (verifiedAchievementReward never grants them currency).
 export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.freeze({
   citizen: 20,
   first_building: 20,
   explorer_5: 35,
   explorer_10: 60,
-  walker_100: 30,
-  walker_500: 80,
-  chat_1: 20,
-  chat_all: 60,
-  night_owl: 25,
   unlock_3: 40,
-  cat_cafe_note: 30,
+  cat_cafe_note: 0,
   cat_death_remembrance: 0,
-  minicity_origin: 50,
-  dragonwell_assimilation: 80,
-  west_beach_encounter: 50,
-  echo_unnoticed: 30,
-  echo_eternal_lie: 40,
-  echo_real_echo: 80,
-  echo_true_dawn: 120,
-  yesterday_witness: 40,
-  yesterday_silence: 30,
-  yesterday_true_dawn: 80,
+  minicity_origin: 0,
+  dragonwell_assimilation: 0,
+  west_beach_encounter: 0,
+  echo_unnoticed: 0,
+  echo_eternal_lie: 0,
+  echo_real_echo: 0,
+  echo_true_dawn: 0,
+  yesterday_witness: 0,
+  yesterday_silence: 0,
+  yesterday_true_dawn: 0,
   wild_mushroom_stubborn: 0,
   wild_mushroom_local: 0,
-  magi_87_cents: 60,
-  'overcoat.recover': 50,
-  'overcoat.witness': 60,
-  'overcoat.ghost': 80,
+  magi_87_cents: 0,
+  'overcoat.recover': 0,
+  'overcoat.witness': 0,
+  'overcoat.ghost': 0,
   murder_wanderer: 0,
   murder_watcher: 0,
   murder_chain: 0,
@@ -142,7 +140,9 @@ export const MAX_ACTIVE_MARKET_LISTINGS = 6;
 
 /** Tradeable goods = whatever the shop currently sells plus crafted outputs. */
 export function isMarketTradeableItemId(itemId: string): boolean {
-  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || itemId in SHOP_PRODUCTS;
+  // Object.hasOwn keeps inherited Object.prototype keys ('toString',
+  // 'constructor', 'valueOf') out of the tradeable set.
+  return RECIPE_OUTPUT_ITEM_IDS.has(itemId) || Object.hasOwn(SHOP_PRODUCTS, itemId);
 }
 
 export function getMarketTradeableItemIds(): string[] {
@@ -268,7 +268,7 @@ export type BuildingUnlockResolution = {
 export function resolveBuildingUnlockStates(): BuildingUnlockResolution[] {
   const overrides = getBuildingOverrides();
   return BUILDING_CATALOG
-    .filter((building) => building.id in BUILDING_PRICES)
+    .filter((building) => Object.hasOwn(BUILDING_PRICES, building.id))
     .map((building) => {
       const override = overrides[building.id] ?? null;
       const defaultState: ResolvedBuildingState = STORY_LOCKED_BUILDING_IDS.has(building.id) || BUILDING_UNLOCKABLE[building.id] !== true ? 'locked' : 'unlockable';

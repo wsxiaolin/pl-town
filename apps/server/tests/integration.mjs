@@ -603,8 +603,8 @@ try {
   send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
   const duplicateAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building' && message.event.reward === 0);
   if (duplicateAchievement.progress.currency !== 1160) throw new Error('Achievement rewards must be idempotent');
-  send(alice, { type: 'progress.achievement.unlock', achievementId: 'walker_500' });
-  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'walker_500');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'echo_unnoticed' });
+  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'echo_unnoticed');
   if (unverifiedAchievement.event.reward !== 0 || unverifiedAchievement.progress.currency !== 1160) throw new Error('Client-only achievement claims must not mint currency');
   send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
   const consumed = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed');
@@ -647,6 +647,10 @@ try {
 
   send(bob, { type: 'position', position: { x: 3, y: 0, z: 4, rotation: 1 } });
   await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 3);
+  // Far-north walks (星语北城 ground reaches z=-86.5) must stay valid; the old
+  // ±80 bound rejected them as "Invalid position".
+  send(bob, { type: 'position', position: { x: 0, y: 0, z: -84 } });
+  await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.z === -84);
 
   send(alice, { type: 'chat', text: 'a'.repeat(501) });
   await waitFor(alice, 'error', (message) => message.message === 'Invalid chat message');
@@ -915,6 +919,20 @@ try {
   send(trader, { type: 'market.listing.create', itemId: 'city_guide', quantity: 1, price: 10 });
   const nonTradeable = await sinceMessage(trader, 'error', (item) => item.message === 'This item cannot be listed', nonTradeableSince);
   if (!nonTradeable) throw new Error('Non-tradeable items must be refused by the listing API');
+
+  // Object.prototype keys must not be mistaken for shop products via the `in`
+  // operator (the tradeable check must be own-property only).
+  const protoSince = trader.messages.length;
+  send(trader, { type: 'market.listing.create', itemId: 'toString', quantity: 1, price: 10 });
+  const protoListed = await sinceMessage(trader, 'error', (item) => item.message === 'This item cannot be listed', protoSince);
+  if (!protoListed) throw new Error('Inherited Object.prototype keys must not be tradeable');
+
+  // The shop.buy guard must uphold the same own-property rule: an inherited
+  // key is rejected as a product up front, not allowed through to a NaN total.
+  const protoBuySince = trader.messages.length;
+  send(trader, { type: 'progress.shop.buy', productId: 'toString', quantity: 1 });
+  const protoBuy = await sinceMessage(trader, 'error', (item) => item.message === 'Product is not available', protoBuySince);
+  if (!protoBuy) throw new Error('Inherited Object.prototype keys must not be purchasable shop products');
 
   const selfBuySince = trader.messages.length;
   send(trader, { type: 'market.listing.buy', listingId });

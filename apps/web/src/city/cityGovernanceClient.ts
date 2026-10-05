@@ -26,6 +26,7 @@ type CityStateWithVotes = Omit<CityState, 'projects'> & {
 };
 import { townApiUrl } from '../core/townApi';
 import { getResidentToken } from '../core/residentToken';
+import { combineAbortSignals } from '../core/abortable';
 
 // This module is the existing browser transport facade, including safe error
 // adaptation. Pure gameplay rules do not depend on this HTTP/storage boundary.
@@ -137,7 +138,10 @@ function isOlderCityState(next: CityState): boolean {
 
 async function fetchJson(path: string, signal?: AbortSignal, init?: RequestInit): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(8_000);
-  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  // combineAbortSignals falls back to manual composition on browsers without
+  // AbortSignal.any (HarmonyOS/HuaweiBrowser Chromium <116); the plain
+  // timeout path needs no combination.
+  const requestSignal = signal ? combineAbortSignals([signal, timeoutSignal]) : timeoutSignal;
   return fetch(townApiUrl(path), { ...init, signal: requestSignal, headers: { accept: 'application/json', ...(init?.headers ?? {}) } });
 }
 

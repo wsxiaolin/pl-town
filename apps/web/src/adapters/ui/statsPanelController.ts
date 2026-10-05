@@ -5,8 +5,8 @@ export type StatsPanelControllerOptions = {
   formatDate: (time: number) => string;
   formatTime: (seconds: number) => string;
   getBuildingCount: () => number;
-  getNpcCount: () => number;
   achievements: readonly { id: string; name: string; desc?: string }[];
+  unlockedAchievements: () => readonly string[];
   unlockTiers: readonly { threshold: number; label: string }[];
 };
 
@@ -45,7 +45,7 @@ export function createStatsPanelController(options: StatsPanelControllerOptions)
     const stats = options.getStats();
     const interactions = stats.interactions ?? 0;
     const visited = (stats.buildingsVisited ?? []).length;
-    const achievementIds = stats.achievements ?? [];
+    const achievementIds = options.unlockedAchievements();
     const next = options.unlockTiers.find((tier) => interactions < tier.threshold);
     const previous = [...options.unlockTiers].reverse().find((tier) => interactions >= tier.threshold)?.threshold ?? 0;
     const target = next?.threshold ?? options.unlockTiers.at(-1)?.threshold ?? 1;
