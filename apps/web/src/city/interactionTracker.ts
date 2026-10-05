@@ -7,7 +7,6 @@ import { showUnlockToast } from './toast';
 export type InteractionTrackerOptions = {
   getStats: () => LegacyStats;
   saveStats: (stats: LegacyStats) => void;
-  checkAchievements: () => void;
   updateWelcome: () => void;
   getProgressionController: () => { checkUnlocks: (stats: LegacyStats) => void } | null;
   getQuestRuntime: () => { dispatch: (event: QuestEvent) => QuestTransition };
@@ -26,7 +25,6 @@ export function createInteractionTracker(options: InteractionTrackerOptions) {
     options.saveStats(s);
     options.updateWelcome();
     options.getProgressionController()?.checkUnlocks(s);
-    options.checkAchievements();
     const transition = options.getQuestRuntime().dispatch({
       id: `building:${buildingId}:${Date.now()}:${options.getQuestEventSequence()}`,
       type: 'building.visited',
@@ -48,7 +46,6 @@ export function createInteractionTracker(options: InteractionTrackerOptions) {
     if (!stats.npcsMet) stats.npcsMet = [];
     if (!stats.npcsMet.includes(npcId)) stats.npcsMet.push(npcId);
     options.saveStats(stats);
-    options.checkAchievements();
     const at = Date.now();
     options.getQuestRuntime().dispatch({
       id: `npc:${npcId}:${at}:${options.getQuestEventSequence()}`,
@@ -64,7 +61,6 @@ export function createInteractionTracker(options: InteractionTrackerOptions) {
     const s = options.getStats();
     s.distance = (s.distance || 0) + amount;
     options.saveStats(s);
-    options.checkAchievements();
   }
 
   return { trackInteraction, recordNpcInteraction, flushDistance };

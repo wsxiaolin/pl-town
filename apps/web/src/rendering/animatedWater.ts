@@ -218,6 +218,15 @@ export function createAnimatedWaterSurface(
     material.onBeforeCompile = (shader) => {
       const vertexAnchor = 'void main() {';
       const fragmentAnchor = 'gl_FragColor = vec4( outgoingLight, alpha );';
+      // Validate every anchor before mutating the shaders. Patching only some
+      // of them would declare shoreTint/vShoreDist in one stage and not the
+      // other, so the shore tint is all-or-nothing.
+      if (!shader.vertexShader.includes(vertexAnchor)
+        || !shader.fragmentShader.includes(vertexAnchor)
+        || !shader.fragmentShader.includes(fragmentAnchor)) {
+        console.warn('[animatedWater] shoreBlend shader anchors not found — the shore tint was skipped.');
+        return;
+      }
       const patchedVertex = shader.vertexShader.replace(
         vertexAnchor,
         /* glsl */ `
@@ -246,10 +255,6 @@ export function createAnimatedWaterSurface(
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );
-      if (patchedVertex === shader.vertexShader || patchedFragment === shader.fragmentShader) {
-        // A silent miss would ship half a feature; make it loud instead.
-        console.warn('[animatedWater] shoreBlend shader anchors not found — the shore tint was skipped.');
-      }
       shader.vertexShader = patchedVertex;
       shader.fragmentShader = patchedFragment;
     };

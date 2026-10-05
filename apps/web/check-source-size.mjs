@@ -1,7 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 
-const roots = ['apps/web/src', 'apps/server/src'];
+// `apps/server/admin` is the admin console's browser bundle; it grows like any
+// other logic file, so include it rather than trusting a hand-written comment
+// that it is "close to the limit".
+const roots = ['apps/web/src', 'apps/server/src', 'apps/server/admin'];
 const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx']);
 const dataDirectories = new Set(['content', 'data']);
 const defaultLimit = 1_000;
