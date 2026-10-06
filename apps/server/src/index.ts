@@ -242,7 +242,7 @@ async function handle(client: Client, raw: string) {
     }
     if (message.type === 'progress.get') { sendProgress(client.socket, userId); return; }
     if (message.type === 'progress.building.visit') {
-      if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building is not available');
+      if (!validId(message.buildingId) || !Object.hasOwn(BUILDING_PRICES, message.buildingId)) return fail(client.socket, 'Building is not available');
       if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       const progress = db.getPlayerProgress(userId);
@@ -252,7 +252,7 @@ async function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'progress.building.unlock') {
-      if (!validId(message.buildingId) || !(message.buildingId in BUILDING_PRICES)) return fail(client.socket, 'Building cannot be unlocked');
+      if (!validId(message.buildingId) || !Object.hasOwn(BUILDING_PRICES, message.buildingId)) return fail(client.socket, 'Building cannot be unlocked');
       if (!isCityBuildingBuilt(message.buildingId)) return fail(client.socket, 'Building is not built');
       if (!isBuildingUnlockable(message.buildingId)) return fail(client.socket, 'Building is story-locked');
       try {
@@ -262,14 +262,14 @@ async function handle(client: Client, raw: string) {
       return;
     }
     if (message.type === 'progress.achievement.unlock') {
-      if (!validId(message.achievementId) || !(message.achievementId in ACHIEVEMENT_REWARDS)) return fail(client.socket, 'Achievement is not available');
+      if (!validId(message.achievementId) || !Object.hasOwn(ACHIEVEMENT_REWARDS, message.achievementId)) return fail(client.socket, 'Achievement is not available');
       const reward = verifiedAchievementReward(db.getPlayerProgress(userId), message.achievementId);
       const result = db.unlockAchievement(userId, message.achievementId, reward);
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'achievement.unlocked', achievementId: message.achievementId, reward: result.rewardGranted } });
       return;
     }
     if (message.type === 'progress.shop.buy') {
-      if (!validId(message.productId) || !(message.productId in SHOP_PRODUCTS)) return fail(client.socket, 'Product is not available');
+      if (!validId(message.productId) || !Object.hasOwn(SHOP_PRODUCTS, message.productId)) return fail(client.socket, 'Product is not available');
       const quantity = message.quantity ?? 1;
       if (!validQuantity(quantity)) return fail(client.socket, 'Invalid quantity');
       const product = SHOP_PRODUCTS[message.productId as keyof typeof SHOP_PRODUCTS];

@@ -2,11 +2,12 @@ import { BUILDING_API_QUERIES } from './data/buildings';
 import type { BuildingEntity } from './buildingEntity';
 import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
-import { openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 
 type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
 
 export type BuildingInteractionOptions = {
+  /** Injected by the composition root; domain code must not import UI by value. */
+  openGovernancePanel?: (buildingId: string) => void;
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
   getCityDialogs: () => CityDialogController | null;
@@ -35,7 +36,7 @@ const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityP
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
   function openGovernanceIfNeeded(building: BuildingEntity): boolean {
     if (building.id !== 'commons' && building.id !== 'commons_outer') return false;
-    openCityGovernancePanel(building.id);
+    options.openGovernancePanel?.(building.id);
     options.trackInteraction(building.id);
     return true;
   }

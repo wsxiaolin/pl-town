@@ -93,7 +93,7 @@ jobs:
              playwright-report/).
           3. If changed files are large, inspect them file-by-file; read full files for context
              when needed.
-          4. Read `AGENTS.md` and evaluate changes strictly against its rules:
+          4. Read `AGENTS.md` and evaluate the changes against its rules:
              - 依赖方向：渲染层可消费城市数据；领域/数据模块不得反向依赖 UI 或网络。
              - 模块边界：业务逻辑不得继续写入 `apps/web/src/city/MiniCityApp.ts`（迁移期仅保留必要 wrapper）。
              - 源码体积：普通逻辑文件（含 MiniCityApp.ts）≤ 1000 行。
@@ -103,15 +103,30 @@ jobs:
                apps/server/tests/integration.mjs。
              - 安全：不在日志/URL 中写入会话令牌、密码；保留 WebSocket 的 JSON、大小限制、
                频率限制与输入校验。
-          5. Write a concise, objective, constructive Markdown review report in
-              Simplified Chinese (简体中文):
-              - All narrative text — findings, explanations, reasoning and
-                recommendations — must be written in Simplified Chinese.
-              - Keep code identifiers, file paths, commands, config keys and
-                established technical terms (e.g. WebGL, z-fighting, WebSocket)
-                in their original English form.
-              - Group findings as 🔴 Blocker / 🟡 Suggestion / 🟢 Nit, and skip empty
-                categories.
+             Only report rules that are actually violated. Do NOT enumerate passing
+             rules, and do NOT produce a compliance matrix or per-rule checklist.
+          5. Write a short, findings-only Markdown review report in Simplified
+             Chinese (简体中文). The report is a list of real findings, not an
+             audit document:
+             - All narrative text — findings, explanations, reasoning and
+               recommendations — must be written in Simplified Chinese.
+             - Keep code identifiers, file paths, commands, config keys and
+               established technical terms (e.g. WebGL, z-fighting, WebSocket)
+               in their original English form.
+             - Structure: one opening line summarising the verdict reason, then
+               the findings. Skip the change overview, praise sections, quality
+               commentary and closing summary — they are padding.
+             - 🔴 Blocker: bugs, correctness / security / data-loss risks, or hard
+               AGENTS.md rule violations. Each finding: location (file + function
+               or line), what breaks, and the minimal fix. Keep each ≤ 6 lines.
+             - 🟡 Suggestion: only issues that can actually misbehave at runtime —
+               edge cases, race conditions, unhandled error/fallback paths — plus
+               AGENTS.md coverage gaps (missing tests for new user-visible
+               behavior or new server protocol/persistence). Style preferences
+               (naming, comments, extracting constants, "consider refactoring",
+               alternative patterns) are NOT findings; omit them entirely.
+             - No 🟢 Nit section. Do not pad the report. If nothing applies
+               beyond the opening line, that one line is a complete report.
           6. End the report with exactly one line: `REVIEW_VERDICT: PASS` or
              `REVIEW_VERDICT: BLOCKER`. Use BLOCKER if and only if there is at
              least one 🔴 Blocker finding. Blockers fail the required check.

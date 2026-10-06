@@ -44,7 +44,6 @@ export interface MultiplayerHousingOptions {
   getMapMode: () => boolean;
   toggleMapMode: () => void;
   communityPanels: ReturnType<typeof createCommunityPanelController>;
-  getLegacyAchievements?: () => string[];
   isResidenceUnavailable?: (residenceId: string) => boolean;
   setWeather?: (weather: NetWeather) => void;
   getLoginGate?: () => LoginGate | null;
@@ -56,7 +55,6 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
     showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
     getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
-    getLegacyAchievements = () => [],
     isResidenceUnavailable = () => false,
     setWeather = () => {},
     getLoginGate = () => null,
@@ -271,10 +269,19 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         chatHistoryRequested = false;
         const log = document.getElementById('chatLog');
         if (!log) return;
-        // The snapshot is authoritative: replace whatever live broadcasts already
-        // rendered so the newest 100 messages cannot duplicate.
+        // Live broadcasts can land between the request and this snapshot.
+        // Keep the ones newer than the snapshot's max id and re-append them
+        // after the replace, instead of silently dropping that window until
+        // the next reconnect.
+        const maxHistoryId = messages.reduce((max, message) => Math.max(max, message.messageId), 0);
+        const newerRows = [...log.querySelectorAll<HTMLElement>('.chat-line')]
+          .filter((row) => Number(row.dataset.messageId) > maxHistoryId);
+        // The snapshot is authoritative for everything at or below its max id:
+        // replace so the newest 100 messages cannot duplicate.
         log.replaceChildren();
         messages.forEach((message) => appendChat(message.messageId, message.nickname, message.text, message.userId === multiplayer?.user?.id, verifiedIds.has(message.userId), true));
+        newerRows.forEach((row) => log.appendChild(row));
+        log.scrollTop = log.scrollHeight;
       },
       chatRemoved: (message) => removeChat(message.messageId),
       houses: renderHouseList,
@@ -287,7 +294,6 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       progress: (progress, catalog, event) => {
         progression.applySnapshot(progress, catalog, event);
         if (catalog) onWorldCatalog(catalog);
-        if (!event) progression.syncAchievements(getLegacyAchievements());
       },
       weather: setWeather,
       worldCatalog: (catalog) => { progression.applyCatalog(catalog); onWorldCatalog(catalog); },
@@ -324,6 +330,9 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         showUnlockToast(message);
       },
       error: (message) => {
+        // A failed or rate-limited history read must not suppress backfill for
+        // the rest of the session; let the next panel open retry it.
+        if (!chatHistoryLoaded) chatHistoryRequested = false;
         progression.handleError();
         document.getElementById('residenceClaimSubmit')?.removeAttribute('disabled');
         document.getElementById('residenceApply')?.removeAttribute('disabled');

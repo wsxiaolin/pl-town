@@ -24,7 +24,7 @@ import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
-import { closeCityGovernancePanel, isCityGovernancePanelOpen } from '../adapters/ui/cityGovernancePanel';
+import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createProgressionController } from './progression/progressionController';
@@ -193,7 +193,6 @@ const themeClock = createThemeClock({
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
   saveStats,
-  checkAchievements,
 });
 
 const themeSync = createCityThemeSync({
@@ -240,7 +239,6 @@ const interactionPointer = createInteractionPointer({
 const interactionTracker = createInteractionTracker({
   getStats,
   saveStats,
-  checkAchievements,
   updateWelcome: () => {},
   getProgressionController: () => progressionController,
   getQuestRuntime: () => questRuntime,
@@ -324,6 +322,7 @@ const filmCityExperience = createFilmCityExperienceController({
 });
 
 const buildingInteraction = createBuildingInteraction({
+  openGovernancePanel: openCityGovernancePanel,
   isBuildingUnavailable: availability.isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
   getCityDialogs: () => cityDialogs,
@@ -378,8 +377,12 @@ let UNLOCK_TIERS = createUnlockTiers(
   (x, y, z, rotY) => worldDecorations?.addBench(x, y, z, rotY),
 );
 
-function awardDirectAchievement(id: string, name: string) { progressionController?.awardDirectAchievement(id, name); }
-function checkAchievements() { progressionController?.checkAchievements(); }
+// Story achievements unlock straight in cloud progress; the local copy only
+// feeds the stats panel, so a repeat trigger is silently ignored.
+function awardDirectAchievement(id: string, name: string) {
+  if (multiplayerHousing?.progression.getProgress().achievements.includes(id)) return;
+  if (multiplayerHousing?.progression.unlockAchievement(id)) showUnlockToast(`Achievement unlocked: ${name}`);
+}
 function findRaycastBuilding(hits: readonly THREE.Intersection[]) {
   return findBuildingFromRaycastHits({ hits, buildings, readUserData: (object, key) => multiplayerHousing.raycastUserData(object, key), isUnavailable: availability.isBuildingUnavailable });
 }
@@ -507,7 +510,6 @@ function init() {
     fountainClear: roadNavigation.fountainClear, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
     mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
     isResidenceUnavailable: availability.isResidenceUnavailable,
-    getLegacyAchievements: () => getStats().achievements || [],
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
     onWorldCatalog: applyWorldCatalog,
@@ -523,9 +525,7 @@ function init() {
   progressionController = createProgressionController({
     getStats,
     saveStats,
-    achievements: ACHIEVEMENTS,
     unlockTiers: UNLOCK_TIERS,
-    unlockAchievement: (id) => multiplayerHousing?.progression.unlockAchievement(id),
     showToast: showUnlockToast,
   });
   initStoryTaskGuideWiring({
@@ -568,7 +568,7 @@ function init() {
     getScene: () => scene,
     getBuildings: () => buildings,
     getCursor: () => cursorChar,
-    getStats,
+    canTeleport: () => multiplayerHousing.progression.getProgress().visitedBuildings.length >= 5,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isBuildingUnavailable: availability.isBuildingUnavailable,
@@ -625,7 +625,6 @@ function init() {
     getStats,
     saveStats,
     ensureUserId: getUserId,
-    checkAchievements,
     shouldShowIntro: shouldShowCG,
     startIntro: startCG,
     beforeShow: closeCityGovernancePanel,
@@ -640,8 +639,8 @@ function init() {
     formatDate,
     formatTime,
     getBuildingCount: () => BUILDING_DEFS.length,
-    getNpcCount: () => NPC_PROFILES.length,
     achievements: ACHIEVEMENTS,
+    unlockedAchievements: () => multiplayerHousing.progression.getProgress().achievements,
     unlockTiers: UNLOCK_TIERS,
   });
   cityDialogs = createCityDialogController({
@@ -789,7 +788,6 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
   // Dev portal stays offline: a credential-less connect would bounce off the
   // auth gate and re-open the login overlay we just skipped.
   if (!isDevPortalRequested()) multiplayerHousing.connect(nickname, password, pl);
-  checkAchievements();
 }
 
 function disposeSession() {

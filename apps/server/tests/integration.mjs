@@ -603,8 +603,8 @@ try {
   send(alice, { type: 'progress.achievement.unlock', achievementId: 'first_building' });
   const duplicateAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'first_building' && message.event.reward === 0);
   if (duplicateAchievement.progress.currency !== 1160) throw new Error('Achievement rewards must be idempotent');
-  send(alice, { type: 'progress.achievement.unlock', achievementId: 'walker_500' });
-  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'walker_500');
+  send(alice, { type: 'progress.achievement.unlock', achievementId: 'echo_unnoticed' });
+  const unverifiedAchievement = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'achievement.unlocked' && message.event.achievementId === 'echo_unnoticed');
   if (unverifiedAchievement.event.reward !== 0 || unverifiedAchievement.progress.currency !== 1160) throw new Error('Client-only achievement claims must not mint currency');
   send(alice, { type: 'progress.item.consume', itemId: 'dragonwell_tea', quantity: 1 });
   const consumed = await waitFor(alice, 'progress.updated', (message) => message.event?.type === 'item.consumed');
@@ -919,6 +919,20 @@ try {
   send(trader, { type: 'market.listing.create', itemId: 'city_guide', quantity: 1, price: 10 });
   const nonTradeable = await sinceMessage(trader, 'error', (item) => item.message === 'This item cannot be listed', nonTradeableSince);
   if (!nonTradeable) throw new Error('Non-tradeable items must be refused by the listing API');
+
+  // Object.prototype keys must not be mistaken for shop products via the `in`
+  // operator (the tradeable check must be own-property only).
+  const protoSince = trader.messages.length;
+  send(trader, { type: 'market.listing.create', itemId: 'toString', quantity: 1, price: 10 });
+  const protoListed = await sinceMessage(trader, 'error', (item) => item.message === 'This item cannot be listed', protoSince);
+  if (!protoListed) throw new Error('Inherited Object.prototype keys must not be tradeable');
+
+  // The shop.buy guard must uphold the same own-property rule: an inherited
+  // key is rejected as a product up front, not allowed through to a NaN total.
+  const protoBuySince = trader.messages.length;
+  send(trader, { type: 'progress.shop.buy', productId: 'toString', quantity: 1 });
+  const protoBuy = await sinceMessage(trader, 'error', (item) => item.message === 'Product is not available', protoBuySince);
+  if (!protoBuy) throw new Error('Inherited Object.prototype keys must not be purchasable shop products');
 
   const selfBuySince = trader.messages.length;
   send(trader, { type: 'market.listing.buy', listingId });
@@ -1379,12 +1393,24 @@ try {
     });
     const snapshotUrl = `${snapshotBase}/internal/deploy/snapshot`;
     if ((await fetch(snapshotUrl, { method: 'GET' })).status !== 405) throw new Error('Deploy snapshot must reject non-POST methods');
-    if ((await fetch(snapshotUrl, { method: 'POST' })).status !== 401) throw new Error('Deploy snapshot must reject a missing bearer token');
+    const missingToken = await fetch(snapshotUrl, { method: 'POST' });
+    if (missingToken.status !== 401) throw new Error('Deploy snapshot must reject a missing bearer token');
+    if ((await missingToken.json()).error !== 'Unauthorized') throw new Error('Deploy snapshot 401 must return a plain Unauthorized body');
     if ((await fetch(snapshotUrl, { method: 'POST', headers: { authorization: 'Bearer wrong-token-wrong-token-wrong-tok' } })).status !== 401) {
       throw new Error('Deploy snapshot must reject an invalid bearer token');
     }
     const emptySnapshot = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
     if (emptySnapshot.status !== 409) throw new Error('Deploy snapshot must refuse to upload an empty database');
+    // Authorized requests are rate-limited (6/min/IP) before the empty-DB check,
+    // so repeated authorized requests stay 409 until the bucket drains.
+    // emptySnapshot above was the 1st; four more make 5, one more makes 6.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const allowed = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
+      if (allowed.status !== 409) throw new Error(`Authorized snapshot on an empty DB must stay 409, got ${allowed.status}`);
+    }
+    const throttled = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
+    if (throttled.status !== 429) throw new Error('Deploy snapshot must throttle repeated authorized requests');
+    if (!throttled.headers.get('retry-after')) throw new Error('Deploy snapshot 429 must carry retry-after');
   } finally {
     if (snapshotServer.exitCode === null && snapshotServer.signalCode === null) {
       const exited = new Promise((resolve) => snapshotServer.once('exit', resolve));

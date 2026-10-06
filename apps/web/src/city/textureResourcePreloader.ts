@@ -106,14 +106,15 @@ export function preloadTextureResources(options: TexturePreloadOptions): Promise
   // re-opens it (it may be a repair pass for earlier failures).
   if (ready && !force) return Promise.resolve();
   const controller = new AbortController();
-  // Ambient runs bound themselves (30 s); forced runs are bounded by the
-  // lifecycle's 240 s watchdog via the shared signal — no duplicate timer
-  // (r8 nit: one of the two was dead weight).
-  const timeout = setTimeout(() => controller.abort(), 30_000);
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', () => controller.abort(), { once: true });
+  // Ambient runs bound themselves (30 s); a forced heavy-boot repair pass is
+  // bounded by the lifecycle's 240 s watchdog via the shared signal, so it must
+  // NOT arm this shorter timer — otherwise a slow-but-progressing 30–240 s
+  // repair would abort mid-pass and still write the precache-done marker.
+  const timeout = force ? null : setTimeout(() => controller.abort(), 30_000);
   const promise = runWithConcurrency(textureUrls, 6, controller.signal, onFileDone).then(() => {
-    clearTimeout(timeout);
+    if (timeout !== null) clearTimeout(timeout);
     // Only a COMPLETED pass claims readiness — an aborted one must not
     // short-circuit a later forced re-run.
     if (!controller.signal.aborted) ready = true;
