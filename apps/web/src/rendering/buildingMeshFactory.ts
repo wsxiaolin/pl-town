@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
+import { buildPaintingAiStudio } from './paintingAiStudio';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
 import { buildKomorebiWorkshop } from './komorebiClockworks';
@@ -919,6 +920,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     tavern: buildTavern,
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    painting_ai: (cfg: BuildingDefinition) => buildPaintingAiStudio({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     film_city: buildFilmCity,
     ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
     komorebi_workshop: (cfg: BuildingDefinition) => buildKomorebiWorkshop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),

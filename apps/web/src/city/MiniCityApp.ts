@@ -43,6 +43,8 @@ import { createSceneAnimations } from './sceneAnimations';
 import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
+import { createPaintingAiStudio } from './paintingAiStudio';
+import { createPaintingAiCanvasController } from '../adapters/ui/paintingAiCanvasController';
 import { installDebugApi } from './debugApi';
 import { isDevPortalRequested } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
@@ -148,6 +150,7 @@ let sceneInterestPoints: SceneInterestPoints | null = null;
 let constructionScene: ReturnType<typeof assembleCityWorld>['constructionScene'] | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
+let paintingAiCanvas: ReturnType<typeof createPaintingAiCanvasController> | null = null;
 const buildingFeatureRegistry = createBuildingFeatureRegistry();
 buildingFeatureRegistry.register(createIceKingBuildingFeature({
   getSanctum: () => iceKingFeature?.sanctum ?? null,
@@ -305,6 +308,13 @@ const wildMushroomRestaurant = createWildMushroomRestaurant({
   awardAchievement: awardDirectAchievement,
 });
 
+const paintingAiStudio = createPaintingAiStudio({
+  getDialogs: () => cityDialogs,
+  openCanvas: (handlers) => paintingAiCanvas?.open(handlers),
+  closeCanvas: () => paintingAiCanvas?.close(),
+  showToast: showUnlockToast,
+});
+
 const filmCityExperience = createFilmCityExperienceController({
   dialogs: () => cityDialogs,
   getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
@@ -336,6 +346,7 @@ const buildingInteraction = createBuildingInteraction({
   getLibrarySearchController: () => librarySearchController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
+  getPaintingAiStudio: () => paintingAiStudio,
   getFilmCityController: () => filmCityExperience,
   interactWithFeature: buildingFeatureRegistry.interact,
 });
@@ -668,6 +679,7 @@ function init() {
     signal: lifecycle.signal,
   });
   cityDialogs.setup();
+  paintingAiCanvas = createPaintingAiCanvasController({ document, signal: lifecycle.signal });
   weatherEffect = createWeatherEffect({
     scene,
     getCursor: () => cursorChar,

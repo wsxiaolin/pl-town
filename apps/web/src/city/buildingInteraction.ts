@@ -23,6 +23,7 @@ export type BuildingInteractionOptions = {
   getLibrarySearchController?: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
+  getPaintingAiStudio?: () => { interact: (onComplete?: () => void) => 'opened' | 'no-dialog' } | null;
   getFilmCityController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
 };
@@ -64,6 +65,14 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
         // 小剧情走到最终离开选项时，才算完成一次互动。
         if (restaurant.interact(() => options.trackInteraction(b.id)) === 'opened') return;
       }
+      options.trackInteraction(b.id);
+      openModal(b);
+      return;
+    }
+    // 点击「绘画+AI」进入速写小课堂：确认 → 涂鸦 → 笔画变形为小城简笔轮廓 → 表扬。
+    if (b.id === 'painting_ai') {
+      const studio = options.getPaintingAiStudio?.();
+      if (studio && studio.interact(() => options.trackInteraction(b.id)) === 'opened') return;
       options.trackInteraction(b.id);
       openModal(b);
       return;

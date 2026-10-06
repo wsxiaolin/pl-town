@@ -51,6 +51,7 @@ import arena from './arena';
 import guesthouse from './guesthouse';
 import shrine from './shrine';
 import beacon from './beacon';
+import paintingAi from './painting_ai';
 import bananaPalace from './banana_palace';
 import qipaiHall from './qipai_hall';
 import wushiRestaurant from './wushi_restaurant';
@@ -125,6 +126,7 @@ export const BUILDING_REGISTRY: readonly BuildingConfig[] = [
   guesthouse,
   shrine,
   beacon,
+  paintingAi,
   bananaPalace,
   qipaiHall,
   wushiRestaurant,

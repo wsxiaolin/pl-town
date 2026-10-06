@@ -556,6 +556,14 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     x: 27.5,
     z: -59.5,
     storyLocked: false
+  },
+  {
+    id: "painting_ai",
+    label: "绘画+AI",
+    num: "52A",
+    x: 9,
+    z: 24,
+    storyLocked: false
   }
 ]
 );

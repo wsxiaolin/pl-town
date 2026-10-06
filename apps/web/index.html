@@ -528,6 +528,30 @@
     </div>
   </div>
 
+  <!-- 绘画+AI 画室：涂鸦画布，笔画会变形为小城简笔轮廓 -->
+  <div class="painting-overlay" id="paintingOverlay" role="dialog" aria-modal="true" aria-label="绘画+AI 快速课堂">
+    <div class="painting-paper">
+      <header class="painting-head">
+        <div class="painting-heading">
+          <span class="painting-kicker">PAINTING + AI</span>
+          <h2 class="painting-title">绘画+AI · 快速课堂</h2>
+        </div>
+        <button class="painting-close" id="paintingClose" type="button" aria-label="收起画布">✕</button>
+      </header>
+      <div class="painting-easel">
+        <canvas id="paintingCanvas"></canvas>
+        <span class="painting-badge" id="paintingBadge">AI 待命 · 画完点「交给 AI」</span>
+      </div>
+      <footer class="painting-toolbar">
+        <span class="painting-hint">随便画几笔，剩下的交给 AI</span>
+        <div class="painting-actions">
+          <button class="painting-btn" id="paintingClear" type="button">清空</button>
+          <button class="painting-btn painting-btn-primary" id="paintingDone" type="button">交给 AI ✨</button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
   <!-- Activity panel (top-right entry; static catalog with per-activity background) -->
   <div class="activity-panel-overlay" id="activityPanelOverlay" role="dialog" aria-modal="true" aria-label="活动">
     <div class="activity-panel-shell">

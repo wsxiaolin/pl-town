@@ -64,7 +64,10 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // 建筑（外部 Three.js 作品《木漏时光.html》移植），目录重生成后自动追加
   // 为治理项目。komorebi 与鸽子广场一样保持待建，由居民在众议院共同筹建；
   // 既有项目与 initialBuiltBuildingIds 零改动。
-  version: '2026-10-04.komorebi.2',
+  // 2026-10-06.painting.1: 新增绘画+AI 画室（painting_ai），目录重生成后
+  // 自动追加为筹建项目，与 komorebi 一样保持待建不赠礼；建筑坐标 (9,24)
+  // 与既有地块/装饰布置互不越界。
+  version: '2026-10-06.painting.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))
