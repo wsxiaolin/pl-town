@@ -10,7 +10,7 @@
 
 declare const __MINICITY_BUILD_ID__: string;
 
-import { probeServerVersion, refreshServerVersion } from '../core/serverVersionProbe';
+import { PROBE_TIMEOUT_MS, probeServerVersion, refreshServerVersion } from '../core/serverVersionProbe';
 
 /** Injectable storage so the marker state machine is unit-testable in node. */
 export type BootStorage = {
@@ -116,12 +116,12 @@ export async function resolveBootDecision(): Promise<BootDecision> {
   const precacheDone = safeGet(PRECACHE_KEY) === '1';
 
   // The server probe only runs when the local state looks healthy — every
-  // other reason is already heavy regardless of what the server says. 4.5 s
-  // covers a cold-starting free-tier backend; AbortSignal.timeout keeps the
-  // fetch itself from ever hanging the decision.
+  // other reason is already heavy regardless of what the server says. It
+  // shares the probe's documented light-path budget so a black-holed
+  // connection cannot stall the reveal (a cold backend just fails open).
   let serverVersion: string | null = null;
   if (precacheDone && knownBuild === buildId) {
-    serverVersion = await probeServerVersion(AbortSignal.timeout(4_500));
+    serverVersion = await probeServerVersion(AbortSignal.timeout(PROBE_TIMEOUT_MS));
     // A 429/timeout on a shared NAT is routine — debug, not warn.
     if (serverVersion === null) console.debug('bootGate: /town-api/version probe failed — deciding locally');
   }

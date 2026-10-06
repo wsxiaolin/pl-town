@@ -68,6 +68,56 @@ test('resident phone loads the newest 100 chat messages on first open', async ({
   expect(await page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
 });
 
+test('live chat that lands during a history backfill is preserved', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).__chatHistoryRequests = 0;
+    let socket: any = null;
+    const NativeWebSocket = window.WebSocket;
+    class BackfillGameWebSocket extends EventTarget {
+      readyState = NativeWebSocket.CONNECTING;
+      constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
+      send(raw: string) {
+        const request = JSON.parse(raw);
+        if (request.type === 'hello') {
+          socket = this;
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+            type: 'hello', token: 'backfill-token',
+            user: { id: 'backfill-user', nickname: 'backfill-tester', email: null, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [],
+            progress: { currency: 0, inventory: {}, achievements: ['citizen'], unlockedBuildings: [], visitedBuildings: [] },
+            catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
+          }) })));
+        } else if (request.type === 'chat.history') {
+          (window as any).__chatHistoryRequests += 1;
+          // Send a live message BEFORE the snapshot reply, exactly like a
+          // broadcast racing the history read, then answer with an older window.
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+            type: 'chat', messageId: 999, userId: 'other-user', nickname: '实时居民', text: '实时消息',
+          }) })));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+            type: 'chat.history',
+            messages: [{ messageId: 1, userId: 'other-user', nickname: '历史居民', text: '历史消息 1' }],
+          }) })));
+        }
+      }
+      close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
+    }
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
+      construct(Target, args) { return String(args[0]).includes(':8787') ? new BackfillGameWebSocket() : Reflect.construct(Target, args); },
+    }) });
+    (window as any).__currentSocket = () => socket;
+  });
+  await waitForCityReady(page, 'backfill-tester');
+  const toggle = page.locator('#onlinePanelToggle');
+  await expect(toggle).toHaveClass(/connected/, { timeout: 30_000 });
+  await toggle.click({ force: true });
+  const lines = page.locator('#chatLog .chat-line');
+  // The snapshot's older message and the newer live message both survive.
+  await expect(lines).toHaveCount(2);
+  await expect(lines.last()).toContainText('实时消息');
+  expect(await page.evaluate(() => (window as any).__chatHistoryRequests)).toBe(1);
+});
+
 test('neighborhood landmarks render their plots and open building details', async ({ page }) => {
   await waitForCityReady(page, 'landmark-tester');
 

@@ -843,9 +843,13 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const upper = part(g, new THREE.BoxGeometry(upW, upperH, upD), {color:0x8a6a4f, roughness:0.66, tex:'residence_wood', rx:2, ry:1}, [0, floorTop + 0.12 + upperH / 2, 0]);
     upper.castShadow = true;
     const upTop = floorTop + 0.12 + upperH;
-    // Balustrade for the guest-room gallery.
-    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(upW + 0.26, 0.3, 0.06), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [0, floorTop + 0.12 + 0.24, s * (upD / 2 + 0.08)], false));
-    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(0.06, 0.3, upD + 0.14), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [s * (upW / 2 + 0.08), floorTop + 0.12 + 0.24, 0], false));
+    // Balustrade for the guest-room gallery. Each rail's centre sits one
+    // half-height (0.15) above the gallery slab top (floorTop + 0.12) plus a
+    // 0.002 epsilon: closing the old 0.09 gap without putting the rail's
+    // underside coplanar with the slab top, which z-fights at far camera
+    // distances (AGENTS.md: same-height surfaces need a Y separation).
+    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(upW + 0.26, 0.3, 0.06), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [0, floorTop + 0.12 + 0.002 + 0.15, s * (upD / 2 + 0.08)], false));
+    [-1, 1].forEach((s) => part(g, new THREE.BoxGeometry(0.06, 0.3, upD + 0.14), {color:0x503728, roughness:0.82, tex:'wood', rx:1, ry:1}, [s * (upW / 2 + 0.08), floorTop + 0.12 + 0.002 + 0.15, 0], false));
     const roof = part(g, new THREE.ConeGeometry(2.1, 1.02, 4), {color:0x47433a, roughness:0.66, tex:'residence_tile', rx:3, ry:1}, [0, upTop + 0.51, 0]);
     roof.rotation.y = Math.PI / 4;
     // Structural beams across the worn facade.
@@ -877,14 +881,17 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
       part(g, new THREE.BoxGeometry(0.08, 0.14, 0.08), {color:0xf0b95c, emissive:0xf0a83f, emissiveIntensity:1.15, roughness:0.4}, [x, baseY + 1.06, depth / 2 + 0.11], false);
     });
     // The old piano by the tavern's front corner — worn shell, keys still bright.
-    part(g, new THREE.BoxGeometry(0.56, 0.44, 0.42), {color:0x241a12, roughness:0.82, tex:'wood', rx:1, ry:1}, [-1.05, baseY + 0.22, depth / 2 + 0.18], false);
-    part(g, new THREE.BoxGeometry(0.72, 0.07, 0.26), {color:0xd9cfae, roughness:0.35, tex:'wall', rx:1, ry:1}, [-1.05, baseY + 0.24, depth / 2 + 0.3], false);
+    // Keep every part inside the plinth edge (front face at depth/2 + 0.31):
+    // the shell and keys used to cantilever past it over empty air.
+    part(g, new THREE.BoxGeometry(0.56, 0.44, 0.42), {color:0x241a12, roughness:0.82, tex:'wood', rx:1, ry:1}, [-1.05, baseY + 0.22, depth / 2 + 0.05], false);
+    part(g, new THREE.BoxGeometry(0.72, 0.07, 0.26), {color:0xd9cfae, roughness:0.35, tex:'wall', rx:1, ry:1}, [-1.05, baseY + 0.24, depth / 2 + 0.16], false);
     part(g, new THREE.BoxGeometry(0.34, 0.2, 0.05), {color:0x59422e, roughness:0.85, tex:'wood', rx:1, ry:1}, [-1.05, baseY + 0.56, depth / 2 + 0.12], false);
-    // Chimney + aged barrels out back.
+    // Chimney + aged barrels out back. The barrel stack sits on the plinth
+    // (top at baseY), not floating 0.29 above it.
     part(g, new THREE.BoxGeometry(0.17, 1.02, 0.17), {color:0x795445, roughness:0.8, tex:'brick', rx:1, ry:1}, [width * 0.3, upTop + 0.42, -depth * 0.18]);
-    part(g, new THREE.CylinderGeometry(0.36, 0.36, 0.12, 16), {color:0x3d2b21, roughness:0.75, tex:'wood', rx:1, ry:1}, [-width / 2 - 0.22, baseY + 0.35, depth / 2 + 0.06], false);
-    part(g, new THREE.CylinderGeometry(0.32, 0.32, 0.36, 16), {color:0x8a5c39, roughness:0.85, tex:'wood', rx:1, ry:1}, [-width / 2 - 0.22, baseY + 0.59, depth / 2 + 0.06], false);
-    part(g, new THREE.TorusGeometry(0.33, 0.035, 6, 14), {color:0x4b3526, roughness:0.6, tex:'metal', rx:1, ry:1}, [-width / 2 - 0.22, baseY + 0.57, depth / 2 + 0.06], false).rotation.x = Math.PI / 2;
+    part(g, new THREE.CylinderGeometry(0.36, 0.36, 0.12, 16), {color:0x3d2b21, roughness:0.75, tex:'wood', rx:1, ry:1}, [-width / 2 - 0.22, baseY + 0.06, depth / 2 + 0.06], false);
+    part(g, new THREE.CylinderGeometry(0.32, 0.32, 0.36, 16), {color:0x8a5c39, roughness:0.85, tex:'wood', rx:1, ry:1}, [-width / 2 - 0.22, baseY + 0.30, depth / 2 + 0.06], false);
+    part(g, new THREE.TorusGeometry(0.33, 0.035, 6, 14), {color:0x4b3526, roughness:0.6, tex:'metal', rx:1, ry:1}, [-width / 2 - 0.22, baseY + 0.28, depth / 2 + 0.06], false).rotation.x = Math.PI / 2;
     part(g, new THREE.CylinderGeometry(0.16, 0.16, 0.05, 20), {color:P.BLUE, emissive:P.BLUE, emissiveIntensity:0.28}, [0, baseY + 0.05, 0], false);
     g.position.set(cfg.x, 0, cfg.z); tagMeshes(g, cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:upTop + 1.35};

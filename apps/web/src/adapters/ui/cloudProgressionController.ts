@@ -84,6 +84,10 @@ export function createCloudProgressionController(options: Options) {
   const pendingDailyClaims = new Set<string>();
   const pendingMarketActions = new Set<string>();
   let listings: { active: MarketListingView[]; own: MarketListingView[] } = { active: [], own: [] };
+  // Names of every product ever seen in a catalog. The live catalog drops
+  // delisted admin products, but residents who already own them must keep
+  // their display name in the backpack instead of degrading to a raw itemId.
+  const lastKnownProductNames = new Map<string, string>();
   const listingDraft = { itemId: '', quantity: 1, price: 1 };
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
   const pendingRewards = new Map<string, {
@@ -213,6 +217,9 @@ export function createCloudProgressionController(options: Options) {
   }
 
   function mergeCatalog(nextCatalog: ProgressionCatalog): void {
+    for (const [itemId, product] of Object.entries(nextCatalog.products ?? {})) {
+      if (product?.name) lastKnownProductNames.set(itemId, product.name);
+    }
     catalog = {
       ...catalog,
       ...nextCatalog,
@@ -226,6 +233,14 @@ export function createCloudProgressionController(options: Options) {
       tradeableItemIds: nextCatalog.tradeableItemIds ?? catalog.tradeableItemIds,
     };
     if (listingDraft.itemId && !isTradeable(listingDraft.itemId)) { listingDraft.itemId = ''; listingDraft.quantity = 1; }
+  }
+
+  /** Catalog products plus remembered names for items that were delisted. */
+  function knownProducts(): Record<string, { name: string }> {
+    const merged: Record<string, { name: string }> = {};
+    for (const [itemId, name] of lastKnownProductNames) merged[itemId] = { name };
+    for (const [itemId, product] of Object.entries(catalog.products)) merged[itemId] = { name: product.name };
+    return merged;
   }
 
   /** Server push of the escrow board (also covers other residents' trades). */
@@ -250,7 +265,7 @@ export function createCloudProgressionController(options: Options) {
   }
 
   function itemName(itemId: string): string {
-    return catalog.products[itemId]?.name ?? ITEM_LABELS[itemId] ?? itemId;
+    return catalog.products[itemId]?.name ?? lastKnownProductNames.get(itemId) ?? ITEM_LABELS[itemId] ?? itemId;
   }
 
   function describeEvent(event?: ProgressionEvent): void {
@@ -278,7 +293,7 @@ export function createCloudProgressionController(options: Options) {
     if (currencyValue) currencyValue.textContent = String(progress.currency);
     if (shopCurrencyValue) shopCurrencyValue.textContent = String(progress.currency);
     if (inventoryList) {
-      const entries = inventoryEntries(progress, catalog.products);
+      const entries = inventoryEntries(progress, knownProducts());
       inventoryList.replaceChildren(...(entries.length ? entries.map((entry) => {
         const row = options.document.createElement('div');
         row.className = 'sp-ul-item done';
@@ -333,7 +348,7 @@ export function createCloudProgressionController(options: Options) {
     }));
     const entries = Object.entries(catalog.products).filter(([, product]) => activeShopCategory === 'all' || product.category === activeShopCategory);
     list.replaceChildren(...(entries.length ? entries.map(([productId, product]) => {
-      const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: '物', detail: `${product.name} · 商场在售商品` };
+      const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: itemIcon(product.itemId, product.name), detail: `${product.name} · 商场在售商品` };
       const row = options.document.createElement('div');
       row.className = `shop-product${productId === catalog.store.featuredProductId ? ' featured' : ''}`;
       row.dataset.productId = productId;

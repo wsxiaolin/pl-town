@@ -1393,12 +1393,24 @@ try {
     });
     const snapshotUrl = `${snapshotBase}/internal/deploy/snapshot`;
     if ((await fetch(snapshotUrl, { method: 'GET' })).status !== 405) throw new Error('Deploy snapshot must reject non-POST methods');
-    if ((await fetch(snapshotUrl, { method: 'POST' })).status !== 401) throw new Error('Deploy snapshot must reject a missing bearer token');
+    const missingToken = await fetch(snapshotUrl, { method: 'POST' });
+    if (missingToken.status !== 401) throw new Error('Deploy snapshot must reject a missing bearer token');
+    if ((await missingToken.json()).error !== 'Unauthorized') throw new Error('Deploy snapshot 401 must return a plain Unauthorized body');
     if ((await fetch(snapshotUrl, { method: 'POST', headers: { authorization: 'Bearer wrong-token-wrong-token-wrong-tok' } })).status !== 401) {
       throw new Error('Deploy snapshot must reject an invalid bearer token');
     }
     const emptySnapshot = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
     if (emptySnapshot.status !== 409) throw new Error('Deploy snapshot must refuse to upload an empty database');
+    // Authorized requests are rate-limited (6/min/IP) before the empty-DB check,
+    // so repeated authorized requests stay 409 until the bucket drains.
+    // emptySnapshot above was the 1st; four more make 5, one more makes 6.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const allowed = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
+      if (allowed.status !== 409) throw new Error(`Authorized snapshot on an empty DB must stay 409, got ${allowed.status}`);
+    }
+    const throttled = await fetch(snapshotUrl, { method: 'POST', headers: { authorization: `Bearer ${snapshotToken}` } });
+    if (throttled.status !== 429) throw new Error('Deploy snapshot must throttle repeated authorized requests');
+    if (!throttled.headers.get('retry-after')) throw new Error('Deploy snapshot 429 must carry retry-after');
   } finally {
     if (snapshotServer.exitCode === null && snapshotServer.signalCode === null) {
       const exited = new Promise((resolve) => snapshotServer.once('exit', resolve));

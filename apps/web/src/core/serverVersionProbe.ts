@@ -8,7 +8,7 @@ import { hasTownApiBase, townApiUrl } from './townApi';
 // splash. A COLD free-tier backend may exceed it on the first visit — that
 // round fails open (local decision) and the NEXT visit catches the change,
 // while governance (already parallel) still serves fresh content (r8#4).
-const PROBE_TIMEOUT_MS = 1_500;
+export const PROBE_TIMEOUT_MS = 1_500;
 
 export async function probeServerVersion(signal: AbortSignal): Promise<string | null> {
   // Static hosting (e.g. Pages without an API base) has nothing to probe —

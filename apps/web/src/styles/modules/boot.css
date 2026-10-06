@@ -83,7 +83,9 @@
 
 /* Bottom progress pipeline — one slow honest bar for the whole heavy boot. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.boot-screen #bootSkipButton:focus-visible { outline: 2px solid rgba(120, 168, 255, 0.8); outline-offset: 2px; }
+/* #bootSkipButton is a sibling of .boot-screen, so the selector must not be
+   scoped under it or the ring never renders. */
+#bootSkipButton:focus-visible { outline: 2px solid rgba(120, 168, 255, 0.8); outline-offset: 2px; }
 .boot-pipeline {
   position: absolute;
   left: 0;
