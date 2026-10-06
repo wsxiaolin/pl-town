@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-04.unlock.1",
+  "version": "2026-10-04.komorebi.2",
   "projects": [
     {
       "id": "build-catcafe",
@@ -527,6 +527,14 @@
       "buildingId": "north_backrooms_door",
       "name": "后室之门",
       "description": "共同筹建后室之门",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_komorebi",
+      "buildingId": "north_komorebi",
+      "name": "木漏时光",
+      "description": "共同筹建木漏时光",
       "kind": "building",
       "cost": 3000
     },

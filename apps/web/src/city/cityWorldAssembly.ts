@@ -5,6 +5,7 @@ import { createWorldDecorations } from '../rendering/worldDecorations';
 import { createCityConstructionScene } from '../rendering/cityConstructionScene';
 import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
+import { updateKomorebiClockworks } from '../rendering/komorebiClockworks';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
 import { createBuildingSceneController } from './buildingSceneController';
@@ -190,7 +191,11 @@ export function assembleCityWorld(options: {
   });
   void loadModels(options.buildings);
   const updateDecorations = worldDecorations.update;
-  worldDecorations.update = (elapsed) => { updateDecorations(elapsed); constructionScene.update(); };
+  worldDecorations.update = (elapsed) => {
+    updateDecorations(elapsed);
+    constructionScene.update();
+    updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced);
+  };
   return {
     constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
     worldDecorations,

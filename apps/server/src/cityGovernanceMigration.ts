@@ -27,6 +27,8 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   'north_chat_plaza', 'north_pigeon_square', 'north_stellar_hall', 'north_singularity',
   'north_binary_garden', 'north_maya_grove', 'north_api_memorial', 'north_worry_store',
   'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
+  // 木漏时光（2026-10-03）：同上，保持待建。
+  'north_komorebi',
 ]);
 
 // 2026-10-04 default-standing policy: 参议院与星语北城 11 栋作品建筑在
