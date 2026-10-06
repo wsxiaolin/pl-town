@@ -84,6 +84,10 @@ export function createCloudProgressionController(options: Options) {
   const pendingDailyClaims = new Set<string>();
   const pendingMarketActions = new Set<string>();
   let listings: { active: MarketListingView[]; own: MarketListingView[] } = { active: [], own: [] };
+  // Names of every product ever seen in a catalog. The live catalog drops
+  // delisted admin products, but residents who already own them must keep
+  // their display name in the backpack instead of degrading to a raw itemId.
+  const lastKnownProductNames = new Map<string, string>();
   const listingDraft = { itemId: '', quantity: 1, price: 1 };
   const pendingConsumption = new Map<string, (consumed: boolean) => void>();
   const pendingRewards = new Map<string, {
@@ -168,6 +172,7 @@ export function createCloudProgressionController(options: Options) {
     }
     if (event?.type === 'market.listing.sold' && event.listingId) pendingMarketActions.delete(`listing:${event.listingId}`);
     if (event?.type === 'market.listing.sold') requestListings();
+    evaluateStatAchievements();
     render();
     describeEvent(event);
     if (event?.type === 'item.consumed' && event.itemId) {
@@ -212,6 +217,9 @@ export function createCloudProgressionController(options: Options) {
   }
 
   function mergeCatalog(nextCatalog: ProgressionCatalog): void {
+    for (const [itemId, product] of Object.entries(nextCatalog.products ?? {})) {
+      if (product?.name) lastKnownProductNames.set(itemId, product.name);
+    }
     catalog = {
       ...catalog,
       ...nextCatalog,
@@ -225,6 +233,14 @@ export function createCloudProgressionController(options: Options) {
       tradeableItemIds: nextCatalog.tradeableItemIds ?? catalog.tradeableItemIds,
     };
     if (listingDraft.itemId && !isTradeable(listingDraft.itemId)) { listingDraft.itemId = ''; listingDraft.quantity = 1; }
+  }
+
+  /** Catalog products plus remembered names for items that were delisted. */
+  function knownProducts(): Record<string, { name: string }> {
+    const merged: Record<string, { name: string }> = {};
+    for (const [itemId, name] of lastKnownProductNames) merged[itemId] = { name };
+    for (const [itemId, product] of Object.entries(catalog.products)) merged[itemId] = { name: product.name };
+    return merged;
   }
 
   /** Server push of the escrow board (also covers other residents' trades). */
@@ -249,7 +265,7 @@ export function createCloudProgressionController(options: Options) {
   }
 
   function itemName(itemId: string): string {
-    return catalog.products[itemId]?.name ?? ITEM_LABELS[itemId] ?? itemId;
+    return catalog.products[itemId]?.name ?? lastKnownProductNames.get(itemId) ?? ITEM_LABELS[itemId] ?? itemId;
   }
 
   function describeEvent(event?: ProgressionEvent): void {
@@ -277,7 +293,7 @@ export function createCloudProgressionController(options: Options) {
     if (currencyValue) currencyValue.textContent = String(progress.currency);
     if (shopCurrencyValue) shopCurrencyValue.textContent = String(progress.currency);
     if (inventoryList) {
-      const entries = inventoryEntries(progress, catalog.products);
+      const entries = inventoryEntries(progress, knownProducts());
       inventoryList.replaceChildren(...(entries.length ? entries.map((entry) => {
         const row = options.document.createElement('div');
         row.className = 'sp-ul-item done';
@@ -332,7 +348,7 @@ export function createCloudProgressionController(options: Options) {
     }));
     const entries = Object.entries(catalog.products).filter(([, product]) => activeShopCategory === 'all' || product.category === activeShopCategory);
     list.replaceChildren(...(entries.length ? entries.map(([productId, product]) => {
-      const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: '物', detail: `${product.name} · 商场在售商品` };
+      const presentation = PRODUCT_PRESENTATIONS[product.itemId] ?? { icon: itemIcon(product.itemId, product.name), detail: `${product.name} · 商场在售商品` };
       const row = options.document.createElement('div');
       row.className = `shop-product${productId === catalog.store.featuredProductId ? ' featured' : ''}`;
       row.dataset.productId = productId;
@@ -780,12 +796,26 @@ export function createCloudProgressionController(options: Options) {
     return options.send({ type: 'progress.achievement.unlock', achievementId });
   }
 
-  function syncAchievements(achievementIds: readonly string[]): void {
+  // Stat achievements are evaluated from cloud progress after every snapshot;
+  // the server re-verifies each claim, so this only ever sends eligible unlocks.
+  const STAT_ACHIEVEMENT_CHECKS: ReadonlyArray<{ id: string; met: () => boolean }> = [
+    { id: 'citizen', met: () => true },
+    { id: 'first_building', met: () => progress.visitedBuildings.length >= 1 },
+    { id: 'explorer_5', met: () => progress.visitedBuildings.length >= 5 },
+    { id: 'explorer_10', met: () => progress.visitedBuildings.length >= 10 },
+    { id: 'unlock_3', met: () => progress.unlockedBuildings.length >= 3 },
+  ];
+  // Claims that were sent but not yet confirmed, so intermediate snapshots do
+  // not re-send them before the server echoes the unlock back.
+  const pendingStatAchievements = new Set<string>();
+
+  function evaluateStatAchievements(): void {
     if (!online) return;
-    achievementIds.forEach((achievementId) => {
-      if (achievementId in catalog.achievementRewards && !progress.achievements.includes(achievementId)) {
-        options.send({ type: 'progress.achievement.unlock', achievementId });
-      }
+    progress.achievements.forEach((id) => pendingStatAchievements.delete(id));
+    STAT_ACHIEVEMENT_CHECKS.forEach(({ id, met }) => {
+      if (!met() || !(id in catalog.achievementRewards)) return;
+      if (progress.achievements.includes(id) || pendingStatAchievements.has(id)) return;
+      if (options.send({ type: 'progress.achievement.unlock', achievementId: id })) pendingStatAchievements.add(id);
     });
   }
 
@@ -867,6 +897,7 @@ export function createCloudProgressionController(options: Options) {
     pendingShopProducts.clear();
     pendingDailyClaims.clear();
     pendingMarketActions.clear();
+    pendingStatAchievements.clear();
     pendingFilmCity?.(false);
     pendingFilmCity = null;
     render();
@@ -875,7 +906,7 @@ export function createCloudProgressionController(options: Options) {
   function destroy(): void { handleError(); shopPanel?.remove(); shopPanel = null; panel = null; }
 
   return {
-    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement, syncAchievements,
+    setup, setConnection, applySnapshot, applyCatalog, applyListings, interactBuilding, unlockAchievement,
  buyProduct, consumeItem, purchaseFilmCityExperience, nextRewardClaimSequence, claimReward, openInventory, openShop,
     getProgress: () => progress,
     getQuestProgressView: () => toQuestProgressView(progress),

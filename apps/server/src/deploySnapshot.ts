@@ -5,13 +5,18 @@ import { DEPLOY_SNAPSHOT_TOKEN } from './config.js';
 import * as db from './db.js';
 import { logger } from './logger.js';
 import { uploadOffsiteBackup } from './offsiteBackup.js';
-import { jsonSecurityHeaders, pathOf } from './requestSecurity.js';
+import { FixedWindowRateLimiter } from './rateLimit.js';
+import { clientIp, jsonSecurityHeaders, pathOf } from './requestSecurity.js';
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 const tokenMatches = (candidate: string): boolean => {
   if (!DEPLOY_SNAPSHOT_TOKEN) return false;
   return timingSafeEqual(digest(candidate), digest(DEPLOY_SNAPSHOT_TOKEN));
 };
+
+// A valid hit does a full backup + OSS upload, so cap it even though the token
+// is the primary gate (the static CI token is long-lived).
+const snapshotRate = new FixedWindowRateLimiter(6, 60_000);
 
 export async function handleDeploySnapshot(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
   if (pathOf(request) !== '/internal/deploy/snapshot') return false;
@@ -28,9 +33,15 @@ export async function handleDeploySnapshot(request: IncomingMessage, response: S
   const header = request.headers.authorization;
   const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!tokenMatches(token)) {
-    logger.warn('Deploy snapshot rejected', { ip: request.socket.remoteAddress ?? 'unknown' });
+    logger.warn('Deploy snapshot rejected', { ip: clientIp(request) });
     response.writeHead(401, jsonSecurityHeaders);
     response.end(JSON.stringify({ error: 'Unauthorized' }));
+    return true;
+  }
+  const rate = snapshotRate.consume(clientIp(request));
+  if (!rate.allowed) {
+    response.writeHead(429, { ...jsonSecurityHeaders, 'retry-after': String(rate.retryAfterSeconds) });
+    response.end(JSON.stringify({ error: 'Too many snapshot requests' }));
     return true;
   }
   if (db.residentCount() === 0) {

@@ -48,6 +48,11 @@ test('light boot shows the current real-world moment still and enters', async ({
   await expect(page.locator('#bootScreen')).toHaveAttribute('data-moment-skip-bound', 'true');
   await page.locator('#bootScreen').dispatchEvent('pointerdown');
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
+  // The sr-only skip button is a sibling of the screen, so hiding the screen
+  // must not leave an invisible tabbable control for the rest of the session.
+  // stopMomentPresentation runs ~1.2 s after is-ready, so poll.
+  await expect.poll(async () => page.locator('#bootSkipButton').evaluate((element) => (element as HTMLButtonElement).disabled)).toBe(true);
+  await expect(page.locator('#bootSkipButton')).toBeHidden();
 });
 
 test('a rejected decode still reveals the moment layer (#201 r2 fallback)', async ({ page }) => {

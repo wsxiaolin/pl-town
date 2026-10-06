@@ -94,6 +94,17 @@ try {
   await page.locator('#backupRows').waitFor();
   const offsitePanelHidden = await page.locator('#offsitePanel').evaluate((element) => element.hidden);
   if (!offsitePanelHidden) throw new Error('Admin off-site backup panel must stay hidden when OSS is not configured');
+  // The 校验 column relies on `.nowrap` to stop CJK cells breaking one
+  // character per line. Lock the rule even when no backup rows exist.
+  const nowrap = await page.evaluate(() => {
+    const cell = document.createElement('td');
+    cell.className = 'nowrap';
+    document.body.appendChild(cell);
+    const value = getComputedStyle(cell).whiteSpace;
+    cell.remove();
+    return value;
+  });
+  if (nowrap !== 'nowrap') throw new Error(`Admin .nowrap cells must not wrap, got white-space: ${nowrap}`);
   await page.locator('[data-view="users"]').click();
   await page.locator('#userRows').waitFor();
 
