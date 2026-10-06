@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "records",
   num: "39",
   label: "记录厅",
-  x: -33,
+  x: -30,
   z: -21,
   shape: "temple",
   facade: "facade_observatory",

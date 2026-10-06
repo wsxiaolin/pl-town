@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "45",
   label: "神社",
   x: 9,
-  z: -33,
+  z: -30,
   shape: "altar",
   facade: "facade_temple",
   icon: iconSvg(`<path d="M4 20h16"/><path d="M6 20V8h12v12"/>`),

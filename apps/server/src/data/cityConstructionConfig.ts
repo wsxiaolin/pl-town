@@ -57,7 +57,10 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // 2026-10-02.north.1: 星语北城（黑洞热门作品 Top100 城市化）——新增
   // 12 栋 north_* 作品建筑（BUILDING_CATALOG 重新生成后自动追加为治理
   // 项目）。既有项目与 initialBuiltBuildingIds 零改动。
-  version: '2026-10-02.north.1',
+  // 2026-10-06.layout.1: 城市重新规划（功能分区）——54 栋既有建筑按
+  // CBD / 文化教育 / 科技创新 / 外环四区重新落位，BUILDING_CATALOG 坐标
+  // 同步重新生成；无新增或下线建筑，个人地块与装饰零改动。
+  version: '2026-10-06.layout.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))

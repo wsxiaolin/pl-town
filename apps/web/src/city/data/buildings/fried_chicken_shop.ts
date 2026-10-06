@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "fried_chicken_shop",
   num: "51",
   label: "炸鸡店",
-  x: 28,
-  z: 2,
+  x: 9,
+  z: -3,
   shape: "fried_chicken_shop",
   icon: iconSvg(`<path d="M4 20V9h16v11"/><path d="M3 9h18"/><path d="M6 5h12v4"/><path d="M9 14h6"/>`),
   content: {

@@ -6,8 +6,8 @@ export default defineBuilding({
   num: "28",
   // <discussion=6738a487ce449cb493cd6349>小店</discussion>
   label: "断星玄",
-  x: -22.5,
-  z: 22.5,
+  x: -24,
+  z: 24,
   shape: "mall",
   icon: iconSvg(`<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`),
   content: {

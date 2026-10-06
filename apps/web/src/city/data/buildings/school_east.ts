@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "school_east",
   num: "27",
   label: "东区小学",
-  x: 31.5,
-  z: -15.25,
+  x: 30,
+  z: -15,
   shape: "school",
   icon: iconSvg(`<path d="M3 21h18"/><path d="M6 21V10l6-5 6 5v11"/><path d="M9 21v-5h6v5"/><path d="M4 10l8-5 8 5"/>`),
   content: {

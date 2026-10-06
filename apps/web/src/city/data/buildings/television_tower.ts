@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "television_tower",
   num: "50",
   label: "电视塔",
-  x: 32,
-  z: -8,
+  x: 30,
+  z: -9,
   shape: "television_tower",
   icon: iconSvg(`<path d="M12 3v18"/><path d="M8 21h8"/><path d="M7 9h10"/><path d="M5 5c2 2 2 5 0 7"/><path d="M19 5c-2 2-2 5 0 7"/>`),
   content: {

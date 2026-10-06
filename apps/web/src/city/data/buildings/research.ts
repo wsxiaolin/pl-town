@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "research",
   num: "19",
   label: "研究院",
-  x: 15,
-  z: -9,
+  x: 12,
+  z: 12,
   shape: "factory",
   icon: iconSvg(`<path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M8 3h8"/><path d="M8 15h8"/>`),
   content: {

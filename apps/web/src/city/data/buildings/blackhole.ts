@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "04",
   label: "黑洞半城",
   x: -9,
-  z: -3,
+  z: -12,
   shape: "darktower",
   icon: iconSvg(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2" fill="#3B6FE0"/>`),
   content: {

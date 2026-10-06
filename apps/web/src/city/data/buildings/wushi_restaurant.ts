@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "wushi_restaurant",
   num: "49",
   label: "物实饭店",
-  x: -22.5,
+  x: -21,
   z: -15,
   shape: "restaurant",
   icon: iconSvg(`<path d="M4 20V7h16v13"/><path d="M7 20v-7h4v7"/><path d="M14 11h3"/><path d="M6 4h12v3H6z"/>`),

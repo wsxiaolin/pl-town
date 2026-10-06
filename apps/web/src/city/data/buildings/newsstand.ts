@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "newsstand",
   num: "17",
   label: "报摊",
-  x: -9,
-  z: -15,
+  x: -6,
+  z: -9,
   shape: "market",
   icon: iconSvg(`<path d="M4 7h16v11H4z"/><path d="M4 7l2-3h12l2 3"/><path d="M8 11h4"/><path d="M8 14h8"/>`),
   content: {

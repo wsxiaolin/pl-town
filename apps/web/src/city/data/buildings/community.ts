@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "community",
   num: "18",
   label: "社区中心",
-  x: 15,
+  x: 12,
   z: -15,
   shape: "clocktower",
   icon: iconSvg(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M7 11h2"/><path d="M15 11h2"/>`),

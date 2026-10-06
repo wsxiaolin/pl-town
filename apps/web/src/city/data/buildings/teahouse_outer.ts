@@ -6,8 +6,8 @@ export default defineBuilding({
   num: "35",
   disabled: true,
   label: "茶馆（外环）",
-  x: 33,
-  z: 33,
+  x: -24,
+  z: 18,
   shape: "pagoda",
   icon: iconSvg(`<path d="M5 10h12v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 11h1a2 2 0 0 1 0 4h-1"/>`),
   content: {

@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "guildhall",
   num: "40",
   label: "公会堂",
-  x: 33,
+  x: 30,
   z: -21,
   shape: "clocktower",
   facade: "facade_tower",

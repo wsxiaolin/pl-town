@@ -1,0 +1,142 @@
+{
+  "version": "1.0.0",
+  "description": "MiniCity 城市重新规划 - 建筑坐标调整方案",
+  "changes": {
+    "cbd_core": {
+      "description": "中央商务区核心 - CBD Core",
+      "buildings": [
+        { "id": "senate", "label": "参议院", "oldPos": [-15, 9], "newPos": [0, 0], "reason": "作为市政厅移至城市中心原点" },
+        { "id": "commons", "label": "众议院", "oldPos": [-15, 3], "newPos": [-6, 0], "reason": "立法机构，CBD西侧" },
+        { "id": "stats", "label": "STATS", "oldPos": [-5.5, -5.5], "newPos": [6, 0], "reason": "统计局，CBD东侧" },
+        { "id": "residentid", "label": "居民证", "oldPos": [-9, -9], "newPos": [-9, 0], "reason": "政务服务中心" },
+        { "id": "mutualaid", "label": "互助团", "oldPos": [-9, 9], "newPos": [-6, 3], "reason": "社会服务机构" },
+        { "id": "bulletin", "label": "公告板", "oldPos": [-4, -9], "newPos": [-9, -3], "reason": "信息发布中心" }
+      ]
+    },
+    "financial_district": {
+      "description": "金融商务区 - Financial District",
+      "buildings": [
+        { "id": "tradingpost", "label": "交易所", "oldPos": [21, -33], "newPos": [9, 0], "reason": "金融中心，CBD东侧主轴" },
+        { "id": "kingice", "label": "King Ice", "oldPos": [20, 20], "newPos": [12, 3], "reason": "商业综合体" },
+        { "id": "lab_outer", "label": "数据中心", "oldPos": [33, 9], "newPos": [9, 6], "reason": "商务数据支持" },
+        { "id": "tavern", "label": "科特维酒馆", "oldPos": [33, 3], "newPos": [12, -3], "reason": "商务会所" },
+        { "id": "fried_chicken_shop", "label": "炸鸡店", "oldPos": [28, 2], "newPos": [9, -3], "reason": "商务区快餐" }
+      ]
+    },
+    "cultural_education_zone": {
+      "description": "文化教育区 - Cultural & Education Zone",
+      "buildings": [
+        { "id": "library", "label": "图书馆", "oldPos": [-4, 3], "newPos": [-12, 12], "reason": "文化区主馆" },
+        { "id": "academy_library", "label": "书院", "oldPos": [3, -15], "newPos": [-6, 12], "reason": "文化教育配套" },
+        { "id": "culturehall", "label": "文化馆", "oldPos": [15, 9], "newPos": [0, 15], "reason": "文化活动中心" },
+        { "id": "news", "label": "星尘报社", "oldPos": [-4, 9], "newPos": [-12, 15], "reason": "媒体文化机构" },
+        { "id": "litreview", "label": "文学审核部", "oldPos": [-9, 3], "newPos": [-9, 15], "reason": "文学管理机构" },
+        { "id": "academy", "label": "物实学院", "oldPos": [4, 9], "newPos": [6, 12], "reason": "教育主校区" },
+        { "id": "research", "label": "研究院", "oldPos": [15, -9], "newPos": [12, 12], "reason": "科研机构" },
+        { "id": "lab", "label": "实验楼", "oldPos": [15, 3], "newPos": [9, 15], "reason": "实验教学设施" },
+        { "id": "screen", "label": "大屏幕", "oldPos": [9, 9], "newPos": [0, 12], "reason": "文化广场中心" },
+        { "id": "catcafe", "label": "猫咖馆", "oldPos": [9, 3], "newPos": [15, 12], "reason": "文化休闲配套" },
+        { "id": "teahouse", "label": "茶馆", "oldPos": [15, 15], "newPos": [12, 15], "reason": "文化交流空间" },
+        { "id": "photostudio", "label": "照相馆", "oldPos": [21, 15], "newPos": [15, 15], "reason": "文化服务配套" }
+      ]
+    },
+    "tech_innovation_zone": {
+      "description": "科技创新区 - Tech Innovation Zone",
+      "buildings": [
+        { "id": "techhalf", "label": "技术半城", "oldPos": [9, -3], "newPos": [9, -12], "reason": "技术创新中心" },
+        { "id": "blackhole", "label": "黑洞半城", "oldPos": [-9, -3], "newPos": [-9, -12], "reason": "实验研究中心" },
+        { "id": "knowledgebaseE", "label": "实验知识库", "oldPos": [-15, -15], "newPos": [-12, -15], "reason": "技术知识管理" },
+        { "id": "knowledgebaseD", "label": "黑洞知识库", "oldPos": [-33, -33], "newPos": [-15, -12], "reason": "研究数据中心" },
+        { "id": "activity", "label": "活动区", "oldPos": [4, -9], "newPos": [6, -12], "reason": "科技展览场地" },
+        { "id": "community", "label": "社区中心", "oldPos": [15, -15], "newPos": [12, -15], "reason": "科技社区活动" },
+        { "id": "elevator", "label": "纪念碑", "oldPos": [9, -9], "newPos": [0, -15], "reason": "科技成就纪念" },
+        { "id": "laws", "label": "城的法则", "oldPos": [4, 3], "newPos": [3, -9], "reason": "科技伦理规范" },
+        { "id": "newsstand", "label": "报摊", "oldPos": [-9, -15], "newPos": [-6, -9], "reason": "科技资讯服务" }
+      ]
+    },
+    "shopping_district_se": {
+      "description": "东南商业购物区 - Shopping District (Southeast)",
+      "buildings": [
+        { "id": "mall_south", "label": "金月店", "oldPos": [22.5, -22.5], "newPos": [24, -24], "reason": "大型购物中心" },
+        { "id": "school_east", "label": "东区小学", "oldPos": [31.5, -15.25], "newPos": [30, -15], "reason": "家庭配套教育" },
+        { "id": "television_tower", "label": "电视塔", "oldPos": [32, -8], "newPos": [30, -9], "reason": "商业区地标" },
+        { "id": "community_outer", "label": "社区中心（外环）", "oldPos": [33, -33], "newPos": [30, -30], "reason": "社区服务中心" },
+        { "id": "guildhall", "label": "公会堂", "oldPos": [33, -21], "newPos": [30, -21], "reason": "商业组织机构" }
+      ]
+    },
+    "entertainment_zone_ne": {
+      "description": "东北文化娱乐区 - Entertainment Zone (Northeast)",
+      "buildings": [
+        { "id": "conservatory", "label": "温室", "oldPos": [21, 33], "newPos": [21, 30], "reason": "植物园景观" },
+        { "id": "qipai_hall", "label": "棋气派", "oldPos": [30, 30], "newPos": [27, 27], "reason": "娱乐休闲中心" },
+        { "id": "guesthouse", "label": "客栈", "oldPos": [33, 21], "newPos": [30, 21], "reason": "旅游住宿配套" },
+        { "id": "beacon", "label": "灯塔", "oldPos": [9, 31.5], "newPos": [9, 30], "reason": "观景地标" },
+        { "id": "teahouse_outer", "label": "茶馆（外环）", "oldPos": [33, 33], "newPos": [30, 30], "reason": "茶文化体验" }
+      ]
+    },
+    "traditional_culture_nw": {
+      "description": "西北传统文化区 - Traditional Culture Zone (Northwest)",
+      "buildings": [
+        { "id": "mall_west", "label": "断星玄", "oldPos": [-22.5, 22.5], "newPos": [-24, 24], "reason": "传统商业中心" },
+        { "id": "banana_palace", "label": "布拿拉宫", "oldPos": [-30, 30], "newPos": [-27, 27], "reason": "文化地标建筑" },
+        { "id": "arena", "label": "竞技场", "oldPos": [-33, 21], "newPos": [-30, 21], "reason": "体育竞技场馆" },
+        { "id": "musichall", "label": "音乐厅", "oldPos": [-21, 33], "newPos": [-21, 30], "reason": "音乐艺术殿堂" },
+        { "id": "school_north", "label": "北区学院", "oldPos": [-22.5, 15], "newPos": [-21, 18], "reason": "教育机构" },
+        { "id": "writingclub", "label": "文训社", "oldPos": [-15, 15], "newPos": [-18, 21], "reason": "文学创作社团" }
+      ]
+    },
+    "service_zone_sw": {
+      "description": "西南产业服务区 - Service Zone (Southwest)",
+      "buildings": [
+        { "id": "commons_outer", "label": "众议院（外环）", "oldPos": [-33, -9], "newPos": [-30, -9], "reason": "政务服务延伸" },
+        { "id": "records", "label": "记录厅", "oldPos": [-33, -21], "newPos": [-30, -21], "reason": "档案记录管理" },
+        { "id": "archive", "label": "档案馆", "oldPos": [-21, -33], "newPos": [-21, -30], "reason": "历史档案保存" },
+        { "id": "shrine", "label": "神社", "oldPos": [9, -33], "newPos": [9, -30], "reason": "文化体验场所" }
+      ]
+    },
+    "film_culture_zone": {
+      "description": "影视文化区 - Film Culture Zone",
+      "buildings": [
+        { "id": "film_city", "label": "物实影视城", "oldPos": [-9, -21], "newPos": [-9, -21], "reason": "保持影视城核心位置" }
+      ]
+    },
+    "dining_street": {
+      "description": "餐饮美食街 - Dining Street",
+      "buildings": [
+        { "id": "wushi_restaurant", "label": "物实饭店", "oldPos": [-22.5, -15], "newPos": [-21, -15], "reason": "主题餐厅" },
+        { "id": "writingclub_outer", "label": "野生菌餐馆", "oldPos": [-31.5, -15.125], "newPos": [-30, -15], "reason": "特色餐饮" },
+        { "id": "teahouse_outer", "label": "茶馆（外环）", "oldPos": [33, 33], "newPos": [-24, 18], "reason": "茶文化餐饮" }
+      ]
+    },
+    "north_district": {
+      "description": "北区居住文化带 - North District Residential & Cultural Belt",
+      "note": "北区建筑坐标保持不变，已有良好规划",
+      "buildings": [
+        { "id": "north_chat_plaza", "label": "聊天广场", "oldPos": [-15, -49.5], "newPos": [-15, -49.5], "reason": "保持" },
+        { "id": "north_pigeon_square", "label": "鸽子广场", "oldPos": [-26, -49.5], "newPos": [-26, -49.5], "reason": "保持" },
+        { "id": "north_stellar_hall", "label": "恒星会堂", "oldPos": [5.5, -49.5], "newPos": [5.5, -49.5], "reason": "保持" },
+        { "id": "north_singularity", "label": "奇点塔", "oldPos": [-5.5, -49.5], "newPos": [-5.5, -49.5], "reason": "保持" },
+        { "id": "north_binary_garden", "label": "双星花园", "oldPos": [15, -49.5], "newPos": [15, -49.5], "reason": "保持" },
+        { "id": "north_maya_grove", "label": "玛雅台地", "oldPos": [25, -49.5], "newPos": [25, -49.5], "reason": "保持" },
+        { "id": "north_api_memorial", "label": "安全碑", "oldPos": [-26, -59.5], "newPos": [-26, -59.5], "reason": "保持" },
+        { "id": "north_backrooms_door", "label": "后室之门", "oldPos": [18, -59.5], "newPos": [18, -59.5], "reason": "保持" },
+        { "id": "north_bistro", "label": "会员制餐厅", "oldPos": [-6, -59.5], "newPos": [-6, -59.5], "reason": "保持" },
+        { "id": "north_night_kiosk", "label": "不打烊贩卖店", "oldPos": [4, -59.5], "newPos": [4, -59.5], "reason": "保持" },
+        { "id": "north_worry_store", "label": "解忧杂货店", "oldPos": [-14, -59.5], "newPos": [-14, -59.5], "reason": "保持" },
+        { "id": "north_jukebox", "label": "点唱机", "oldPos": [11, -59.5], "newPos": [11, -59.5], "reason": "保持" }
+      ]
+    }
+  },
+  "summary": {
+    "totalBuildings": 70,
+    "movedBuildings": 58,
+    "unchangedBuildings": 12,
+    "majorChanges": [
+      "CBD核心区域重组，参议院移至城市中心原点",
+      "文化教育区集中在北部象限",
+      "科技创新区集中在南部象限",
+      "外环区域按功能分为四大区",
+      "北区保持现有规划，强化功能定位"
+    ]
+  }
+}

@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "library",
   num: "06",
   label: "图书馆",
-  x: -4,
-  z: 3,
+  x: -12,
+  z: 12,
   shape: "library",
   icon: iconSvg(`<path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M4 19a2 2 0 0 1 2-2h12"/>`),
   content: {

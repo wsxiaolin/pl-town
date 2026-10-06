@@ -6,8 +6,8 @@ export default defineBuilding({
   num: "26",
   // <discussion=654782b83b13265ec0206f9a>五金月饼&一瓶农夫山泉『金月店』</discussion>
   label: "金月店",
-  x: 22.5,
-  z: -22.5,
+  x: 24,
+  z: -24,
   shape: "mall",
   icon: iconSvg(`<path d="M3 9l2-5h14l2 5"/><path d="M3 9v11h18V9"/><path d="M9 20v-5h6v5"/><path d="M3 13h18"/>`),
   content: {

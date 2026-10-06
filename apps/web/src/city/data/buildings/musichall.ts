@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "41",
   label: "音乐厅",
   x: -21,
-  z: 33,
+  z: 30,
   shape: "pavilion",
   facade: "facade_screen",
   icon: iconSvg(`<path d="M9 18V5l12-2v13"/><circle cx="6" cy="6" r="3"/>`),

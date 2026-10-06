@@ -7,7 +7,7 @@ export default defineBuilding({
   storyLocked: true,
   label: "文学审核部",
   x: -9,
-  z: 3,
+  z: 15,
   shape: "ruins",
   icon: iconSvg(`<path d="M4 20V8l5-4 5 4v8"/><path d="M14 20V12l6-3v11"/><line x1="4" y1="20" x2="20" y2="20"/>`),
   content: {

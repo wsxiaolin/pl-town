@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "writingclub_outer",
   num: "36",
   label: "野生菌餐馆",
-  x: -31.5,
-  z: -15.125,
+  x: -30,
+  z: -15,
   shape: "wild_mushroom_restaurant",
   icon: iconSvg(`<path d="M4 10h16v10H4z"/><path d="M3 10h18"/><path d="M6 6v4M12 6v4M18 6v4"/><path d="M8 14h8v6H8z"/>`),
   content: {

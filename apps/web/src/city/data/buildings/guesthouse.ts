@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "guesthouse",
   num: "44",
   label: "客栈",
-  x: 33,
+  x: 30,
   z: 21,
   shape: "pagoda",
   facade: "facade_kiosk",

@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "laws",
   num: "05",
   label: "城的法则",
-  x: 4,
-  z: 3,
+  x: 3,
+  z: -9,
   shape: "pavilion",
   icon: iconSvg(`<path d="M12 3v18"/><path d="M6 8h12"/><path d="M6 8l-2 6h4z"/><path d="M18 8l-2 6h4z"/>`),
   content: {

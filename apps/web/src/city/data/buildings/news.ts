@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "news",
   num: "10",
   label: "星尘报社",
-  x: -4,
-  z: 9,
+  x: -12,
+  z: 15,
   shape: "kiosk",
   icon: iconSvg(`<rect x="3" y="5" width="18" height="14" rx="1"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/><line x1="7" y1="17" x2="13" y2="17"/>`),
   content: {

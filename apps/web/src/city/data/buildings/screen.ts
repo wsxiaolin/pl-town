@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "screen",
   num: "12",
   label: "大屏幕",
-  x: 9,
-  z: 9,
+  x: 0,
+  z: 12,
   shape: "screen",
   icon: iconSvg(`<rect x="3" y="4" width="18" height="13" rx="1"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/>`),
   content: {

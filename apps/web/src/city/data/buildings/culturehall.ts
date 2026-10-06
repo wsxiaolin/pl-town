@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "culturehall",
   num: "24",
   label: "文化馆",
-  x: 15,
-  z: 9,
+  x: 0,
+  z: 15,
   shape: "screen",
   // 故意不配 contentQuery：点击已改为打开右侧「物实作家图鉴」面板（见 writerCatalogController）。
   icon: iconSvg(`<path d="M4 5h16v14H4z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="M6 19l3-4"/><path d="M18 19l-3-4"/>`),

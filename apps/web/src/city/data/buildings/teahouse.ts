@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "teahouse",
   num: "25",
   label: "茶馆",
-  x: 15,
+  x: 12,
   z: 15,
   shape: "pagoda",
   icon: iconSvg(`<path d="M5 10h12v3a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 11h1a2 2 0 0 1 0 4h-1"/><path d="M8 6c0-1 1-1 1-2"/><path d="M12 6c0-1 1-1 1-2"/>`),

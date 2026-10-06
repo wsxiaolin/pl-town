@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "46",
   label: "灯塔",
   x: 9,
-  z: 31.5,
+  z: 30,
   shape: "tower",
   facade: "facade_darktower",
   icon: iconSvg(`<path d="M8 21V5l4-3 4 3v16"/><path d="M8 21h8"/>`),

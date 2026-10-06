@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "qipai_hall",
   num: "48",
   label: "棋气派",
-  x: 30,
-  z: 30,
+  x: 27,
+  z: 27,
   shape: "qipai",
   icon: iconSvg(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`),
   content: {

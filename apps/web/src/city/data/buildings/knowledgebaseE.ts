@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "knowledgebaseE",
   num: "16",
   label: "实验知识库",
-  x: -15,
+  x: -12,
   z: -15,
   shape: "library",
   icon: iconSvg(`<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M8 4v16"/><path d="M11 8h5"/><path d="M11 12h4"/>`),

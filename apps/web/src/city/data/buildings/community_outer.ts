@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "community_outer",
   num: "32",
   label: "社区中心（外环）",
-  x: 33,
-  z: -33,
+  x: 30,
+  z: -30,
   shape: "clocktower",
   icon: iconSvg(`<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>`),
   content: {

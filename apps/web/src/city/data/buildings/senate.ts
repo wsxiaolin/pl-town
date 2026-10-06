@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "senate",
   num: "21",
   label: "参议院",
-  x: -15,
-  z: 9,
+  x: 0,
+  z: 0,
   shape: "temple",
   icon: iconSvg(`<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/><path d="M4 12h16"/>`),
   content: {

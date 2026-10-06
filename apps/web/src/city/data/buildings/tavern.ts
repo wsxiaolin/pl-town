@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "tavern",
   num: "52",
   label: "科特维酒馆",
-  x: 33,
-  z: 3,
+  x: 12,
+  z: -3,
   shape: "tavern",
   icon: iconSvg(`<path d="M6 5h9a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6z"/><path d="M18 8h1.5a2 2 0 0 1 0 4H18"/><path d="M6 5v6h3l-.5-2H9a2 2 0 1 1 2 2v3"/><path d="M3 5v14"/>`),
   content: {

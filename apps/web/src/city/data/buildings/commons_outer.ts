@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "commons_outer",
   num: "33",
   label: "众议院（外环）",
-  x: -33,
+  x: -30,
   z: -9,
   shape: "temple",
   icon: iconSvg(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/>`),

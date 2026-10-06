@@ -6,7 +6,7 @@ export default defineBuilding({
   id: "photostudio",
   num: "26A",
   label: "照相馆",
-  x: 21,
+  x: 15,
   z: 15,
   shape: "kiosk",
   facade: "facade_market",

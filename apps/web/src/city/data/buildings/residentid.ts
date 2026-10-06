@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "14",
   label: "居民证",
   x: -9,
-  z: -9,
+  z: 0,
   shape: "altar",
   icon: iconSvg(`<rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="8" cy="12" r="2"/><line x1="13" y1="11" x2="18" y2="11"/><line x1="13" y1="14" x2="16" y2="14"/>`),
   content: {

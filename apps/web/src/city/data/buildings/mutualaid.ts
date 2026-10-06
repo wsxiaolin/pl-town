@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "mutualaid",
   num: "11",
   label: "互助团",
-  x: -9,
-  z: 9,
+  x: -6,
+  z: 3,
   shape: "kiosk",
   icon: iconSvg(`<path d="M12 21s-7-5-7-11a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 6-7 11-7 11z"/>`),
   content: {

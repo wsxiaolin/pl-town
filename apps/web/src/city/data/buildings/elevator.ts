@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "elevator",
   num: "13",
   label: "纪念碑",
-  x: 9,
-  z: -9,
+  x: 0,
+  z: -15,
   shape: "shaft",
   icon: iconSvg(`<rect x="6" y="3" width="12" height="18" rx="1"/><line x1="10" y1="8" x2="12" y2="6"/><line x1="12" y1="6" x2="14" y2="8"/><line x1="10" y1="16" x2="12" y2="18"/><line x1="12" y1="18" x2="14" y2="16"/>`),
   content: {

@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "37",
   label: "档案馆",
   x: -21,
-  z: -33,
+  z: -30,
   shape: "library",
   facade: "facade_board",
   icon: iconSvg(`<path d="M3 4h18v16H3z"/><path d="M7 4v16"/>`),

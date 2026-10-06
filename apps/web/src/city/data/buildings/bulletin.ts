@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "bulletin",
   num: "02",
   label: "公告板",
-  x: -4,
-  z: -9,
+  x: -9,
+  z: -3,
   shape: "board",
   icon: iconSvg(`<rect x="4" y="5" width="16" height="14" rx="1"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>`),
   content: {

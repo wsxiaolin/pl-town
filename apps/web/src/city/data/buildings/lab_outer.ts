@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "lab_outer",
   num: "34",
   label: "数据中心",
-  x: 33,
-  z: 9,
+  x: 9,
+  z: 6,
   shape: "greenhouse",
   icon: iconSvg(`<path d="M9 3h6"/><path d="M10 3v5l-4 9a3 3 0 0 0 3 4h6a3 3 0 0 0 3-4l-4-9V3"/>`),
   content: {

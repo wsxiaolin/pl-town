@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "42",
   label: "温室",
   x: 21,
-  z: 33,
+  z: 30,
   shape: "greenhouse",
   facade: "facade_campus",
   icon: iconSvg(`<path d="M12 2L2 12h3v8h14v-8h3z"/>`),

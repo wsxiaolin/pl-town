@@ -5,7 +5,7 @@ export default defineBuilding({
   id: "arena",
   num: "43",
   label: "竞技场",
-  x: -33,
+  x: -30,
   z: 21,
   shape: "factory",
   facade: "facade_clocktower",

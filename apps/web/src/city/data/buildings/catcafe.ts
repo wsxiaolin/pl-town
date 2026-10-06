@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "catcafe",
   num: "08",
   label: "猫咖馆",
-  x: 9,
-  z: 3,
+  x: 15,
+  z: 12,
   shape: "skyscraper",
   icon: iconSvg(`<path d="M6 8V5l3 2"/><path d="M18 8V5l-3 2"/><path d="M5 10c0-2 2-3 7-3s7 1 7 3v5c0 3-3 5-7 5s-7-2-7-5z"/>`),
   content: {

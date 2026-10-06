@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "academy",
   num: "09",
   label: "物实学院",
-  x: 4,
-  z: 9,
+  x: 6,
+  z: 12,
   shape: "campus",
   icon: iconSvg(`<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1 2.5 3 6 3s6-2 6-3v-5"/>`),
   content: {

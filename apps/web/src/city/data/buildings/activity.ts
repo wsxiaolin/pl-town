@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "activity",
   num: "01",
   label: "活动区",
-  x: 4,
-  z: -9,
+  x: 6,
+  z: -12,
   shape: "bank",
   icon: iconSvg(`<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>`),
   content: {

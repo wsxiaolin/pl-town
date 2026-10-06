@@ -6,7 +6,7 @@ export default defineBuilding({
   num: "03",
   label: "技术半城",
   x: 9,
-  z: -3,
+  z: -12,
   shape: "tower",
   icon: iconSvg(`<polyline points="8 6 4 12 8 18"/><polyline points="16 6 20 12 16 18"/>`),
   content: {

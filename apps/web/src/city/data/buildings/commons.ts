@@ -5,8 +5,8 @@ export default defineBuilding({
   id: "commons",
   num: "20",
   label: "众议院",
-  x: -15,
-  z: 3,
+  x: -6,
+  z: 0,
   shape: "temple",
   icon: iconSvg(`<path d="M3 10l9-6 9 6"/><path d="M5 10h14"/><path d="M7 10v8"/><path d="M12 10v8"/><path d="M17 10v8"/><path d="M4 18h16"/>`),
   content: {
