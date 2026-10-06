@@ -95,31 +95,31 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   // ── 局部造型辅助（原作坐标，y 向上；parent 缺省为根组 g）──────────
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, mat: MatLike, parent: PartTarget = g, shadow = true) =>
     addPart(parent, new THREE.BoxGeometry(w, h, d), mat, [x, y, z], shadow);
-  const cyl = (x: number, y: number, z: number, rt: number, rb: number, h: number, mat: MatLike, parent: PartTarget = g, n = 12) =>
-    addPart(parent, new THREE.CylinderGeometry(rt, rb, h, n), mat, [x, y, z]);
-  const ball = (x: number, y: number, z: number, r: number, mat: MatLike, parent: PartTarget = g, n = 1) =>
-    addPart(parent, new THREE.IcosahedronGeometry(r, n), mat, [x, y, z]);
-  const torus = (x: number, y: number, z: number, r: number, t: number, mat: MatLike, parent: PartTarget = g, rx = 0, ry = 0, n = 32) => {
-    const o = addPart(parent, new THREE.TorusGeometry(r, t, 6, n), mat, [x, y, z]);
+  const cyl = (x: number, y: number, z: number, rt: number, rb: number, h: number, mat: MatLike, parent: PartTarget = g, n = 12, shadow = true) =>
+    addPart(parent, new THREE.CylinderGeometry(rt, rb, h, n), mat, [x, y, z], shadow);
+  const ball = (x: number, y: number, z: number, r: number, mat: MatLike, parent: PartTarget = g, n = 1, shadow = true) =>
+    addPart(parent, new THREE.IcosahedronGeometry(r, n), mat, [x, y, z], shadow);
+  const torus = (x: number, y: number, z: number, r: number, t: number, mat: MatLike, parent: PartTarget = g, rx = 0, ry = 0, n = 32, shadow = true) => {
+    const o = addPart(parent, new THREE.TorusGeometry(r, t, 6, n), mat, [x, y, z], shadow);
     o.rotation.set(rx, ry, 0);
     return o;
   };
   /** 圆片，默认面向 +z（原作 disc）。 */
-  const disc = (x: number, y: number, z: number, r: number, depth: number, mat: MatLike, parent: PartTarget = g, n = 40) => {
-    const o = cyl(x, y, z, r, r, depth, mat, parent, n);
+  const disc = (x: number, y: number, z: number, r: number, depth: number, mat: MatLike, parent: PartTarget = g, n = 40, shadow = true) => {
+    const o = cyl(x, y, z, r, r, depth, mat, parent, n, shadow);
     o.rotation.x = Math.PI / 2;
     return o;
   };
-  const beam = (a: Vec3, b: Vec3, r: number, mat: MatLike, parent: PartTarget = g, n = 8) => {
+  const beam = (a: Vec3, b: Vec3, r: number, mat: MatLike, parent: PartTarget = g, n = 8, shadow = true) => {
     const av = new THREE.Vector3(...a);
     const bv = new THREE.Vector3(...b);
-    const o = cyl((av.x + bv.x) / 2, (av.y + bv.y) / 2, (av.z + bv.z) / 2, r, r, av.distanceTo(bv), mat, parent, n);
+    const o = cyl((av.x + bv.x) / 2, (av.y + bv.y) / 2, (av.z + bv.z) / 2, r, r, av.distanceTo(bv), mat, parent, n, shadow);
     o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bv.clone().sub(av).normalize());
     return o;
   };
-  const tube = (points: Vec3[], mat: MatLike, r = 0.02, parent: PartTarget = g, segMul = 5) => {
+  const tube = (points: Vec3[], mat: MatLike, r = 0.02, parent: PartTarget = g, segMul = 5, shadow = true) => {
     const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
-    return addPart(parent, new THREE.TubeGeometry(curve, Math.max(8, points.length * segMul), r, 6, false), mat, [0, 0, 0]);
+    return addPart(parent, new THREE.TubeGeometry(curve, Math.max(8, points.length * segMul), r, 6, false), mat, [0, 0, 0], shadow);
   };
   /** 原作 ribbon：沿路径的宽带水面/瀑布。 */
   const ribbon = (path: Vec3[], width: number, mat: THREE.Material = WATER_MAT) => {
@@ -168,12 +168,12 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     return addPart(parent, geo, leafMat(color), [0, 0, 0], false);
   };
   /** 原作 carvedLeaf（简化）：垂直浮雕叶片，只保留叶形挤出体。 */
-  const carvedLeaf = (x: number, y: number, z: number, s = 0.4, angle = 0, mat: MaterialParameters = woodPlain(MAPLE), parent: PartTarget = g) => {
+  const carvedLeaf = (x: number, y: number, z: number, s = 0.4, angle = 0, mat: MaterialParameters = woodPlain(MAPLE), parent: PartTarget = g, shadow = true) => {
     const shape = new THREE.Shape();
     shape.moveTo(0, -s * 0.55);
     shape.bezierCurveTo(-s * 0.62, -s * 0.1, -s * 0.42, s * 0.34, 0, s * 0.70);
     shape.bezierCurveTo(s * 0.42, s * 0.34, s * 0.62, -s * 0.1, 0, -s * 0.55);
-    const o = addPart(parent, new THREE.ExtrudeGeometry(shape, { depth: 0.025, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.012, bevelSegments: 1, curveSegments: 5 }), mat, [x, y, z]);
+    const o = addPart(parent, new THREE.ExtrudeGeometry(shape, { depth: 0.025, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.012, bevelSegments: 1, curveSegments: 5 }), mat, [x, y, z], shadow);
     o.rotation.z = angle;
     return o;
   };
@@ -193,7 +193,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   box(6.9, 0.23, 0, 0.20, 0.18, 13.6, wood(WALNUT, 1, 5));
   box(-6.9, 0.23, 0, 0.20, 0.18, 13.6, wood(WALNUT, 1, 5));
   for (const [fx, fz] of [[-6.45, -6.45], [6.45, -6.45], [-6.45, 6.45], [6.45, 6.45]] as const) {
-    cyl(fx, -0.88, fz, 0.28, 0.32, 0.13, woodPlain(DARK));
+    cyl(fx, -0.88, fz, 0.28, 0.32, 0.13, woodPlain(DARK), g, 12, false);
   }
 
   // ── 钟屋骨架：四柱 + 两层环梁 + 斜撑 + 地板（cx=-0.65）────────────
@@ -214,7 +214,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   }
   for (const px of [-3.05, 1.75]) {
     const inward = px < 0 ? 1 : -1;
-    beam([px, 2.67, front], [px + inward * 0.78, 3.71, front], 0.09, woodPlain(MAPLE));
+    beam([px, 2.67, front], [px + inward * 0.78, 3.71, front], 0.09, woodPlain(MAPLE), g, 8, false);
   }
 
   // ── 墙板：背墙两段（中留检修口）+ 敞开小盖板 + 左侧板 ────────────
@@ -225,8 +225,8 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   hatch.rotation.y = 1.05;
   g.add(hatch);
   addPart(hatch, new THREE.BoxGeometry(2.1, 2.77, 0.10), wood(MAPLE, 2, 4), [0.7, 0, 0]);
-  addPart(hatch, new THREE.BoxGeometry(2.12, 0.13, 0.11), woodPlain(WALNUT), [0.7, -0.98, -0.072]);
-  addPart(hatch, new THREE.BoxGeometry(2.12, 0.13, 0.11), woodPlain(WALNUT), [0.7, 0.98, -0.072]);
+  addPart(hatch, new THREE.BoxGeometry(2.12, 0.13, 0.11), woodPlain(WALNUT), [0.7, -0.98, -0.072], false);
+  addPart(hatch, new THREE.BoxGeometry(2.12, 0.13, 0.11), woodPlain(WALNUT), [0.7, 0.98, -0.072], false);
   box(-3.042, 5.5, -1.34, 0.12, 3.2, 2.1, wood(MAPLE, 1, 4));
 
   // ── 前阳台：栏杆 + 宝瓶柱 + 雕叶饰带 ────────────────────────────
@@ -235,10 +235,10 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   box(cx, 4.55, 2.13, 5.69, 0.105, 0.15, wood(MAPLE, 5, 1));
   for (let i = 0; i < 6; i++) {
     const bx = cx - 2.1 + i * 0.85;
-    cyl(bx, 4.22, 2.13, 0.035, 0.043, 0.56, woodPlain(CHERRY), g, 8);
+    cyl(bx, 4.22, 2.13, 0.035, 0.043, 0.56, woodPlain(CHERRY), g, 8, false);
   }
-  for (const ex of [-3.36, 2.04]) box(ex, 4.23, 2.13, 0.13, 0.79, 0.13, woodPlain(WALNUT));
-  for (let i = 0; i < 3; i++) carvedLeaf(cx - 2.0 + i * 2.0, 3.74, 2.207, 0.15, i % 2 ? 0.6 : -0.6);
+  for (const ex of [-3.36, 2.04]) box(ex, 4.23, 2.13, 0.13, 0.79, 0.13, woodPlain(WALNUT), g, false);
+  for (let i = 0; i < 3; i++) carvedLeaf(cx - 2.0 + i * 2.0, 3.74, 2.207, 0.15, i % 2 ? 0.6 : -0.6, woodPlain(MAPLE), g, false);
 
   // ── 琥珀木格窗（前上两扇 + 左侧一扇）────────────────────────────
   const woodWindow = (x: number, y: number, z: number, w: number, h: number, ry: number) => {
@@ -246,10 +246,10 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     wg.position.set(x, y, z);
     wg.rotation.y = ry;
     g.add(wg);
-    addPart(wg, new THREE.BoxGeometry(w + 0.13, h + 0.13, 0.08), woodPlain(WALNUT), [0, 0, 0]);
+    addPart(wg, new THREE.BoxGeometry(w + 0.13, h + 0.13, 0.08), woodPlain(WALNUT), [0, 0, 0], false);
     addPart(wg, new THREE.BoxGeometry(w, h, 0.018), amberPane, [0, 0, 0.046], false);
     addPart(wg, new THREE.BoxGeometry(0.028, h, 0.025), woodPlain(CHERRY), [0, 0, 0.067], false);
-    addPart(wg, new THREE.BoxGeometry(w + 0.28, 0.087, 0.34), woodPlain(MAPLE), [0, -h / 2 - 0.08, 0.14]);
+    addPart(wg, new THREE.BoxGeometry(w + 0.28, 0.087, 0.34), woodPlain(MAPLE), [0, -h / 2 - 0.08, 0.14], false);
   };
   woodWindow(cx - 1.10, 8.48, 1.33, 0.43, 0.57, 0);
   woodWindow(cx + 1.10, 8.48, 1.33, 0.43, 0.57, 0);
@@ -283,12 +283,12 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
       -0.645, slopeLen, 0.09, 4.66, wood(SHINGLES[1]!, 3, 8),
     );
     panel.rotation.z = -side * slopeAngle;
-    beam([cx + side * 3.02, 7.32, 1.85], [cx + side * 3.02, 7.32, -3.1], 0.075, woodPlain(WALNUT));
+    beam([cx + side * 3.02, 7.32, 1.85], [cx + side * 3.02, 7.32, -3.1], 0.075, woodPlain(WALNUT), g, 8, false);
     for (const ez of [1.88, -3.17]) beam([cx, 10.24, ez], [cx + side * 3.09, 7.25, ez], 0.11, wood(WALNUT, 1, 2));
   }
   beam([cx, 10.26, -3.20], [cx, 10.26, 1.96], 0.13, wood(WALNUT, 1, 8), g, 10);
-  for (const rz of [-2.4, -1.1, 0.4]) carvedLeaf(cx, 10.5, rz, 0.32, 0);
-  carvedLeaf(cx, 10.49, 1.7, 0.5, 0, woodPlain(BIRCH));
+  for (const rz of [-2.4, -1.1, 0.4]) carvedLeaf(cx, 10.5, rz, 0.32, 0, woodPlain(MAPLE), g, false);
+  carvedLeaf(cx, 10.49, 1.7, 0.5, 0, woodPlain(BIRCH), g, false);
 
   // ── 老虎窗（阳坡）与后坡小钟塔 ──────────────────────────────────
   const dormer = new THREE.Group();
@@ -300,17 +300,17 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     const r = addPart(dormer, new THREE.BoxGeometry(0.81, 0.075, 0.89), wood(WALNUT, 1, 2), [side * 0.29, 1.01, 0]);
     r.rotation.z = -side * 0.70;
   }
-  disc(0, 0.43, 0.338, 0.27, 0.035, woodPlain(WALNUT), dormer, 20);
-  disc(0, 0.43, 0.365, 0.205, 0.021, amberPane, dormer, 20);
+  disc(0, 0.43, 0.338, 0.27, 0.035, woodPlain(WALNUT), dormer, 20, false);
+  disc(0, 0.43, 0.365, 0.205, 0.021, amberPane, dormer, 20, false);
   const belfry = new THREE.Group();
   belfry.position.set(0.47, 9.0, -2.33);
   g.add(belfry);
   addPart(belfry, new THREE.BoxGeometry(0.61, 0.15, 0.60), wood(WALNUT, 1, 1), [0, 0.11, 0]);
   for (const px of [-0.22, 0.22]) for (const pz of [-0.21, 0.21]) {
-    addPart(belfry, new THREE.BoxGeometry(0.065, 0.69, 0.065), wood(MAPLE, 1, 3), [px, 0.46, pz]);
+    addPart(belfry, new THREE.BoxGeometry(0.065, 0.69, 0.065), wood(MAPLE, 1, 3), [px, 0.46, pz], false);
   }
   cyl(0, 1.02, 0, 0.04, 0.48, 0.52, wood(WALNUT, 1, 2), belfry, 4);
-  ball(0, 1.42, 0, 0.056, woodPlain(BIRCH), belfry, 1);
+  ball(0, 1.42, 0, 0.056, woodPlain(BIRCH), belfry, 1, false);
 
   // ── 大钟盘：双层木盘 + 刻度 + 罗马数字 + 真实时间指针 ────────────
   const dialX = cx;
@@ -335,11 +335,11 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
       const s = text[i];
       if (s === 'I') box(xx, y, z, 0.021, 0.17, 0.014, woodPlain(BIRCH), g, false);
       else if (s === 'V') {
-        beam([xx - 0.033, y + 0.082, z], [xx, y - 0.086, z], 0.010, woodPlain(BIRCH), g, 4);
-        beam([xx, y - 0.086, z], [xx + 0.033, y + 0.082, z], 0.010, woodPlain(BIRCH), g, 4);
+        beam([xx - 0.033, y + 0.082, z], [xx, y - 0.086, z], 0.010, woodPlain(BIRCH), g, 4, false);
+        beam([xx, y - 0.086, z], [xx + 0.033, y + 0.082, z], 0.010, woodPlain(BIRCH), g, 4, false);
       } else {
-        beam([xx - 0.032, y - 0.083, z], [xx + 0.032, y + 0.083, z], 0.010, woodPlain(BIRCH), g, 4);
-        beam([xx + 0.032, y - 0.083, z], [xx - 0.032, y + 0.083, z], 0.010, woodPlain(BIRCH), g, 4);
+        beam([xx - 0.032, y - 0.083, z], [xx + 0.032, y + 0.083, z], 0.010, woodPlain(BIRCH), g, 4, false);
+        beam([xx + 0.032, y - 0.083, z], [xx - 0.032, y + 0.083, z], 0.010, woodPlain(BIRCH), g, 4, false);
       }
     }
   };
@@ -361,37 +361,37 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     group.position.set(dialX, dialY, z);
     g.add(group);
     addPart(group, new THREE.ExtrudeGeometry(shape, { depth: 0.022, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 1 }), mat, [0, 0, 0], false);
-    carvedLeaf(0, length * 0.58, 0.03, w * 1.3, 0, mat, group);
+    carvedLeaf(0, length * 0.58, 0.03, w * 1.3, 0, mat, group, false);
     return group;
   };
   anim.minuteHand = clockHand(1.04, 0.063, woodPlain(BIRCH), dialZ + 0.246);
   anim.hourHand = clockHand(0.71, 0.085, woodPlain(CHERRY), dialZ + 0.29);
-  disc(dialX, dialY, dialZ + 0.36, 0.111, 0.11, wood(CHERRY, 1, 1), g, 16);
+  disc(dialX, dialY, dialZ + 0.36, 0.111, 0.11, wood(CHERRY, 1, 1), g, 16, false);
 
   // ── 布谷鸟门：钟盘上方的报时小门 + 双开木翼门 + 木布谷鸟 ─────────
   const doorY = 8.31;
   box(cx, doorY, 0.68, 1.02, 1.03, 0.07, woodPlain(DARK));
   for (const s of [-1, 1]) box(cx + s * 0.53, doorY, 1.38, 0.083, 1.10, 0.12, wood(WALNUT, 1, 2));
   triangle([cx - 0.60, 8.82, 1.40], [cx + 0.60, 8.82, 1.40], [cx, 9.30, 1.40], wood(BIRCH, 1, 1));
-  carvedLeaf(cx, 9.13, 1.49, 0.18, 0, woodPlain(CHERRY));
+  carvedLeaf(cx, 9.13, 1.49, 0.18, 0, woodPlain(CHERRY), g, false);
   for (const s of [-1, 1]) {
     const doorGroup = new THREE.Group();
     doorGroup.position.set(cx + s * 0.485, doorY, 1.50);
     g.add(doorGroup);
     addPart(doorGroup, new THREE.BoxGeometry(0.475, 0.98, 0.065), wood(MAPLE, 1, 2), [-s * 0.238, 0, 0]);
     for (const by of [-0.33, 0.33]) addPart(doorGroup, new THREE.BoxGeometry(0.448, 0.055, 0.022), woodPlain(WALNUT), [-s * 0.238, by, 0.057], false);
-    for (const by of [-0.34, 0.34]) cyl(0, by, 0, 0.047, 0.047, 0.17, wood(CHERRY, 1, 1), doorGroup, 10);
+    for (const by of [-0.34, 0.34]) cyl(0, by, 0, 0.047, 0.047, 0.17, wood(CHERRY, 1, 1), doorGroup, 10, false);
     anim.birdDoors.push({ g: doorGroup, side: s });
   }
   const cuckoo = new THREE.Group();
   cuckoo.position.set(cx, doorY - 0.03, 0.88);
   g.add(cuckoo);
   anim.cuckoo = cuckoo;
-  addPart(cuckoo, new THREE.BoxGeometry(0.36, 0.063, 0.75), wood(WALNUT, 1, 2), [0, -0.23, -0.04]);
+  addPart(cuckoo, new THREE.BoxGeometry(0.36, 0.063, 0.75), wood(WALNUT, 1, 2), [0, -0.23, -0.04], false);
   const birdBody = addPart(cuckoo, new THREE.IcosahedronGeometry(0.20, 2), wood(CHERRY, 1, 1), [0, -0.04, 0.06]);
   birdBody.scale.set(0.80, 1, 1.25);
   const birdHead = addPart(cuckoo, new THREE.IcosahedronGeometry(0.143, 2), wood(MAPLE, 1, 1), [0, 0.20, 0.20]);
-  const birdBeak = addPart(cuckoo, new THREE.ConeGeometry(0.05, 0.16, 4), wood(WALNUT, 1, 1), [0, 0.19, 0.36]);
+  const birdBeak = addPart(cuckoo, new THREE.ConeGeometry(0.05, 0.16, 4), wood(WALNUT, 1, 1), [0, 0.19, 0.36], false);
   birdBeak.rotation.x = Math.PI / 2;
   leaf([0.13, 0.135, 0.22], [0.26, 0.07, 0.30], 0.15, 0x9a7a52, cuckoo);
   leaf([-0.13, 0.135, 0.22], [-0.26, 0.07, 0.30], 0.15, 0x9a7a52, cuckoo);
@@ -433,7 +433,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     gearGroup.position.set(x, y, -0.60);
     g.add(gearGroup);
     addPart(gearGroup, new THREE.ExtrudeGeometry(shape, { depth: 0.13, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 1, curveSegments: 4 }), mat, [0, 0, -0.065]);
-    disc(0, 0, 0, pitch * 0.23, 0.18, wood(WALNUT, 1, 1), gearGroup, 16);
+    disc(0, 0, 0, pitch * 0.23, 0.18, wood(WALNUT, 1, 1), gearGroup, 16, false);
     return gearGroup;
   };
   let gx = -4.45;
@@ -448,13 +448,13 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     const ratio = (i % 2 ? -1 : 1) * toothCounts[0]! / toothCounts[i]!;
     const phase = i ? Math.PI / toothCounts[i]! : 0;
     anim.gears.push({ g: gearGroup, ratio, phase });
-    beam([gx, gy, -1.67], [gx, gy, -0.24], 0.056, wood(WALNUT, 1, 2));
-    if (i > 0) box(gx, gy, -1.78, 0.28, 0.30, 0.19, wood(MAPLE, 1, 1));
+    beam([gx, gy, -1.67], [gx, gy, -0.24], 0.056, wood(WALNUT, 1, 2), g, 8, false);
+    if (i > 0) box(gx, gy, -1.78, 0.28, 0.30, 0.19, wood(MAPLE, 1, 1), g, false);
   }
 
   // ── 重锤：两枚松果形木锤挂于摆侧 ────────────────────────────────
   const pinecone = (x: number, bottom: number) => {
-    for (let y = 3.62; y > bottom + 0.4; y -= 0.18) torus(x, y, 1.11, 0.071, 0.017, wood(CHERRY, 1, 1), g, 0, Math.round(y / 0.18) % 2 ? Math.PI / 2 : 0, 12);
+    for (let y = 3.62; y > bottom + 0.4; y -= 0.18) torus(x, y, 1.11, 0.071, 0.017, wood(CHERRY, 1, 1), g, 0, Math.round(y / 0.18) % 2 ? Math.PI / 2 : 0, 12, false);
     const core = ball(x, bottom, 1.11, 0.20, wood(WALNUT, 1, 1));
     core.scale.y = 1.7;
   };
@@ -479,8 +479,8 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     tg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), bv.clone().sub(av).normalize());
     g.add(tg);
     const len = av.distanceTo(bv);
-    addPart(tg, new THREE.BoxGeometry(width + 0.17, 0.12, len), wood(WALNUT, 2, 3), [0, -0.095, 0]);
-    for (const s of [-1, 1]) addPart(tg, new THREE.BoxGeometry(0.08, 0.28, len + 0.04), wood(CHERRY, 1, 3), [s * (width / 2 + 0.042), 0.065, 0]);
+    addPart(tg, new THREE.BoxGeometry(width + 0.17, 0.12, len), wood(WALNUT, 2, 3), [0, -0.095, 0], false);
+    for (const s of [-1, 1]) addPart(tg, new THREE.BoxGeometry(0.08, 0.28, len + 0.04), wood(CHERRY, 1, 3), [s * (width / 2 + 0.042), 0.065, 0], false);
     addPart(tg, new THREE.PlaneGeometry(width, len), WATER_MAT, [0, 0.017, 0], false).rotation.x = -Math.PI / 2;
   };
   trough([rx, 5.34, -3.22], [rx, 5.13, -2.15]);
@@ -526,10 +526,10 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   const wr = 1.70;
   for (const wz of [-0.34, 0.34]) {
     torus(0, 0, wz, wr, 0.082, wood(WALNUT, 2, 2), wheel, 0, 0, 44);
-    disc(0, 0, wz, 0.22, 0.17, wood(CHERRY, 1, 1), wheel, 16);
+    disc(0, 0, wz, 0.22, 0.17, wood(CHERRY, 1, 1), wheel, 16, false);
     for (let j = 0; j < 4; j++) {
       const a = j * Math.PI / 2;
-      beam([Math.cos(a) * 0.16, Math.sin(a) * 0.16, wz], [Math.cos(a) * (wr - 0.08), Math.sin(a) * (wr - 0.08), wz], 0.075, wood(CHERRY, 1, 1), wheel);
+      beam([Math.cos(a) * 0.16, Math.sin(a) * 0.16, wz], [Math.cos(a) * (wr - 0.08), Math.sin(a) * (wr - 0.08), wz], 0.075, wood(CHERRY, 1, 1), wheel, 8, false);
     }
   }
   for (let j = 0; j < 8; j++) {
@@ -568,7 +568,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
   for (let j = 0; j < 4; j++) {
     const u = -1.07 + j * 0.5;
     const h = 0.42 + j * 0.12;
-    addPart(cabinet, new THREE.BoxGeometry(0.255, h, 0.33), j % 2 ? wood(MAPLE, 1, 1) : wood(BIRCH, 1, 1), [u, 6.34 + h / 2, -0.19]);
+    addPart(cabinet, new THREE.BoxGeometry(0.255, h, 0.33), j % 2 ? wood(MAPLE, 1, 1) : wood(BIRCH, 1, 1), [u, 6.34 + h / 2, -0.19], false);
   }
   const musicBarrel = new THREE.Group();
   musicBarrel.position.set(0, 5.66, -0.09);
@@ -618,8 +618,8 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     bg.scale.setScalar(s);
     g.add(bg);
     addPart(bg, new THREE.BoxGeometry(1.55, 0.066, 0.6), wood(MAPLE, 2, 1), [0, 0.11, 0]);
-    for (const lx of [-0.59, 0.59]) addPart(bg, new THREE.BoxGeometry(0.095, 0.44, 0.09), wood(WALNUT, 1, 1), [lx, -0.11, 0]);
-    addPart(bg, new THREE.BoxGeometry(0.076, 0.89, 0.077), wood(CHERRY, 1, 2), [0, 0.44, -0.28]);
+    for (const lx of [-0.59, 0.59]) addPart(bg, new THREE.BoxGeometry(0.095, 0.44, 0.09), wood(WALNUT, 1, 1), [lx, -0.11, 0], false);
+    addPart(bg, new THREE.BoxGeometry(0.076, 0.89, 0.077), wood(CHERRY, 1, 2), [0, 0.44, -0.28], false);
     addPart(bg, new THREE.BoxGeometry(1.54, 0.10, 0.10), wood(WALNUT, 2, 1), [0, 0.75, -0.28]);
   };
   bench(4.19, -4.51, 0, 1.07);
@@ -630,7 +630,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     const x = cx + Math.cos(a) * 4.4;
     const z = -0.42 + Math.sin(a) * 3.8;
     if (x < -3.4 && z < 2.5) continue;
-    cyl(x, 0.259, z, 0.24, 0.24, 0.08, wood(CHERRY, 1, 1), g, 12);
+    cyl(x, 0.259, z, 0.24, 0.24, 0.08, wood(CHERRY, 1, 1), g, 12, false);
   }
   // 椰子棕榈 ×3（弯干 + 放射叶冠）。
   const palm = (x: number, z: number, height: number, lean: number) => {
@@ -652,8 +652,8 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
       const dz = Math.sin(a);
       leaf([0, 0, 0], [dx * len, -0.30, dz * len], 0.145, frondColors[k % 3]!, crown);
     }
-    ball(0, -0.15, 0, 0.13, woodPlain(0xa79260), crown, 1);
-    ball(x, 0.30, z, 0.45, leafMat(0x718c49), g, 1).scale.y = 0.3;
+    ball(0, -0.15, 0, 0.13, woodPlain(0xa79260), crown, 1, false);
+    ball(x, 0.30, z, 0.45, leafMat(0x718c49), g, 1, false).scale.y = 0.3;
   };
   palm(4.84, -4.97, 6.35, -0.31);
   palm(5.27, 0.94, 4.48, -0.22);
@@ -663,9 +663,9 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     [-6.05, -5.50, 0.95], [3.72, -3.85, 1.10], [5.65, 2.28, 0.85], [1.43, 5.75, 0.7],
   ];
   for (const [mx, mz, ms] of mossSpots) {
-    ball(mx, 0.27, mz, ms * 0.45, leafMat(0x718c49), g, 1).scale.y = 0.3;
-    beam([mx + 0.3, 0.32, mz + 0.2], [mx + 0.3, 0.52, mz + 0.2], 0.009, leafMat(0x73904d), g, 4);
-    ball(mx + 0.3, 0.56, mz + 0.2, 0.05, leafMat(0xeebcb0), g, 0);
+    ball(mx, 0.27, mz, ms * 0.45, leafMat(0x718c49), g, 1, false).scale.y = 0.3;
+    beam([mx + 0.3, 0.32, mz + 0.2], [mx + 0.3, 0.52, mz + 0.2], 0.009, leafMat(0x73904d), g, 4, false);
+    ball(mx + 0.3, 0.56, mz + 0.2, 0.05, leafMat(0xeebcb0), g, 0, false);
   }
   // 小鸟屋。
   box(2.74, 6.19, -2.10, 0.63, 0.78, 0.59, wood(MAPLE, 1, 1));
@@ -675,7 +675,7 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
     const sprig = new THREE.Group();
     sprig.position.set(sx, 0.23, sz);
     g.add(sprig);
-    beam([0, 0, 0], [0, 0.42, 0], 0.012, leafMat(0x6d894f), sprig, 4);
+    beam([0, 0, 0], [0, 0.42, 0], 0.012, leafMat(0x6d894f), sprig, 4, false);
     for (let j = 0; j < 3; j++) {
       const a = j * 2.4;
       leaf([0, 0.10, 0], [Math.cos(a) * 0.35, 0.45 + j * 0.1, Math.sin(a) * 0.35], 0.15, j % 2 ? 0x819b61 : 0x9aaa70, sprig);
@@ -701,6 +701,10 @@ export function buildKomorebiWorkshop(options: KomorebiBuildingOptions, definiti
 export function updateKomorebiClockworks(buildings: ReadonlyArray<{ group: THREE.Group }>, elapsed: number, reduced: boolean): void {
   if (reduced) return;
   const t = elapsed;
+  // 指针走本地真实时间（全楼共用一次取时，避免每栋楼每帧各建一个 Date）。
+  const now = new Date();
+  const minutes = now.getMinutes() + now.getSeconds() / 60;
+  const hours = (now.getHours() % 12) + minutes / 60;
   for (const building of buildings) {
     const anim = building.group.userData.komorebiAnim as KomorebiAnim | undefined;
     if (!anim) continue;
@@ -709,10 +713,6 @@ export function updateKomorebiClockworks(buildings: ReadonlyArray<{ group: THREE
     for (const gear of anim.gears) gear.g.rotation.z = gear.phase + t * 0.105 * gear.ratio;
     // 钟摆。
     anim.pendulum.rotation.z = Math.sin(t * 1.7) * 0.17;
-    // 指针走本地真实时间。
-    const now = new Date();
-    const minutes = now.getMinutes() + now.getSeconds() / 60;
-    const hours = (now.getHours() % 12) + minutes / 60;
     anim.minuteHand.rotation.z = -(minutes / 60) * Math.PI * 2;
     anim.hourHand.rotation.z = -(hours / 12) * Math.PI * 2;
     // 布谷鸟报时：32 秒一循环（开门→探头→收工）。

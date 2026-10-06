@@ -191,7 +191,11 @@ export function assembleCityWorld(options: {
   });
   void loadModels(options.buildings);
   const updateDecorations = worldDecorations.update;
-  worldDecorations.update = (elapsed) => { updateDecorations(elapsed); constructionScene.update(); updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced); };
+  worldDecorations.update = (elapsed) => {
+    updateDecorations(elapsed);
+    constructionScene.update();
+    updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced);
+  };
   return {
     constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
     worldDecorations,
