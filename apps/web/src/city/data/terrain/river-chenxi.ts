@@ -42,7 +42,12 @@ const CHENXI_RIVER_PATH: Array<[number, number]> = [
  * 数值审计见 tests/unit/worldTerrainAudit.test.ts。
  */
 export const ESTUARY_PROFILE: ReadonlyArray<readonly [number, number, number]> = [
-  [-44.2, -97.8, 6.4],
+  // v6 海侧羽流（plume）两站：河口不再以湾口几何边缘直接撞上西海面，
+  // 而是向西伸出渐隐水舌没入海中（渲染层按 x 渐降 y 至 0.064 并把
+  // alpha/水色渐变入海）。半宽沿羽流先展后收 = 扩散的水舌形态。
+  [-50.5, -99.4, 5.6], // 羽流海内端（y 0.064 贴海面、alpha 归零处）
+  [-47.2, -98.6, 6.6], // 羽流中段
+  [-44.2, -97.8, 6.4], // 湾口（满高 0.08 起点以西不再抬升）
   [-41.5, -97.4, 7.0],
   [-38.5, -97.0, 5.6],
   [-35.5, -96.6, 3.6],
@@ -50,7 +55,7 @@ export const ESTUARY_PROFILE: ReadonlyArray<readonly [number, number, number]> =
 ];
 
 /** 湾水舌 + 沙洲的包围盒（岸景排除用，含边缘扰动余量）。 */
-export const ESTUARY_BBOX = { x0: -46, x1: -31.5, z0: -106, z1: -89 };
+export const ESTUARY_BBOX = { x0: -52, x1: -31.5, z0: -107, z1: -89 };
 
 export const CHENXI_RIVER: readonly TerrainFeatureConfig[] = [
   {

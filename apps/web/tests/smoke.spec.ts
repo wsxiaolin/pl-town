@@ -359,7 +359,10 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
 
   await page.goto('/');
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
+  // 30s boot budget, aligned with helpers.waitForCityBooted: on software-GL
+  // CI runners the first-frame warm-up (compileAsync + 3 render frames) of the
+  // v5 world terrain + rain-night scene pushes past Playwright's default 5s.
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
   const phoneToggle = page.locator('#onlinePanelToggle');
   await expect(phoneToggle).toHaveClass(/connected/, { timeout: 30_000 });
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');

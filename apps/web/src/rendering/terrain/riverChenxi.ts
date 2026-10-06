@@ -15,6 +15,15 @@
 // - 西北岬群（sea-minglan headland-nw）同步北移让出河口湾外的开阔
 //   海面——河流入海不再正对山体。
 //
+// v6 入海羽流（2026-10-06，sin 截图反馈「入海处颜色断层/硬边界/落差感」）：
+// - 湾口向西伸出渐隐水舌（ESTUARY_PROFILE 前两站，深入海内 ~7 单位）：
+//   环 y 从 0.08 平滑降到 0.064（贴海面 0.06 滑出）+ shader 端
+//   mouthFade 把 alpha 渐隐至 0、水色混向浅海青——河水以楔形羽流
+//   没入海中，颜色断层与几何硬边界同时消失，不再有悬空水片的落差感；
+// - 湾面 timeScale 0.8 → 0.55 与海面同速，交界处波速连续；
+// - westBeach 浪带在河口水道 z 带淡出到 15%（河口是被河流切开的
+//   水道，浪不再横穿河口）。
+//
 // v2 改线（2026-10）：星语北城（PR #196）并入后占据 x∈[-33.5,33.5]、
 // z∈[-36,-80]，旧线（z -52..-74）穿城且压在 150×150 的 district 平面
 // （y=0.018，±75）上仅差 0.002。新线全程 z ≤ -95，与城区 keep-out 盒
@@ -327,16 +336,30 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   }
   estuaryRings.push({ x: ESTUARY_PROFILE[ESTUARY_PROFILE.length - 1]![0], z: ESTUARY_PROFILE[ESTUARY_PROFILE.length - 1]![1], half: ESTUARY_PROFILE[ESTUARY_PROFILE.length - 1]![2] });
 
+  // v6 入海羽流的水位衔接：湾内环保持 ESTUARY_Y(0.08)；从湾口向西，
+  // 环 y 平滑降至 MOUTH_LIP_Y(0.064)——比海面(0.06)高 0.004、贴着海面
+  // 滑出，不再有"悬空水片/堤坝"式的落差错觉。羽流几何穿过海面东缘
+  // （x ≈ -43.2±wobble）深入海内约 7 单位，配合 shader 的 alpha 渐隐，
+  // 河水读作没入海中而非"贴"在海上。
+  const MOUTH_X_START = -44.2; // 湾口（满高起点）
+  const MOUTH_X_END = ESTUARY_PROFILE[0]![0]; // 羽流海内端（y 触底）
+  const MOUTH_LIP_Y = 0.064;
+  const estuaryRingY = (x: number): number => {
+    const t = THREE.MathUtils.clamp((MOUTH_X_START - x) / (MOUTH_X_START - MOUTH_X_END), 0, 1);
+    const ease = t * t * (3 - 2 * t);
+    return THREE.MathUtils.lerp(ESTUARY_Y, MOUTH_LIP_Y, ease);
+  };
+
   const estuaryPositions: number[] = [];
   for (let ring = 0; ring + 1 < estuaryRings.length; ring += 1) {
     const current = estuaryRings[ring]!;
     const next = estuaryRings[ring + 1]!;
     // 逆时针绕向（从上看）：北边(-z) → 南边(+z)……水面单面朝上即可：
     // 顶点序 (北current, 北next, 南current) + (南current, 北next, 南next)。
-    const nc = [current.x, ESTUARY_Y, current.z - current.half];
-    const nn = [next.x, ESTUARY_Y, next.z - next.half];
-    const sc = [current.x, ESTUARY_Y, current.z + current.half];
-    const sn = [next.x, ESTUARY_Y, next.z + next.half];
+    const nc = [current.x, estuaryRingY(current.x), current.z - current.half];
+    const nn = [next.x, estuaryRingY(next.x), next.z - next.half];
+    const sc = [current.x, estuaryRingY(current.x), current.z + current.half];
+    const sn = [next.x, estuaryRingY(next.x), next.z + next.half];
     estuaryPositions.push(...nc, ...nn, ...sc, ...sc, ...nn, ...sn);
   }
   const estuaryGeometry = new THREE.BufferGeometry();
@@ -348,9 +371,19 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     waterColorNight: new THREE.Color(0x1c3b46),
     sunColorDay: new THREE.Color(0xbdd4e6),
     sunColorNight: new THREE.Color(0x3a4a6a),
-    timeScale: 0.8,
+    // v6：与海面 SEA_TIME_SCALE 同速——羽流与海在交界处波速连续，
+    // 不再是两套节奏的水各拍各的。
+    timeScale: 0.55,
     size: 6, // 湾面更宽，波纹 tile 略小
     alpha: 0.9,
+    // v6 入海羽流渐变：从湾口向海内把 alpha 渐隐至 0、水色混向浅海青
+    // （与浪带/近岸浅水同族色）。颜色断层与几何硬边界在渐隐里同时消失。
+    mouthFade: {
+      xStart: -44.4,
+      xEnd: -50.2,
+      seaColorDay: new THREE.Color(0x2c8699),
+      seaColorNight: new THREE.Color(0x0e2b36),
+    },
   });
   estuarySurface.water.name = 'river-chenxi-estuary';
   object.add(estuarySurface.water);
