@@ -50,6 +50,28 @@ test('light boot shows the current real-world moment still and enters', async ({
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
 });
 
+test('a rejected decode still reveals the moment layer (#201 r2 fallback)', async ({ page }) => {
+  // The decode() gate must not turn a failed image load into a silent dark
+  // splash: the .catch folds the same event, so the still layer takes the
+  // screen with whatever the browser can render (an empty layer renders
+  // nothing — never worse than staying hidden, and it restores the pre-gate
+  // behaviour of showing partial/native-drawn data when it exists).
+  // The pattern must stay $-anchored: in dev the image *module* is fetched
+  // as `moments/<name>.webp?import` (Vite module graph) — aborting THAT
+  // kills the whole app's module graph, not just the image load.
+  await page.route(/moments\/(dawn|noon|dusk|night)\.webp$/, (route) => route.abort());
+  stubCityWebSocket(page);
+  stubNewsstandWebSocket(page);
+  stubWorldCatalogWebSocket(page);
+  await seedCityStorage(page);
+  await page.goto('/');
+
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 20_000 });
+  // The boot itself is unaffected: gate + city still reveal normally.
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
+});
+
 test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ page }) => {
   stubCityWebSocket(page);
   stubNewsstandWebSocket(page);

@@ -52,7 +52,7 @@ GPU 行：`WEBGL_debug_renderer_info` 读取驱动上报的 renderer 字符串�
 
 级间淡入 0.45s + 递减 blur（24px / 6px，CSS `boot-moment-step`、`boot-moment-step-2`）；三层共用 drift keyframes 保持像素级同步；`.boot-moment-img` 基础规则与 `.boot-moment-step` 覆盖规则的**层叠顺序**（step 必须在后，否则 1.6s 基础过渡覆盖 0.45s 级间过渡）在内联 `bootCritical` 与外链 `boot.css` 中互为镜像——两处修改需同步。内联阈值 4KB（Vite `assetsInlineLimit`），故仅 L1 内联、L2 起走网络。`paintToken` 代际隔离防止旧 decode 回调翻动新 paint 的层。
 
-**揭示即退役**（#201 B1 修复）：`momentTiers.applyDecodeEvent()` 把每次 decode 完成折叠成整梯状态（纯函数，单测钉住）——更高级层揭示的**同一写**里，所有在屏的粗级层标记 `is-retired`。正常到达顺序（L1→L2→L3）也会退役，不再出现三层全屏模糊层伴随整条重型管线合成/漂移的情况。退役的视觉语义（#201 S1 修复）：退役层**保留 opacity**（`is-front` 不摘，新层在其上淡入 = 交叉淡化，无黑帧），漂移动画立即停止，`visibility` 经基础过渡的 `visibility 0s linear 1.6s` 延迟 1.6s 翻转——恰好等于原图收尾淡入时长，淡入完成即退出合成。慢级晚到则自退休垫底（`tierDecision` 保证揭示单调，网络抖动下画面只变清晰、不倒退）；decode 失败跳级、粗级兜底不黑屏。边缘：server-changed 判定（探测期间缓存原图已直出）重画时检测到原图已揭示，跳过阶梯保留直出画面。层状态（hidden/front/retired）的 DOM 读取-折叠-写回全部经由该纯函数，视图不再自持 `shownMomentLevel` 计数；梯级数量由 `Record<MomentName, readonly [string, string, string]>` 在编译期钉死为三。
+**揭示即退役**（#201 B1 修复）：`momentTiers.applyDecodeEvent()` 把每次 decode 完成折叠成整梯状态（纯函数，单测钉住）——更高级层揭示的**同一写**里，所有在屏的粗级层标记 `is-retired`。正常到达顺序（L1→L2→L3）也会退役，不再出现三层全屏模糊层伴随整条重型管线合成/漂移的情况。退役的视觉语义（#201 S1 修复）：退役层**保留 opacity**（`is-front` 不摘，新层在其上淡入 = 交叉淡化，无黑帧），漂移动画**冻结在当前 transform**（`animation-play-state: paused`，`animation: none` 会在交叉淡化窗口内可见约 4% 的缩放回跳），`visibility` 经基础过渡的 `visibility 0s linear 1.6s` 延迟 1.6s 翻转——恰好等于原图收尾淡入时长，淡入完成即退出合成。慢级晚到则自退休垫底（`tierDecision` 保证揭示单调，网络抖动下画面只变清晰、不倒退）；**decode 失败不再静默**——`.catch` 同样折叠事件兜底揭示（浏览器能画多少画多少，空层渲染为无物，永远不会比藏起来更糟，亦恢复了门控前"字节渐进绘出"的行为）。边缘：server-changed 判定（探测期间缓存原图已直出）重画时检测到原图已揭示，跳过阶梯保留直出画面。层状态（hidden/front/retired）的 DOM 读取-折叠-写回全部经由该纯函数，视图不再自持 `shownMomentLevel` 计数；梯级数量由 `Record<MomentName, readonly [string, string, string]>` 在编译期钉死为三。
 
 缩图由 PIL 生成（`moments/` 下的 `*-step1..2.webp`）：`LANCZOS` 缩放至 32/256 宽，quality 50/60，method 6。原图更新时需重新生成两级，在 `apps/web/` 下执行（#201 N3，可直接复制）：
 
@@ -73,7 +73,7 @@ for src in sorted(Path('src/assets/moments').glob('*.webp')):
 PY
 ```
 
-**资产预算**：`check:asset-size` 上限 48MiB，当前 ~45.4MiB（含 8 张缩图约 29KB），只剩 ~2.6MiB 余量——下一张大图入库前先考虑压缩或减重。
+**资产预算**：`check:asset-size` 上限 48MiB，当前 ~45.4MiB（含 8 张缩图约 29KB），只剩 ~2.6MiB 余量——下一张大图入库前先考虑压缩或减重。**缩图一致性**：`npm run check:moment-tiers`（已接入 typecheck/build 链）用纯 Node 的 WebP 头解析断言 4 组缩图宽度为 32/256 且与原图比例一致——原画重导出而漏跑重生成命令时构建直接红灯，不会静默地让 L1/L2 播放另一张画面。
 
 ## 开场 CG 的临时下线与恢复
 

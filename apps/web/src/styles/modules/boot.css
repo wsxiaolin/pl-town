@@ -43,11 +43,12 @@
 /* Retired tiers: a sharper tier has taken the screen, so drop the coarser
    layer from compositing instead of animating three fullscreen layers for
    the whole splash. Retirement keeps the layer's opacity (is-front stays —
-   the incoming tier fades in OVER it, no dark frame in between), stops the
-   drift immediately, and flips visibility 1.6s later via the base
-   transition (review #201 B1/S1). Kept in the DOM — a re-paint of the same
+   the incoming tier fades in OVER it, no dark frame in between), pauses the
+   drift at its current transform (animation:none would snap ~4% scale back
+   to the base mid-crossfade — review #201 r2), and flips visibility 1.6s
+   later via the base transition. Kept in the DOM — a re-paint of the same
    moment un-retires it without refetching. */
-.boot-moment-img.is-retired { visibility: hidden; animation: none; }
+.boot-moment-img.is-retired { visibility: hidden; animation-play-state: paused; }
 /* Tier rules MUST stay after .boot-moment-img: equal specificity, so an
    earlier placement would let the 1.6s base transition override the quick
    0.45s tier fade (both in this stylesheet and over the inline critical

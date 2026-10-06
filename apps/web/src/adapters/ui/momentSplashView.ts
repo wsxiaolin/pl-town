@@ -86,8 +86,8 @@ function readLayerStates(): LayerState[] {
 // a retiree that was front keeps its opacity so the incoming tier crossfades
 // OVER it (no dark bleed while the winner is still fading in — the full
 // still's fade is 1.6s); a retiree that was hidden stays hidden. CSS drops
-// visibility (and with it compositing) 1.6s after the class flips, and stops
-// the 26s drift immediately.
+// visibility (and with it compositing) 1.6s after the class flips, and
+// freezes the drift at its current transform.
 function writeLayerStates(states: readonly LayerState[]): void {
   MOMENT_LAYER_IDS.forEach((id, index) => {
     const layer = document.getElementById(id);
@@ -157,11 +157,20 @@ function paintMoment(moment: ViewMoment, mode: PaintMode): void {
     decoded
       .then(() => {
         if (token !== paintToken) return; // a newer paint owns the layers now
-        // decodeOk=true here; the .catch path is the decodeOk=false case and
-        // leaves the ladder exactly as-is (coarser tiers remain the fallback).
+        // decodeOk=true here; the .catch path folds the same event as a
+        // fallback reveal (see below).
         writeLayerStates(applyDecodeEvent(readLayerStates(), level, true));
       })
-      .catch(() => { /* keep: coarser tiers remain as the fallback */ });
+      .catch(() => {
+        // Fallback reveal (#201 r2): a rejected decode() must not leave the
+        // splash a silent #0b1018 slab for the whole boot — fold the event
+        // anyway so the layer takes the screen with whatever the browser
+        // can render (native progressive draw / partial bitmap / nothing,
+        // which is never worse than staying hidden). decodeOk=false stays
+        // the pure model's "leave as-is" contract, so this passes true.
+        if (token !== paintToken) return;
+        writeLayerStates(applyDecodeEvent(readLayerStates(), level, true));
+      });
   });
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {
