@@ -7,6 +7,8 @@ import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { createMountainTerrain } from '../rendering/terrain/mountainRanges';
 import { createRiverChenxi } from '../rendering/terrain/riverChenxi';
 import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
+import { createCityGround } from '../rendering/terrain/cityGround';
+import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
@@ -127,13 +129,27 @@ export function assembleCityWorld(options: {
     groundMaterials: options.groundMats,
     addLamps: (positions) => worldDecorations.addLamps(positions),
   });
-  // ── 世界地形（岚屏岭山脉 / 晨溪河 / 明澜外海）：地表 ground 之后挂接。
-  // 配置在 city/data/terrain/，渲染器逐条消费；山脉工厂不自行挂接场景，
-  // 由这里 scene.add；河流与外海工厂内部自行 scene.add。
+  // ── 世界地形（岚屏岭山脉 / 晨溪河 / 明澜外海 / 城缘草甸）：地表 ground 之后挂接。
+  // 配置在 city/data/terrain/，渲染器逐条消费；山脉与草甸工厂不自行挂接
+  // 场景，由这里 scene.add；河流与外海工厂内部自行 scene.add。
   const mountainTerrain = createMountainTerrain({ scene });
   scene.add(mountainTerrain.object);
+  const cityGround = createCityGround({ scene });
+  scene.add(cityGround.object);
+  // 松树（v7 起为顶点色单材质）与草簇/花丛/灌木按 18 单位网格实例化合批：
+  // 此前约 110 棵松树各带 4 材质组（≈440 draw call），合批后每格每变体
+  // 一个 InstancedMesh；山体/麓原/草甸为逐峰唯一几何，批量器自动跳过。
+  batchStaticMeshes(scene, [mountainTerrain.object, cityGround.object]);
   const riverChenxi = createRiverChenxi({ scene });
   const minglanIsles = createMinglanIsles({ scene });
+  // 昼夜水色接线（review #218：晨溪河面此前从未跟随昼夜时钟，夜间保持
+  // 日间亮色）：MiniCityApp 的 setWaterDaylight 经 worldDecorations 分发，
+  // 这里转发给晨溪（河面 + 河口湾面）。
+  const baseSetWaterDaylight = worldDecorations.setWaterDaylight.bind(worldDecorations);
+  worldDecorations.setWaterDaylight = (value?: number, instant = false) => {
+    baseSetWaterDaylight(value, instant);
+    riverChenxi.setDaylight(value ?? 1, instant);
+  };
   // 导航：不把地形注册为障碍组。registerObstacleGroup 对整组只生成一个
   // setFromObject AABB——山脉组横跨 x≈[-97,115]、z≈[-114,110]，会把环线
   // （半径 38）与全城道路边全部判 blocked，玩家 movement 也被锁死；
@@ -218,6 +234,7 @@ export function assembleCityWorld(options: {
     terrain: {
       dispose() {
         mountainTerrain.dispose();
+        cityGround.dispose();
         riverChenxi.dispose();
         minglanIsles.dispose();
       },

@@ -17,7 +17,8 @@ export type TerrainKind =
   | 'sea'        // 海：城市边缘的大面积水面（先例：西海滩）
   | 'forest'     // 林地：装饰树聚集区，含密度参数
   | 'cliff'      // 崖壁：阻断通行的竖直面
-  | 'island';    // 离岛：水域中的可登陆地块
+  | 'island'     // 离岛：水域中的可登陆地块
+  | 'meadow';    // 草甸：城缘起伏草地（v7 城市地面建模），含草簇/花丛密度
 
 export interface TerrainFeatureConfig {
   /** 稳定 ID；地形一旦上线即被导航/存档引用，发布后不可改名。 */
@@ -46,6 +47,10 @@ export interface TerrainFeatureConfig {
     /** 水体类地形是否启用流动动画（animatedWater）。 */
     animated?: boolean;
     castShadow?: boolean;
+    /** 草甸装饰密度（每 100×100 平方单位的草簇/花丛/灌木组数）。 */
+    density?: number;
+    /** 草甸起伏最大高度（世界单位）；缺省由渲染层按面积定。 */
+    reliefHeight?: number;
   };
 
   // ── 导航影响 ───────────────────────────────────

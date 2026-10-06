@@ -82,9 +82,11 @@ function glslFloat(value: number): string {
 // render target — so it can never nest the mirror pass that breaks the sea.
 const POND_WATER_VERTEX = /* glsl */ `
 varying vec3 vWorldPosition;
+varying vec2 vUv;
 void main() {
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
   vWorldPosition = worldPosition.xyz;
+  vUv = uv;
   gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }
 `;
@@ -100,7 +102,11 @@ uniform float alpha;
 uniform float mouthEnabled;
 uniform vec2 mouthRange;
 uniform vec3 mouthSeaColor;
+uniform float shoreEnabled;
+uniform float shoreWidth;
+uniform vec3 shoreFoamColor;
 varying vec3 vWorldPosition;
+varying vec2 vUv;
 
 void main() {
   vec2 uv = vWorldPosition.xz * size;
@@ -114,6 +120,17 @@ void main() {
   float sunDiffuse = max(dot(surfaceNormal, normalize(sunDirection)), 0.0);
   vec3 color = waterColor;
   color += sunColor * pow(sunDiffuse, 6.0) * 0.1;
+  // 岸线浅水与泡沫（shoreEnabled = 1 时生效；条带几何 uv.x 横穿水面）：
+  // 水线附近混入浅亮色（浅水见底的透亮感），再叠一层随波闪动的泡沫
+  // 微光——低多边形河流因此有"岸"而不止是两条平直的几何边。
+  if (shoreEnabled > 0.5) {
+    float lateral = min(vUv.x, 1.0 - vUv.x) * 2.0;
+    float deep = smoothstep(0.0, shoreWidth, lateral);
+    color = mix(shoreFoamColor, color, deep);
+    float rim = 1.0 - deep;
+    float sparkle = texture2D(normalSampler, uv0 * 2.7 + vec2(time * 0.021, 0.0)).g;
+    color = mix(color, shoreFoamColor * 1.14, rim * smoothstep(0.62, 0.86, sparkle) * 0.5);
+  }
   // 河口羽流渐变（mouthEnabled = 1 时生效，其余水面走原路径）：从
   // mouthRange.x（河口侧）向 mouthRange.y（海内，x 更小）把 alpha 渐隐
   // 至 0、水色混向 mouthSeaColor —— 河水以楔形羽流没入海面，取代两种
@@ -147,6 +164,15 @@ export type PondWaterConfig = {
     seaColorDay: THREE.Color;
     seaColorNight: THREE.Color;
   };
+  /** 岸线浅水与泡沫（v7，可选）。条带几何需带 uv 属性（uv.x 从 0 到 1
+   *  横穿水面）；水线附近混入浅亮色并叠加随波闪动的泡沫微光，水面因此
+   *  读得出"岸"。无 uv 的几何（河口湾手写三角带）不要启用。 */
+  shoreEdge?: {
+    /** 水线到中轴的过渡带宽（lateral 0..1 中占比，默认 0.24）。 */
+    width?: number;
+    foamColorDay: THREE.Color;
+    foamColorNight: THREE.Color;
+  };
 };
 
 export function createPondWaterSurface(
@@ -154,6 +180,7 @@ export function createPondWaterSurface(
   config: PondWaterConfig,
 ): AnimatedWaterSurface {
   const mouth = config.mouthFade;
+  const shore = config.shoreEdge;
   const uniforms: Record<string, THREE.IUniform> = {
     normalSampler: { value: getWaterNormals() },
     time: { value: 0 },
@@ -165,6 +192,9 @@ export function createPondWaterSurface(
     mouthEnabled: { value: mouth ? 1 : 0 },
     mouthRange: { value: mouth ? new THREE.Vector2(mouth.xStart, mouth.xEnd) : new THREE.Vector2(0, -1) },
     mouthSeaColor: { value: (mouth ? mouth.seaColorDay : new THREE.Color(0x000000)).clone() },
+    shoreEnabled: { value: shore ? 1 : 0 },
+    shoreWidth: { value: shore?.width ?? 0.24 },
+    shoreFoamColor: { value: (shore ? shore.foamColorDay : new THREE.Color(0x000000)).clone() },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -196,6 +226,10 @@ export function createPondWaterSurface(
       if (mouth) {
         const mouthSeaColor = uniforms['mouthSeaColor']!.value as THREE.Color;
         mouthSeaColor.copy(mouth.seaColorDay).lerp(mouth.seaColorNight, 1 - daylight);
+      }
+      if (shore) {
+        const shoreFoamColor = uniforms['shoreFoamColor']!.value as THREE.Color;
+        shoreFoamColor.copy(shore.foamColorDay).lerp(shore.foamColorNight, 1 - daylight);
       }
     },
     setDaylight(value, instant = false) {

@@ -59,6 +59,15 @@ import { LANPING_RANGE } from '../../city/data/terrain/range-lanping';
 import type { TerrainFeatureConfig } from '../../city/data/terrain/_types';
 import { getActiveProceduralTextureLibrary } from '../proceduralTextureLibrary';
 import { RENDER_ORDER, SURFACE_Y } from '../layers';
+import {
+  NO_SNOW_BAND,
+  TERRAIN_TEXTURE_SCALE,
+  bakeFacetTintAndBand,
+  createPlainFacetMaterial,
+  createTerrainFacetMaterial,
+  terrainChainTint,
+  type TerrainShaderUniforms,
+} from './terrainMaterial';
 
 export type MountainTerrainOptions = { scene: THREE.Scene };
 
@@ -90,10 +99,7 @@ const MULTI_SUMMIT_SMALL_PROBABILITY = 0.3; // 小丘：30% 概率单副峰
 // 雪带下限：只有海拔达到该值的峰出雪。v5 主脊 h 104..208、麓丘 h 32..58，
 // 抬高到 44（溪谷侧丘 13..24 永不出雪，麓丘保持草甸-岩壁，主脊全面雪冠）。
 const SNOW_MIN_PEAK_HEIGHT = 44;
-// 三平面纹理世界尺度：v5 从 5 收到 3.2（单位面积纹理格数 ×2.4）。
-const TERRAIN_TEXTURE_SCALE = 3.2;
-// aBand.y 的「无雪带」哨兵值：雪线 smoothstep 永远达不到。
-const NO_SNOW_BAND = 99;
+// aBand.y 的「无雪带」哨兵值已随共享材质移入 terrainMaterial.ts。
 
 // ── 世界裙板（apron）────────────────────────────────────────────
 // createCitySurfaces farMat 配方（220×220 / repeat 24 → ≈9.17 单位/格）
@@ -123,7 +129,6 @@ import {
   angularHarmonics,
   angularLobes,
   smoothStep,
-  clamp01,
   type Vec2,
   type MassifLobe,
   type MassifShape,
@@ -132,182 +137,9 @@ import {
 } from './massifGeometry';
 
 
-// ── 逐面顶点色（链级色调 + AO 式明度抖动 + 冷色偏移）+ 着色器分带参数 ──
-
-type FacetBake = {
-  height: number;
-  /** 雪线高度占比（0..1）；null = 该峰无雪带（aBand.y 烘成 NO_SNOW_BAND）。 */
-  snowLine: number | null;
-  /** 链级色调（配置色向白混合），纹理提供细节，顶点色提供色调与色斑。 */
-  tint: THREE.Color;
-};
-
-/**
- * 逐面烘焙两组顶点属性：
- * - color：tint × ±6% 明度抖动 × 北/东坡面轻微冷色偏移（大气散射背光面）。
- * - aBand (vec2)：x = 面心高度占比，y = 该峰雪线占比（或 NO_SNOW_BAND）。
- *   草甸/岩壁/雪冠的混合完全交给片元着色器（smoothstep + 噪声），不再
- *   存在顶点色分带与锯齿带界。
- */
-function bakeFacetTintAndBand(geometry: THREE.BufferGeometry, bake: FacetBake, jitterSeed: number): void {
-  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
-  const faceCount = Math.floor(position.count / 3);
-  const colors = new Float32Array(position.count * 3);
-  const bands = new Float32Array(position.count * 2);
-  const random = mulberry32(jitterSeed);
-  const tint = new THREE.Color();
-  const snowBand = bake.snowLine ?? NO_SNOW_BAND;
-  for (let face = 0; face < faceCount; face += 1) {
-    const first = face * 3;
-    const centroidY = (position.getY(first) + position.getY(first + 1) + position.getY(first + 2)) / 3;
-    // non-indexed：同一三角形三顶点法线一致，取第一顶点即面法线。
-    const normalX = normal.getX(first);
-    const normalZ = normal.getZ(first);
-    tint.copy(bake.tint);
-    const brightness = 0.94 + random() * 0.12; // ±6% 逐面明度色斑（CG 折面色块）
-    const north = smoothStep(0.15, 0.8, -normalZ);
-    const east = smoothStep(0.15, 0.8, normalX) * 0.6;
-    const cool = Math.min(1, north + east);
-    tint.setRGB(
-      Math.min(1, tint.r * brightness * (1 - 0.05 * cool)),
-      Math.min(1, tint.g * brightness),
-      Math.min(1, tint.b * brightness * (1 + 0.05 * cool)),
-    );
-    const heightFraction = clamp01(centroidY / bake.height);
-    for (let corner = 0; corner < 3; corner += 1) {
-      const vertex = first + corner;
-      colors[vertex * 3] = tint.r;
-      colors[vertex * 3 + 1] = tint.g;
-      colors[vertex * 3 + 2] = tint.b;
-      bands[vertex * 2] = heightFraction;
-      bands[vertex * 2 + 1] = snowBand;
-    }
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.setAttribute('aBand', new THREE.BufferAttribute(bands, 2));
-}
-
-// ── 三平面程序纹理材质（MeshStandardMaterial + onBeforeCompile）────
-
-type TerrainShaderUniforms = {
-  uGrassMap: { value: THREE.Texture | null };
-  uRockMap: { value: THREE.Texture | null };
-  uSnowMap: { value: THREE.Texture | null };
-  uTexScale: { value: number };
-  uAllRock: { value: number };
-};
-
-/** 片元内低频 3D value noise：带界扰动用，确定性（格点哈希）。 */
-const TERRAIN_NOISE_GLSL = `
-float terrainHash(vec3 p) {
-  p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
-  p *= 17.0;
-  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-}
-float terrainValueNoise(vec3 x) {
-  vec3 i = floor(x);
-  vec3 f = fract(x);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(mix(terrainHash(i), terrainHash(i + vec3(1.0, 0.0, 0.0)), f.x),
-        mix(terrainHash(i + vec3(0.0, 1.0, 0.0)), terrainHash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
-    mix(mix(terrainHash(i + vec3(0.0, 0.0, 1.0)), terrainHash(i + vec3(1.0, 0.0, 1.0)), f.x),
-        mix(terrainHash(i + vec3(0.0, 1.0, 1.0)), terrainHash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
-    f.z);
-}
-`;
-
-function createTexturedTerrainMaterial(uniforms: TerrainShaderUniforms): THREE.MeshStandardMaterial {
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    vertexColors: true,
-    flatShading: true,
-    roughness: 0.96,
-    metalness: 0,
-  });
-  material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aBand;\nvarying vec2 vBand;\nvarying vec3 vWorldPos;')
-      .replace(
-        '#include <begin_vertex>',
-        '#include <begin_vertex>\nvBand = aBand;\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-varying vec2 vBand;
-varying vec3 vWorldPos;
-uniform sampler2D uGrassMap;
-uniform sampler2D uRockMap;
-uniform sampler2D uSnowMap;
-uniform float uTexScale;
-uniform float uAllRock;
-${TERRAIN_NOISE_GLSL}`,
-      )
-      .replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-{
-  // 世界空间折面法线（flat 折面与光照法线一致）→ 坡度。
-  vec3 terrainNormalW = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
-  float terrainSlope = clamp(terrainNormalW.y, 0.0, 1.0);
-  float hFrac = vBand.x;
-  // 低频 3D 噪声：带界大幅扰动 + 中频细节，杜绝锯齿/二值分带。
-  float nLow = terrainValueNoise(vWorldPos * 0.055);
-  float nMid = terrainValueNoise(vWorldPos * 0.23 + vec3(7.31, 3.77, 11.13));
-  float wobble = (nLow - 0.5) * 2.0;
-  // 岩壁：陡坡（slope 低）+ 高海拔缓坡（alpine 裸岩带），双路汇入。
-  float steepRock = 1.0 - smoothstep(0.30, 0.52, terrainSlope + 0.12 * (nMid - 0.5));
-  float altRock = smoothstep(0.34, 0.58, hFrac + 0.18 * wobble);
-  float rockW = clamp(steepRock + 0.75 * altRock, 0.0, 1.0);
-  // 雪冠：高海拔 + 缓坡，雪线按 vBand.y（逐峰烘焙）+ 噪声扰动。
-  float snowTh = vBand.y + 0.10 * wobble + 0.08 * (nMid - 0.5);
-  float snowW = smoothstep(snowTh, snowTh + 0.10, hFrac)
-    * smoothstep(0.42, 0.62, terrainSlope + 0.10 * (nMid - 0.5));
-  rockW *= 1.0 - snowW;
-  float grassW = clamp(1.0 - rockW - snowW, 0.0, 1.0);
-  // 崖壁变体：uAllRock=1 → 全岩。
-  float colorMask = 1.0 - uAllRock;
-  grassW *= colorMask;
-  snowW *= colorMask;
-  rockW = mix(rockW, 1.0, uAllRock);
-  float totalW = grassW + rockW + snowW;
-  grassW /= totalW;
-  rockW /= totalW;
-  snowW /= totalW;
-  // 三平面 UV：世界空间 ≈uTexScale 单位/格。草/雪只出现在缓坡
-  // （顶投影响即可），岩壁全三平面按 |法线|^4 混合。
-  vec3 axisW = pow(abs(terrainNormalW), vec3(4.0));
-  axisW /= (axisW.x + axisW.y + axisW.z);
-  vec2 uvTop = vWorldPos.xz / uTexScale;
-  vec3 grassCol = texture2D(uGrassMap, uvTop).rgb;
-  vec3 snowCol = texture2D(uSnowMap, uvTop).rgb;
-  vec3 rockCol = texture2D(uRockMap, uvTop).rgb * axisW.y
-    + texture2D(uRockMap, vWorldPos.zy / uTexScale).rgb * axisW.x
-    + texture2D(uRockMap, vWorldPos.xy / uTexScale).rgb * axisW.z;
-  diffuseColor.rgb *= grassCol * grassW + rockCol * rockW + snowCol * snowW;
-}`,
-      );
-  };
-  // 两份材质（山体/崖壁）共用同一份着色器源与 uniform 结构，仅
-  // uAllRock 值不同 —— 固定 cacheKey 让 three 复用同一程序。
-  material.customProgramCacheKey = () => 'lanping-terrain-triplanar-v1';
-  return material;
-}
-
-function createPlainFacetMaterial(): THREE.MeshStandardMaterial {
-  // 纹理库不可用（纹理渲染关闭等）时的回退：纯顶点色色调（烘焙时加强）。
-  return new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    vertexColors: true,
-    flatShading: true,
-    roughness: 0.96,
-    metalness: 0,
-  });
-}
+// ── 逐面顶点色烘焙与三平面材质：共享实现见 terrainMaterial.ts ──────────
+// v7 抽出：城缘草甸（cityGround.ts）与山体共用同一套混合管线与贴图尺度，
+// 保证「山脚草甸 → 城缘草甸 → 城区绿地」材质完全连续。
 
 export function createMountainTerrain(options: MountainTerrainOptions): MountainTerrainHandle {
   void options.scene; // 工厂不挂接场景：调用方决定 object 的挂载点
@@ -325,7 +157,37 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
   const geometries = new Set<THREE.BufferGeometry>();
   const ownedMaterials = new Set<THREE.Material>();
   const pineMaterials = new Map<number, THREE.MeshStandardMaterial>();
-  const solidMeshes: THREE.Mesh[] = []; // 供松树贴坡取高（山体 + 崖壁）
+  // 解析式贴地采样源（v7 替代启动期 Raycaster）：山体/崖壁/麓原各登记
+  // 一条「局部高度场」；松树与碎石贴坡直接算高度，不再对几千个三角形
+  // 做逐三角形射线测试——启动成本从 O(候选×体素×三角形) 降为纯标量运算。
+  type HeightSampleSource = {
+    x: number;
+    z: number;
+    rotY: number;
+    /** 局部几何的归一化半径（world 局部单位 → xn/zn 除以该值）。 */
+    radiusNorm: number;
+    /** mesh.scale.z（椭圆底座 depth/width）。 */
+    depthScale: number;
+    heightAt: (xn: number, zn: number) => number;
+  };
+  const heightSources: HeightSampleSource[] = [];
+
+  /** 世界坐标 (wx, wz) 处的地表高度（山体/崖壁/麓原取最大， bury 部分截为 0）。 */
+  function sampleTerrainY(wx: number, wz: number): number {
+    let ground = 0;
+    for (const source of heightSources) {
+      const dx = wx - source.x;
+      const dz = wz - source.z;
+      if (Math.abs(dx) > source.radiusNorm * 1.4 || Math.abs(dz) > source.radiusNorm * 1.4 * source.depthScale) continue;
+      const cos = Math.cos(source.rotY);
+      const sin = Math.sin(source.rotY);
+      const lx = dx * cos - dz * sin;
+      const lz = dx * sin + dz * cos;
+      const y = source.heightAt(lx / source.radiusNorm, lz / (source.radiusNorm * source.depthScale));
+      if (y > ground) ground = y;
+    }
+    return ground;
+  }
 
   const materialFor = (color: number): THREE.MeshStandardMaterial => {
     const existing = pineMaterials.get(color);
@@ -352,18 +214,17 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
   // 有纹理：三平面混合材质（山体/崖壁各一份，崖壁全岩）；无纹理：回退
   // 纯顶点色（一份，两处共用——Set 会去重，dispose 安全）。
   const facetMaterial = hasTerrainTextures
-    ? createTexturedTerrainMaterial(terrainUniforms)
+    ? createTerrainFacetMaterial(terrainUniforms)
     : createPlainFacetMaterial();
   const cragMaterial = hasTerrainTextures
-    ? createTexturedTerrainMaterial(cliffUniforms)
+    ? createTerrainFacetMaterial(cliffUniforms)
     : facetMaterial;
   ownedMaterials.add(facetMaterial);
   ownedMaterials.add(cragMaterial);
   // 顶点色调强度：有纹理时保持轻微（纹理提供细节与分带），回退时加强
   // （色调承担链级配色）。
   const tintStrength = hasTerrainTextures ? 0.3 : 0.85;
-  const chainTint = (colorHex: number): THREE.Color =>
-    new THREE.Color(colorHex).lerp(new THREE.Color(0xffffff), 1 - tintStrength);
+  const chainTint = (colorHex: number): THREE.Color => terrainChainTint(colorHex, tintStrength);
 
   const track = <T extends THREE.BufferGeometry>(geometry: T): T => {
     geometries.add(geometry);
@@ -470,7 +331,14 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     mesh.receiveShadow = false;
     mesh.scale.z = depthRadius / radius; // 椭圆底座：depth 独立于 width
     group.add(mesh);
-    solidMeshes.push(mesh);
+    heightSources.push({
+      x: feature.x,
+      z: feature.z,
+      rotY: group.rotation.y,
+      radiusNorm: radius,
+      depthScale: depthRadius / radius,
+      heightAt: (xn, zn) => massifSurfaceY(shape, xn, zn),
+    });
     object.add(group);
   }
 
@@ -498,8 +366,15 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     crag.rotation.y = rng() * Math.PI * 2;
     crag.castShadow = feature.renderHint?.castShadow ?? true;
     crag.receiveShadow = false;
+    heightSources.push({
+      x: feature.x,
+      z: feature.z,
+      rotY: crag.rotation.y,
+      radiusNorm: radius,
+      depthScale: crag.scale.z,
+      heightAt: (xn, zn) => massifSurfaceY(shape, xn, zn),
+    });
     object.add(crag);
-    solidMeshes.push(crag);
   }
 
   // ── 麓原裙（piedmont）：山脚缓坡基座 ─────────────────────────────
@@ -539,21 +414,22 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
       const base = 1.5 - 0.5 * toward * toward;
       return base * (1 + lobesAmp * angularLobes(angle, lobesSeed) * (base - 1) * 2);
     };
+    const piedmontSurfaceY = (xn: number, zn: number): number => {
+      const rhoR = Math.hypot(xn, zn) * 1.5;
+      return lift * (1 - smoothStep(0.55, 1.05, rhoR))
+        - 0.3 * smoothStep(0.92, 1.02, rhoR);
+    };
     const geometry = track(buildRadialFieldGeometry({
       radius: radius * 1.5,
       rings: 5,
       segments: 22,
       planRadius,
       // xn/zn 以 1.5r 归一：ρ（以 r 计）= hypot(xn,zn) × 1.5。
-      surfaceY: (xn, zn) => {
-        const rhoR = Math.hypot(xn, zn) * 1.5;
-        return lift * (1 - smoothStep(0.55, 1.05, rhoR))
-          - 0.3 * smoothStep(0.92, 1.02, rhoR);
-      },
+      surfaceY: piedmontSurfaceY,
     }));
     const jitterSeed = Math.floor(rng() * 0x7fffffff);
     // tint：配置色调向草绿偏 45%——主脊灰青 × 草绿 = 苔原色，麓丘 = 草绿。
-    const tint = chainTint(feature.renderHint?.color ?? 0x648a84).lerp(PIEDMONT_GRASS, 0.45);
+    const tint = terrainChainTint(feature.renderHint?.color ?? 0x648a84, 0.6).lerp(PIEDMONT_GRASS, 0.68);
     bakeFacetTintAndBand(geometry, { height: lift * 3, snowLine: null, tint }, jitterSeed);
     const mesh = new THREE.Mesh(geometry, facetMaterial);
     mesh.name = `${feature.id}:piedmont`;
@@ -563,14 +439,21 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     mesh.scale.z = depthRadius / radius;
     mesh.castShadow = false;
     mesh.receiveShadow = true;
+    heightSources.push({
+      x: feature.x,
+      z: feature.z,
+      rotY: 0, // 麓原网格不旋转
+      radiusNorm: radius * 1.5,
+      depthScale: depthRadius / radius,
+      heightAt: piedmontSurfaceY,
+    });
     object.add(mesh);
-    solidMeshes.push(mesh); // 松树/碎石可贴麓原坡面
   }
 
   // ── 坡脚碎石带（talus）：山脚环形散布的砾石 ──────────────────────
-  // 打破山体底缘与麓原之间的几何切割线。贴地用与松树相同的向下 raycast
-  // （在山体 + 麓原全部入列后执行）。rho 0.74..0.99 r，全部在审计
-  // 包围盒之内，无导航影响（砾石不进 raycast 集）。
+  // 打破山体底缘与麓原之间的几何切割线。贴地用解析高度采样（v7：
+  // sampleTerrainY 替代启动期 Raycaster，山体 + 麓原高度场全量参与）。
+  // rho 0.74..0.99 r，全部在审计包围盒之内，无导航影响（砾石不进 raycast 集）。
   const TALUS_COLORS = [0x8d8679, 0x9d968a] as const;
 
   function buildTalus(feature: TerrainFeatureConfig, boulderGeometry: THREE.BufferGeometry): void {
@@ -578,19 +461,12 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     const radius = (feature.width ?? 20) / 2;
     const depthRadius = (feature.depth ?? feature.width ?? 20) / 2;
     const count = 3 + Math.floor(rng() * 5);
-    const raycaster = new THREE.Raycaster();
-    raycaster.far = 160;
-    const down = new THREE.Vector3(0, -1, 0);
-    const origin = new THREE.Vector3();
     for (let index = 0; index < count; index += 1) {
       const angle = rng() * Math.PI * 2;
       const distR = 0.74 + rng() * 0.25;
       const worldX = feature.x + Math.cos(angle) * distR * radius;
       const worldZ = feature.z + Math.sin(angle) * distR * depthRadius;
-      origin.set(worldX, 80, worldZ);
-      raycaster.set(origin, down);
-      const hit = raycaster.intersectObjects(solidMeshes, false)[0];
-      const groundY = hit ? hit.point.y : 0;
+      const groundY = sampleTerrainY(worldX, worldZ);
       const scale = 0.5 + rng() * 1.7;
       const talusColor = TALUS_COLORS[Math.floor(rng() * TALUS_COLORS.length)] ?? TALUS_COLORS[0]!;
       const boulder = new THREE.Mesh(boulderGeometry, materialFor(talusColor));
@@ -631,6 +507,17 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
 
   // ── 针叶松（observatory-song 式：细干 + 2~3 层叠锥）──────────────
   const TRUNK_COLOR = 0x6e5138;
+  // v7：松树改为单材质顶点色几何（干/冠颜色烘进 'color' 属性），整株
+  // 一份共享 MeshStandardMaterial——此前每棵松 4 个材质组 = 4 次 draw
+  // call，且数组材质直接被 staticMeshBatcher 拒绝；现在整林可被实例化
+  // 合批（cityWorldAssembly 在挂接后调用 batchStaticMeshes）。
+  const pineVertexMaterial = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    flatShading: true,
+    roughness: 0.95,
+    metalness: 0,
+  });
+  ownedMaterials.add(pineVertexMaterial);
 
   /** 叠锥锥面确定性微抖动：打破完美圆锥的机械感，剪影更接近手绘松。 */
   function jitterPineCone(cone: THREE.BufferGeometry, coneRadius: number, seed: number): void {
@@ -653,19 +540,36 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     position.needsUpdate = true;
   }
 
-  function buildPineGeometry(variant: number): THREE.BufferGeometry {
+  /** 给部件几何整体烘一个顶点色（干/冠分色用），随后与同属性几何合并。 */
+  function paintPart(part: THREE.BufferGeometry, color: THREE.Color): void {
+    const count = part.getAttribute('position').count;
+    const colors = new Float32Array(count * 3);
+    for (let index = 0; index < count; index += 1) {
+      colors[index * 3] = color.r;
+      colors[index * 3 + 1] = color.g;
+      colors[index * 3 + 2] = color.b;
+    }
+    part.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  }
+
+  function buildPineGeometry(variant: number, foliageHex: number): THREE.BufferGeometry {
     const parts: THREE.BufferGeometry[] = [];
     const trunk = new THREE.CylinderGeometry(0.05, 0.09, 0.5, 5);
     trunk.translate(0, 0.25, 0);
+    paintPart(trunk, new THREE.Color(TRUNK_COLOR));
     parts.push(trunk);
     const stack: Array<[number, number, number]> = variant === 0
       ? [[0.62, 0.95, 0.85], [0.42, 0.8, 1.4]] // 两层冠
       : variant === 1
         ? [[0.58, 0.85, 0.8], [0.44, 0.75, 1.32], [0.28, 0.62, 1.78]] // 三层冠
         : [[0.5, 0.9, 0.82], [0.36, 0.8, 1.36], [0.22, 0.66, 1.8]]; // 窄高冠
+    const foliageColor = new THREE.Color(foliageHex);
     stack.forEach(([coneRadius, coneHeight, coneY], coneIndex) => {
       const cone = new THREE.ConeGeometry(coneRadius, coneHeight, 7);
       jitterPineCone(cone, coneRadius, (0x51 + variant * 131 + coneIndex * 17) >>> 0);
+      // 冠层自下而上轻微提亮：光从冠顶穿入的低多边形近似。
+      const shade = foliageColor.clone().multiplyScalar(1 + coneIndex * 0.055);
+      paintPart(cone, shade);
       cone.translate(0, coneY, 0);
       parts.push(cone);
     });
@@ -675,7 +579,7 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
   }
 
   /** 林地基色 → 三档叶色（色相/明度微移），逐树取色增加层次。 */
-  function foliageShadeMaterials(baseHex: number): THREE.MeshStandardMaterial[] {
+  function foliageShadeHexes(baseHex: number): number[] {
     const hsl = { h: 0, s: 0, l: 0 };
     new THREE.Color(baseHex).getHSL(hsl);
     const shades = [
@@ -683,13 +587,12 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
       new THREE.Color().setHSL((hsl.h + 0.012) % 1, hsl.s, Math.max(0, hsl.l - 0.05)),
       new THREE.Color().setHSL((hsl.h + 0.025) % 1, Math.min(1, hsl.s + 0.02), Math.min(1, hsl.l + 0.045)),
     ];
-    return shades.map((shade) => materialFor(shade.getHex()));
+    return shades.map((shade) => shade.getHex());
   }
 
-  function buildForest(feature: TerrainFeatureConfig, pineVariants: THREE.BufferGeometry[]): void {
+  function buildForest(feature: TerrainFeatureConfig, pineVariants: Array<THREE.BufferGeometry | null>): void {
     const rng = mulberry32((hashString(feature.id) ^ GLOBAL_SEED) >>> 0);
-    const foliageMaterials = foliageShadeMaterials(feature.renderHint?.color ?? 0x3c6b50);
-    const trunkMaterial = materialFor(TRUNK_COLOR);
+    const foliageHexes = foliageShadeHexes(feature.renderHint?.color ?? 0x3c6b50);
     const envelopeRadius = Math.min(feature.width ?? 10, feature.depth ?? 10) / 2;
     const count = 8 + Math.floor(rng() * 7); // 8..14 棵
     const group = new THREE.Group();
@@ -697,10 +600,6 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     group.position.set(feature.x, 0, feature.z);
 
     const placed: Vec2[] = [];
-    const raycaster = new THREE.Raycaster();
-    raycaster.far = 160;
-    const down = new THREE.Vector3(0, -1, 0);
-    const origin = new THREE.Vector3();
 
     for (let index = 0; index < count; index += 1) {
       let spot: Vec2 | null = null;
@@ -728,12 +627,9 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
         if (riverDistance < RIVER_CLEARANCE) continue;
         if (placed.some(([px, pz]) => Math.hypot(px - candidate[0], pz - candidate[1]) < 1.1)) continue;
 
-        // 贴坡：向下 raycast massif 真实坡面取地表高度。
-        // 只保留坡脚带（平地与山坡下段）的点位，峰顶附近不放树。
-        origin.set(worldX, 80, worldZ);
-        raycaster.set(origin, down);
-        const hit = raycaster.intersectObjects(solidMeshes, false)[0];
-        const groundY = hit ? hit.point.y : 0;
+        // 贴坡：解析高度场采样（山体 + 麓原坡面），只保留坡脚带
+        // （平地与山坡下段）的点位，峰顶附近不放树。
+        const groundY = sampleTerrainY(worldX, worldZ);
         if (groundY > MAX_PINE_GROUND_Y) continue;
         spot = candidate;
         spotGroundY = groundY;
@@ -743,12 +639,16 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
 
       const scale = 0.55 + rng() * 0.6;
       const variant = Math.floor(rng() * pineVariants.length) % pineVariants.length;
-      const shadeIndex = Math.floor(rng() * foliageMaterials.length) % foliageMaterials.length;
-      const foliageMaterial = foliageMaterials[shadeIndex];
-      if (!foliageMaterial) continue;
-      const geometry = pineVariants[variant];
-      if (!geometry) continue;
-      const pine = new THREE.Mesh(geometry, [trunkMaterial, foliageMaterial, foliageMaterial, foliageMaterial]);
+      const shadeIndex = Math.floor(rng() * foliageHexes.length) % foliageHexes.length;
+      const foliageHex = foliageHexes[shadeIndex]!;
+      // 9 组（3 变体 × 3 叶色）共享几何 + 单一顶点色材质：同格可实例化合批。
+      const pineKey = variant * 3 + shadeIndex;
+      let geometry = pineVariants[pineKey];
+      if (!geometry) {
+        geometry = buildPineGeometry(variant, foliageHex);
+        pineVariants[pineKey] = geometry;
+      }
+      const pine = new THREE.Mesh(geometry, pineVertexMaterial);
       pine.name = `${feature.id}:pine-${index}`;
       pine.position.set(spot[0], spotGroundY - PINE_SINK, spot[1]);
       pine.scale.setScalar(scale);
@@ -777,7 +677,9 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
   for (const feature of LANPING_RANGE) {
     if (feature.kind === 'mountain' && (feature.height ?? 12) >= PIEDMONT_MIN_HEIGHT) buildTalus(feature, talusGeometry);
   }
-  const pineVariants = [0, 1, 2].map((variant) => buildPineGeometry(variant));
+  // 松树几何按（变体 × 叶色）懒建：3 变体 × 3 叶色 = 9 组共享几何，
+  // 全部烘顶点色 + 单材质，可被 batchStaticMeshes 实例化合批。
+  const pineVariants: Array<THREE.BufferGeometry | null> = new Array(9).fill(null);
   for (const feature of LANPING_RANGE) {
     if (feature.kind === 'forest') buildForest(feature, pineVariants);
   }
@@ -792,7 +694,6 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
       for (const material of ownedMaterials) material.dispose();
       ownedMaterials.clear();
       pineMaterials.clear();
-      solidMeshes.length = 0;
     },
   };
 }
