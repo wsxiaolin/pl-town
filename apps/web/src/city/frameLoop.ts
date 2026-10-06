@@ -21,6 +21,8 @@ export type FrameLoopOptions = {
   getNpcList: () => NpcEntity[];
   getPlayerController: () => { updateMovement: (delta: number) => void; updateCamera: () => void } | null;
   getCameraPanController?: () => { update: (delta: number) => void } | null;
+  /** First-person mode owns the camera while active; the overhead follow loop pauses. */
+  getFirstPersonController?: () => { isActive: () => boolean; update: (delta: number) => void } | null;
   getMultiplayerHousing: () => { updateRemotePlayers: (delta: number) => void } | null;
   getSceneInterestPoints: () => SceneInterestPoints | null;
   getSceneInterestPointController: () => SceneInterestPointController | null;
@@ -83,8 +85,12 @@ export function createFrameLoop(options: FrameLoopOptions) {
     if (cursorChar?.visible) {
       for (const npc of options.getNpcList()) options.npcYieldToPlayer(npc);
     }
-    playerController?.updateCamera();
-    options.getCameraPanController?.()?.update(delta);
+    const firstPerson = options.getFirstPersonController?.() ?? null;
+    if (firstPerson?.isActive()) firstPerson.update(delta);
+    else {
+      playerController?.updateCamera();
+      options.getCameraPanController?.()?.update(delta);
+    }
     const sceneInterestPoints = options.getSceneInterestPoints();
     sceneInterestPoints?.update(now / 1000);
     options.getWorldDecorations?.()?.update(now / 1000);

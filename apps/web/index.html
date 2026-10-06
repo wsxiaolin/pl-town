@@ -78,6 +78,7 @@
     </div>
   </div>
   <div class="labels-wrap" id="labelsWrap"></div>
+  <div id="fpsCrosshair" aria-hidden="true"></div>
 
   <!-- UI Chrome -->
   <header class="ui-header">
@@ -91,6 +92,7 @@
        <button class="map-toggle fs-toggle" id="fsToggle" type="button">全屏</button>
        <button class="map-toggle" id="statsToggle" type="button" aria-haspopup="dialog" aria-controls="statsPanel" aria-expanded="false">档案</button>
        <button class="map-toggle" id="mapToggle" type="button">地图</button>
+       <button class="map-toggle walk-toggle" id="walkToggle" type="button" aria-pressed="false" title="第一人称漫步（F）">第一人称</button>
        <button class="settings-toggle" id="renderSettingsToggle" type="button" aria-label="画面设置" aria-expanded="false">
          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.2 13.4 1.2.9-1.8 3.1-1.4-.6a7.7 7.7 0 0 1-1.7 1l-.2 1.5h-3.6l-.2-1.5a7.7 7.7 0 0 1-1.7-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.8l-1.2-.9 1.8-3.1 1.4.6a7.7 7.7 0 0 1 1.7-1l.2-1.5h3.6l.2 1.5a7.7 7.7 0 0 1 1.7 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.8Z"/></svg>
        </button>

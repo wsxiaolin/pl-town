@@ -96,3 +96,21 @@ body.touch-movement-enabled .movement-control { display: block; }
   box-shadow: 0 5px 18px rgba(0,0,0,0.24);
   will-change: transform;
 }
+
+/* First-person walk mode: center crosshair, shown only while active. */
+#fpsCrosshair {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(30, 34, 44, 0.55), 0 0 6px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+  z-index: 40;
+}
+body.first-person-active #fpsCrosshair { opacity: 1; }

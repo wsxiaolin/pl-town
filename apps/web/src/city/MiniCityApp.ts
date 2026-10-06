@@ -27,6 +27,7 @@ import { createMovementInputController } from './navigation/movementInputControl
 import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
+import { createFirstPersonController, type FirstPersonController } from './navigation/firstPersonController';
 import { createProgressionController } from './progression/progressionController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
@@ -133,6 +134,7 @@ let playerController: ReturnType<typeof createPlayerController>;
 let movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
 let cameraPanController: ReturnType<typeof createCameraPanController>;
+let firstPersonController: FirstPersonController | null = null;
 let progressionController: ReturnType<typeof createProgressionController>;
 let communityPanels: CityHudPanels['communityPanels'];
 let writerCatalogController: CityHudPanels['writerCatalog'];
@@ -160,6 +162,7 @@ let questEventSequence = 0;
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const mouse2D = new THREE.Vector2(-9999, -9999);
+const firstPersonCenter2D = new THREE.Vector2(0, 0);
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
@@ -258,13 +261,14 @@ const frameLoop = createFrameLoop({
   onFirstRender: () => flushPendingEntrance(),
   getRenderer: () => renderer,
   getScene: () => scene,
-  getCamera: () => camera,
+  getCamera: () => firstPersonController?.getActiveCamera() ?? camera,
   getBuildings: () => buildings,
   getResidences: () => residences,
   getLabelWorldPosition: () => labelWorldPosition,
   getNpcList: () => npcSystem?.getAvoidanceNpcs() ?? npcList,
   getPlayerController: () => playerController,
   getCameraPanController: () => cameraPanController,
+  getFirstPersonController: () => firstPersonController,
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
   getSceneInterestPointController: () => sceneInterestPointController,
@@ -344,8 +348,11 @@ const eventBindings = createEventBindings({
   getCanvas: () => document.getElementById('c') as HTMLElement,
   getSignal: () => lifecycle.signal,
   getRenderer: () => renderer,
-  onMouseMove: (event) => interactionPointer.onMouseMove(event),
-  onCanvasClick: (event) => interactionPointer.onCanvasClick(event),
+  onMouseMove: (event) => { if (!firstPersonController?.isActive()) interactionPointer.onMouseMove(event); },
+  onCanvasClick: (event) => {
+    if (firstPersonController?.isActive()) { firstPersonController.handleCanvasClick(); return; }
+    interactionPointer.onCanvasClick(event);
+  },
   consumeSuppressedCanvasClick: () => cameraPanController?.consumeSuppressedClick() ?? false,
   onViewInteraction: () => cameraPanController?.notifyViewInteraction(),
   clamp: roadNavigation.clamp,
@@ -363,6 +370,8 @@ const eventBindings = createEventBindings({
   getMutualAidController: () => mutualAidController,
   getLibrarySearchController: () => librarySearchController,
   toggleMapMode: () => mapController?.toggle(),
+  toggleWalkMode: () => firstPersonController?.toggle(),
+  isWalkModeActive: () => Boolean(firstPersonController?.isActive()),
   closeModal: () => buildingInteraction.closeModal(),
   openMemorial: (beforeOpen) => cityDialogs?.openMemorial(beforeOpen),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
@@ -448,6 +457,7 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
+    getFirstPerson: () => firstPersonController,
     teleport: devTeleport,
     focus: devFocus,
   });
@@ -593,6 +603,22 @@ function init() {
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
       || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
   });
+  firstPersonController = createFirstPersonController({
+    document, window, signal: lifecycle.signal,
+    canvas: document.getElementById('c') as HTMLElement,
+    getCursor: () => cursorChar,
+    getIsoMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
+    resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
+    walkSpeed: CONFIG.playerSpeed,
+    sendPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
+    onEnter: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
+    onExit: () => { if (cursorChar) view.setTarget(cursorChar.position.x, cursorChar.position.z, true); },
+    interactInFront: firstPersonInteractInFront,
+    isBlocked: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(mapController?.isOpen())
+      || view.isCinematic() || Boolean(stories?.echo.isInteriorView()) || Boolean(iceKingFeature?.sanctum.isActive()),
+    showToast: showUnlockToast,
+    onStateChange: setWalkModeButtonState,
+  });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
   }, { signal: lifecycle.signal });
@@ -620,6 +646,7 @@ function init() {
     isInputLocked: () => view.isCinematic(),
     isCinematicCameraActive: () => view.isCinematic(),
     isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
+    isMovementSuspended: () => Boolean(firstPersonController?.isActive()),
   });
   loginController = createLoginController({
     getStats,
@@ -843,6 +870,24 @@ function devTeleport(x: number, z: number): boolean {
 function devFocus(x: number, z: number, zoom?: number): boolean {
   if (zoom !== undefined) view.applyZoom(zoom);
   return devTeleport(x, z);
+}
+
+/** First-person: interact with whatever building sits under the crosshair,
+ *  falling back to the ordinary walk-to flow (which exits the mode first). */
+function firstPersonInteractInFront(): void {
+  const activeCamera = firstPersonController?.getActiveCamera();
+  if (!activeCamera) return;
+  raycaster.setFromCamera(firstPersonCenter2D, activeCamera);
+  const building = findRaycastBuilding(raycaster.intersectObjects(raycastBuildingGroups, true));
+  if (!building) { showUnlockToast('准星附近没有可互动的建筑'); return; }
+  firstPersonController?.exit();
+  interactionPointer.interactOrWalk(building);
+}
+
+function setWalkModeButtonState(active: boolean): void {
+  const button = document.getElementById('walkToggle');
+  button?.classList.toggle('active', active);
+  button?.setAttribute('aria-pressed', String(active));
 }
 
 const lifecycle = createCityRuntimeLifecycle({
