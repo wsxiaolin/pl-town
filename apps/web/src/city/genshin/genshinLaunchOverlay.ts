@@ -412,21 +412,21 @@ function buildScene(bag: ReturnType<typeof makeDisposeBag>): SceneRig {
 // ─── DOM 覆盖层 ──────────────────────────────────────────────────────────────
 const ROOT_HTML = `
   <div class="gl-vignette"></div>
-  <div class="gl-title-block">
-    <div class="gl-title">原神</div>
-    <div class="gl-sub">GENSHIN IMPACT · 研究院复刻</div>
-    <div class="gl-disclaimer">非官方社区致敬作品 · 原神及相关商标归属 miHoYo / 米哈游</div>
+  <div class="gl-title">
+    <span class="gl-title-cn">原神</span>
+    <span class="gl-title-sub">GENSHIN IMPACT · 研究院复刻</span>
   </div>
-  <button type="button" class="gl-tap-hint">点击任意处进入</button>
+  <button type="button" class="gl-enter">点击任意处进入</button>
   <button type="button" class="gl-door-enter">进入</button>
+  <div class="gl-disclaimer">非官方社区致敬作品 · 原神及相关商标归属 miHoYo / 米哈游</div>
   <div class="gl-flash"></div>
-  <div class="gl-boot">
-    <div class="gl-boot-ring"></div>
+  <div class="gl-loading">
+    <div class="gl-orbit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="gl-boot-title">原神，启动！</div>
-    <div class="gl-boot-bar"><i></i></div>
-    <div class="gl-boot-pct">0%</div>
+    <div class="gl-bar"><span class="gl-bar-fill"></span></div>
+    <div class="gl-pct">0%</div>
   </div>
-  <div class="gl-exit-hint">按 ESC 离开</div>
+  <div class="gl-hint">按 ESC 离开</div>
 `;
 
 export function createGenshinLaunchOverlay(options: GenshinLaunchOverlayOptions = {}): GenshinLaunchOverlayLike {
@@ -458,15 +458,14 @@ export function createGenshinLaunchOverlay(options: GenshinLaunchOverlayOptions 
     pad = startAmbientPad();
     clockStart = performance.now();
     // 入场淡入 + 标题浮现 + 相机前飞。
-    root.classList.add('entering');
+    root.classList.add('gl-phase-approach');
+    root.addEventListener('click', onApproachTap, { once: true });
     timeline = gsap.timeline();
-    timeline.call(() => { root?.classList.remove('entering'); }, [], 0.9);
     if (options.reduced) {
       rig.camera.position.set(0, 7.5, 26);
       startBootSequence();
     } else {
       timeline.to(rig.camera.position, { z: 26, duration: 15, ease: 'power1.out' }, 0);
-      timeline.call(() => showTapHint(), [], 3.2);
     }
   }
 
@@ -478,17 +477,12 @@ export function createGenshinLaunchOverlay(options: GenshinLaunchOverlayOptions 
     rig.camera.updateProjectionMatrix();
   }
 
-  function showTapHint() {
-    if (phase !== 'approach') return;
-    rootEl?.classList.add('can-tap');
-    rootEl?.addEventListener('click', onApproachTap, { once: true });
-  }
 
   function onApproachTap() {
     if (phase !== 'approach') return;
     phase = 'door';
-    rootEl?.classList.remove('can-tap');
-    rootEl?.classList.add('door-in');
+    rootEl?.classList.remove('gl-phase-approach');
+    rootEl?.classList.add('gl-phase-door');
     playDuang();
     // 相机停稳（若仍在前飞，截停到附近位置）。
     timeline?.kill();
@@ -496,10 +490,6 @@ export function createGenshinLaunchOverlay(options: GenshinLaunchOverlayOptions 
     timeline.to(rig.camera.position, { z: Math.max(rig.camera.position.z, 24), duration: 1.6, ease: 'power2.out' }, 0);
     // 大门自云海浮起。
     timeline.to(rig.doorGroup.position, { y: 0, duration: 1.5, ease: 'back.out(1.4)' }, 0.15);
-    timeline.call(() => {
-      if (phase !== 'door') return;
-      rootEl?.classList.add('can-enter');
-    }, [], 1.8);
     const enterBtn = el<HTMLButtonElement>('.gl-door-enter');
     enterBtn?.addEventListener('click', onDoorEnter);
   }
@@ -507,7 +497,8 @@ export function createGenshinLaunchOverlay(options: GenshinLaunchOverlayOptions 
   function onDoorEnter() {
     if (phase !== 'door') return;
     phase = 'dive';
-    rootEl?.classList.remove('can-enter');
+    rootEl?.classList.remove('gl-phase-door');
+    rootEl?.classList.add('gl-phase-dive');
     playDoorOpen();
     timeline?.kill();
     timeline = gsap.timeline();
@@ -532,10 +523,11 @@ export function createGenshinLaunchOverlay(options: GenshinLaunchOverlayOptions 
   function startBootSequence() {
     if (phase === 'boot' || phase === 'exiting') return;
     phase = 'boot';
-    rootEl?.classList.add('booting');
+    rootEl?.classList.remove('gl-phase-dive');
+    rootEl?.classList.add('gl-phase-boot');
     pad?.stop();
-    const bar = el<HTMLElement>('.gl-boot-bar i');
-    const pct = el<HTMLElement>('.gl-boot-pct');
+    const bar = el<HTMLElement>('.gl-bar-fill');
+    const pct = el<HTMLElement>('.gl-pct');
     timeline?.kill();
     timeline = gsap.timeline();
     const state = { v: 0 };
