@@ -18,6 +18,16 @@ export type BuildingOverrides = Record<string, BuildingUnlockState>;
 
 export type WeatherConfig = { value: Weather; autoBroadcast: boolean };
 
+/**
+ * 城市主题（视觉/季节活动皮肤）。服务端只下发主题 ID；具体的装饰与
+ * 特殊建筑表现由客户端内置渲染（`spring-festival` = 春节主题）。新增
+ * 主题 ID 时客户端必须先具备对应表现，再在此登记。
+ */
+export const THEME_IDS = ['default', 'spring-festival'] as const;
+export type ThemeId = (typeof THEME_IDS)[number];
+export type ThemeConfig = { id: ThemeId };
+const DEFAULT_THEME: ThemeConfig = { id: 'default' };
+
 export type { ShopProduct };
 export { DEFAULT_SHOP_CATALOG };
 
@@ -104,6 +114,7 @@ export function sanitizeShopProducts(input: unknown): ShopProduct[] | null {
 let weatherCache: WeatherConfig | null = null;
 let overridesCache: BuildingOverrides | null = null;
 let shopCache: ShopProduct[] | null = null;
+let themeCache: ThemeConfig | null = null;
 
 export function getWeatherConfig(): WeatherConfig {
   if (!weatherCache) weatherCache = parseWeather(readRow('weather'));
@@ -127,6 +138,7 @@ export function resetWorldConfig(): void {
   weatherCache = null;
   overridesCache = null;
   shopCache = null;
+  themeCache = null;
 }
 
 export function getShopProducts(): ShopProduct[] {
@@ -150,6 +162,26 @@ export function setBuildingOverrides(overrides: BuildingOverrides): BuildingOver
   writeRow('buildings', next);
   overridesCache = next;
   return { ...next };
+}
+
+export function getThemeConfig(): ThemeConfig {
+  if (!themeCache) {
+    const row = readRow('theme') as Partial<ThemeConfig> | undefined;
+    themeCache = row && (THEME_IDS as readonly string[]).includes(row.id as string) ? { id: row.id as ThemeId } : { ...DEFAULT_THEME };
+  }
+  return { ...themeCache };
+}
+
+export function setThemeConfig(config: ThemeConfig): ThemeConfig {
+  const next: ThemeConfig = (THEME_IDS as readonly string[]).includes(config.id) ? { id: config.id } : { ...DEFAULT_THEME };
+  writeRow('theme', next);
+  themeCache = next;
+  return { ...next };
+}
+
+/** Validate an untrusted theme payload; returns null when the shape is wrong. */
+export function sanitizeThemeId(input: unknown): ThemeId | null {
+  return typeof input === 'string' && (THEME_IDS as readonly string[]).includes(input) ? input as ThemeId : null;
 }
 
 /** Validate an untrusted override payload; returns null when the shape is wrong. */

@@ -6,6 +6,8 @@ import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
 import { buildKomorebiWorkshop } from './komorebiClockworks';
+import { buildFireworksShop } from './fireworksShopBuilding';
+import { buildObservationDeck } from './observationDeckBuilding';
 import { RENDER_ORDER } from './layers';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
@@ -922,6 +924,8 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     film_city: buildFilmCity,
     ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
     komorebi_workshop: (cfg: BuildingDefinition) => buildKomorebiWorkshop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    fireworks_shop: (cfg: BuildingDefinition) => buildFireworksShop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    observation_deck: (cfg: BuildingDefinition) => buildObservationDeck({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };

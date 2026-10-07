@@ -29,6 +29,10 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
   // 木漏时光（2026-10-03）：同上，保持待建。
   'north_komorebi',
+  // 烟花店 / 海边观景台（2026-10-07）：进入 legacy 保留清单以满足
+  // 「每个目录建筑必须有显式政策决定」的覆盖断言；实际落成走
+  // DEFAULT_COMPLETED_BUILDING_IDS 的赠礼补全（见下），不进 legacy 赠礼。
+  'fireworks_shop', 'observation_deck',
 ]);
 
 // 2026-10-04 default-standing policy: 参议院与星语北城 11 栋作品建筑在
@@ -42,6 +46,10 @@ export const DEFAULT_COMPLETED_BUILDING_IDS = Object.freeze([
   'north_chat_plaza', 'north_stellar_hall', 'north_singularity', 'north_binary_garden',
   'north_maya_grove', 'north_api_memorial', 'north_worry_store', 'north_bistro',
   'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
+  // 2026-10-07 fireworks policy: 烟花店与海边观景台是新玩法的功能建筑
+  // （烟花设计云端保存 / 观景轮播），boot 时赠礼补全直接建成，对新城镇
+  // 与既有城镇一视同仁——与参议院/北城 11 栋的 2026-10-04 政策同款。
+  'fireworks_shop', 'observation_deck',
 ]);
 
 // Read-only reconciliation runs inside initializeCityGovernance's caller-owned

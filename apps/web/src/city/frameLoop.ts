@@ -39,6 +39,10 @@ export type FrameLoopOptions = {
     interactNpc: () => boolean;
   } | null;
   updateWeather?: (delta: number) => void;
+  /** 烟花粒子引擎（升空/爆裂物理与拖尾）。 */
+  updateFireworks?: (delta: number, elapsedSeconds: number) => void;
+  /** 主题装饰（灯笼昼夜发光过渡等）。 */
+  updateFestival?: (elapsedSeconds: number) => void;
   getLastFrameTime: () => number;
   setLastFrameTime: (value: number) => void;
   npcYieldToPlayer: (npc: NpcEntity) => void;
@@ -78,6 +82,8 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const playerController = options.getPlayerController();
     playerController?.updateMovement(delta);
     options.updateWeather?.(delta);
+    options.updateFireworks?.(delta, now / 1000);
+    options.updateFestival?.(now / 1000);
     options.getMultiplayerHousing()?.updateRemotePlayers(delta);
     const cursorChar = options.getCursorChar();
     if (cursorChar?.visible) {
