@@ -21,8 +21,9 @@ jobs:
     # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # 3 × (15m + 30s kill-after) 回退链约 46.5 分钟，必须给启动/评论留出余量，
-    # 否则回退耗尽会在循环内被硬杀，bot_failed 分支与评论步骤永不执行。
+    # 20m 主模型 + 3 × 10m 免费回退，加上各次 30s kill-after 与启动/评论
+    # 开销约 57 分钟；超过会在循环内被 job 硬杀，bot_failed 分支与评论
+    # 步骤永不执行。
     timeout-minutes: 60
     steps:
       - name: Checkout repository
@@ -91,9 +92,16 @@ jobs:
           2. Skip lock files (package-lock.json), build artifacts (dist/, apps/web/dist),
              runtime data (data/, logs/) and generated test reports (test-results/,
              playwright-report/).
-          3. If changed files are large, inspect them file-by-file; read full files for context
+          3. Read-only review: do NOT install anything (npm ci / npm install, playwright
+             install, browser downloads) and do NOT run builds, dev servers or test
+             suites. Allowed commands: git log/diff/show, grep, sed, cat, wc, ls —
+             quick read-only inspection only.
+          4. Time-box the exploration: aim to finish well within the runtime budget.
+             When it is nearly exhausted, stop exploring and write the report from
+             what you have, marking any area you did not fully inspect.
+          5. If changed files are large, inspect them file-by-file; read full files for context
              when needed.
-          4. Read `AGENTS.md` and evaluate the changes against its rules:
+          6. Read `AGENTS.md` and evaluate the changes against its rules:
              - 依赖方向：渲染层可消费城市数据；领域/数据模块不得反向依赖 UI 或网络。
              - 模块边界：业务逻辑不得继续写入 `apps/web/src/city/MiniCityApp.ts`（迁移期仅保留必要 wrapper）。
              - 源码体积：普通逻辑文件（含 MiniCityApp.ts）≤ 1000 行。
@@ -105,7 +113,7 @@ jobs:
                频率限制与输入校验。
              Only report rules that are actually violated. Do NOT enumerate passing
              rules, and do NOT produce a compliance matrix or per-rule checklist.
-          5. Write a short, findings-only Markdown review report in Simplified
+          7. Write a short, findings-only Markdown review report in Simplified
              Chinese (简体中文). The report is a list of real findings, not an
              audit document:
              - All narrative text — findings, explanations, reasoning and
@@ -127,7 +135,7 @@ jobs:
                alternative patterns) are NOT findings; omit them entirely.
              - No 🟢 Nit section. Do not pad the report. If nothing applies
                beyond the opening line, that one line is a complete report.
-          6. End the report with exactly one line: `REVIEW_VERDICT: PASS` or
+          8. End the report with exactly one line: `REVIEW_VERDICT: PASS` or
              `REVIEW_VERDICT: BLOCKER`. Use BLOCKER if and only if there is at
              least one 🔴 Blocker finding. Blockers fail the required check.
           EOF
@@ -155,17 +163,30 @@ jobs:
           review_succeeded=false
           # 模型调用需要容错：单个模型超时/失败后继续回退，只在循环内部关闭 -e
           set +e
+          # 回退链于 2026-10-07 在干净环境（无凭据，等同 CI）实测：旧链的
+          # deepseek-v4-flash-free / hy3-free 在 opencode 网关持续 500
+          # （UnknownError: Unexpected server error，秒挂），换入实测可连接、
+          # 可跑通回合的免费模型（候选名单与 plweb-cyberlife 唤醒链同源，
+          # 只保留实测通过者）。主模型给足 20 分钟；免费回退各 10 分钟，
+          # 且不带 --variant，避免个别模型无 high 变体导致空跑。
+          attempt=0
           for model in \
             opencode/big-pickle \
-            opencode/deepseek-v4-flash-free \
-            opencode/hy3-free; do
-            echo "Running OpenCode review with $model"
+            opencode/muse-spark-1.3-contributor-free \
+            opencode/nemotron-3-ultra-free \
+            opencode/ling-3.1-flash-free; do
+            attempt=$((attempt+1))
+            case "$model" in
+              opencode/big-pickle) per_try=20m; variant_args=(--variant high) ;;
+              *)                   per_try=10m; variant_args=() ;;
+            esac
+            echo "Running OpenCode review with $model (attempt $attempt, budget $per_try)"
             # Any attempt (paid primary or free fallback) can hang without
             # returning an error. Bound each one so the fallback chain can
             # advance and the job cannot stay pending indefinitely.
-            if timeout --signal=TERM --kill-after=30s 15m opencode run \
+            if timeout --signal=TERM --kill-after=30s "$per_try" opencode run \
               --model "$model" \
-              --variant high \
+              ${variant_args[@]+"${variant_args[@]}"} \
               --dangerously-skip-permissions \
               "$(cat review_prompt.txt)" > review_report.md; then
               if [ -s review_report.md ]; then
@@ -175,7 +196,8 @@ jobs:
               fi
               echo "OpenCode returned an empty review with $model" >&2
             else
-              echo "OpenCode failed with $model; trying the next fallback" >&2
+              rc=$?
+              echo "OpenCode failed with $model (exit $rc); trying next candidate" >&2
             fi
           done
 
@@ -184,6 +206,9 @@ jobs:
           set -e
           if [ "$review_succeeded" != true ]; then
             echo "All configured OpenCode review models failed." >&2
+            # 打可见性注解：#184 不变量要求 bot 失败不把 required check 变红，
+            # 但"看起来成功实际没审"同样危险，用 warning 挂到 run 摘要上。
+            echo "::warning::AI 审查在全部模型上失败（big-pickle + 3 个免费回退）。已按 #184 不变量放行 required check，请检查 opencode 网关状态后重跑本 job。" >&2
             printf '%s\n' '自动审查失败' > review_report.md
             echo "review_status=bot_failed" >> "$GITHUB_OUTPUT"
           else

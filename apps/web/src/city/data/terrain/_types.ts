@@ -54,3 +54,36 @@ export interface TerrainFeatureConfig {
   /** 可通行但需保持的间隙（如岸线缓冲）。 */
   navigationClearance?: number;
 }
+
+/** Static modeling inputs for the built city's walkable ground surfaces. */
+export interface CityGroundPlanConfig {
+  relief: {
+    width: number;
+    depth: number;
+    segments: number;
+    amplitude: number;
+    seed: number;
+  };
+  paving: {
+    x: number;
+    z: number;
+    width: number;
+    depth: number;
+    tileWidth: number;
+    tileDepth: number;
+    joint: number;
+    bevel: number;
+    minLift: number;
+    maxLift: number;
+    seed: number;
+    texture: string;
+    dayColor: number;
+    nightColor: number;
+    exclusions: readonly CityGroundExclusion[];
+  };
+}
+
+export type CityGroundExclusion =
+  | { kind: 'cross'; x: number; z: number; halfWidth: number }
+  | { kind: 'circle'; x: number; z: number; radius: number }
+  | { kind: 'rect'; minX: number; maxX: number; minZ: number; maxZ: number };
