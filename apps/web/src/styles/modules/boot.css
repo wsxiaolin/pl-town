@@ -17,7 +17,11 @@
   pointer-events: none;
 }
 
-/* Moment still — the city at the visitor's time of day, one image, slow drift. */
+/* Moment still — the city at the visitor's time of day, one image, slow drift.
+   Three-sharpness progressive reveal (heavy boots only): every tier layer
+   reuses .boot-moment-img (position / cover / drift / opacity gate) and adds
+   a shrinking blur; tiers load independently and fade in only when sharper
+   than what is showing. Cached visits paint the full still directly. */
 .boot-moment { position: absolute; inset: 0; }
 .boot-moment-img {
   position: absolute;
@@ -27,11 +31,37 @@
   object-fit: cover;
   opacity: 0;
   transform: scale(1.06);
-  transition: opacity 1.6s ease;
+  /* visibility is transitioned ONLY as the retire mechanism: the flip is
+     delayed by the slowest fade (the full still's 1.6s reveal) so a retired
+     layer keeps crossfading under the incoming tier until that fade is
+     done — an earlier flip would let the dark background bleed through. */
+  transition: opacity 1.6s ease, visibility 0s linear 1.6s;
   animation: boot-moment-drift 26s ease-in-out infinite alternate;
   user-select: none;
 }
 .boot-moment-img.is-front { opacity: 1; }
+/* Retired tiers: a sharper tier has taken the screen, so drop the coarser
+   layer from compositing instead of animating three fullscreen layers for
+   the whole splash. Retirement keeps the layer's opacity (is-front stays —
+   the incoming tier fades in OVER it, no dark frame in between), pauses the
+   drift at its current transform (animation:none would snap ~4% scale back
+   to the base mid-crossfade — review #201 r2), and flips visibility 1.6s
+   later via the base transition. Kept in the DOM — a re-paint of the same
+   moment un-retires it without refetching. */
+.boot-moment-img.is-retired { visibility: hidden; animation-play-state: paused; }
+/* Tier rules MUST stay after .boot-moment-img: equal specificity, so an
+   earlier placement would let the 1.6s base transition override the quick
+   0.45s tier fade (both in this stylesheet and over the inline critical
+   CSS, which loads first and mirrors this order). */
+.boot-moment-step {
+  /* Tier fade is quick (0.45s) — the final full still keeps .boot-moment-img's
+     1.6s reveal as the settling beat. The visibility leg inherits the base
+     1.6s delay so a retired step also lingers under the incoming fade. */
+  transition: opacity 0.45s ease, visibility 0s linear 1.6s;
+  filter: blur(24px) saturate(1.08);
+  pointer-events: none;
+}
+.boot-moment-step-2 { filter: blur(6px) saturate(1.02); }
 .boot-moment-shade {
   position: absolute;
   inset: 0;
@@ -139,6 +169,7 @@
 @media (prefers-reduced-motion: reduce) {
   .boot-screen { transition-duration: 0.2s; }
   .boot-moment-img { animation: none; }
+  .boot-moment-step { transition-duration: 0.2s; }
   .boot-live i { animation: none; }
 }
 

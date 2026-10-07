@@ -9,23 +9,35 @@
 // outside, so there is no day-passing cycle; the progress bar carries time.
 
 import dawnUrl from '../../assets/moments/dawn.webp';
+import dawnStep1Url from '../../assets/moments/dawn-step1.webp';
+import dawnStep2Url from '../../assets/moments/dawn-step2.webp';
 import noonUrl from '../../assets/moments/noon.webp';
+import noonStep1Url from '../../assets/moments/noon-step1.webp';
+import noonStep2Url from '../../assets/moments/noon-step2.webp';
 import duskUrl from '../../assets/moments/dusk.webp';
+import duskStep1Url from '../../assets/moments/dusk-step1.webp';
+import duskStep2Url from '../../assets/moments/dusk-step2.webp';
 import nightUrl from '../../assets/moments/night.webp';
+import nightStep1Url from '../../assets/moments/night-step1.webp';
+import nightStep2Url from '../../assets/moments/night-step2.webp';
 import { momentForHour, type MomentName } from '../../core/momentClock';
+import { MOMENT_LAYER_IDS, applyDecodeEvent, type LayerState } from './momentTiers';
 
-type ViewMoment = { name: MomentName; caption: string; url: string };
+// The ladder length is pinned at the type level (S2): every moment feeds
+// exactly three layers, so a short ladder that would silently drop the top or
+// a long one that would never show cannot compile.
+type ViewMoment = { name: MomentName; caption: string; levels: readonly [string, string, string] };
 
-const IMAGE_BY_NAME: Record<MomentName, string> = {
-  dawn: dawnUrl,
-  noon: noonUrl,
-  dusk: duskUrl,
-  night: nightUrl,
+const IMAGE_BY_NAME: Record<MomentName, readonly [string, string, string]> = {
+  dawn: [dawnStep1Url, dawnStep2Url, dawnUrl],
+  noon: [noonStep1Url, noonStep2Url, noonUrl],
+  dusk: [duskStep1Url, duskStep2Url, duskUrl],
+  night: [nightStep1Url, nightStep2Url, nightUrl],
 };
 
 function viewMoment(hour: number): ViewMoment {
   const moment = momentForHour(hour);
-  return { name: moment.name, caption: moment.caption, url: IMAGE_BY_NAME[moment.name] };
+  return { name: moment.name, caption: moment.caption, levels: IMAGE_BY_NAME[moment.name] };
 }
 
 // ─── boot screen gate state ──────────────────────────────────────────────────
@@ -51,12 +63,115 @@ export function configureMomentSplash(options: { reduced: boolean }): void {
   reducedMotion = options.reduced;
 }
 
-function paintMoment(moment: ViewMoment): void {
-  // Single <img>: there is no crossfade target anymore (the day-cycle was
-  // removed), so a two-layer swap buffer is pure dead weight — one image
-  // element, set directly.
-  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (img) img.src = moment.url;
+// Layer screen state, coarsest → sharpest (index = level - 1). The DOM
+// classes are the visible truth; every decode completion reads them, folds
+// the event through the pure applyDecodeEvent, and writes them back. This
+// keeps the ladder monotonic (a slow tier arriving after a faster one stays
+// under the winner) AND retires coarser layers the moment a sharper tier
+// reveals (review #201 B1: the old code never retired in the normal in-order
+// climb, so blurred fullscreen layers kept compositing and drifting for the
+// whole heavy splash).
+function readLayerStates(): LayerState[] {
+  return MOMENT_LAYER_IDS.map((id) => {
+    const layer = document.getElementById(id);
+    // is-retired dominates: a retired-from-front layer keeps is-front (its
+    // opacity crossfades under the incoming tier) but is out of the race.
+    if (layer?.classList.contains('is-retired')) return 'retired';
+    if (layer?.classList.contains('is-front')) return 'front';
+    return 'hidden';
+  });
+}
+
+// 'retired' only ADDS is-retired and deliberately leaves is-front as it was:
+// a retiree that was front keeps its opacity so the incoming tier crossfades
+// OVER it (no dark bleed while the winner is still fading in — the full
+// still's fade is 1.6s); a retiree that was hidden stays hidden. CSS drops
+// visibility (and with it compositing) 1.6s after the class flips, and
+// freezes the drift at its current transform.
+function writeLayerStates(states: readonly LayerState[]): void {
+  MOMENT_LAYER_IDS.forEach((id, index) => {
+    const layer = document.getElementById(id);
+    if (!layer) return;
+    const state = states[index];
+    if (state === 'retired') {
+      layer.classList.add('is-retired');
+    } else {
+      layer.classList.remove('is-retired');
+      layer.classList.toggle('is-front', state === 'front');
+    }
+  });
+}
+
+// Bumped on every paintMoment: decode callbacks carry their paint's token,
+// so a decode that resolves after a NEWER paint (e.g. splash → heavy repaint
+// with a different moment) can never flip layers the newer paint owns.
+let paintToken = 0;
+
+// Direct = the full still only (the pre-ladder behaviour): the cached-visit
+// path and the pre-decision first paint. Ladder = every tier in parallel with
+// monotonic blur-to-sharp reveals: reserved for heavy boots, the only visits
+// that actually have to download the stills (sin: 渐进式只服务于首次下载).
+type PaintMode = 'direct' | 'ladder';
+
+function paintMoment(moment: ViewMoment, mode: PaintMode): void {
+  const token = ++paintToken;
+  // Literal index (not length-1): the tuple type pins the full still at rung
+  // 3, and a computed index would drag in noUncheckedIndexedAccess's
+  // string | undefined.
+  const fullUrl = moment.levels[2];
+  const fullLayerId = MOMENT_LAYER_IDS[MOMENT_LAYER_IDS.length - 1];
+  const fullLayer = fullLayerId
+    ? (document.getElementById(fullLayerId) as HTMLImageElement | null)
+    : null;
+  const alreadySharp =
+    mode === 'ladder' &&
+    fullLayer?.classList.contains('is-front') === true &&
+    fullLayer.getAttribute('src') === fullUrl;
+  if (alreadySharp) {
+    // Heavy repaint while the full still is ALREADY on screen (a cached
+    // visit re-routed to heavy by a server-changed probe): the picture is
+    // sharp, so keep it — re-running the ladder would only re-blur it.
+    return;
+  }
+  // Direct paints touch ONLY the full layer (tier srcs stay unset — a cached
+  // visit must not fire a single tier request); the ladder spreads every
+  // level across its layer in parallel so total time ≈ the full still's own.
+  const levelOffset = mode === 'direct' ? moment.levels.length - 1 : 0;
+  const urls = mode === 'direct' ? [fullUrl] : moment.levels;
+  urls.forEach((levelUrl, urlIndex) => {
+    const index = levelOffset + urlIndex;
+    const layerId = MOMENT_LAYER_IDS[index];
+    if (!layerId) return;
+    const layer = document.getElementById(layerId) as HTMLImageElement | null;
+    if (!layer) return;
+    const level = index + 1;
+    if (layer.getAttribute('src') !== levelUrl) {
+      layer.classList.remove('is-front', 'is-retired');
+      layer.src = levelUrl;
+    }
+    // decode() gates the fade so a tier never shows a half-decoded bitmap.
+    // Not every engine exposes decode() (Safari < 14); without it the tier
+    // simply reveals on load-complete via the is-front swap below — the
+    // worst case is one frame of browser-native progressive draw.
+    const decoded = typeof layer.decode === 'function' ? layer.decode() : Promise.resolve();
+    decoded
+      .then(() => {
+        if (token !== paintToken) return; // a newer paint owns the layers now
+        // decodeOk=true here; the .catch path folds the same event as a
+        // fallback reveal (see below).
+        writeLayerStates(applyDecodeEvent(readLayerStates(), level, true));
+      })
+      .catch(() => {
+        // Fallback reveal (#201 r2): a rejected decode() must not leave the
+        // splash a silent #0b1018 slab for the whole boot — fold the event
+        // anyway so the layer takes the screen with whatever the browser
+        // can render (native progressive draw / partial bitmap / nothing,
+        // which is never worse than staying hidden). decodeOk=false stays
+        // the pure model's "leave as-is" contract, so this passes true.
+        if (token !== paintToken) return;
+        writeLayerStates(applyDecodeEvent(readLayerStates(), level, true));
+      });
+  });
   const caption = document.getElementById('bootMomentCaption');
   if (caption) {
     caption.textContent = moment.caption;
@@ -65,7 +180,7 @@ function paintMoment(moment: ViewMoment): void {
 }
 
 function showCurrentMoment(): void {
-  paintMoment(viewMoment(new Date().getHours()));
+  paintMoment(viewMoment(new Date().getHours()), 'ladder');
 }
 
 function bindSkip(): void {
@@ -97,7 +212,11 @@ export function showMomentSplash(): void {
   const screen = bootScreen();
   if (screen) {
     screen.classList.add('is-moment', 'is-splash');
-    paintMoment(viewMoment(new Date().getHours()));
+    // Direct paint: the splash lands before the boot decision is known, so
+    // show the full still only — a cached visit gets it instantly and never
+    // fires a tier request; a cold visit re-paints as a ladder the moment
+    // heavy is confirmed (first-visit decisions need no network probe).
+    paintMoment(viewMoment(new Date().getHours()), 'direct');
   }
   // Armed OUTSIDE the element guard: a missing #bootScreen must not leave
   // the reveal gate permanently sealed (review r3#10).
@@ -114,6 +233,9 @@ export function showMomentHeavy(): void {
   // no second timer, no visible swap (the still is the same current moment).
   screen.classList.remove('is-splash');
   screen.classList.add('is-moment', 'is-heavy');
+  // Heavy = this visit must download resources, the ONLY mode that runs the
+  // sharpness ladder: the inline coarsest tier lands a first frame at once,
+  // then the picture climbs as sharper tiers decode.
   showCurrentMoment();
   bindSkip();
 }
@@ -128,12 +250,16 @@ function scheduleMinimumElapsed(): void {
  * memory from idling on an invisible 60fps transform for the whole session.
  */
 function freezeMomentPresentation(): void {
-  const img = document.getElementById('bootMomentImg') as HTMLImageElement | null;
-  if (!img) return;
-  img.style.animation = 'none';
+  const layers = MOMENT_LAYER_IDS
+    .map((id) => document.getElementById(id) as HTMLImageElement | null)
+    .filter((layer): layer is HTMLImageElement => layer !== null);
+  if (layers.length === 0) return;
+  for (const layer of layers) layer.style.animation = 'none';
   // Clear only after the boot fade has fully finished — clearing earlier
   // would flash a blank frame during the fade-out.
-  window.setTimeout(() => { img.removeAttribute('src'); }, REVEAL_CLEANUP_DELAY_MS);
+  window.setTimeout(() => {
+    for (const layer of layers) layer.removeAttribute('src');
+  }, REVEAL_CLEANUP_DELAY_MS);
 }
 
 export function stopMomentPresentation(): void {

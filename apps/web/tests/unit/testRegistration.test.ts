@@ -3,22 +3,20 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 
-// `test:unit` enumerates every compiled unit file by hand. A new test file that
-// nobody appends to that list silently never runs in `test:domain` (the
-// required CI job) while still looking like coverage in the repo. Fail loudly
-// instead — in both directions:
-//   forward: every `tests/unit/**.test.ts` must be registered in
-//            `test:unit` or `test:unit:story-sentences`;
-//   reverse: every registration must have a live source file. A stale entry is
-//            silent locally because tsc never cleans the outDir, so the old
-//            compiled assertions keep executing (CI only catches it via
-//            MODULE_NOT_FOUND after `npm ci`).
-// A third leg: every `test:unit*` script in apps/web must be wired into the
-// root `test:domain`, otherwise a future `test:unit:extra` would pass this
-// guard while CI never runs it.
+// `test:unit` no longer enumerates test files by hand: it compiles the tests
+// and then routes through `run-unit-tests.mjs`, which discovers every
+// `tests/unit/**/*.test.ts` from the source tree and runs its compiled file.
+// A new test file therefore runs automatically — the old failure mode (a file
+// that silently never executes because nobody appended it to the package.json
+// chain, which was also the chain's recurring merge conflict) is gone.
 //
-// All offenders are reported in a single assertion (batch diff) instead of
-// failing on the first one, so one run is enough to fix a batch of omissions.
+// What can still regress silently:
+//   - a `test:unit*` script bypassing the runner (back to hand enumeration —
+//     new files stop running, and the single shared line starts conflicting
+//     across branches again), so every such script must invoke the runner;
+//   - a `test:unit*` script not wired into the root `test:domain`, which is
+//     the only thing CI executes — a future `test:unit:extra` would pass the
+//     guard above while CI never runs it.
 //
 // Resolve the app root from this compiled file
 // (<repo>/node_modules/.cache/minicity-tests/tests/unit/): walk up to the
@@ -72,42 +70,21 @@ function listSubdirectories(root: string, base: string): string[] {
     .map((entry) => `${base}/${entry.name}`);
 }
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-test('every unit test file is registered in the package test scripts', () => {
+test('every test:unit* script routes through the auto-discovery runner', () => {
   const appRoot = findAppRoot();
   const pkg = JSON.parse(readFileSync(join(appRoot, 'package.json'), 'utf8')) as {
     scripts?: Record<string, string>;
   };
   assert.ok(pkg.scripts, 'apps/web/package.json must define a scripts section');
-  const scripts = pkg.scripts!;
-  const registered = `${scripts['test:unit'] ?? ''} ${scripts['test:unit:story-sentences'] ?? ''}`;
-
-  // Recursive to match tsconfig.test.json's `tests/unit/**/*.ts` include.
-  // readdirSync's recursive typing is `(string | Buffer)[]` on the current
-  // @types/node, hence the String() cast; the backslash normalization keeps
-  // Windows separators comparable.
-  const files = readdirSync(join(appRoot, 'tests', 'unit'), { recursive: true })
-    .map((name) => String(name).replaceAll('\\', '/'))
-    .filter((name) => name.endsWith('.test.ts'))
-    .map((name) => name.replace(/\.test\.ts$/, ''));
-  assert.ok(files.length > 0, 'expected at least one unit test file');
-
-  // forward: on-disk test files that no script runs.
-  const missing = files.filter(
-    (name) => !new RegExp(`tests/unit/${escapeRegExp(name)}\\.test\\.js\\b`).test(registered),
-  );
-  // reverse: script entries whose source file was deleted (tsc does not clean
-  // the outDir, so the stale compiled assertions keep executing locally).
-  const onDisk = new Set(files);
-  const stale = [...registered.matchAll(/tests\/unit\/(\S+)\.test\.js\b/g)]
-    .map((match) => match[1]!)
-    .filter((name) => !onDisk.has(name));
-
+  const unitScripts = Object.entries(pkg.scripts!).filter(([name]) => /^test:unit/.test(name));
+  assert.ok(unitScripts.length > 0, 'expected at least one test:unit* script');
+  const bypassing = unitScripts
+    .filter(([, command]) => !command.includes('run-unit-tests.mjs'))
+    .map(([name]) => name);
   assert.deepEqual(
-    { missing, stale },
-    { missing: [], stale: [] },
-    'unit test registration mismatch — missing: .test.ts not registered in test:unit / test:unit:story-sentences; stale: registration without a .test.ts on disk (remove the entry)',
+    bypassing,
+    [],
+    'test:unit* scripts must invoke run-unit-tests.mjs (auto-discovery). Hand-maintained `node <file>` chains made every new test append to one shared package.json line — the recurring merge conflict — and let unregistered files silently never run.',
   );
 });
 

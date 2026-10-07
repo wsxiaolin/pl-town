@@ -29,9 +29,13 @@ test('light boot shows the current real-world moment still and enters', async ({
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
   await expect(page.locator('#bootPipeline')).not.toHaveClass(/is-active/);
-  // Only the FRONT layer carries a src (the back one is the swap buffer).
-  const src = await page.locator('#bootMomentImg').getAttribute('src');
-  expect(src).toMatch(/moments\/(dawn|noon|dusk|night)\.webp/);
+  // Cached (light) visit: the full still shows DIRECTLY (decode-gated) —
+  // the tier ladder is a download-time device reserved for heavy boots, so
+  // not a single tier request may fire here (sin: 只有首次下载才渐进).
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 20_000 });
+  expect(await page.locator('#bootMomentStep1').getAttribute('src')).toBeNull();
+  expect(await page.locator('#bootMomentStep2').getAttribute('src')).toBeNull();
   await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
   // Skip interaction (r8 nit: click-skip had no coverage): the splash binds a
   // capture-phase pointerdown listener; exercising THAT path via a real
@@ -49,6 +53,28 @@ test('light boot shows the current real-world moment still and enters', async ({
   // stopMomentPresentation runs ~1.2 s after is-ready, so poll.
   await expect.poll(async () => page.locator('#bootSkipButton').evaluate((element) => (element as HTMLButtonElement).disabled)).toBe(true);
   await expect(page.locator('#bootSkipButton')).toBeHidden();
+});
+
+test('a rejected decode still reveals the moment layer (#201 r2 fallback)', async ({ page }) => {
+  // The decode() gate must not turn a failed image load into a silent dark
+  // splash: the .catch folds the same event, so the still layer takes the
+  // screen with whatever the browser can render (an empty layer renders
+  // nothing — never worse than staying hidden, and it restores the pre-gate
+  // behaviour of showing partial/native-drawn data when it exists).
+  // The pattern must stay $-anchored: in dev the image *module* is fetched
+  // as `moments/<name>.webp?import` (Vite module graph) — aborting THAT
+  // kills the whole app's module graph, not just the image load.
+  await page.route(/moments\/(dawn|noon|dusk|night)\.webp$/, (route) => route.abort());
+  stubCityWebSocket(page);
+  stubNewsstandWebSocket(page);
+  stubWorldCatalogWebSocket(page);
+  await seedCityStorage(page);
+  await page.goto('/');
+
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 20_000 });
+  // The boot itself is unaffected: gate + city still reveal normally.
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
 });
 
 test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ page }) => {
@@ -77,8 +103,23 @@ test('forced heavy boot runs the pipeline, marks precache, reveals', async ({ pa
   await expect(page.locator('#bootPipeline')).toHaveClass(/is-active/);
   // The still behind the pipeline is the CURRENT moment, not a day cycle.
   // (The caption is display:none in heavy mode — assert what is visible.)
-  const heavySrc = await page.locator('#bootMomentImg').getAttribute('src');
-  expect(heavySrc).toMatch(new RegExp(`moments/(dawn|noon|dusk|night)\\.webp`));
+  // Same decode-gated src as the light path: wait instead of a sync read.
+  await expect(page.locator('#bootMomentImg')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)\.webp/, { timeout: 15_000 });
+  // Heavy = this visit must download resources: the ladder is armed (its
+  // coarsest tier's src set; inline data URI in prod, dev URL in dev).
+  await expect(page.locator('#bootMomentStep1')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)-step1\.webp|data:image\/webp/, { timeout: 15_000 });
+  await expect(page.locator('#bootMomentStep2')).toHaveAttribute('src', /moments\/(dawn|noon|dusk|night)-step2\.webp/, { timeout: 15_000 });
+  // Ladder settle (B1): once the full still has revealed, the coarse tiers
+  // must be retired — one fullscreen layer compositing, not three drifting
+  // for the whole pipeline. The is-retired class and the img's is-front
+  // flip in the same write, so the class check is deterministic; the
+  // visibility flip lands 1.6s later (crossfade window), which the
+  // not-to-be-visible assertion waits through.
+  await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 60_000 });
+  await expect(page.locator('#bootMomentStep1')).toHaveClass(/is-retired/, { timeout: 2_500 });
+  await expect(page.locator('#bootMomentStep2')).toHaveClass(/is-retired/, { timeout: 2_500 });
+  await expect(page.locator('#bootMomentStep1')).not.toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#bootMomentStep2')).not.toBeVisible({ timeout: 5_000 });
 
   // Full pipeline: download → scene → precompile → ready → reveal.
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 190_000 });

@@ -8,6 +8,7 @@ import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
+import { buildKomorebiWorkshop } from './komorebiClockworks';
 import type { MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
 import { createBuilderContext } from './buildingModels/builderContext';
@@ -134,6 +135,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
+    komorebi_workshop: (cfg: BuildingDefinition) => buildKomorebiWorkshop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };
