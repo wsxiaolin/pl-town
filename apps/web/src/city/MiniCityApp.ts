@@ -48,6 +48,7 @@ import { isDevPortalRequested } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
+import { createGenshinInstituteController, scheduleGenshinIdlePrefetch } from './genshin/genshinInstituteController';
 import { createIceKingFeatureExperience } from './iceKing/createIceKingFeatureExperience';
 import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
 import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatureRegistry';
@@ -272,6 +273,7 @@ const frameLoop = createFrameLoop({
   getMapController: () => mapController,
   getNavigationTargetMarker: () => navigationTargetMarker,
   getBurnOverlay: () => burnCityEffect,
+  getGenshinLaunchOverlay: () => genshinInstitute.getOverlay(),
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
@@ -321,6 +323,15 @@ const filmCityExperience = createFilmCityExperienceController({
   showToast: showUnlockToast,
 });
 
+// 原神研究院：启动页 chunk 在城市空闲时仅预下载（模块零副作用，不建场景），
+// 重代码（场景/shader/每帧渲染）在选择「好想玩原神！」后才运行。
+const genshinInstitute = createGenshinInstituteController({
+  dialogs: () => cityDialogs,
+  getRenderer: () => renderer,
+  showToast: showUnlockToast,
+  reduced: REDUCED,
+});
+
 const buildingInteraction = createBuildingInteraction({
   openGovernancePanel: openCityGovernancePanel,
   isBuildingUnavailable: availability.isBuildingUnavailable,
@@ -337,6 +348,7 @@ const buildingInteraction = createBuildingInteraction({
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
   getFilmCityController: () => filmCityExperience,
+  getGenshinInstituteController: () => genshinInstitute,
   interactWithFeature: buildingFeatureRegistry.interact,
 });
 
@@ -595,6 +607,7 @@ function init() {
   });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
+    if (event.key === 'Escape' && genshinInstitute.isActive()) genshinInstitute.stop();
   }, { signal: lifecycle.signal });
   playerController = createPlayerController({
     getCursor: () => cursorChar,
@@ -773,6 +786,9 @@ function init() {
     entranceGateOpen = true;
     pendingEntrance?.();
     pendingEntrance = null;
+    // 城市首帧已亮相：空闲时预下载原神启动页 chunk（genshinLaunchOverlay
+    // 顶层零副作用，eval 不建场景；重代码推迟到玩家选择「好想玩原神！」）。
+    scheduleGenshinIdlePrefetch();
   }
 
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
@@ -792,6 +808,7 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
 
 function disposeSession() {
   filmCityExperience.dispose();
+  genshinInstitute.dispose();
   frameLoop.stop();
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
