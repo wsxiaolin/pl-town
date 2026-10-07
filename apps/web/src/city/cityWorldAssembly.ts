@@ -10,6 +10,7 @@ import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
 import { createCityGround } from '../rendering/terrain/cityGround';
 import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
+import { updateKomorebiClockworks } from '../rendering/komorebiClockworks';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
 import { createSceneInterestPoints } from '../rendering/sceneInterestPoints';
 import { createBuildingSceneController } from './buildingSceneController';
@@ -222,7 +223,12 @@ export function assembleCityWorld(options: {
   });
   void loadModels(options.buildings);
   const updateDecorations = worldDecorations.update;
-  worldDecorations.update = (elapsed) => { updateDecorations(elapsed); constructionScene.update(); riverChenxi.update(elapsed ?? 0); };
+  worldDecorations.update = (elapsed) => {
+    updateDecorations(elapsed);
+    constructionScene.update();
+    riverChenxi.update(elapsed ?? 0);
+    updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced);
+  };
   return {
     constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
     worldDecorations,

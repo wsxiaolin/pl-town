@@ -409,10 +409,10 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
 
   await page.goto('/');
-  // 30s boot budget, aligned with helpers.waitForCityBooted: on software-GL
-  // CI runners the first-frame warm-up (compileAsync + 3 render frames) of the
-  // v5 world terrain + rain-night scene pushes past Playwright's default 5s.
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
+  // Heavy boot (full download + shader precompile) on a slow CI runner with
+  // software GL needs well past the 5 s default — 60 s matches the is-ready
+  // budget every other boot-waiting suite uses (boot-gate, onboarding).
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
   // 世界地形端到端守护（review #218：新增大幅用户可见地形需有浏览器侧
   // 断言）：岚屏岭山体、晨溪河（水面/河口湾）与城缘草甸网格必须挂在
   // 场景里。低配软件 GL 下不做像素断言，只验"地形被构建并进入场景"。
