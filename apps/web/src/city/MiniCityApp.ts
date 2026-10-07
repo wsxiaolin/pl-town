@@ -63,6 +63,13 @@ import { createCityViewControls } from './cityViewControls';
 import { createNpcDistrictFilter } from './npcDistrictFilter';
 import { createIceKingCityHooks } from './iceKingCityHooks';
 import { createCityThemeSync } from './cityThemeSync';
+import { createFestivalThemeController } from './festivalThemeController';
+import { createSpringFestivalDecor } from '../rendering/springFestivalDecor';
+import { createFireworksEngine } from '../rendering/fireworksEngine';
+import { createFireworksClient } from './fireworks/fireworksClient';
+import { createObservationDeckShow } from './fireworks/observationDeckShow';
+import { createFireworksDesignerController } from '../adapters/ui/fireworksDesignerController';
+import { FIREWORKS_SHOP_FEATURE_ID, OBSERVATION_DECK_FEATURE_ID } from './fireworks/fireworksFeatureIds';
 import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
@@ -153,6 +160,28 @@ buildingFeatureRegistry.register(createIceKingBuildingFeature({
   getSanctum: () => iceKingFeature?.sanctum ?? null,
   showLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
 }));
+// 烟花玩法：烟花铺 → 设计台；海边观景台 → 云上烟花秀。
+let festivalTheme: ReturnType<typeof createFestivalThemeController> | null = null;
+let fireworksEngine: ReturnType<typeof createFireworksEngine> | null = null;
+let fireworksClient: ReturnType<typeof createFireworksClient> | null = null;
+let fireworksDesigner: ReturnType<typeof createFireworksDesignerController> | null = null;
+let deckShow: ReturnType<typeof createObservationDeckShow> | null = null;
+buildingFeatureRegistry.register({
+  id: FIREWORKS_SHOP_FEATURE_ID,
+  interact: () => {
+    if (!fireworksDesigner) return false;
+    fireworksDesigner.open();
+    return true;
+  },
+});
+buildingFeatureRegistry.register({
+  id: OBSERVATION_DECK_FEATURE_ID,
+  interact: () => {
+    if (!deckShow) return false;
+    deckShow.interact();
+    return true;
+  },
+});
 let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
 let navigationTargetMarker: ReturnType<typeof createNavigationTargetMarker> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
@@ -277,6 +306,8 @@ const frameLoop = createFrameLoop({
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
   updateWeather: (delta) => weatherEffect?.update(delta),
+  updateFireworks: (delta, elapsed) => fireworksEngine?.update(delta, elapsed),
+  updateFestival: (elapsed) => festivalTheme?.update(elapsed),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer: (npc) => npcSystem.npcYieldToPlayer(npc),
@@ -450,6 +481,12 @@ function init() {
     getTutorial: () => onboardingTutorial,
     teleport: devTeleport,
     focus: devFocus,
+    fireworks: {
+      openDesigner: () => fireworksDesigner?.open(),
+      startShow: () => deckShow?.interact(),
+      setTheme: (id: string) => festivalTheme?.apply({ id }),
+      launch: (design: unknown, x = -58, z = -12) => fireworksEngine?.launch(design as Parameters<NonNullable<typeof fireworksEngine>['launch']>[0], { x, z }),
+    },
   });
   addCityLighting(scene, MOBILE, isNight);
   navigationTargetMarker = createNavigationTargetMarker(scene);
@@ -513,6 +550,8 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
     onWorldCatalog: applyWorldCatalog,
+    onTheme: (theme) => festivalTheme?.apply(theme),
+    onFireworksMessage: (message) => fireworksClient?.handleServerMessage(message as Parameters<NonNullable<typeof fireworksClient>['handleServerMessage']>[0]),
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -679,6 +718,44 @@ function init() {
   });
   graphics.setWeatherVisual(weatherEffect);
   weatherEffect.set(graphics.weather.get());
+  // 烟花玩法装配：引擎（粒子）→ 主题（春节装饰）→ 云端客户端 → 设计台与观景秀。
+  fireworksEngine = createFireworksEngine({
+    scene,
+    getZoom: () => view.getZoom(),
+    getViewportHeight: () => renderer.domElement.height,
+  });
+  festivalTheme = createFestivalThemeController({
+    createDecor: () => createSpringFestivalDecor({ scene, helpers: graphics.mesh, getIsNight: () => isNight }),
+    showToast: showUnlockToast,
+  });
+  fireworksClient = createFireworksClient({
+    send: (message) => multiplayerHousing?.sendFireworks(message) ?? false,
+  });
+  fireworksDesigner = createFireworksDesignerController({
+    document,
+    signal: lifecycle.signal,
+    client: fireworksClient,
+    showToast: showUnlockToast,
+    getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
+    isOnline: () => multiplayerHousing?.progression.isOnline() ?? false,
+  });
+  deckShow = createObservationDeckShow({
+    engine: fireworksEngine,
+    client: fireworksClient,
+    document,
+    signal: lifecycle.signal,
+    dialogs: () => cityDialogs,
+    getCameraSnapshot: () => view.snapshot(),
+    focusCamera: (x, z, zoom) => cameraController?.focus(x, z, { zoom, duration: 1.4 }),
+    stopCamera: () => cameraController?.stop(),
+    restoreCamera: (snapshot) => view.restoreSnapshot(snapshot),
+    setCinematicActive: (active) => {
+      view.setCinematic(active);
+      movementInputController?.setLocked(active);
+    },
+    clearPlayerPath: () => view.clearPlayerPath(),
+    showToast: showUnlockToast,
+  });
   const iceHooks = createIceKingCityHooks({
     defaultZoom: CONFIG.cameraNearSize,
     wellZoom: 5.2,
@@ -792,6 +869,16 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
 
 function disposeSession() {
   filmCityExperience.dispose();
+  deckShow?.dispose();
+  deckShow = null;
+  fireworksDesigner?.dispose();
+  fireworksDesigner = null;
+  fireworksClient?.dispose();
+  fireworksClient = null;
+  festivalTheme?.dispose();
+  festivalTheme = null;
+  fireworksEngine?.dispose();
+  fireworksEngine = null;
   frameLoop.stop();
   clearInterval(clockInterval);
   clearInterval(trackingInterval);

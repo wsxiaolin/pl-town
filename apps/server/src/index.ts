@@ -19,7 +19,8 @@ import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_CHECK_IN, DAILY_DEAL_DISCOUNT_PERCENT, DAILY_MISSIONS, DAILY_REWARDS, DAILY_SUPPLY_ORDERS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, isMarketTradeableItemId, MARKET_RECIPES, MAX_ACTIVE_MARKET_LISTINGS, MAX_MARKET_LISTING_PRICE, MAX_MARKET_LISTING_QUANTITY, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
-import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
+import { getWeatherConfig, resetWorldConfig, setWeatherConfig, getThemeConfig, setThemeConfig } from './worldConfig.js';
+import { handleFireworksMessage, type FireworksClientMessage } from './fireworksService.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
 import { bumpMetric, handleTelemetryCollection, recordServerError } from './telemetry.js';
@@ -50,6 +51,9 @@ const housingMutationRate = new FixedWindowRateLimiter(6, 10_000);
 // Generous by design: an engaged resident crafting, delivering and trading
 // stays far below this; only scripted abuse reaches it.
 const marketMutationRate = new FixedWindowRateLimiter(40, 10_000);
+// Firework design saves cost currency; the limiter only blocks scripted spam
+// (same generosity as the market mutation budget).
+const fireworksMutationRate = new FixedWindowRateLimiter(40, 10_000);
 const chatHistoryRate = new FixedWindowRateLimiter(20, 60_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(5, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
@@ -94,6 +98,7 @@ function broadcastHousingState() {
   housingBroadcastTimer.unref();
 }
 function broadcastWeather() { broadcast({ type: 'world.weather', weather: serverWeather }); }
+function broadcastTheme() { broadcast({ type: 'world.theme', theme: getThemeConfig() }); }
 // The listing board is per-viewer (own listings carry private state), so each
 // resident receives their own snapshot whenever the escrow ledger changes.
 function broadcastMarketListings() {
@@ -208,7 +213,7 @@ async function handle(client: Client, raw: string) {
     if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
-    send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, ...progressState(client.user.id) });
+    send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, theme: getThemeConfig(), ...progressState(client.user.id) });
     send(client.socket, { type: 'city.updated', state: getCityState() });
     broadcast({ type: 'player.joined', player: publicUser(client.user) }, client.user.id); client.authInProgress = false; return;
   }
@@ -395,6 +400,16 @@ async function handle(client: Client, raw: string) {
       send(client.socket, { type: 'progress.updated', progress: result.progress, catalog: getProgressionCatalog(), event: { type: 'reward.claimed', rewardId: message.rewardId, claimed: result.claimed } });
       return;
     }
+    if (message.type === 'fireworks.list' || message.type === 'fireworks.save' || message.type === 'fireworks.delete') {
+      if (message.type !== 'fireworks.list' && !fireworksMutationRate.consume(userId).allowed) return fail(client.socket, 'Too many firework requests, try again later');
+      handleFireworksMessage(client.user, message as FireworksClientMessage, {
+        send: (socket, payload) => send(socket as WebSocket, payload as ServerMessage),
+        fail: (socket, text) => fail(socket as WebSocket, text),
+        broadcast: (payload) => broadcast(payload as ServerMessage),
+        socket: client.socket,
+      });
+      return;
+    }
     if (message.type === 'story.get') {
       if (!validStoryId(message.storyId)) return fail(client.socket, 'Invalid story ID');
       send(client.socket, { type: 'story.updated', story: db.getStoryProgress(userId, message.storyId), event: { type: 'story.loaded', storyId: message.storyId } });
@@ -521,6 +536,9 @@ const http = createServer(async (request, response) => {
     setWeatherConfig: (config) => { const next = setWeatherConfig(config); serverWeather = next.value; broadcastWeather(); return next; },
     resetWorldConfig: () => { resetWorldConfig(); initShopCatalog(); serverWeather = getWeatherConfig().value; lastWorldCatalogJson = ''; },
     broadcastWorldCatalog,
+    getThemeConfig,
+    setThemeConfig,
+    broadcastTheme,
   })) return;
   if (await handleDeploySnapshot(request, response)) return;
   const headers = { ...jsonSecurityHeaders, ...corsHeaders(request) };

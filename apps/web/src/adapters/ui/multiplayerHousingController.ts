@@ -48,6 +48,10 @@ export interface MultiplayerHousingOptions {
   setWeather?: (weather: NetWeather) => void;
   getLoginGate?: () => LoginGate | null;
   onWorldCatalog?: (catalog: NetProgressionCatalog) => void;
+  /** 服务端下发的城市主题（hello 快照 / world.theme 推送）。 */
+  onTheme?: (theme: { id: string }) => void;
+  /** fireworks.* 服务端透传消息。 */
+  onFireworksMessage?: (message: { type: string; [key: string]: unknown }) => void;
 }
 
 export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
@@ -59,6 +63,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     setWeather = () => {},
     getLoginGate = () => null,
     onWorldCatalog = () => {},
+    onTheme = () => {},
+    onFireworksMessage = () => {},
   } = options;
   const {
     loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
@@ -296,6 +302,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         if (catalog) onWorldCatalog(catalog);
       },
       weather: setWeather,
+      theme: onTheme,
+      fireworks: onFireworksMessage,
       worldCatalog: (catalog) => { progression.applyCatalog(catalog); onWorldCatalog(catalog); },
       marketListings: (listings) => progression.applyListings(listings),
       authenticationFailed: (message, code) => {
@@ -770,10 +778,16 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     progression.destroy();
   }
 
+  /** fireworks.* 客户端消息统一从这里发出（socket 可能尚未建立）。 */
+  function sendFireworks(message: { type: string; [key: string]: unknown }): boolean {
+    return multiplayer?.send(message) ?? false;
+  }
+
   return {
     setupUI: setupMultiplayerUI, connect: setupMultiplayer, updateRemotePlayers,
     setPhoneOpen, renderMapHouseTags, openResidence, closeResidencePanel,
     navigateToResidence, raycastUserData, sendLocalPosition, destroy,
+    sendFireworks,
     progression,
   };
 }

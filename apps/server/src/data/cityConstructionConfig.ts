@@ -64,7 +64,12 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // 建筑（外部 Three.js 作品《木漏时光.html》移植），目录重生成后自动追加
   // 为治理项目。komorebi 与鸽子广场一样保持待建，由居民在众议院共同筹建；
   // 既有项目与 initialBuiltBuildingIds 零改动。
-  version: '2026-10-04.komorebi.2',
+  // 2026-10-07.fireworks.1: 新增 fireworks_shop（烟花铺）与
+  // observation_deck（海边观景台）两栋功能建筑（烟花设计云端保存 +
+  // 观景轮播秀），目录重生成后自动追加为治理项目，并按 2026-10-04 政策
+  // 进入 DEFAULT_COMPLETED_BUILDING_IDS 由 boot 赠礼补全直接建成；
+  // 既有项目定义与 initialBuiltBuildingIds 零改动。
+  version: '2026-10-07.fireworks.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))

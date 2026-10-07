@@ -502,6 +502,66 @@
     </div>
   </div>
 
+  <!-- Fireworks Shop Designer -->
+  <aside class="fireworks-panel" id="fireworksPanel" role="dialog" aria-label="烟花铺设计台" hidden>
+    <header class="fw-head">
+      <span class="fw-title">烟花铺 · 设计台</span>
+      <button type="button" class="fw-close" data-fw-close aria-label="合上设计台">✕</button>
+    </header>
+    <div class="fw-body">
+      <section class="fw-left">
+        <label class="fw-field">
+          <span class="fw-label">烟花名</span>
+          <input type="text" class="fw-name" data-fw-name maxlength="20" placeholder="给这支烟花起个名字" />
+        </label>
+        <div class="fw-field">
+          <span class="fw-label">花形</span>
+          <div class="fw-shapes" data-fw-shapes></div>
+        </div>
+        <div class="fw-sliders">
+          <label class="fw-slider">高度 <input type="range" data-fw-height min="24" max="90" step="1" value="52" /> <output data-fw-height-value>52</output></label>
+          <label class="fw-slider">大小 <input type="range" data-fw-size min="60" max="160" step="5" value="100" /> <output data-fw-size-value>100%</output></label>
+          <label class="fw-slider">闪烁 <input type="range" data-fw-sparkle min="0" max="100" step="5" value="35" /> <output data-fw-sparkle-value>35</output></label>
+        </div>
+        <div class="fw-colors">
+          <label class="fw-color">主色 <input type="color" data-fw-primary value="#ffd76e" /></label>
+          <label class="fw-color">次色 <input type="color" data-fw-secondary value="#ff5f8a" /></label>
+          <label class="fw-color">余焰 <input type="color" data-fw-trail value="#ffe9b0" /></label>
+        </div>
+        <div class="fw-pattern" data-fw-pattern-section hidden>
+          <div class="fw-pattern-tools">
+            <button type="button" class="fw-tool active" data-fw-tool="draw">画</button>
+            <button type="button" class="fw-tool" data-fw-tool="erase">擦</button>
+            <label class="fw-symmetry"><input type="checkbox" data-fw-symmetry checked /> 左右对称</label>
+            <button type="button" class="fw-tool" data-fw-clear>清空</button>
+            <span class="fw-cells" data-fw-cells>0 点</span>
+          </div>
+          <canvas class="fw-grid" data-fw-grid width="420" height="420"></canvas>
+          <p class="fw-pattern-hint">在网格上一格一格画出烟花要在夜空拼出的图案（拼字请亲手画，别指望打字）</p>
+        </div>
+      </section>
+      <section class="fw-right">
+        <div class="fw-preview-wrap">
+          <canvas class="fw-preview" data-fw-preview width="260" height="300"></canvas>
+        </div>
+        <button type="button" class="fw-save" data-fw-save>存入云端 · 30 金币</button>
+        <p class="fw-status" data-fw-status></p>
+        <div class="fw-mine">
+          <div class="fw-mine-head">我的烟花 <button type="button" class="fw-refresh" data-fw-refresh>刷新</button></div>
+          <ul class="fw-mine-list" data-fw-mine-list></ul>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <!-- Observation Deck Show HUD -->
+  <div class="deck-show-hud" id="deckShowHud" hidden>
+    <div class="deck-show-title">海边观景 · 云上烟花</div>
+    <div class="deck-show-act" data-deck-act></div>
+    <div class="deck-show-names" data-deck-names></div>
+    <button type="button" class="deck-show-exit" data-deck-exit>结束观景（Esc）</button>
+  </div>
+
   <!-- Memorial Roster Modal -->
   <div class="lyrics-overlay memorial-overlay" id="memorialOverlay" role="dialog" aria-modal="true" aria-labelledby="memorialTitle" inert>
     <div class="lyrics-stage memorial-stage" id="memorialStage">
