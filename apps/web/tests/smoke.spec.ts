@@ -424,7 +424,9 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
       if (!node.isMesh) return;
       const name = node.name ?? '';
       if (name.includes(':massif')) counts.massif += 1;
-      if (name.startsWith('river-chenxi-water') || name.startsWith('river-chenxi-estuary')) counts.river += 1;
+      // 精确匹配两张水面：estuary 前缀会把 v5 的湾缘砾石
+      // (river-chenxi-estuary-stone-N) 也吞进计数。
+      if (name === 'river-chenxi-water' || name === 'river-chenxi-estuary') counts.river += 1;
       if (name.endsWith(':meadow')) counts.meadow += 1;
     });
     return counts;

@@ -167,8 +167,18 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
   }
 
   function mergeParts(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-    const merged = mergeGeometries(parts, true) ?? new THREE.BufferGeometry();
-    parts.forEach((part) => part.dispose());
+    // Cone/Cylinder 系带 index，Icosahedron 系（PolyhedronGeometry）不带；
+    // 三者混并会被 mergeGeometries 拒绝（静默 null + 控制台报错，
+    // 花丛变体渲染成空几何）。统一展开为非索引后合并——装饰几何小，
+    // 顶点翻倍可忽略，flatShading 逐面着色也更贴合展开形态。
+    const flatParts = parts.map((part) => {
+      if (!part.index) return part;
+      const flat = part.toNonIndexed();
+      part.dispose();
+      return flat;
+    });
+    const merged = mergeGeometries(flatParts, true) ?? new THREE.BufferGeometry();
+    flatParts.forEach((part) => part.dispose());
     return track(merged);
   }
 
