@@ -113,8 +113,12 @@ export function assembleCityWorld(options: {
     updateCameraProjection: options.updateCameraProjection,
     getActiveStoryActorIds: options.getActiveStoryActorIds,
   });
-  createCitySurfaces({
+  const citySurfaces = createCitySurfaces({
     scene,
+    resources,
+    grassDensity: readRenderSettings().resolution <= 0.75 ? 'off' : options.isMobile() || options.reduced ? 'low' : 'high',
+    reducedMotion: options.reduced,
+    grassExclusions: () => options.residences.map(({ group }) => ({ x: group.position.x, z: group.position.z, half: 1.35 })),
     isNight: options.isNight,
     roadCoords: ROAD_COORDS,
     cityLimit: CITY_LIMIT,
@@ -144,6 +148,7 @@ export function assembleCityWorld(options: {
   }).forEach((group) => options.roadNavigation.registerObstacleGroup(group));
   options.roadNavigation.cacheBuildingBoxes();
   worldDecorations.addDecorations();
+  citySurfaces.addGrass();
   // 星语北城公园内容（树阵与长椅走世界装饰批次，与主城基础设施同级）。
   worldDecorations.addTrees(NORTH_DISTRICT_AREA.parkTrees.map(([x, z]) => [x, 0, z] as const));
   NORTH_DISTRICT_AREA.parkBenches.forEach(([x, z, rotY]) => worldDecorations.addBench(x, 0, z, rotY));
@@ -197,7 +202,7 @@ export function assembleCityWorld(options: {
     updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced);
   };
   return {
-    constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
+    constructionScene: { dispose() { disposed = true; citySurfaces.dispose(); constructionScene.dispose(); } },
     worldDecorations,
     npcSystem,
     buildingSceneController,
