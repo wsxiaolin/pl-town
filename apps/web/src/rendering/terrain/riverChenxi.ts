@@ -312,13 +312,6 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     // 世界单位，在 5-6 宽的河面上能看到流动的细波纹
     size: 7.5,
     alpha: 0.9, // 轻微透出下方 0.028 处的深色河床
-    // v7 岸线浅水与泡沫：水线附近混入浅亮色 + 随波闪动的泡沫微光——
-    // 河面读得出"岸"与浅滩，不再是从岸到岸一色的等宽水带。
-    shoreEdge: {
-      width: 0.26,
-      foamColorDay: new THREE.Color(0xc4e2e6),
-      foamColorNight: new THREE.Color(0x24404e),
-    },
   });
   waterSurface.water.name = 'river-chenxi-water';
   object.add(waterSurface.water);
