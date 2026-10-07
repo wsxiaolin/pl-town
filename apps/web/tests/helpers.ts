@@ -43,8 +43,12 @@ export async function seedCityStorage(page: Page, user = 'tester'): Promise<void
  */
 export async function waitForCityBooted(page: Page): Promise<void> {
   await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 30_000 });
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
+  // 60s, aligned with the repo's other boot budgets (boot-gate uses 60s for
+  // is-ready, smoke/movement use 60–190s): on soft-GL CI runners the heavy
+  // pipeline (download + shader precompile) routinely blows past 30s, and a
+  // budget cut to the bone here only produces the next flake (#201 S3).
+  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 60_000 });
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
   // The boot-screen first-paint shell fades out over ~0.7s after is-ready is
   // applied. Clicking a top-bar control during that window can be swallowed by
   // the still-visible shell / overlapping canvas on software-GL runners, so

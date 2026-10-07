@@ -409,7 +409,10 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
 
   await page.goto('/');
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/);
+  // Heavy boot (full download + shader precompile) on a slow CI runner with
+  // software GL needs well past the 5 s default — 60 s matches the is-ready
+  // budget every other boot-waiting suite uses (boot-gate, onboarding).
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
   const phoneToggle = page.locator('#onlinePanelToggle');
   await expect(phoneToggle).toHaveClass(/connected/, { timeout: 30_000 });
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
