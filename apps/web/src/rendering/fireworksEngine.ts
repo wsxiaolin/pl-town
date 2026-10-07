@@ -266,6 +266,10 @@ export function createFireworksEngine(options: FireworksEngineOptions) {
         explode(shell);
       }
     }
+    // 已爆的壳及时移出，避免长场烟花秀里数组无限累积。
+    for (let i = shells.length - 1; i >= 0; i -= 1) {
+      if (shells[i]!.done) shells.splice(i, 1);
+    }
     // 拖尾衰减。
     for (let i = 0; i < TRAIL_CAPACITY; i += 1) {
       if (trailLife[i]! <= 0) { trailAlphas[i] = 0; continue; }

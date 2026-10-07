@@ -429,6 +429,7 @@ export function createFireworksDesignerController(options: {
     return !panel.hidden;
   }
   function open(): void {
+    if (isOpen()) return; // 重复打开会叠加预览 rAF 链
     panel.hidden = false;
     disarmConfirm();
     syncDesignFromInputs();
