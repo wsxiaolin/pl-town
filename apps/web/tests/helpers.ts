@@ -56,6 +56,25 @@ export async function waitForCityBooted(page: Page): Promise<void> {
   await page.waitForTimeout(1_000);
 }
 
+/**
+ * Wait for the boot-time map atlas preload to settle: both district pages
+ * (主城 main + 星语北城 north) have their snapshot captured. Map specs that
+ * count WebGL contexts must call this before opening the map — the preload is
+ * scheduled off the boot critical path (idle callback + 2.5s fallback timer)
+ * and a late-landing north capture mid-test would otherwise read as an
+ * unexpected context in the assertions.
+ */
+export async function waitForMapShotsPreloaded(page: Page, timeout = 20_000): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const shots = (window as { _mini?: { mapShotsReady?: () => { main: boolean; north: boolean } } })._mini?.mapShotsReady?.();
+      return Boolean(shots?.main && shots?.north);
+    },
+    undefined,
+    { timeout },
+  );
+}
+
 /** Convenience: seed defaults, navigate, and wait for boot in one call. */
 export async function waitForCityReady(page: Page, user = 'tester'): Promise<void> {
   await seedCityStorage(page, user);

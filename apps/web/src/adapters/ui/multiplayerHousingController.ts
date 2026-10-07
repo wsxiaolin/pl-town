@@ -40,7 +40,9 @@ export interface MultiplayerHousingOptions {
   pointInAnyBuilding: (x: number, z: number) => boolean;
   fountainClear: number;
   getMapIconsBuilt: () => boolean;
-  mapShotSpan: number;
+  /** Project a residence's world position onto the ACTIVE map page (percent
+   *  of the captured image). Returns null when it belongs to the other page. */
+  projectToMap: (x: number, z: number) => { left: number; top: number } | null;
   getMapMode: () => boolean;
   toggleMapMode: () => void;
   communityPanels: ReturnType<typeof createCommunityPanelController>;
@@ -54,7 +56,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
   const {
     scene, signal, residences, getCursorChar, makeCharacter, showLoginEntry,
     showLoginOverlay, showUnlockToast, movePlayerTo, pointInAnyBuilding, fountainClear: FOUNTAIN_CLEAR,
-    getMapIconsBuilt, mapShotSpan, getMapMode, toggleMapMode, communityPanels,
+    getMapIconsBuilt, projectToMap, getMapMode, toggleMapMode, communityPanels,
     isResidenceUnavailable = () => false,
     setWeather = () => {},
     getLoginGate = () => null,
@@ -681,7 +683,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     });
   }
   
-  // 全景地图上同步显示已命名住宅的名字
+  // 全景地图上同步显示已命名住宅的名字（只渲染当前页——主城/星语北城——
+  // 上的住宅；另一页的标签等翻到那一页时再出现）
   function renderMapHouseTags() {
     const wrap = document.getElementById('mapIcons');
     if (!wrap || !getMapIconsBuilt()) return;
@@ -691,11 +694,13 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       if (!name) return;
       const residence = residences.find((item) => item.id === house.buildingId);
       if (!residence || isResidenceUnavailable(residence.id)) return;
+      const position = projectToMap(residence.group.position.x, residence.group.position.z);
+      if (!position) return;
       const tag = document.createElement('button');
       tag.type = 'button'; tag.className = 'map-house-tag'; tag.textContent = name;
-      tag.style.left = ((residence.group.position.x + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
+      tag.style.left = position.left + '%';
       // North (-z) at top, East (+x) at right — matches the captured map image.
-      tag.style.top = ((residence.group.position.z + mapShotSpan) / (2 * mapShotSpan) * 100) + '%';
+      tag.style.top = position.top + '%';
       tag.addEventListener('click', () => { if (getMapMode()) toggleMapMode(); openResidence(house.buildingId); });
       wrap.appendChild(tag);
     });

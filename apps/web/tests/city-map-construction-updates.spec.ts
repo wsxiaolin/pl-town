@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { pushCityState, stubCityWebSocket, waitForCityReady } from './helpers';
+import { pushCityState, stubCityWebSocket, waitForCityReady, waitForMapShotsPreloaded } from './helpers';
 
 test('an open map updates construction access without creating more WebGL contexts', async ({ page }) => {
   // Keep the real town clock away from dusk/dawn: theme changes intentionally
@@ -34,6 +34,10 @@ test('an open map updates construction access without creating more WebGL contex
     return route.fulfill({ status: 204, body: '' });
   });
   await waitForCityReady(page, 'map-construction-tester');
+  // The boot-time map preload is scheduled off the critical path (idle + 2.5s
+  // fallback); a late north-page capture would otherwise read as an unexpected
+  // WebGL context once the assertion loop below starts counting.
+  await waitForMapShotsPreloaded(page);
   await page.locator('#mapToggle').click({ force: true });
   await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(0);
