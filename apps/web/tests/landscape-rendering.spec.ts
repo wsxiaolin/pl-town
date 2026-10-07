@@ -3,7 +3,7 @@ import { seedCityStorage, stubCityWebSocket, waitForCityBooted } from './helpers
 
 // The product requires landscape on phones; portrait shows the rotation prompt.
 for (const viewport of [{ width: 1280, height: 800 }, { width: 660, height: 390 }]) {
-  test(`grass and sea render at near and far views (${viewport.width})`, async ({ page }) => {
+  test(`sea renders at near and far views (${viewport.width})`, async ({ page }) => {
     await page.setViewportSize(viewport);
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -14,24 +14,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 660, height: 390 
     await seedCityStorage(page);
     await page.clock.setFixedTime(new Date('2026-10-07T00:12:00Z'));
     await waitForCityBooted(page);
-    const grassCount = await page.evaluate(() => {
-      const mini = (window as any)._mini;
-      let count = 0;
-      mini.scene.traverse((object: any) => {
-        if (object.userData.cityGrass) count += object.count;
-      });
-      return count;
-    });
-    expect(grassCount).toBeGreaterThan(0);
-    await expect.poll(() => page.evaluate(() => {
-      let loaded = false;
-      (window as any)._mini.scene.traverse((object: any) => {
-        const map = object.material?.map;
-        if (map?.name === 'generated_ground4' && map.image?.naturalWidth > 0) loaded = true;
-      });
-      return loaded;
-    })).toBe(true);
-    for (const [x, z, zoom] of [[24, 24, 6], [-42, 0, 10], [0, 0, 21]]) {
+    expect(await page.evaluate(() => (window as any)._mini.scene.getObjectByName('shore-surf') !== undefined)).toBe(true);
+    for (const [x, z, zoom] of [[-42, 0, 6], [-42, 0, 10], [0, 0, 21]]) {
       const frame = await page.evaluate(([x, z, zoom]) => {
         const mini = (window as any)._mini;
         mini.focus(x, z, zoom);
@@ -57,7 +41,7 @@ test('energy-saving settings retain a flat landscape without animated water', as
   await waitForCityBooted(page);
   expect(await page.evaluate(() => {
     let count = 0;
-    (window as any)._mini.scene.traverse((object: any) => { if (object.userData.cityGrass || object.name === 'shore-surf') count++; });
+    (window as any)._mini.scene.traverse((object: any) => { if (object.name === 'shore-surf') count++; });
     return count;
   })).toBe(0);
   expect(await page.evaluate(() => (window as any)._mini.renderer.getContext().isContextLost())).toBe(false);

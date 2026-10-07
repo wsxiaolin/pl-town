@@ -4,8 +4,6 @@ import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, NORTH_DIS
 import { BUILDING_DEFS } from '../city/data/buildings';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
-import type { ResourcePool } from '../core/ResourcePool';
-import { createGrassField, type GrassDensity } from './createGrassField';
 
 type MaterialOptions = MaterialParameters;
 
@@ -30,13 +28,9 @@ type CitySurfaceOptions = {
   pathMaterials: THREE.MeshStandardMaterial[];
   groundMaterials: ThemeMaterial[];
   addLamps: (positions: readonly (readonly [number, number, number])[]) => void;
-  resources?: ResourcePool;
-  grassDensity?: GrassDensity;
-  reducedMotion?: boolean;
-  grassExclusions?: () => readonly { x: number; z: number; half: number }[];
 };
 
-export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): void; dispose(): void } {
+export function createCitySurfaces(options: CitySurfaceOptions): void {
   const {
     scene,
     isNight,
@@ -50,8 +44,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
   const existingSceneChildren = new Set(scene.children);
   const layerMaterials = new Map<string, THREE.MeshStandardMaterial>();
   const trackedPathMaterials = new Set(pathMaterials);
-  let disposeGrass = () => {};
-  let addGrass = () => {};
 
   // Surface overlays are painter-ordered. They still test against buildings,
   // but do not compete with one another in the depth buffer.
@@ -74,7 +66,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
   addGround();
   addPaths();
   batchStaticMeshes(scene, scene.children.filter((child) => !existingSceneChildren.has(child)));
-  return { addGrass: () => addGrass(), dispose: () => disposeGrass() };
 
   function addGround(): void {
     const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
@@ -101,17 +92,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
     plaza.renderOrder = RENDER_ORDER.plaza;
     scene.add(plaza);
 
-    const grassMat = createLayerMaterial({ color: isNight ? 0x75927c : 0xc4ffdb, roughness: 1, tex: 'ground4', rx: 6, ry: 6 });
-    // The detailed turf is darker than the former canvas swatch. Lift its
-    // linear albedo without flattening the fine blade contrast or night lighting.
-    grassMat.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>',
-        `#include <map_fragment>
-         diffuseColor.rgb *= 1.9;
-         float lawnLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-         diffuseColor.rgb = mix(vec3(lawnLuma), diffuseColor.rgb, 0.72);`);
-    };
-    grassMat.customProgramCacheKey = () => 'lawn-albedo-v1';
+    const grassMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 12, ry: 12 });
     const grassPositions: Array<[number, number]> = [[24, 24], [24, -24], [-24, 24], [-24, -24]];
     for (const [x, z] of grassPositions) {
       const grass = createMesh(new THREE.PlaneGeometry(24, 24), grassMat);
@@ -120,21 +101,6 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
       grass.receiveShadow = true;
       grass.renderOrder = RENDER_ORDER.landscape;
       scene.add(grass);
-    }
-    if (options.resources) {
-      const resources = options.resources;
-      const bladeMaterial = resources.material({ kind: 'city-grass-blades' }, () => createMaterial({
-        color: isNight ? 0x40582b : 0x799d49, roughness: 1, metalness: 0,
-      }));
-      groundMaterials.push({ mat: bladeMaterial, day: 0x799d49, night: 0x40582b });
-      addGrass = () => {
-        disposeGrass = createGrassField({
-          scene, resources, material: bladeMaterial, patches: grassPositions,
-          density: options.grassDensity ?? 'high', reducedMotion: options.reducedMotion ?? false,
-          exclusions: options.grassExclusions?.(),
-        });
-        addGrass = () => {};
-      };
     }
 
     const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 8, ry: 6 });
@@ -149,7 +115,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
       { mat: farMat, day: 0xd8d4cc, night: 0x9a988e },
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
-      { mat: grassMat, day: 0xc4ffdb, night: 0x75927c },
+      { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
       { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
     );
   }

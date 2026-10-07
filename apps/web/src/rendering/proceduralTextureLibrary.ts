@@ -118,9 +118,7 @@ export function createProceduralTextureLibrary(
         : generatedKey === 'snow_ground' ? snowGroundColor
           : generatedKey === 'snow_roof' ? snowRoofColor
             : undefined);
-    // The lawn's single local texture is its base detail even on the light
-    // boot path; enabling all building textures is unnecessary for a full lawn.
-    if (generatedSource && (key === 'ground4' || getTextureRendering() && isTextureResourceAvailable(generatedSource))) {
+    if (getTextureRendering() && generatedSource && isTextureResourceAvailable(generatedSource)) {
       return resources.texture(`generated:repeat:${generatedKey}:${rx || 1}:${ry || 1}`, () => {
         const t = new THREE.TextureLoader().load(generatedSource);
         t.name = `generated_${generatedKey}`;
