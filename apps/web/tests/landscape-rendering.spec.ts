@@ -1,5 +1,27 @@
 import { expect, test } from '@playwright/test';
 import { seedCityStorage, stubCityWebSocket, waitForCityBooted } from './helpers';
+import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
+
+test.beforeEach(async ({ page }) => {
+  // This rendering suite runs without a backend. Keep HTTP traffic isolated
+  // as well as WebSocket traffic so proxy failures cannot pollute console QA.
+  const config: CityConfig = {
+    schemaVersion: 1, version: 'landscape-test', projects: [],
+    personalPlots: [], decorations: [], initialBuiltBuildingIds: [],
+  };
+  const state: CityState = {
+    epoch: 'landscape-test', revision: 0, configVersion: config.version,
+    projects: [], decorations: [],
+  };
+  await page.route('**/town-api/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/city/config')) return route.fulfill({ json: config });
+    if (path.endsWith('/city/state')) return route.fulfill({ json: state });
+    if (path.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
+    if (path.endsWith('/telemetry/event')) return route.fulfill({ status: 204, body: '' });
+    return route.continue();
+  });
+});
 
 // The product requires landscape on phones; portrait shows the rotation prompt.
 for (const viewport of [{ width: 1280, height: 800 }, { width: 660, height: 390 }]) {
