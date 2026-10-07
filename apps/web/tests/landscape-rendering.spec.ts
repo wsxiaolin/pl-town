@@ -23,6 +23,14 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 660, height: 390 
       return count;
     });
     expect(grassCount).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => {
+      let loaded = false;
+      (window as any)._mini.scene.traverse((object: any) => {
+        const map = object.material?.map;
+        if (map?.name === 'generated_ground4' && map.image?.naturalWidth > 0) loaded = true;
+      });
+      return loaded;
+    })).toBe(true);
     for (const [x, z, zoom] of [[24, 24, 6], [-42, 0, 10], [0, 0, 21]]) {
       const frame = await page.evaluate(([x, z, zoom]) => {
         const mini = (window as any)._mini;

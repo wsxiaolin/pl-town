@@ -67,7 +67,7 @@ export function createGrassField(options: {
   const transform = new THREE.Object3D();
   const color = new THREE.Color();
   for (const [cx, cz] of options.patches) {
-    const count = options.density === 'low' ? 2400 : 10000;
+    const count = options.density === 'low' ? 1500 : 6500;
     const grass = new THREE.InstancedMesh(geometry, material, count);
     grass.name = `city-grass:${cx}:${cz}`;
     grass.userData.cityGrass = true;
@@ -86,7 +86,7 @@ export function createGrassField(options: {
       if (footprints.some((b) => Math.abs(x - b.x) < b.half && Math.abs(z - b.z) < b.half)) continue;
       transform.position.set(x, SURFACE_Y.landscape + 0.012, z);
       transform.rotation.set(0, random() * Math.PI * 2, 0);
-      transform.scale.set(0.04 + random() * 0.045, 0.12 + random() * 0.16, 0.12);
+      transform.scale.set(0.025 + random() * 0.035, 0.025 + random() * 0.05, 0.06);
       transform.updateMatrix();
       grass.setMatrixAt(placed, transform.matrix);
       color.setHSL(0.23 + random() * 0.035, 0.25 + random() * 0.12, 0.78 + random() * 0.15);

@@ -101,7 +101,17 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
     plaza.renderOrder = RENDER_ORDER.plaza;
     scene.add(plaza);
 
-    const grassMat = createLayerMaterial({ color: isNight ? 0x6a7a50 : 0xc0d0a0, roughness: 1, tex: 'ground4', rx: 12, ry: 12 });
+    const grassMat = createLayerMaterial({ color: isNight ? 0x75927c : 0xc4ffdb, roughness: 1, tex: 'ground4', rx: 6, ry: 6 });
+    // The detailed turf is darker than the former canvas swatch. Lift its
+    // linear albedo without flattening the fine blade contrast or night lighting.
+    grassMat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>',
+        `#include <map_fragment>
+         diffuseColor.rgb *= 1.9;
+         float lawnLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+         diffuseColor.rgb = mix(vec3(lawnLuma), diffuseColor.rgb, 0.72);`);
+    };
+    grassMat.customProgramCacheKey = () => 'lawn-albedo-v1';
     const grassPositions: Array<[number, number]> = [[24, 24], [24, -24], [-24, 24], [-24, -24]];
     for (const [x, z] of grassPositions) {
       const grass = createMesh(new THREE.PlaneGeometry(24, 24), grassMat);
@@ -139,7 +149,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): { addGrass(): v
       { mat: farMat, day: 0xd8d4cc, night: 0x9a988e },
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
-      { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
+      { mat: grassMat, day: 0xc4ffdb, night: 0x75927c },
       { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
     );
   }
