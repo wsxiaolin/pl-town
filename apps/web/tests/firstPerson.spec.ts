@@ -132,3 +132,78 @@ test('leaving first person restores the overhead follow camera on the player', a
   expect(restored.cameraOnPlayer).toBeGreaterThan(30);
   expect(restored.cameraOnPlayer).toBeLessThan(36);
 });
+
+test('first person restyles the city into the cel-shaded toon world and restores it on exit', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page);
+  const before = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    let standardMeshes = 0;
+    mini.scene.traverse((object: any) => {
+      if (object.isMesh && object.material?.isMeshStandardMaterial) standardMeshes += 1;
+    });
+    return {
+      toonActive: Boolean(mini.firstPerson?.worldStyle?.toonActive?.()),
+      standardMeshes,
+    };
+  });
+  expect(before.toonActive).toBe(false);
+  expect(before.standardMeshes).toBeGreaterThan(50);
+
+  await page.evaluate(() => (window as any)._mini.firstPerson.enter());
+  await page.waitForTimeout(300);
+
+  const during = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    let toonMeshes = 0;
+    let standardMeshes = 0;
+    mini.scene.traverse((object: any) => {
+      if (object.isMesh && object.material) {
+        if (object.material.isMeshToonMaterial) toonMeshes += 1;
+        else if (object.material.isMeshStandardMaterial) standardMeshes += 1;
+      }
+    });
+    return {
+      active: Boolean(mini.firstPerson?.isActive()),
+      toonActive: Boolean(mini.firstPerson?.worldStyle?.toonActive?.()),
+      skyActive: Boolean(mini.firstPerson?.worldStyle?.skyActive?.()),
+      skyDome: Boolean(mini.scene.getObjectByName('toon-sky-dome')),
+      fogged: Boolean(mini.scene.fog),
+      toonMeshes,
+      standardMeshes,
+    };
+  });
+  expect(during.active).toBe(true);
+  expect(during.toonActive).toBe(true);
+  expect(during.skyActive).toBe(true);
+  expect(during.skyDome).toBe(true);
+  expect(during.fogged).toBe(true);
+  expect(during.toonMeshes).toBeGreaterThan(50);
+  expect(during.standardMeshes).toBe(0);
+
+  await page.evaluate(() => (window as any)._mini.firstPerson.exit());
+
+  const after = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    let standardMeshes = 0;
+    let toonMeshes = 0;
+    mini.scene.traverse((object: any) => {
+      if (object.isMesh && object.material) {
+        if (object.material.isMeshToonMaterial) toonMeshes += 1;
+        else if (object.material.isMeshStandardMaterial) standardMeshes += 1;
+      }
+    });
+    return {
+      toonActive: Boolean(mini.firstPerson?.worldStyle?.toonActive?.()),
+      skyDome: Boolean(mini.scene.getObjectByName('toon-sky-dome')),
+      fogged: Boolean(mini.scene.fog),
+      toonMeshes,
+      standardMeshes,
+    };
+  });
+  expect(after.toonActive).toBe(false);
+  expect(after.skyDome).toBe(false);
+  expect(after.fogged).toBe(false);
+  expect(after.toonMeshes).toBe(0);
+  expect(after.standardMeshes).toBeGreaterThan(50);
+});

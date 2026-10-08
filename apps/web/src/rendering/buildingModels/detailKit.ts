@@ -180,14 +180,14 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
   function window(group: THREE.Group, opts: WindowOptions): void {
     const { x, y, z, facing = 'front', w = 0.34, h = 0.42, frameColor = 0xf0efec, lit = false, sill = true, mullions = false } = opts;
     const sub = oriented(group, x, y, z, facing);
-    part(sub, new THREE.BoxGeometry(w, h, 0.05), { color: frameColor, roughness: 0.5, tex: 'wood', rx: 1, ry: 1 }, [0, 0, 0.025]);
-    part(sub, new THREE.BoxGeometry(w - 0.06, h - 0.06, 0.02), lit ? litGlassMaterial() : glassMaterial(), [0, 0, 0.012], false);
+    part(sub, ctx.rbox(w, h, 0.05), { color: frameColor, roughness: 0.5, tex: 'wood', rx: 1, ry: 1 }, [0, 0, 0.025]);
+    part(sub, ctx.rbox(w - 0.06, h - 0.06, 0.02), lit ? litGlassMaterial() : glassMaterial(), [0, 0, 0.012], false);
     if (mullions) {
-      part(sub, new THREE.BoxGeometry(0.024, h - 0.06, 0.056), { color: frameColor, roughness: 0.5 }, [0, 0, 0.028], false);
-      part(sub, new THREE.BoxGeometry(w - 0.06, 0.024, 0.056), { color: frameColor, roughness: 0.5 }, [0, 0, 0.028], false);
+      part(sub, ctx.rbox(0.024, h - 0.06, 0.056), { color: frameColor, roughness: 0.5 }, [0, 0, 0.028], false);
+      part(sub, ctx.rbox(w - 0.06, 0.024, 0.056), { color: frameColor, roughness: 0.5 }, [0, 0, 0.028], false);
     }
     if (sill) {
-      part(sub, new THREE.BoxGeometry(w + 0.08, 0.05, 0.1), { color: 0xd9d7d2, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 }, [0, -h / 2 - 0.026, 0.04]);
+      part(sub, ctx.rbox(w + 0.08, 0.05, 0.1), { color: 0xd9d7d2, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 }, [0, -h / 2 - 0.026, 0.04]);
     }
   }
 
@@ -205,19 +205,19 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
       color = 0x6a4a38, frameColor = 0x4a3a2c, step = true, canopyColor, lit = false,
     } = opts;
     const sub = oriented(group, x, y, z, facing);
-    part(sub, new THREE.BoxGeometry(w, h, 0.045), { color, roughness: 0.6, tex: 'wood', rx: 1, ry: 2 }, [0, h / 2, 0.02], false);
-    part(sub, new THREE.BoxGeometry(0.05, h + 0.06, 0.06), { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [-w / 2 - 0.025, h / 2, 0.025], false);
-    part(sub, new THREE.BoxGeometry(0.05, h + 0.06, 0.06), { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [w / 2 + 0.025, h / 2, 0.025], false);
-    part(sub, new THREE.BoxGeometry(w + 0.15, 0.06, 0.06), { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, h + 0.03, 0.025], false);
+    part(sub, ctx.rbox(w, h, 0.045), { color, roughness: 0.6, tex: 'wood', rx: 1, ry: 2 }, [0, h / 2, 0.02], false);
+    part(sub, ctx.rbox(0.05, h + 0.06, 0.06), { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [-w / 2 - 0.025, h / 2, 0.025], false);
+    part(sub, ctx.rbox(0.05, h + 0.06, 0.06), { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [w / 2 + 0.025, h / 2, 0.025], false);
+    part(sub, ctx.rbox(w + 0.15, 0.06, 0.06), { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, h + 0.03, 0.025], false);
     part(sub, new THREE.SphereGeometry(0.022, 8, 8), { color: 0xd8b25a, roughness: 0.3, metalness: 0.6 }, [w / 2 - 0.06, h * 0.46, 0.055], false);
     if (lit) {
-      part(sub, new THREE.BoxGeometry(w - 0.12, 0.03, 0.02), { color: 0xd78535, emissive: 0xd78535, emissiveIntensity: 0.7, roughness: 0.5 }, [0, 0.025, 0.05], false);
+      part(sub, ctx.rbox(w - 0.12, 0.03, 0.02), { color: 0xd78535, emissive: 0xd78535, emissiveIntensity: 0.7, roughness: 0.5 }, [0, 0.025, 0.05], false);
     }
     if (step) {
-      part(sub, new THREE.BoxGeometry(w + 0.24, 0.06, 0.22), { color: 0xd9d7d2, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, 0.03, 0.11]);
+      part(sub, ctx.rbox(w + 0.24, 0.06, 0.22), { color: 0xd9d7d2, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, 0.03, 0.11]);
     }
     if (canopyColor !== undefined) {
-      const canopy = part(sub, new THREE.BoxGeometry(w + 0.3, 0.04, 0.28), { color: canopyColor, roughness: 0.6, tex: 'fabric', rx: 1, ry: 1 }, [0, h + 0.12, 0.13], false);
+      const canopy = part(sub, ctx.rbox(w + 0.3, 0.04, 0.28), { color: canopyColor, roughness: 0.6, tex: 'fabric', rx: 1, ry: 1 }, [0, h + 0.12, 0.13], false);
       canopy.rotation.x = -0.3;
     }
   }
@@ -229,7 +229,7 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
     for (let i = 0; i < stripes; i++) {
       const stripe = part(
         sub,
-        new THREE.BoxGeometry(stripeWidth - 0.012, 0.05, depth),
+        ctx.rbox(stripeWidth - 0.012, 0.05, depth),
         { color: i % 2 === 0 ? colorA : colorB, roughness: 0.55, tex: 'fabric', rx: 1, ry: 1 },
         [-width / 2 + stripeWidth / 2 + i * stripeWidth, 0, depth * 0.42],
         false,
@@ -255,7 +255,7 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
     roof.castShadow = roof.receiveShadow = true;
     group.add(roof);
     const capLength = ridge === 'x' ? span : width + 0.06;
-    const cap = part(group, new THREE.BoxGeometry(0.09, 0.05, capLength), { color: 0x4a3a2c, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, y + height - 0.005, 0], false);
+    const cap = part(group, ctx.rbox(0.09, 0.05, capLength), { color: 0x4a3a2c, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, y + height - 0.005, 0], false);
     if (ridge === 'x') cap.rotation.y = Math.PI / 2;
   }
 
@@ -268,45 +268,45 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
 
   function chimney(group: THREE.Group, opts: ChimneyOptions): void {
     const { x, z, y, height = 0.55, size = 0.18, color = 0x8a5a48 } = opts;
-    part(group, new THREE.BoxGeometry(size, height, size), { color, roughness: 0.8, tex: 'brick', rx: 1, ry: 1 }, [x, y + height / 2, z]);
-    part(group, new THREE.BoxGeometry(size + 0.07, 0.05, size + 0.07), { color: 0x4a3a32, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 }, [x, y + height + 0.025, z]);
+    part(group, ctx.rbox(size, height, size), { color, roughness: 0.8, tex: 'brick', rx: 1, ry: 1 }, [x, y + height / 2, z]);
+    part(group, ctx.rbox(size + 0.07, 0.05, size + 0.07), { color: 0x4a3a32, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 }, [x, y + height + 0.025, z]);
   }
 
   function railing(group: THREE.Group, opts: RailingOptions): void {
     const { x, y, z, facing = 'front', width, height = 0.16, posts = 4, color = 0x503728 } = opts;
     const sub = oriented(group, x, y, z, facing);
-    part(sub, new THREE.BoxGeometry(width, 0.035, 0.035), { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, height, 0]);
-    part(sub, new THREE.BoxGeometry(width, 0.028, 0.028), { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, 0.035, 0], false);
+    part(sub, ctx.rbox(width, 0.035, 0.035), { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, height, 0]);
+    part(sub, ctx.rbox(width, 0.028, 0.028), { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, 0.035, 0], false);
     for (let i = 0; i <= posts; i++) {
       const offset = -width / 2 + (width * i) / posts;
-      part(sub, new THREE.BoxGeometry(0.03, height, 0.03), { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [offset, height / 2, 0]);
+      part(sub, ctx.rbox(0.03, height, 0.03), { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [offset, height / 2, 0]);
     }
   }
 
   function wallSign(group: THREE.Group, opts: WallSignOptions): void {
     const { x, y, z, facing = 'front', w = 0.8, h = 0.3, color = 0x3a4a5c, accentColor = 0xe8c56a } = opts;
     const sub = oriented(group, x, y, z, facing);
-    part(sub, new THREE.BoxGeometry(w, h, 0.05), { color, roughness: 0.45, tex: 'wood', rx: 1, ry: 1 }, [0, 0, 0.03], false);
-    part(sub, new THREE.BoxGeometry(w * 0.72, 0.05, 0.056), { color: accentColor, roughness: 0.4, emissive: accentColor, emissiveIntensity: 0.12 }, [0, 0, 0.032], false);
+    part(sub, ctx.rbox(w, h, 0.05), { color, roughness: 0.45, tex: 'wood', rx: 1, ry: 1 }, [0, 0, 0.03], false);
+    part(sub, ctx.rbox(w * 0.72, 0.05, 0.056), { color: accentColor, roughness: 0.4, emissive: accentColor, emissiveIntensity: 0.12 }, [0, 0, 0.032], false);
   }
 
   function steps(group: THREE.Group, opts: StepsOptions): void {
     const { x, y, z, facing = 'front', width = 0.9, count = 2, depth = 0.15, height = 0.055, color = 0xd9d7d2 } = opts;
     const sub = oriented(group, x, y, z, facing);
     for (let i = 0; i < count; i++) {
-      part(sub, new THREE.BoxGeometry(width - i * 0.06, height, depth * (count - i)), { color, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, height / 2 + i * height, depth * (count - i) / 2 - depth / 2 + 0.06]);
+      part(sub, ctx.rbox(width - i * 0.06, height, depth * (count - i)), { color, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, height / 2 + i * height, depth * (count - i) / 2 - depth / 2 + 0.06]);
     }
   }
 
   function lantern(group: THREE.Group, opts: LanternOptions): void {
     const { x, y, z, cageColor = 0x2f2f31, glowColor = 0xf0a83f, intensity = 1.0 } = opts;
-    part(group, new THREE.BoxGeometry(0.13, 0.2, 0.13), { color: cageColor, roughness: 0.5, tex: 'metal', rx: 1, ry: 1 }, [x, y, z], false);
-    part(group, new THREE.BoxGeometry(0.075, 0.13, 0.075), { color: glowColor, emissive: glowColor, emissiveIntensity: intensity, roughness: 0.4 }, [x, y, z], false);
+    part(group, ctx.rbox(0.13, 0.2, 0.13), { color: cageColor, roughness: 0.5, tex: 'metal', rx: 1, ry: 1 }, [x, y, z], false);
+    part(group, ctx.rbox(0.075, 0.13, 0.075), { color: glowColor, emissive: glowColor, emissiveIntensity: intensity, roughness: 0.4 }, [x, y, z], false);
   }
 
   function flagpole(group: THREE.Group, x: number, z: number, height = 2.2, flagColor = P.BLUE): void {
     part(group, new THREE.CylinderGeometry(0.025, 0.025, height, 8), { color: 0xd0cfcc, roughness: 0.5, metalness: 0.3, tex: 'metal', rx: 1, ry: 2 }, [x, height / 2, z]);
-    part(group, new THREE.BoxGeometry(0.42, 0.26, 0.02), { color: flagColor, emissive: flagColor, emissiveIntensity: 0.16, roughness: 0.55 }, [x + 0.23, height - 0.22, z], false);
+    part(group, ctx.rbox(0.42, 0.26, 0.02), { color: flagColor, emissive: flagColor, emissiveIntensity: 0.16, roughness: 0.55 }, [x + 0.23, height - 0.22, z], false);
   }
 
   function barrel(group: THREE.Group, x: number, y: number, z: number, radius = 0.3, color = 0x8a5c39): void {
@@ -315,8 +315,8 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
   }
 
   function crate(group: THREE.Group, x: number, y: number, z: number, size = 0.36, color = 0xb8956b): void {
-    part(group, new THREE.BoxGeometry(size, size, size), { color, roughness: 0.75, tex: 'wood', rx: 1, ry: 1 }, [x, y + size / 2, z]);
-    part(group, new THREE.BoxGeometry(size + 0.02, 0.035, size + 0.02), { color: 0x8a6a48, roughness: 0.75, tex: 'wood', rx: 1, ry: 1 }, [x, y + size - 0.01, z], false);
+    part(group, ctx.rbox(size, size, size), { color, roughness: 0.75, tex: 'wood', rx: 1, ry: 1 }, [x, y + size / 2, z]);
+    part(group, ctx.rbox(size + 0.02, 0.035, size + 0.02), { color: 0x8a6a48, roughness: 0.75, tex: 'wood', rx: 1, ry: 1 }, [x, y + size - 0.01, z], false);
   }
 
   function entryDisc(group: THREE.Group, y = ctx.PLH): void {

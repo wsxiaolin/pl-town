@@ -151,6 +151,11 @@ export type DebugApiOptions = {
     exit: () => void;
     toggle: () => void;
     getActiveCamera: () => unknown;
+    /** Cel-shading world restyle + painted sky dome (first-person only). */
+    worldStyle: {
+      toonActive: () => boolean;
+      skyActive: () => boolean;
+    };
   } | null;
   teleport: (x: number, z: number) => boolean;
   focus: (x: number, z: number, zoom?: number) => boolean;

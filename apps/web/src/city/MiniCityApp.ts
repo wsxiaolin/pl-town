@@ -28,6 +28,8 @@ import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernance
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createFirstPersonController, type FirstPersonController } from './navigation/firstPersonController';
+import { createToonWorld } from '../rendering/toon/toonWorld';
+import { createToonSky } from '../rendering/toon/toonSky';
 import { createProgressionController } from './progression/progressionController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
@@ -457,7 +459,17 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
-    getFirstPerson: () => firstPersonController,
+    getFirstPerson: () => firstPersonController && {
+      isActive: firstPersonController.isActive,
+      enter: firstPersonController.enter,
+      exit: firstPersonController.exit,
+      toggle: firstPersonController.toggle,
+      getActiveCamera: firstPersonController.getActiveCamera,
+      worldStyle: {
+        toonActive: firstPersonToonWorld.isActive,
+        skyActive: firstPersonToonSky.isActive,
+      },
+    },
     teleport: devTeleport,
     focus: devFocus,
   });
@@ -603,6 +615,12 @@ function init() {
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
       || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
   });
+  const firstPersonToonWorld = createToonWorld({ scene, renderer, getIsNight: () => isNight });
+  const firstPersonToonSky = createToonSky({
+    scene,
+    getCamera: () => firstPersonController?.getActiveCamera() ?? null,
+  });
+  graphics.setToonSync(() => { firstPersonToonWorld.syncWeather(); });
   firstPersonController = createFirstPersonController({
     document, window, signal: lifecycle.signal,
     canvas: document.getElementById('c') as HTMLElement,
@@ -611,8 +629,19 @@ function init() {
     resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
     walkSpeed: CONFIG.playerSpeed,
     sendPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
-    onEnter: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
-    onExit: () => { if (cursorChar) view.setTarget(cursorChar.position.x, cursorChar.position.z, true); },
+    onEnter: () => {
+      view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget();
+      // Anime stroll mode: cel-shaded materials, painted sky dome, distance fog.
+      firstPersonToonWorld.enter();
+      firstPersonToonSky.enter(isNight);
+    },
+    onExit: () => {
+      firstPersonToonWorld.exit();
+      firstPersonToonSky.exit();
+      themeClock.restoreSky();
+      if (cursorChar) view.setTarget(cursorChar.position.x, cursorChar.position.z, true);
+    },
+    onFrame: (delta) => { firstPersonToonSky.update(delta, isNight); },
     interactInFront: firstPersonInteractInFront,
     isBlocked: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(mapController?.isOpen())
       || view.isCinematic() || Boolean(stories?.echo.isInteriorView()) || Boolean(iceKingFeature?.sanctum.isActive()),
