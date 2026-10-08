@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-04.komorebi.2",
+  "version": "2026-10-07.genshin.1",
   "projects": [
     {
       "id": "build-catcafe",
@@ -535,6 +535,14 @@
       "buildingId": "north_komorebi",
       "name": "木漏时光",
       "description": "共同筹建木漏时光",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_genshin_institute",
+      "buildingId": "north_genshin_institute",
+      "name": "原神研究院",
+      "description": "共同筹建原神研究院",
       "kind": "building",
       "cost": 3000
     },
