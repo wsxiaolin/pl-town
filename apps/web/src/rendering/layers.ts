@@ -1,8 +1,10 @@
 export const SURFACE_Y = Object.freeze({
   base: 0,
   district: 0.018,
+  northDistrict: 0.026,
   plaza: 0.036,
   landscape: 0.04,
+  cityGroundDetail: 0.052,
   buildingPlot: 0.036,
   road: 0.065,
   roadSurface: 0.10,
@@ -14,7 +16,9 @@ export const SURFACE_Y = Object.freeze({
 export const RENDER_ORDER = Object.freeze({
   base: 0,
   district: 1,
+  northDistrict: 1.25,
   plaza: 2,
+  cityGroundDetail: 2.5,
   landscape: 3,
   buildingPlot: 4,
   road: 5,

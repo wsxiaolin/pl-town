@@ -564,6 +564,14 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     x: 9,
     z: 24,
     storyLocked: false
+  },
+  {
+    id: "north_genshin_institute",
+    label: "原神研究院",
+    num: "66",
+    x: 30.5,
+    z: -49.5,
+    storyLocked: false
   }
 ]
 );

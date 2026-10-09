@@ -25,6 +25,7 @@ export type BuildingInteractionOptions = {
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getPaintingAiStudio?: () => { interact: (onComplete?: () => void) => 'opened' | 'no-dialog' } | null;
   getFilmCityController?: () => { interact: () => void } | null;
+  getGenshinInstituteController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
 };
 
@@ -85,6 +86,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     if (b.isStats) { options.getStatsPanelController()?.open(); options.trackInteraction('stats'); return; }
     if (b.id === 'mutualaid') {
       options.getMutualAidController?.()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'north_genshin_institute') {
+      options.getGenshinInstituteController?.()?.interact();
       options.trackInteraction(b.id);
       return;
     }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-06.painting.1",
+  "version": "2026-10-09.painting-merge.1",
   "projects": [
     {
       "id": "build-catcafe",
@@ -543,6 +543,14 @@
       "buildingId": "painting_ai",
       "name": "绘画+AI",
       "description": "共同筹建绘画+AI",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_genshin_institute",
+      "buildingId": "north_genshin_institute",
+      "name": "原神研究院",
+      "description": "共同筹建原神研究院",
       "kind": "building",
       "cost": 3000
     },

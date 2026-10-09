@@ -41,7 +41,7 @@ npm test                 # 前端 Playwright + 服务端集成
 
 工作流文件（`.github/workflows/*.yml`）改动后额外跑一次 actionlint：CI 的 `actionlint` job 会用固定 digest 的 `rhysd/actionlint` 镜像校验全部 workflow，能发现 YAML 解析看不到的非法表达式（如误写的 `${{ secrets.X }}`）与非 ASCII 同形字符。本地复现用与 CI 相同的 digest：`docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color`（当前对应 v1.7.7 + shellcheck 0.9.0）。更换 digest 时同步更新本行。
 
-新增 `apps/web/tests/unit/*.test.ts` 单测时，必须同步把对应 `.test.js` 追加到 `apps/web/package.json` 的 `test:unit`（或 `test:unit:story-sentences`）脚本：`test:domain`（required CI job）只执行登记过的文件，漏登记不会报错、只是静默不跑。`unit/testRegistration.test.ts` 在 CI 中同时拦截漏登记与过期残留。浏览器套件文件一律用 `*.spec.ts` 命名（`playwright.config.ts` 的 `testMatch` 固定该约定，`testIgnore` 排除 `tests/unit/**`）。
+新增 `apps/web/tests/unit/*.test.ts` 单测无需任何登记：`test:unit` 编译后经 `apps/web/run-unit-tests.mjs` 自动发现并运行 `tests/unit/**/*.test.ts` 的编译产物（`test:unit:story-sentences` 通过 `--only=storySentences` 单独运行该大用例）。`unit/testRegistration.test.ts` 守卫所有 `test:unit*` 脚本必须经由该 runner 执行、并接入根 `test:domain`（required CI job 只运行 `test:domain` 调用的脚本）。浏览器套件文件一律用 `*.spec.ts` 命名（`playwright.config.ts` 的 `testMatch` 固定该约定，`testIgnore` 排除 `tests/unit/**`）。
 
 前端 Playwright 配置使用 Chromium、单 worker，并自动启动 `4173` 端口的 Vite 服务。`apps/web/tests/diagnostics/` 下的诊断脚本是按需运行的性能/视觉检查，不属于默认烟雾套件。
 
