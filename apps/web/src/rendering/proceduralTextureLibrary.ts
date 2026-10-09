@@ -968,16 +968,23 @@ export function createProceduralTextureLibrary(
   }
 
   /**
-   * Synchronous pre-paint of every procedural canvas — no yields. Timer
-   * yields were measured at ~185 ms each while the splash animates on
-   * software renderers, multiplying a 2.4 s pass into 14 s; a single block
-   * costs the same CPU with zero frame-cost amplification. The heavy boot
-   * calls this right after its fetches are in flight so the network streams
-   * while the main thread paints. _canvas is idempotent, and a throwing
-   * painter leaves its slot unset for initTextures() to retry.
+   * Synchronous pre-paint of every procedural canvas — no yields (timer
+   * yields measured ~185 ms each against an animating splash on software
+   * renderers; a single block costs the same CPU with zero amplification).
+   * The heavy boot calls this while its fetches are in flight.
    */
   function paintPendingTextures(): void {
-    for (const painter of ensurePainters()) _canvas(painter.key, painter.size, painter.draw);
+    for (const painter of ensurePainters()) {
+      // Per-painter isolation: one bad texture logs and skips, the rest of
+      // the city still paints (a whole-pass abort would leave the boot
+      // without any procedural material). The unset slot is what the
+      // initTextures() pass re-attempts.
+      try {
+        _canvas(painter.key, painter.size, painter.draw);
+      } catch (error) {
+        console.error(`Procedural texture painter failed: ${painter.key}`, error);
+      }
+    }
   }
 
 
