@@ -3,26 +3,26 @@ import { ICE_KING_BUILDING_ID } from '../gameplay/content/stories/iceKing/iceKin
 import { drawIceKingCrownFacade } from './iceKing/crownFacadeTexture';
 import type { ResourcePool } from '../core/ResourcePool';
 import { applyNoiseLattice } from './textureNoise';
-import groundCityColor from '../assets/textures/ground_city_color.png';
-import groundDistrictColor from '../assets/textures/ground_district_color.png';
-import groundGrassColor from '../assets/textures/ground_grass_color.png';
-import asphaltColor from '../assets/textures/road_asphalt_color.png';
-import pavementColor from '../assets/textures/road_pavement_color.png';
-import wallPlasterColor from '../assets/textures/wall_plaster_color.png';
-import stoneLightColor from '../assets/textures/stone_light_color.png';
-import brickWarmColor from '../assets/textures/brick_warm_color.png';
-import woodColor from '../assets/textures/wood_color.png';
-import metalColor from '../assets/textures/metal_color.png';
-import roofTileColor from '../assets/textures/rooftile_color.png';
-import shingleColor from '../assets/textures/residence_shingle_color.png';
-import wetAsphaltColor from '../assets/textures/road_asphalt_wet_color.png';
-import snowGroundColor from '../assets/textures/snow_ground_color.png';
-import snowRoofColor from '../assets/textures/snow_roof_color.png';
-import sandColor from '../assets/textures/sand_color.png';
-import mossGroundColor from '../assets/textures/ground_moss_color.png';
-import concreteWornColor from '../assets/textures/concrete_worn_color.png';
-import redBrickColor from '../assets/textures/brick_red_color.png';
-import puddleAsphaltColor from '../assets/textures/puddle_asphalt_color.png';
+import groundCityColor from '../assets/textures/ground_city_color.webp';
+import groundDistrictColor from '../assets/textures/ground_district_color.webp';
+import groundGrassColor from '../assets/textures/ground_grass_color.webp';
+import asphaltColor from '../assets/textures/road_asphalt_color.webp';
+import pavementColor from '../assets/textures/road_pavement_color.webp';
+import wallPlasterColor from '../assets/textures/wall_plaster_color.webp';
+import stoneLightColor from '../assets/textures/stone_light_color.webp';
+import brickWarmColor from '../assets/textures/brick_warm_color.webp';
+import woodColor from '../assets/textures/wood_color.webp';
+import metalColor from '../assets/textures/metal_color.webp';
+import roofTileColor from '../assets/textures/rooftile_color.webp';
+import shingleColor from '../assets/textures/residence_shingle_color.webp';
+import wetAsphaltColor from '../assets/textures/road_asphalt_wet_color.webp';
+import snowGroundColor from '../assets/textures/snow_ground_color.webp';
+import snowRoofColor from '../assets/textures/snow_roof_color.webp';
+import sandColor from '../assets/textures/sand_color.webp';
+import mossGroundColor from '../assets/textures/ground_moss_color.webp';
+import concreteWornColor from '../assets/textures/concrete_worn_color.webp';
+import redBrickColor from '../assets/textures/brick_red_color.webp';
+import puddleAsphaltColor from '../assets/textures/puddle_asphalt_color.webp';
 import type { Weather } from '../city/weather';
 import { weatherTextureKey } from './weatherTextureVariants';
 import { isTextureResourceAvailable } from '../city/textureResourcePreloader';
@@ -31,12 +31,12 @@ type Canvas2D = CanvasRenderingContext2D;
 type DrawFn = (ctx: Canvas2D, size: number) => void;
 type RGB = [number, number, number];
 
-const GENERATED_FACADES = import.meta.glob('../assets/textures/facade_*_color.png', {
+const GENERATED_FACADES = import.meta.glob('../assets/textures/facade_*_color.webp', {
   eager: true,
   query: '?url',
   import: 'default',
 }) as Record<string, string>;
-const GENERATED_WEATHER_TEXTURES = import.meta.glob('../assets/textures/{residence_*,road_*}_color.png', {
+const GENERATED_WEATHER_TEXTURES = import.meta.glob('../assets/textures/{residence_*,road_*}_color.webp', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -85,11 +85,11 @@ const GENERATED_TEXTURES: Record<string, string> = {
   concrete_worn: concreteWornColor,
   brick_red: redBrickColor,
   puddle_asphalt: puddleAsphaltColor,
-  facade_residence_cream: GENERATED_FACADES['../assets/textures/facade_residence_cream_color.png'] ?? '',
-  facade_residence_bluepanel: GENERATED_FACADES['../assets/textures/facade_residence_bluepanel_color.png'] ?? '',
-  facade_residence_stone: GENERATED_FACADES['../assets/textures/facade_residence_stone_color.png'] ?? '',
-  facade_residence_darkwood: GENERATED_FACADES['../assets/textures/facade_residence_darkwood_color.png'] ?? '',
-  facade_residence_moss: GENERATED_FACADES['../assets/textures/facade_residence_moss_color.png'] ?? '',
+  facade_residence_cream: GENERATED_FACADES['../assets/textures/facade_residence_cream_color.webp'] ?? '',
+  facade_residence_bluepanel: GENERATED_FACADES['../assets/textures/facade_residence_bluepanel_color.webp'] ?? '',
+  facade_residence_stone: GENERATED_FACADES['../assets/textures/facade_residence_stone_color.webp'] ?? '',
+  facade_residence_darkwood: GENERATED_FACADES['../assets/textures/facade_residence_darkwood_color.webp'] ?? '',
+  facade_residence_moss: GENERATED_FACADES['../assets/textures/facade_residence_moss_color.webp'] ?? '',
 };
 
 export function createProceduralTextureLibrary(
@@ -124,7 +124,7 @@ export function createProceduralTextureLibrary(
     const weather = getWeather();
     const generatedKey = weatherTextureKey(key, weather);
     const generatedSource = GENERATED_TEXTURES[generatedKey]
-      ?? GENERATED_WEATHER_TEXTURES[`../assets/textures/${generatedKey}_color.png`]
+      ?? GENERATED_WEATHER_TEXTURES[`../assets/textures/${generatedKey}_color.webp`]
       ?? (generatedKey === 'wet_asphalt' ? puddleAsphaltColor
         : generatedKey === 'snow_ground' ? snowGroundColor
           : generatedKey === 'snow_roof' ? snowRoofColor
@@ -163,7 +163,7 @@ export function createProceduralTextureLibrary(
     });
   }
   function _texClamp(key: string) {
-    const facadeSource = GENERATED_FACADES[`../assets/textures/${key}_color.png`];
+    const facadeSource = GENERATED_FACADES[`../assets/textures/${key}_color.webp`];
     if (getTextureRendering() && facadeSource && isTextureResourceAvailable(facadeSource)) {
       return resources.texture(`generated:clamp:${key}`, () => {
         const texture = new THREE.TextureLoader().load(facadeSource);
