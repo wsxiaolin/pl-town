@@ -180,28 +180,38 @@ export function createMapController(options: MapControllerOptions) {
     const canvas = options.document.createElement('canvas');
     canvas.width = MAP_SHOT;
     canvas.height = MAP_SHOT;
-    shotRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
-    shotRenderer.setSize(MAP_SHOT, MAP_SHOT, false);
-    shotRenderer.setPixelRatio(1);
-    shotRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    shotRenderer.toneMappingExposure = 1;
-    if (THREE.SRGBColorSpace) shotRenderer.outputColorSpace = THREE.SRGBColorSpace;
-
     const hidden: THREE.Object3D[] = [];
-    scene.traverse((object) => {
-      const position = new THREE.Vector3();
-      object.getWorldPosition(position);
-      if (region.hidesDuringShot(position.z) && object.visible) {
-        hidden.push(object);
-        object.visible = false;
-      }
-    });
-    shotRenderer.render(scene, shotCamera);
-    hidden.forEach((object) => { object.visible = true; });
-    shotData[region.id] = shotRenderer.domElement.toDataURL('image/png');
-    shotRenderer.dispose();
-    shotRenderer.forceContextLoss();
-    shotRenderer = null;
+    try {
+      shotRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+      shotRenderer.setSize(MAP_SHOT, MAP_SHOT, false);
+      shotRenderer.setPixelRatio(1);
+      shotRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      shotRenderer.toneMappingExposure = 1;
+      if (THREE.SRGBColorSpace) shotRenderer.outputColorSpace = THREE.SRGBColorSpace;
+
+      scene.traverse((object) => {
+        const position = new THREE.Vector3();
+        object.getWorldPosition(position);
+        if (region.hidesDuringShot(position.z) && object.visible) {
+          hidden.push(object);
+          object.visible = false;
+        }
+      });
+      shotRenderer.render(scene, shotCamera);
+      shotData[region.id] = shotRenderer.domElement.toDataURL('image/png');
+    } catch {
+      // Software GL (SwiftShader) can refuse the extra capture context, and
+      // toDataURL can fail on a lost context. Leave the page uncached so the
+      // on-demand capture retries when the map next opens, and never let a
+      // failed shot throw out of the boot preload or leak a half-built
+      // renderer / left-hidden object.
+      shotData[region.id] = null;
+    } finally {
+      hidden.forEach((object) => { object.visible = true; });
+      shotRenderer?.dispose();
+      shotRenderer?.forceContextLoss();
+      shotRenderer = null;
+    }
   }
 
   /** Boot-time preload: capture both atlas pages while the boot splash still
@@ -213,9 +223,13 @@ export function createMapController(options: MapControllerOptions) {
    *  the on-demand capture when the map next opens, exactly like before. */
   function preloadShots(): void {
     if (shotsPreloaded || destroyed) return;
-    shotsPreloaded = true;
     const capture = () => {
-      if (destroyed) return;
+      // Only latch the one-shot flag once the city scene actually exists: if
+      // the idle callback / fallback timer fires during boot before the scene
+      // is ready, leave it unlatched so the on-demand capture path still owns
+      // the retry instead of a preload that silently did nothing.
+      if (destroyed || !options.getScene()) return;
+      shotsPreloaded = true;
       if (!shotData.main) captureShot(MAP_REGIONS.main);
       if (!shotData.north) captureShot(MAP_REGIONS.north);
     };
