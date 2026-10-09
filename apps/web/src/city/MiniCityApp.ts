@@ -866,6 +866,7 @@ const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
+  paintProceduralTextures: () => proceduralTextures.paintPending(),
   prepareFirstFrame,
   startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
   proceedToCity,
