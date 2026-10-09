@@ -43,7 +43,12 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 660, height: 390 
         mini.focus(x, z, zoom);
         return mini.renderer.info.render.frame;
       }, [x, z, zoom]);
-      await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame)).toBeGreaterThan(frame + 5);
+      // 60s 预算：SwiftShader 软渲染下 [0,0,21] 全景把全城几何+海面 shader
+      // 都压进 1280×800 光栅，单帧可达秒级；5s 默认预算在临界 runner 上
+      // 凑不满 5 帧就 flake（#234 引入时曾绿，#239/#218 加建筑后越界；
+      // 660×390 视口像素 1/4 稳定通过即旁证）。断言语义仍是「循环活着
+      // 且上下文未丢」，与 waitForCityBooted 的 60s boot 预算先例一致。
+      await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame), { timeout: 60_000 }).toBeGreaterThan(frame + 5);
       expect(await page.evaluate(() => (window as any)._mini.renderer.getContext().isContextLost())).toBe(false);
       await page.screenshot({ path: test.info().outputPath(`landscape-${x}-${zoom}.png`) });
     }
