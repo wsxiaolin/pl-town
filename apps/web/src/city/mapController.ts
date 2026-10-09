@@ -55,10 +55,11 @@ type MapRegion = {
   /** Whether a world point belongs on this page (decides icon / house-tag
    *  placement and which page the map opens on for a player standing there). */
   contains: (x: number, z: number) => boolean;
-  /** Objects hidden during this page's capture: edge decorations that would
-   *  otherwise poke into the frame (main city keeps its historic z >= 44 rule
-   *  for the far-south strip; the north page's frame contains only the
-   *  district's own ground, so nothing needs hiding). */
+  /** Objects hidden during this page's capture. Both pages share span 48, so
+   *  each square frame necessarily overlaps the other district near the
+   *  boundary; this rule cuts the foreign side back so a page only paints its
+   *  own district. The main page also keeps its historic z >= 44 rule (far-
+   *  south decorations that would otherwise poke into the frame). */
   hidesDuringShot: (z: number) => boolean;
 };
 
@@ -66,9 +67,14 @@ type MapRegion = {
 // edge (RING_ROAD_RADII.outer = 39) and the north gate (z = -40.8): the
 // central avenue's first north-district node sits at z = -40.
 const NORTH_REGION_GATE_Z = -40;
-// North page frame: the district ground spans x∈[-36,36], z∈[-44,-86.5]
-// (NORTH_DISTRICT_AREA.ground) with the gate at z=-40.8, so z∈[-88,-40]
-// centered on (0,-64) covers it with the same margins the main page keeps.
+// Both pages share span 48 — a 96×96 world frame, so the map reads at one
+// scale and only slides. The main page centres on (0,0) → z∈[-48,48]; the
+// north page centres on the district (0,-64) → z∈[-112,-16]. The north frame
+// therefore reaches ~28 world units south of the gate into the main city
+// (ground; buildings at z=-33…-21) while the district's own ground only spans
+// z∈[-44,-86.5] (NORTH_DISTRICT_AREA.ground). `hidesDuringShot` removes that
+// main-city band (and, mirrored on the main page, the north strip above the
+// gate) so neither capture is contaminated by the other district.
 const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
   main: Object.freeze({
     id: 'main',
@@ -78,7 +84,7 @@ const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
     centerZ: 0,
     span: 48,
     contains: (_x: number, z: number) => z >= NORTH_REGION_GATE_Z,
-    hidesDuringShot: (z: number) => z >= 44,
+    hidesDuringShot: (z: number) => z >= 44 || z < NORTH_REGION_GATE_Z,
   }),
   north: Object.freeze({
     id: 'north',
@@ -88,7 +94,7 @@ const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
     centerZ: -64,
     span: 48,
     contains: (_x: number, z: number) => z < NORTH_REGION_GATE_Z,
-    hidesDuringShot: () => false,
+    hidesDuringShot: (z: number) => z >= NORTH_REGION_GATE_Z,
   }),
 } satisfies { main: MapRegion; north: MapRegion });
 
@@ -236,7 +242,16 @@ export function createMapController(options: MapControllerOptions) {
     if (open && !iconsBuilt) renderIcons();
     const marker = options.document.getElementById('mapMarker') as HTMLElement | null;
     const cursor = options.getCursor();
-    if (!marker || !cursor) return;
+    if (!marker) return;
+    // The player can be standing on the other page (e.g. a cross-district
+    // search turned the paper). The dot has no meaningful spot there, so hide
+    // it instead of clamping it to an edge that implies a position the player
+    // never had.
+    if (!cursor || !activeRegion.contains(cursor.position.x, cursor.position.z)) {
+      if (marker.style.display !== 'none') marker.style.display = 'none';
+      return;
+    }
+    if (marker.style.display === 'none') marker.style.display = '';
     // North (-z) at top, East (+x) at right — matches the captured map image.
     const left = ((cursor.position.x - activeRegion.centerX + activeRegion.span) / (2 * activeRegion.span)) * 100;
     const top = ((cursor.position.z - activeRegion.centerZ + activeRegion.span) / (2 * activeRegion.span)) * 100;

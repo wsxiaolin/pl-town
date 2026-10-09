@@ -6,13 +6,43 @@ type CityWindow = Window & { _mini: MiniCityDebugApi };
 
 // The city stub keeps two north-district buildings available (north_bistro at
 // x=-6/z=-59.5 and north_pigeon_square) so the north page has icons to show;
-// 'commons' anchors the main page.
+// 'commons' anchors the main page; 'mall_south' (world 22.5,-22.5) is a
+// main-city building that also falls inside the north page's frame band.
 const config = {
-  schemaVersion: 1, version: 'map-regions-test', initialBuiltBuildingIds: ['commons', 'north_bistro'],
+  schemaVersion: 1, version: 'map-regions-test', initialBuiltBuildingIds: ['commons', 'north_bistro', 'mall_south'],
   projects: [], personalPlots: [], decorations: [],
 };
 const state = { epoch: 'map-regions-test', revision: 0, configVersion: config.version,
   projects: [], decorations: [] };
+
+/** Average of the darkest pixel in a small patch around a world point on the
+ *  currently shown atlas page. `centerZ` is the active page's centre, so the
+ *  same probe works for both pages. The dark mall roof reads low on the main
+ *  page and the sky background reads high on the north page. */
+async function minBrightnessAt(
+  page: Parameters<typeof stubCityWebSocket>[0],
+  worldX: number,
+  worldZ: number,
+  centerZ: number,
+): Promise<number> {
+  return page.evaluate(async ({ x, z, cz }) => {
+    const image = document.getElementById('mapImage') as HTMLImageElement;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(image, 0, 0);
+    const px = Math.round(((x + 48) / 96) * (canvas.width - 1));
+    const py = Math.round(((z - cz + 48) / 96) * (canvas.height - 1));
+    const patch = ctx.getImageData(px - 5, py - 5, 11, 11).data;
+    let min = Infinity;
+    for (let i = 0; i < patch.length; i += 4) {
+      min = Math.min(min, (patch[i]! + patch[i + 1]! + patch[i + 2]!) / 3);
+    }
+    return min;
+  }, { x: worldX, z: worldZ, cz: centerZ });
+}
 
 async function stubCityAndBoot(page: Parameters<typeof stubCityWebSocket>[0], user: string): Promise<void> {
   stubCityWebSocket(page, { user, unlockedBuildings: ['commons'] });
@@ -95,6 +125,8 @@ test('a search hit across the district boundary turns the page', async ({ page }
   // The player stands in the main city; the map opens on the main page.
   await page.locator('#mapToggle').click({ force: true });
   await expect(page.locator('#mapTitle')).toHaveText('物实小城 · 主城');
+  // On their own page the player marker is shown.
+  await expect(page.locator('#mapMarker')).toBeVisible();
 
   // Searching a north-district building by its ID and picking the result
   // flips the paper to the north page so the selection is visible there.
@@ -105,5 +137,39 @@ test('a search hit across the district boundary turns the page', async ({ page }
   await expect(page.locator('#mapTitle')).toHaveText('物实小城 · 星语北城');
   await expect(page.locator('.map-icon[data-building-id="north_bistro"]')).toHaveClass(/is-selected/);
   await expect(page.locator('#mapTipTitle')).toHaveText('会员制餐厅');
-  await expect(errors).toEqual([]);
+  // The player never left the main city, so the "you are here" dot has no
+  // spot on the north page and must be hidden rather than clamped to an edge.
+  await expect(page.locator('#mapMarker')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('the north page capture hides main-city buildings inside its frame', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.clock.setFixedTime(new Date('2026-09-25T00:12:00Z'));
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await stubCityAndBoot(page, 'map-regions-hide-tester');
+  await waitForCityReady(page, 'map-regions-hide-tester');
+  await waitForMapShotsPreloaded(page);
+
+  // Main page: mall_south is on its own page, so its dark roof is rendered.
+  await page.locator('#mapToggle').click({ force: true });
+  await expect(page.locator('#mapTitle')).toHaveText('物实小城 · 主城');
+  await expect(page.locator('.map-icon[data-building-id="mall_south"]')).toHaveCount(1);
+  const mainBrightness = await minBrightnessAt(page, 22.5, -22.5, 0);
+
+  // North page: the same world point falls inside the frame (the district's
+  // centre is at z=-64, so z=-22.5 maps to the lower band) but belongs to the
+  // main city, so the capture must paint sky there — not the building.
+  await page.locator('#mapClose').click({ force: true });
+  await page.evaluate(() => (window as unknown as CityWindow)._mini.teleport(0, -63));
+  await page.locator('#mapToggle').click({ force: true });
+  await expect(page.locator('#mapTitle')).toHaveText('物实小城 · 星语北城');
+  await expect(page.locator('.map-icon[data-building-id="mall_south"]')).toHaveCount(0);
+  const northBrightness = await minBrightnessAt(page, 22.5, -22.5, -64);
+
+  // The main page shows the dark mall roof; the north page shows only sky.
+  expect(northBrightness).toBeGreaterThan(190);
+  expect(northBrightness - mainBrightness).toBeGreaterThan(40);
+  expect(errors).toEqual([]);
 });
