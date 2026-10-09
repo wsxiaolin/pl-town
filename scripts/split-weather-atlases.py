@@ -52,5 +52,7 @@ for atlas_name, names in ATLASES.items():
         right = (column + 1) * width // 4
         bottom = (row + 1) * height // 4
         cell = image.crop((left, top, right, bottom)).resize((1024, 1024), Image.Resampling.LANCZOS)
-        cell.save(OUTPUT_DIR / f'{texture_name}_color.png', optimize=True)
+        # Runtime only globs *.webp (proceduralTextureLibrary.ts) — emitting
+        # PNG here would be silently ignored by the build.
+        cell.save(OUTPUT_DIR / f'{texture_name}_color.webp', 'WEBP', quality=90, method=6)
     print(f'{atlas_name}: {image.size[0]}x{image.size[1]} -> {len(names)} textures')
