@@ -15,6 +15,11 @@ export type FrameLoopOptions = {
   getRenderer: () => THREE.WebGLRenderer;
   getScene: () => THREE.Scene;
   getCamera: () => THREE.Camera;
+  /** 原神启动页 overlay（可选注入；激活时城市渲染被跳过，见 loop）。 */
+  getGenshinLaunchOverlay?: () => {
+    isActive(): boolean;
+    render(renderer: THREE.WebGLRenderer): void;
+  } | null;
   getBuildings: () => BuildingEntity[];
   getResidences: () => ResidenceEntity[];
   getLabelWorldPosition: () => THREE.Vector3;
@@ -105,6 +110,13 @@ export function createFrameLoop(options: FrameLoopOptions) {
     }
     updateLabels();
     const renderer = options.getRenderer();
+    // 原神启动页全屏期间：跳过城市渲染（overlay 不透明盖满画布，城市那
+    // 一遍是纯浪费，软渲设备省下一半帧成本），只渲染 overlay 场景。
+    const genshin = options.getGenshinLaunchOverlay?.();
+    if (genshin?.isActive()) {
+      genshin.render(renderer);
+      return;
+    }
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);

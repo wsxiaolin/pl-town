@@ -206,6 +206,20 @@ export function createAnimatedWaterSurface(
     );
   material.needsUpdate = true;
   if (config.shoreBlend) {
+    // Keep the reflection plane flat; long-wave slopes change the lighting
+    // without moving the sheet through the sand or the mirror clipping plane.
+    // Reuse three's Water normals (https://threejs.org/examples/?q=water).
+    const normalAnchor = 'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );';
+    if (material.fragmentShader.includes(normalAnchor)) {
+      material.fragmentShader = material.fragmentShader.replace(normalAnchor, /* glsl */ `
+        float swellA = dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35;
+        float swellB = dot(worldPosition.xz, vec2(-0.24, 1.12)) - time * 0.85;
+        vec2 swellSlope = vec2(0.78, 0.32) * cos(swellA) * 0.13
+          + vec2(-0.24, 1.12) * cos(swellB) * 0.065;
+        vec3 surfaceNormal = normalize(noise.xzy * vec3(1.15, 1.0, 1.15)
+          + vec3(-swellSlope.x, 0.0, -swellSlope.y));
+      `);
+    }
     // Near-shore shallow tint, measured in world units rather than uv so the
     // band keeps its width no matter how deep the ribbon geometry runs. The
     // `time` uniform here is already time-scaled by the caller.
@@ -252,6 +266,10 @@ export function createAnimatedWaterSurface(
             // models (ships!) must not bleed through the deep sheet.
             vec3 shallowTint = mix(waterColor, shoreTint, 0.55);
             outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(0.0, ${width}, vShoreDist)) * 0.4);
+            // Broad moving crests read from the city camera, while the normal
+            // map keeps the small ripples. Tint with daylight so night stays dark.
+            float crest = pow(max(0.0, sin(dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35)), 6.0);
+            outgoingLight += shoreTint * crest * 0.055;
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );

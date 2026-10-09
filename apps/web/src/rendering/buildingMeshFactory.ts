@@ -9,6 +9,7 @@ import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
 import { buildKomorebiWorkshop } from './komorebiClockworks';
+import { buildGenshinInstitute } from './genshinInstitute';
 import type { MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
 import { createBuilderContext } from './buildingModels/builderContext';
@@ -136,6 +137,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
     komorebi_workshop: (cfg: BuildingDefinition) => buildKomorebiWorkshop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    genshin_institute: (cfg: BuildingDefinition) => buildGenshinInstitute({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };
