@@ -37,6 +37,12 @@ export function createCityRuntimeLifecycle(options: {
   startTutorial: () => void;
   proceedToCity: () => void;
   showLogin: () => void;
+  /**
+   * Preload both map atlas pages (主城 + 星语北城) while the splash still
+   * covers the freshly compiled city. Called on BOTH boot paths, after the
+   * precompile and before the city-ready reveal — never awaited.
+   */
+  preloadMapShots?: () => void;
   /** Dev visual-verification portal (?dev): enter without the login gate. */
   shouldSkipLoginGate?: () => boolean;
   disposeSession: () => void;
@@ -257,6 +263,13 @@ export function createCityRuntimeLifecycle(options: {
       await options.prepareFirstFrame(undefined, precompileSignal).catch((error) => console.error('First-frame precompile failed', error));
     }
     if (!started) return;
+
+    // Map atlas preload (both pages: 主城 + 星语北城). Both boot paths land
+    // here right after the precompile, while the splash still covers the
+    // city — the captures are scheduled off the critical path (idle callback
+    // inside mapController), so the reveal timing is unchanged and the first
+    // map open never pays the WebGL capture cost.
+    options.preloadMapShots?.();
 
     if (heavy) {
       if (precompileSignal?.aborted) {

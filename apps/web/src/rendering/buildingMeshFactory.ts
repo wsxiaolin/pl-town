@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { buildWushiRestaurant } from './wushiRestaurant';
 import { buildWildMushroomRestaurant } from './wildMushroomRestaurant';
+import { buildPaintingAiStudio } from './paintingAiStudio';
 import { buildIceKingCrownBuilding } from './iceKing/iceKingCrownBuilding';
 import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuildings';
 import { buildKomorebiWorkshop } from './komorebiClockworks';
@@ -39,6 +40,32 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     const builder = table[key];
     if (!builder) throw new Error(`buildingModels: missing builder "${key}"`);
     return builder;
+  }
+
+  // 影视城（film_city，自 main 合入）：低矮摄影棚 + 片场门架 + 红毯。
+  function buildFilmCity(cfg: BuildingDefinition): BuildingEntity {
+    const g = new THREE.Group();
+    const width = 5.8, depth = 4.2, height = 2.2;
+    part(g, new THREE.BoxGeometry(width + 0.8, PLH, depth + 0.8), { color: P.BUILDING_BASE, roughness: 0.8, tex: 'stone', rx: 2, ry: 2 }, [0, PLH / 2, 0]);
+    const bodyMat = stdMat({ color: P.BUILDING_WHITE, roughness: 0.08, tex: 'wall', rx: 2, ry: 1 });
+    bodyMat.emissive = new THREE.Color(P.BLUE); bodyMat.emissiveIntensity = 0;
+    const body = mk(new THREE.BoxGeometry(width, height, depth), bodyMat);
+    body.position.y = PLH + height / 2 + 0.012;
+    body.castShadow = body.receiveShadow = true;
+    g.add(body);
+    const top = PLH + height;
+    part(g, new THREE.BoxGeometry(width + 0.3, 0.16, depth + 0.3), { color: P.ROOF_RIM, roughness: 0.4, tex: 'rooftile', rx: 2, ry: 2 }, [0, top + 0.08, 0]);
+    part(g, new THREE.BoxGeometry(0.18, 2.5, 0.18), { color: P.MALL_FRAME, roughness: 0.35, metalness: 0.25 }, [-2.1, top + 1.25, 0]);
+    part(g, new THREE.BoxGeometry(0.18, 2.5, 0.18), { color: P.MALL_FRAME, roughness: 0.35, metalness: 0.25 }, [2.1, top + 1.25, 0]);
+    part(g, new THREE.BoxGeometry(4.5, 1.1, 0.16), { color: P.MALL_SIGN, emissive: P.MALL_SIGN, emissiveIntensity: 0.12, roughness: 0.35 }, [0, top + 1.45, depth / 2 + 0.1], false);
+    part(g, new THREE.BoxGeometry(1.5, 0.12, 0.12), { color: P.BLUE, emissive: P.BLUE, emissiveIntensity: 0.28 }, [0, PLH + 0.06, depth / 2 + 1.1], false);
+    for (const x of [-2.2, -1.1, 0, 1.1, 2.2]) part(g, new THREE.BoxGeometry(0.75, 0.05, 0.75), { color: x % 2 ? P.PARCHMENT : P.BLUE, roughness: 0.5 }, [x, PLH + 0.04, depth / 2 + 0.75], false);
+    part(g, new THREE.BoxGeometry(3.2, 0.05, 4.8), { color: 0x8f2f35, roughness: 0.65 }, [0, PLH + 0.035, -4.6], false);
+    [-1.7, 1.7].forEach((x) => part(g, new THREE.CylinderGeometry(0.09, 0.11, 1.8, 10), { color: P.MALL_FRAME, roughness: 0.4, metalness: 0.25 }, [x, PLH + 0.9, -5.8]));
+    part(g, new THREE.BoxGeometry(3.8, 0.28, 0.3), { color: P.MALL_SIGN, emissive: P.MALL_SIGN, emissiveIntensity: 0.16 }, [0, PLH + 1.8, -5.8], false);
+    g.position.set(cfg.x, 0, cfg.z);
+    tagMeshes(g, cfg.id);
+    return { ...cfg, group: g, body, bodyMat, labelEl: null, labelY: top + 2.2 };
   }
 
   // 科特维酒馆 — a run-down waystation between death and the dungeon: tavern
@@ -135,6 +162,8 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     tavern: buildTavern,
     restaurant: (cfg: BuildingDefinition) => buildWushiRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     wild_mushroom_restaurant: (cfg: BuildingDefinition) => buildWildMushroomRestaurant({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    painting_ai: (cfg: BuildingDefinition) => buildPaintingAiStudio({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    film_city: buildFilmCity,
     ...createNorthDistrictBuilders({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }),
     komorebi_workshop: (cfg: BuildingDefinition) => buildKomorebiWorkshop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     genshin_institute: (cfg: BuildingDefinition) => buildGenshinInstitute({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),

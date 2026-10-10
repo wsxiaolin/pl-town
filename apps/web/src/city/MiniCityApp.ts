@@ -46,6 +46,8 @@ import { createSceneAnimations } from './sceneAnimations';
 import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
+import { createPaintingAiStudio } from './paintingAiStudio';
+import { createPaintingAiCanvasController } from '../adapters/ui/paintingAiCanvasController';
 import { installDebugApi } from './debugApi';
 import { isDevPortalRequested } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
@@ -151,8 +153,10 @@ let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
 let buildingLabelController: ReturnType<typeof assembleCityWorld>['buildingLabelController'];
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let constructionScene: ReturnType<typeof assembleCityWorld>['constructionScene'] | null = null;
+let terrain: ReturnType<typeof assembleCityWorld>['terrain'] | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
+let paintingAiCanvas: ReturnType<typeof createPaintingAiCanvasController> | null = null;
 const buildingFeatureRegistry = createBuildingFeatureRegistry();
 buildingFeatureRegistry.register(createIceKingBuildingFeature({
   getSanctum: () => iceKingFeature?.sanctum ?? null,
@@ -313,6 +317,13 @@ const wildMushroomRestaurant = createWildMushroomRestaurant({
   awardAchievement: awardDirectAchievement,
 });
 
+const paintingAiStudio = createPaintingAiStudio({
+  getDialogs: () => cityDialogs,
+  openCanvas: (handlers) => paintingAiCanvas?.open(handlers),
+  closeCanvas: () => paintingAiCanvas?.close(),
+  showToast: showUnlockToast,
+});
+
 const filmCityExperience = createFilmCityExperienceController({
   dialogs: () => cityDialogs,
   getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
@@ -353,6 +364,7 @@ const buildingInteraction = createBuildingInteraction({
   getLibrarySearchController: () => librarySearchController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
+  getPaintingAiStudio: () => paintingAiStudio,
   getFilmCityController: () => filmCityExperience,
   getGenshinInstituteController: () => genshinInstitute,
   interactWithFeature: buildingFeatureRegistry.interact,
@@ -482,6 +494,8 @@ function init() {
         skyActive: firstPersonToonSky.isActive,
       },
     },
+    getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
+    getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
     teleport: devTeleport,
     focus: devFocus,
   });
@@ -530,6 +544,7 @@ function init() {
   buildingLabelController = world.buildingLabelController;
   sceneInterestPoints = world.sceneInterestPoints;
   constructionScene = world.constructionScene;
+  terrain = world.terrain;
   raycastBuildingGroups = world.raycastBuildingGroups;
   const hud = createCityHudPanels(document, lifecycle.signal, (open) => multiplayerHousing?.setPhoneOpen(open));
   communityPanels = hud.communityPanels;
@@ -542,7 +557,10 @@ function init() {
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
     fountainClear: roadNavigation.fountainClear, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
+    // 标签位置跟随当前打开的那一页地图（主城/星语北城），不在当前页的
+    // 住宅返回 null、不渲染标签。
+    projectToMap: (x, z) => mapController?.projectToActiveMap(x, z) ?? null,
+    getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
     isResidenceUnavailable: availability.isResidenceUnavailable,
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
@@ -737,6 +755,7 @@ function init() {
     signal: lifecycle.signal,
   });
   cityDialogs.setup();
+  paintingAiCanvas = createPaintingAiCanvasController({ document, signal: lifecycle.signal });
   weatherEffect = createWeatherEffect({
     scene,
     getCursor: () => cursorChar,
@@ -884,6 +903,8 @@ function disposeSession() {
   sceneInterestPoints?.dispose();
   constructionScene?.dispose();
   constructionScene = null;
+  terrain?.dispose();
+  terrain = null;
   scene?.clear();
   resources.dispose();
   buildingPlotTargets.length = 0;
@@ -941,6 +962,7 @@ const lifecycle = createCityRuntimeLifecycle({
   isNight: () => isNight,
   initCity: init,
   prepareFirstFrame,
+  preloadMapShots: () => mapController?.preloadShots(),
   startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
   proceedToCity,
   showLogin: () => loginController?.showLogin(),

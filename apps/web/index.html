@@ -193,7 +193,7 @@
   <div class="map-overlay" id="mapOverlay" role="dialog" aria-label="全景地图">
     <div class="map-paper">
       <button class="map-close" id="mapClose" type="button" aria-label="关闭地图">✕</button>
-      <h2 class="map-title">物实小城 · 全景地图</h2>
+      <h2 class="map-title" id="mapTitle">物实小城 · 主城</h2>
       <div class="map-search" id="mapSearch">
         <label class="map-search-label" for="mapSearchInput">搜索建筑</label>
         <input
@@ -211,7 +211,7 @@
         <div class="map-search-results" id="mapSearchResults" role="listbox" aria-label="建筑搜索结果" hidden></div>
       </div>
       <div class="map-image-wrap" id="mapImageWrap">
-        <img id="mapImage" alt="物实小城全景地图" />
+        <img id="mapImage" alt="物实小城主城全景地图" />
         <div class="map-icons" id="mapIcons"></div>
         <span class="map-marker" id="mapMarker" aria-label="当前位置"></span>
         <span class="map-compass map-compass-n" aria-hidden="true">北 N</span>
@@ -536,6 +536,30 @@
         <p class="npc-line" id="npcLine"></p>
       </div>
       <div class="npc-options" id="npcOptions"></div>
+    </div>
+  </div>
+
+  <!-- 绘画+AI 画室：涂鸦画布，笔画会变形为小城简笔轮廓 -->
+  <div class="painting-overlay" id="paintingOverlay" role="dialog" aria-modal="true" aria-label="绘画+AI 快速课堂">
+    <div class="painting-paper">
+      <header class="painting-head">
+        <div class="painting-heading">
+          <span class="painting-kicker">PAINTING + AI</span>
+          <h2 class="painting-title">绘画+AI · 快速课堂</h2>
+        </div>
+        <button class="painting-close" id="paintingClose" type="button" aria-label="收起画布">✕</button>
+      </header>
+      <div class="painting-easel">
+        <canvas id="paintingCanvas"></canvas>
+        <span class="painting-badge" id="paintingBadge">AI 待命 · 画完点「交给 AI」</span>
+      </div>
+      <footer class="painting-toolbar">
+        <span class="painting-hint">随便画几笔，剩下的交给 AI</span>
+        <div class="painting-actions">
+          <button class="painting-btn" id="paintingClear" type="button">清空</button>
+          <button class="painting-btn painting-btn-primary" id="paintingDone" type="button">交给 AI ✨</button>
+        </div>
+      </footer>
     </div>
   </div>
 

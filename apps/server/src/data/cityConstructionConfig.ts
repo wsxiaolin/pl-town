@@ -64,11 +64,12 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // 建筑（外部 Three.js 作品《木漏时光.html》移植），目录重生成后自动追加
   // 为治理项目。komorebi 与鸽子广场一样保持待建，由居民在众议院共同筹建；
   // 既有项目与 initialBuiltBuildingIds 零改动。
-  // 2026-10-07.genshin.1: 新增 north_genshin_institute（原神研究院——
-  // 彩蛋体验建筑，致敬《原神》启动页的程序化复刻，交互入口在北城作品
-  // 街坊），目录重生成后自动追加为治理项目。同 komorebi 保持待建，不进
-  // DEFAULT_COMPLETED 赠礼名单；既有项目与 initialBuiltBuildingIds 零改动。
-  version: '2026-10-07.genshin.1',
+  // 2026-10-09.painting-merge.1: 合并 #235 后——新增绘画+AI 画室
+  // （painting_ai，(9,24)），目录重生成后自动追加为筹建项目，与 komorebi
+  // 一样保持待建不赠礼；同批含 main 已落的 north_genshin_institute
+  // （原神研究院彩蛋，北城作品街坊）。既有项目与 initialBuiltBuildingIds
+  // 零改动。
+  version: '2026-10-09.painting-merge.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))

@@ -1,24 +1,25 @@
-// 世界地形配置。未来加入山河湖海时，在 terrain/ 下按要素分文件
-// （如 river-lan.ts、lake-mirror.ts），在这里按空间顺序聚合。
-// 目前城市边缘仅有西海滩一处地形（配置见 cityConfig.ts 的 WEST_BEACH，
-// 渲染见 rendering/westBeach.ts），尚未迁移到本协议，迁移前保持不动。
+// 世界地形配置聚合。地形按要素分文件放在 terrain/ 下，这里按空间顺序
+// 聚合为单一 WORLD_TERRAIN 列表；渲染实现见 rendering/terrain/ 下的
+// mountainRanges.ts（岚屏岭）、riverChenxi.ts（晨溪）、minglanIsles.ts（明澜外海）、
+// cityGround.ts（城缘草甸——城市地面建模）。
+//
+// 目前城市边缘仅有西海滩一处既有地形尚未迁移到本协议（配置见
+// cityConfig.ts 的 WEST_BEACH，渲染见 rendering/westBeach.ts），迁移前保持不动。
 import type { TerrainFeatureConfig } from './_types';
+import { LANPING_RANGE } from './range-lanping';
+import { CHENXI_RIVER } from './river-chenxi';
+import { MINGLAN_ISLES } from './sea-minglan';
+import { CITYSIDE_MEADOW } from './ground-cityside';
 
 /**
- * 世界级地形要素列表。渲染器与导航系统未来从这里读取；
- * 空数组 = 无自定义地形，城市依赖现有平面地表与西海滩实现。
+ * 世界级地形要素列表（岚屏岭山脉 + 晨溪河 + 明澜外海 + 城缘草甸）。
+ * 渲染器逐条消费上述分文件配置；导航系统按 navigation* 字段避让
+ * （当前由各渲染器/装配层按需接线，见 rendering/terrain/ 与
+ * city/cityWorldAssembly.ts）。
  */
 export const WORLD_TERRAIN: readonly TerrainFeatureConfig[] = [
-  // 示例（未实现，仅示意配置形态）：
-  // {
-  //   id: 'river-lan',
-  //   kind: 'river',
-  //   label: '澜溪',
-  //   x: 0, z: -60,
-  //   width: 6,
-  //   path: [[-60, -60], [60, -64]],
-  //   renderHint: { color: 0x5a8fb8, animated: true, textures: ['water'] },
-  //   navigationBlocking: true,
-  //   navigationClearance: 1.2,
-  // },
+  ...LANPING_RANGE,
+  ...CHENXI_RIVER,
+  ...MINGLAN_ISLES,
+  ...CITYSIDE_MEADOW,
 ];

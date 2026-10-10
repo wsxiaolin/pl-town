@@ -1,0 +1,117 @@
+/* ════════════════════════════════════════════════════════════════════════════ */
+/* PAINTING + AI — 画室涂鸦画布（笔画变形为小城简笔轮廓）                        */
+/* ════════════════════════════════════════════════════════════════════════════ */
+
+.painting-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 640;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(10, 14, 22, 0.74);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.painting-overlay.open { opacity: 1; pointer-events: all; }
+
+.painting-paper {
+  width: min(720px, 94vw);
+  max-height: min(88vh, 88dvh);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  background: linear-gradient(135deg, #F5E6C8 0%, #EEDCB3 40%, #E8D5A8 100%);
+  border: 1px solid #C4A86D;
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4);
+  transform: translateY(16px) scale(0.96);
+  transition: transform 0.3s ease;
+}
+.painting-overlay.open .painting-paper { transform: none; }
+
+.painting-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.painting-kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.22em; color: #8a6d3f; }
+.painting-title { margin-top: 2px; font-size: 19px; color: var(--text-dark); }
+.painting-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0,0,0,0.14);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  color: #6b5636;
+  font-size: 14px;
+  cursor: pointer;
+}
+.painting-close:hover { background: rgba(255,255,255,0.85); }
+
+.painting-easel {
+  position: relative;
+  border: 1px solid #C4A86D;
+  border-radius: 10px;
+  background: radial-gradient(circle at 18% 22%, rgba(59,111,224,0.06), transparent 42%), #FBF7EC;
+  box-shadow: inset 0 0 0 4px rgba(255,255,255,0.5);
+  overflow: hidden;
+}
+#paintingCanvas {
+  display: block;
+  width: 100%;
+  height: min(48vh, 46dvh, 420px);
+  min-height: 240px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.painting-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%) translateY(6px);
+  padding: 5px 14px;
+  border-radius: 99px;
+  background: rgba(42, 48, 56, 0.82);
+  color: #f2ecdd;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.painting-overlay.is-morphing .painting-badge,
+.painting-overlay.is-done .painting-badge { opacity: 1; transform: translateX(-50%) translateY(0); }
+.painting-overlay.is-morphing #paintingCanvas { cursor: default; }
+.painting-overlay.is-done .painting-badge { background: rgba(59, 111, 224, 0.9); }
+
+.painting-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.painting-hint { font-size: 11px; color: #8a6d3f; letter-spacing: 0.06em; }
+.painting-actions { display: flex; gap: 8px; }
+.painting-btn {
+  padding: 7px 16px;
+  border: 1px solid rgba(0,0,0,0.16);
+  border-radius: 99px;
+  background: rgba(255,255,255,0.55);
+  color: var(--text-dark);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.painting-btn:hover { background: rgba(255,255,255,0.9); }
+.painting-btn:disabled { opacity: 0.45; cursor: default; }
+.painting-btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.painting-btn-primary:hover { background: #2f5ec6; }
+
+@media (max-width: 680px) {
+  .painting-overlay { padding: 10px; }
+  .painting-paper { padding: 14px 14px 12px; }
+  #paintingCanvas { height: min(40vh, 40dvh); min-height: 200px; }
+  .painting-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .painting-overlay, .painting-paper, .painting-badge, .painting-btn { transition: none; }
+}

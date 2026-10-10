@@ -367,6 +367,8 @@ try {
       'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
       // 木漏时光（2026-10-03）：同上，保持待建。
       'north_komorebi',
+      // 绘画+AI 画室（2026-10-06.painting.1）：同上，保持待建不赠礼。
+      'painting_ai',
       // 原神研究院（2026-10-07）：同上，保持待建。
       'north_genshin_institute',
     ];
