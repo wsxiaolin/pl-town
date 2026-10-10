@@ -484,15 +484,11 @@ function init() {
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
     getFirstPerson: () => firstPersonController && {
-      isActive: firstPersonController.isActive,
-      enter: firstPersonController.enter,
-      exit: firstPersonController.exit,
-      toggle: firstPersonController.toggle,
+      // 紧凑单行配对以守住 source-size 护栏（该文件长期 999/1000 临界）。
+      isActive: firstPersonController.isActive, enter: firstPersonController.enter,
+      exit: firstPersonController.exit, toggle: firstPersonController.toggle,
       getActiveCamera: firstPersonController.getActiveCamera,
-      worldStyle: {
-        toonActive: firstPersonToonWorld.isActive,
-        skyActive: firstPersonToonSky.isActive,
-      },
+      worldStyle: { toonActive: firstPersonToonWorld.isActive, skyActive: firstPersonToonSky.isActive },
     },
     getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
     getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
