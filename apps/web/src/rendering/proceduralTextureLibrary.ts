@@ -939,6 +939,11 @@ export function createProceduralTextureLibrary(
     _paint('ground4',256,(ctx,s)=>{ctx.fillStyle='#C0D0A0';ctx.fillRect(0,0,s,s);for(let i=0;i<600;i++){const x=Math.random()*s,y=Math.random()*s;const sh=0.65+Math.random()*0.5;ctx.fillStyle=`rgba(${Math.floor(100*sh)},${Math.floor(150*sh)},${Math.floor(70*sh)},0.5)`;ctx.fillRect(x,y,1,2+Math.random()*3);}applyNoiseLattice(ctx,s,0.02);});
     _paint('ground5',256,(ctx,s)=>{ctx.fillStyle='#E8E7E4';ctx.fillRect(0,0,s,s);const ts=32;for(let y=0;y<s;y+=ts){const off=((y/ts)%2)*(ts/2);for(let x=-ts;x<s+ts;x+=ts){const bx=x+off,sh=0.9+Math.random()*0.12;ctx.fillStyle=_shade([232,231,228],sh);ctx.fillRect(bx+1,y+1,ts-2,ts-2);ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(bx+ts-2,y,2,ts);ctx.fillRect(bx,y+ts-2,ts,2);}}applyNoiseLattice(ctx,s,0.015);});
     _paint('ground6',256,(ctx,s)=>{ctx.fillStyle='#D0CCC8';ctx.fillRect(0,0,s,s);ctx.strokeStyle='rgba(100,90,80,0.2)';ctx.lineWidth=1;for(let i=0;i<20;i++){ctx.beginPath();const x=Math.random()*s,y=Math.random()*s;ctx.moveTo(x,y);for(let j=0;j<5;j++)ctx.lineTo(x+(Math.random()-0.5)*40,y+(Math.random()-0.5)*40);ctx.stroke();}for(let i=0;i<200;i++){const x=Math.random()*s,y=Math.random()*s;const sh=Math.random();ctx.fillStyle=`rgba(${180+Math.floor(sh*40)},${170+Math.floor(sh*30)},${160+Math.floor(sh*20)},0.3)`;ctx.fillRect(x,y,1.5,1.5);}applyNoiseLattice(ctx,s,0.02);});
+
+    // --- Snow ground: soft blue-white drifts（山体雪带键 snow_ground 的 canvas
+    // 兜底：生成纹理关闭时（textureRendering 默认 false）雪带仍有贴图；生成
+    // 路径可用时依旧优先 snow_ground_color.webp）---
+    _paint('snow_ground',256,(ctx,s)=>{ctx.fillStyle='#EDF1F5';ctx.fillRect(0,0,s,s);for(let i=0;i<240;i++){const x=Math.random()*s,y=Math.random()*s,r=2+Math.random()*7;const g=ctx.createRadialGradient(x,y,0,x,y,r);const tone=Math.random();g.addColorStop(0,tone<0.5?'rgba(206,218,232,0.4)':'rgba(255,255,255,0.5)');g.addColorStop(1,'rgba(206,218,232,0)');ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2);}for(let i=0;i<60;i++){const x=Math.random()*s,y=Math.random()*s;ctx.fillStyle='rgba(148,168,190,0.35)';ctx.fillRect(x,y,1+Math.random()*2,1);}for(let i=0;i<26;i++){const x=Math.random()*s,y=Math.random()*s;ctx.fillStyle='rgba(255,255,255,0.85)';ctx.fillRect(x,y,1.5,1.5);}applyNoiseLattice(ctx,s,0.015);});
   }
 
   let paintersRegistered = false;
@@ -988,7 +993,7 @@ export function createProceduralTextureLibrary(
   }
 
 
-  return {
+  const library: ProceduralTextureLibrary = {
     initialize: initTextures,
     paintPending: paintPendingTextures,
     repeat: _tex,
@@ -996,4 +1001,35 @@ export function createProceduralTextureLibrary(
     refreshWeather,
     backgrounds: TEX,
   };
+  activeTextureLibrary = library;
+  return library;
+}
+
+export type ProceduralTextureLibrary = {
+  initialize: () => void;
+  paintPending: () => void;
+  repeat: (key: string, rx?: number, ry?: number) => THREE.Texture | null;
+  addFacade: (
+    g: THREE.Group,
+    texKey: string,
+    w: number,
+    h: number,
+    y: number,
+    zOffset: number,
+    rotY?: number,
+  ) => THREE.Mesh | null;
+  refreshWeather: () => void;
+  backgrounds: { skyDay: THREE.Texture | null; skyNight: THREE.Texture | null };
+};
+
+// 模块级活动实例注册表：纹理库由 cityGraphics 在模块加载期创建，而
+// rendering/terrain 下的地形工厂（mountainRanges 等）只接收 { scene }，
+// 无法经参数拿到库实例。这里保存最近一次创建的库，供地形工厂按
+// createCitySurfaces 同样的公开 API（library.repeat(key, rx, ry)）取图，
+// 复用同一 ResourcePool 纹理缓存。纹理归池所有，地形 dispose() 不得
+// 释放经此取得的共享纹理。
+let activeTextureLibrary: ProceduralTextureLibrary | null = null;
+
+export function getActiveProceduralTextureLibrary(): ProceduralTextureLibrary | null {
+  return activeTextureLibrary;
 }

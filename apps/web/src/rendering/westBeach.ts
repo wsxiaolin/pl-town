@@ -43,6 +43,7 @@ const SURF_VERT = /* glsl */ `
   uniform float lift;
   uniform float limitX;
   varying float vFront;
+  varying float vZ;
   varying vec2 vSurfPosition;
   void main() {
     vec3 p = position;
@@ -71,6 +72,7 @@ const SURF_VERT = /* glsl */ `
     float edge = 1.0 - smoothstep(0.72, 1.0, uv.x);
     p.y = ${SURF_SURFACE_Y} + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3) * edge;
     vFront = uv.x;
+    vZ = position.z;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }
 `;
@@ -80,7 +82,9 @@ const SURF_FRAG = /* glsl */ `
   uniform float daylight;
   uniform vec3 shallowDay;
   uniform vec3 shallowNight;
+  uniform vec2 mouthGap;
   varying float vFront;
+  varying float vZ;
   varying vec2 vSurfPosition;
   float foamHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -110,6 +114,12 @@ const SURF_FRAG = /* glsl */ `
     float alpha = mix(0.24, 0.42, smoothstep(0.0, 0.7, vFront));
     alpha *= smoothstep(0.0, 0.5, vFront);
     alpha = mix(alpha, 0.0, smoothstep(0.72, 1.0, vFront));
+    // 河口水道（v6）：晨溪河口湾 + 入海羽流横穿本条带的 z 区间，真实
+    // 河口是被河流切开的水道——带内把 lapping 压到 15%，两端 2.5 单位
+    // 平滑过渡。羽流水面（y 更高、renderOrder 更早）在重叠区盖在带上方。
+    float inMouth = smoothstep(mouthGap.x - 2.5, mouthGap.x + 2.5, vZ)
+      * (1.0 - smoothstep(mouthGap.y - 2.5, mouthGap.y + 2.5, vZ));
+    alpha *= 1.0 - 0.85 * inMouth;
     gl_FragColor = vec4(shallow, alpha);
     // Same output chain as the sea sheet's Water shader, so the strip and
     // the water it sits on agree under every tone-mapping exposure.
@@ -150,6 +160,9 @@ function createShoreSurf(
       limitX: { value: westBeachWaterlineMaxX(SURF_REACH) },
       shallowDay: { value: new THREE.Color(0x2c8699) },
       shallowNight: { value: new THREE.Color(0x0e2b36) },
+      // 河口带 z 区间（v6 淡出用）：晨溪河口湾 z -106..-89.4 + 羽流
+      // z -105.7..-93.1 的并集取整——见 riverChenxi.ts 的 ESTUARY_BBOX。
+      mouthGap: { value: new THREE.Vector2(-105, -90.5) },
     },
   });
   const mesh = new THREE.Mesh(geometry, material);

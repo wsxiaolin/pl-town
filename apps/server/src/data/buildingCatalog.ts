@@ -558,6 +558,14 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     storyLocked: false
   },
   {
+    id: "painting_ai",
+    label: "绘画+AI",
+    num: "52A",
+    x: 9,
+    z: 24,
+    storyLocked: false
+  },
+  {
     id: "north_genshin_institute",
     label: "原神研究院",
     num: "66",
