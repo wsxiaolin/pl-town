@@ -181,7 +181,11 @@ export function createDetailKit(ctx: BuilderContext): BuildingDetailKit {
     const { x, y, z, facing = 'front', w = 0.34, h = 0.42, frameColor = 0xf0efec, lit = false, sill = true, mullions = false } = opts;
     const sub = oriented(group, x, y, z, facing);
     part(sub, ctx.rbox(w, h, 0.05), { color: frameColor, roughness: 0.5, tex: 'wood', rx: 1, ry: 1 }, [0, 0, 0.025]);
-    part(sub, ctx.rbox(w - 0.06, h - 0.06, 0.02), lit ? litGlassMaterial() : glassMaterial(), [0, 0, 0.012], false);
+    // 玻璃前移凸出框面（前表面 0.052 > 框面 0.05）：旧值 z=0.012（前表面
+    // 0.022）完全埋进实心窗框里被遮挡，窗户渲染成实心板（审查 🔴）。
+    // 玻璃贴框前 0.002 悬空差在街景距离不可见；四边框方案每窗 +4 mesh，
+    // 数百扇窗会拖垮 draw call，故取零几何增量的前移方案。
+    part(sub, ctx.rbox(w - 0.06, h - 0.06, 0.02), lit ? litGlassMaterial() : glassMaterial(), [0, 0, 0.042], false);
     if (mullions) {
       part(sub, ctx.rbox(0.024, h - 0.06, 0.056), { color: frameColor, roughness: 0.5 }, [0, 0, 0.028], false);
       part(sub, ctx.rbox(w - 0.06, 0.024, 0.056), { color: frameColor, roughness: 0.5 }, [0, 0, 0.028], false);

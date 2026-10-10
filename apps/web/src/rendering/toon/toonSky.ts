@@ -160,6 +160,9 @@ export function createToonSky(options: {
   let dome: THREE.Mesh | null = null;
   let material: THREE.ShaderMaterial | null = null;
   let fog: THREE.Fog | null = null;
+  // 基础场景的雾只在启动时创建一次（weatherEffect），enter() 覆盖前必须
+  // 保存，exit() 才能还原——否则退出第一人称后雨/雪雾永久丢失（审查 🔴）。
+  let savedFog: THREE.Fog | null = null;
   let elapsed = 0;
   let nightAmount = 0;
   let active = false;
@@ -198,6 +201,7 @@ export function createToonSky(options: {
     scene.add(dome);
     // Fog starts beyond street scale so cel band contrast stays punchy.
     fog = new THREE.Fog(DAY_FOG.getHex(), 55, 210);
+    savedFog = scene.fog instanceof THREE.Fog ? scene.fog : null;
     scene.fog = fog;
     // Start already in the right mood — no sunrise when entering at night.
     nightAmount = night ? 1 : 0;
@@ -215,7 +219,11 @@ export function createToonSky(options: {
     }
     material?.dispose();
     material = null;
-    scene.fog = null;
+    // 还原进入前的雾（可能是天气雾，也可能是 null）：恢复 null 会把
+    // 基础场景雾彻底抹掉——weatherEffect 的 near/far 更新（雨雪浓雾）
+    // 依赖 scene.fog 存在，丢失后不再生效。
+    scene.fog = savedFog;
+    savedFog = null;
     fog = null;
   }
 

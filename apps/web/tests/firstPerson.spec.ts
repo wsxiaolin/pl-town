@@ -203,7 +203,9 @@ test('first person restyles the city into the cel-shaded toon world and restores
   });
   expect(after.toonActive).toBe(false);
   expect(after.skyDome).toBe(false);
-  expect(after.fogged).toBe(false);
+  // 退出后基础场景雾（weatherEffect 启动时创建）应被还原，而非被抹成
+  // null——否则后续雨/雪雾永久丢失（曾为此审查 BLOCKER，此断言为修复固化）。
+  expect(after.fogged).toBe(true);
   expect(after.toonMeshes).toBe(0);
   expect(after.standardMeshes).toBeGreaterThan(50);
 });

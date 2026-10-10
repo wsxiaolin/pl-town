@@ -224,13 +224,17 @@ export function createFirstPersonController(options: FirstPersonControllerOption
   }, { signal: options.signal });
 
   options.signal.addEventListener('abort', () => {
-    if (active) {
-      active = false;
-      options.document.body.classList.remove('first-person-active');
-      const cursor = options.getCursor();
-      if (cursor) cursor.visible = previousCursorVisible;
-      options.onStateChange?.(false);
-    }
+    if (!active) return;
+    active = false;
+    options.document.body.classList.remove('first-person-active');
+    const cursor = options.getCursor();
+    if (cursor) cursor.visible = previousCursorVisible;
+    // app 生命周期 abort（销毁）时补上退出的核心 teardown：onExit 负责
+    // toon world / toon sky / fog 的释放（gradientMap、天空 dome 等），
+    // 原实现漏掉会泄漏到销毁后的 renderer（审查 🟡）。toast 与
+    // exitPointerLock 在销毁路径上无意义，故不复用完整 exit()。
+    options.onExit();
+    options.onStateChange?.(false);
   }, { once: true });
 
   function update(delta: number): void {
