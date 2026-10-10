@@ -17,6 +17,8 @@ test('绘画+AI：确认快速学习 → 涂鸦 → 变形为小城简笔轮廓 
   await page.locator('#npcOptions').getByRole('button', { name: '好呀，快速学！' }).click();
   const overlay = page.locator('#paintingOverlay');
   await expect(overlay).toHaveClass(/open/);
+  // 确认进入画布后对话层应静默收起（不能残留在半透明画布下透出）。
+  await expect(npc).not.toHaveClass(/open/);
 
   // 在画布上随手涂两笔
   const box = await page.locator('#paintingCanvas').boundingBox();

@@ -67,6 +67,11 @@ export function createPaintingAiCanvasController(options: { document: Document; 
   let rafHandle = 0;
   let closeTimer = 0;
   let resultNotified = false;
+  // morphing 状态提到控制器级：窗口 resize 时能按当前进度重绘当前帧
+  // （backing store 更新后 canvas 像素清空，必须重画，否则画面空白）。
+  let morphFrom: readonly SketchPoint[] | null = null;
+  let morphTo: readonly SketchPoint[] | null = null;
+  let morphStart = 0;
 
   const BADGE_IDLE = 'AI 待命 · 画完点「交给 AI」';
   const BADGE_MORPHING = 'AI 变形中…笔迹正在成为一座小城';
@@ -140,14 +145,16 @@ export function createPaintingAiCanvasController(options: { document: Document; 
     ctx.stroke();
   };
 
-  const renderMorphFrame = (from: readonly SketchPoint[], elapsedMs: number): void => {
+  const renderMorphFrame = (from: readonly SketchPoint[], to: readonly SketchPoint[], elapsedMs: number): void => {
     const space = fit();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, space.rect.width, space.rect.height);
     const t = clamp01(elapsedMs / MORPH_MS);
     const eased = easeInOutCubic(t);
     const morphed = from.map((point, index) => {
-      const target = CITY_SKYLINE[index] ?? CITY_SKYLINE[CITY_SKYLINE.length - 1]!;
+      // from/to 已在 startMorph 里重采样到同一弧长点数，逐点一一对应；
+      // 越界兜底仅作防御（不构成塌缩路径）。
+      const target = to[index] ?? to[to.length - 1] ?? point;
       return { x: point.x + (target.x - point.x) * eased, y: point.y + (target.y - point.y) * eased };
     });
     beginPath(4.5 - eased, eased < 0.55 ? INK : SKY_BLUE);
@@ -176,17 +183,26 @@ export function createPaintingAiCanvasController(options: { document: Document; 
     clearButton.disabled = true;
     const drawn = flattenStrokes(strokes);
     const source = drawn.length >= 2 ? drawn : fallbackScribble();
-    const from = resamplePolyline(source, Math.max(MORPH_POINT_COUNT, CITY_SKYLINE.length));
+    // 源笔迹与城廓线都重采样到同一弧长点数：逐点 lerp 才是真正的
+    // 「按弧长对应变形」。旧实现只采样 from（144 点）而 target 直接取
+    // 34 点 CITY_SKYLINE，index≥34 的 ~76% 笔迹点全部塌缩到最后一个
+    // 顶点，中间帧被吸向一隅（审查 BLOCKER）。
+    const pointCount = Math.max(MORPH_POINT_COUNT, CITY_SKYLINE.length);
+    const from = resamplePolyline(source, pointCount);
+    const to = resamplePolyline(CITY_SKYLINE, pointCount);
+    morphFrom = from;
+    morphTo = to;
+    morphStart = performance.now();
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      renderMorphFrame(from, MORPH_MS + DETAILS_MS + DETAILS_DELAY_MS);
+      renderMorphFrame(from, to, MORPH_MS + DETAILS_MS + DETAILS_DELAY_MS);
       finishMorph();
       return;
     }
-    const start = performance.now();
+    const start = morphStart;
     const totalMs = DETAILS_DELAY_MS + DETAILS_MS;
     const frame = (now: number): void => {
       const elapsed = now - start;
-      renderMorphFrame(from, elapsed);
+      renderMorphFrame(from, to, elapsed);
       if (elapsed < totalMs) {
         rafHandle = requestAnimationFrame(frame);
       } else {
@@ -197,6 +213,8 @@ export function createPaintingAiCanvasController(options: { document: Document; 
   };
 
   const finishMorph = (): void => {
+    morphFrom = null;
+    morphTo = null;
     overlay.classList.remove('is-morphing');
     overlay.classList.add('is-done');
     badge.textContent = BADGE_DONE;
@@ -267,6 +285,18 @@ export function createPaintingAiCanvasController(options: { document: Document; 
     renderDrawing();
   });
   bind(closeButton, 'click', () => requestClose());
+  // 画布打开期间窗口尺寸变化（旋转屏/改窗口）：backing store 跟随更新
+  // 并按当前阶段重绘，否则 canvas 像素保持旧分辨率、fit() 用新 rect
+  // 计算坐标导致绘制错位/拉伸（审查 🟡）。
+  options.document.defaultView?.addEventListener('resize', () => {
+    if (!open) return;
+    resizeBackingStore();
+    if (phase === 'morphing' && morphFrom && morphTo) {
+      renderMorphFrame(morphFrom, morphTo, performance.now() - morphStart);
+    } else {
+      renderDrawing();
+    }
+  }, { signal });
 
   return {
     open(newHandlers) {

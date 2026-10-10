@@ -6,7 +6,7 @@ import type { PaintingAiCanvasHandlers } from '../adapters/ui/paintingAiCanvasCo
 export const PAINTING_AI_PRAISE = 'wow你真的太厉害了，随便一画就是此等高度';
 
 export interface PaintingAiStudioOptions {
-  getDialogs: () => Pick<CityDialogController, 'openStory' | 'closeNpc'> | null;
+  getDialogs: () => Pick<CityDialogController, 'openStory' | 'closeNpc' | 'dismissNpc'> | null;
   openCanvas: (handlers: PaintingAiCanvasHandlers) => void;
   /** 静默收起画布（对话被外部关闭时兜底，不触发画布自己的完成/取消回调）。 */
   closeCanvas: () => void;
@@ -39,15 +39,21 @@ export function createPaintingAiStudio(options: PaintingAiStudioOptions): Painti
       options: [
         {
           text: '好呀，快速学！',
-          onPick: () => options.openCanvas({
-            onComplete: () => {
-              // 先结算互动（closeNpc/visit 计数可能同步弹成就提示），
-              // 表扬 toast 延后半拍，保证「此等高度」是玩家看到的最后一句。
-              complete();
-              window.setTimeout(() => options.showToast(PAINTING_AI_PRAISE), 400);
-            },
-            onCancel: complete,
-          }),
+          onPick: () => {
+            // 先静默收起对话层再开画布：半透明全屏画布（z-index 640）下
+            // 残留的对话面板（#npcOverlay z-index 560）会透出（审查 🟡）。
+            // dismissNpc 不触发 story.onClose，结算仍由画布完成/取消路径驱动。
+            dialogs.dismissNpc();
+            options.openCanvas({
+              onComplete: () => {
+                // 先结算互动（closeNpc/visit 计数可能同步弹成就提示），
+                // 表扬 toast 延后半拍，保证「此等高度」是玩家看到的最后一句。
+                complete();
+                window.setTimeout(() => options.showToast(PAINTING_AI_PRAISE), 400);
+              },
+              onCancel: complete,
+            });
+          },
         },
         { text: '先不了，改天再来', onPick: complete },
       ],
