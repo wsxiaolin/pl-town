@@ -3,7 +3,7 @@ import type { WebGLRenderer } from 'three';
 import { BUILDING_DEFS } from '../src/city/data/buildings';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
 import type { MiniCityDebugApi } from '../src/city/debugApi';
-import { stubCityWebSocket, stubWorldCatalogWebSocket, waitForCityReady } from './helpers';
+import { stubCityWebSocket, stubWorldCatalogWebSocket, waitForCityReady, waitForMapShotsPreloaded } from './helpers';
 
 type MapSceneWindow = Window & {
   _mini: MiniCityDebugApi;
@@ -50,6 +50,10 @@ async function openMap(page: Page, catalogChanges = false) {
     return route.fulfill({ status: 204, body: '' });
   });
   await waitForCityReady(page, 'map-scene-tester');
+  // Let the boot-time atlas preload land first — this spec counts WebGL
+  // contexts at every step, and a late north-page capture from the preload
+  // would read as an unexpected +1 mid-test.
+  await waitForMapShotsPreloaded(page);
   await page.locator('#mapToggle').click({ force: true });
   await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
   await expect(page.locator('#mapImage')).toHaveAttribute('src', /^data:image\/png/);

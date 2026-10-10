@@ -41,6 +41,14 @@ window._mini.focus(-16, -70, 9)  // 西坊街景近景
 window._mini.focus(0, 0, 12)     // 主城广场
 ```
 
+## 地图图集（mapShotsReady）
+
+```js
+window._mini.mapShotsReady()   // → { main: boolean, north: boolean }
+```
+
+全景地图是「两页图集」：主城一页、星语北城一页，同跨度同比例，打开时按玩家脚下位置翻到所在的一页（分界在环城步道以北 z = -40）。两页截图在启动揭幕后由空闲回调预加载（2.5s 兜底定时器），主题切换或场景变更会双双失效、下次打开重拍。测试断言 WebGL 上下文数时，先用 `mapShotsReady()` 等两页都就绪再开图，否则预加载的补拍会算进断言窗口（见 `tests/helpers.ts` 的 `waitForMapShotsPreloaded`）。
+
 ## 基础对象
 
 ```js

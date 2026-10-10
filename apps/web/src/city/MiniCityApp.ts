@@ -472,6 +472,8 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
+    getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
+    getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
     teleport: devTeleport,
     focus: devFocus,
   });
@@ -533,7 +535,10 @@ function init() {
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
     fountainClear: roadNavigation.fountainClear, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
+    // 标签位置跟随当前打开的那一页地图（主城/星语北城），不在当前页的
+    // 住宅返回 null、不渲染标签。
+    projectToMap: (x, z) => mapController?.projectToActiveMap(x, z) ?? null,
+    getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
     isResidenceUnavailable: availability.isResidenceUnavailable,
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
@@ -883,6 +888,7 @@ const lifecycle = createCityRuntimeLifecycle({
   isNight: () => isNight,
   initCity: init,
   prepareFirstFrame,
+  preloadMapShots: () => mapController?.preloadShots(),
   startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
   proceedToCity,
   showLogin: () => loginController?.showLogin(),
