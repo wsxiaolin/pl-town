@@ -29,6 +29,14 @@ export function createCityRuntimeLifecycle(options: {
   isNight: () => boolean;
   initCity: () => void;
   /**
+   * Synchronous procedural-texture painting, called by the HEAVY boot right
+   * after its fetches are in flight — the network streams while the main
+   * thread paints, hiding the pass under the download stage. Optional so
+   * tests can construct the lifecycle with a stub; when omitted initCity()
+   * paints exactly as before.
+   */
+  paintProceduralTextures?: () => void;
+  /**
    * Precompile shaders + warm-up frames before reveal. REQUIRED: the frame
    * loop is held (holdRender) when the city initializes, and this is the
    * release path — a missing release would leave a permanently black canvas.
@@ -175,10 +183,22 @@ export function createCityRuntimeLifecycle(options: {
     let download: Awaited<ReturnType<typeof downloadAllAssets>> | null = null;
     let downloadFailed = false;
     try {
-      download = await downloadAllAssets((progress) => {
+      const downloadPromise = downloadAllAssets((progress) => {
         pipeline.setStageProgress('download', stage1Share * (progress.loadedFiles / Math.max(1, progress.totalFiles)));
         pipeline.setDetail(`${reasonTag} · ${describeDownload(progress)}`);
       }, bootAbort.signal, include);
+      // Procedural canvases paint WHILE those fetches stream — the network
+      // needs no main thread, so the pass hides under the download stage it
+      // used to follow serially inside initCity(). Synchronous on purpose:
+      // timer yields measured ~185 ms each against an animating splash on
+      // software renderers (62 painters → +11.5 s wall). A throwing painter
+      // leaves its slot unset; initCity() retries it inside its own guard.
+      try {
+        options.paintProceduralTextures?.();
+      } catch (error) {
+        console.error('Procedural texture pre-paint failed', error);
+      }
+      download = await downloadPromise;
       downloadFailed = download.failedFiles > 0;
     } catch {
       downloadFailed = true;
