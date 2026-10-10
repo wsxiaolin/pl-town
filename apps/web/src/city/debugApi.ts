@@ -102,6 +102,9 @@ function createMiniCityApi(options: DebugApiOptions) {
       },
     },
     get tutorial() { return options.getTutorial(); },
+    get firstPerson() {
+      return options.getFirstPerson?.() ?? null;
+    },
     /** Which map atlas pages (主城 main / 星语北城 north) already have a
      *  captured snapshot — lets tests observe the boot-time preload without
      *  opening the map (opening would capture lazily and mask the check). */
@@ -150,6 +153,18 @@ export type DebugApiOptions = {
   setWeather: (weather: Weather) => void;
   getIceSanctum: () => IceSanctumController | null;
   getTutorial: () => OnboardingTutorialController;
+  getFirstPerson?: () => {
+    isActive: () => boolean;
+    enter: () => boolean;
+    exit: () => void;
+    toggle: () => void;
+    getActiveCamera: () => unknown;
+    /** Cel-shading world restyle + painted sky dome (first-person only). */
+    worldStyle: {
+      toonActive: () => boolean;
+      skyActive: () => boolean;
+    };
+  } | null;
   getMapShotsReady: () => { main: boolean; north: boolean };
   getMapShotsPreloadSettled: () => boolean;
   teleport: (x: number, z: number) => boolean;

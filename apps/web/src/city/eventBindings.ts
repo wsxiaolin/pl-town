@@ -25,6 +25,8 @@ export type EventBindingsOptions = {
   getMutualAidController?: () => { close: () => void } | null;
   getLibrarySearchController?: () => { close: () => void } | null;
   toggleMapMode: () => void;
+  toggleWalkMode?: () => void;
+  isWalkModeActive?: () => boolean;
   closeModal: () => void;
   closeNpcDialog: () => void;
   getLoginController: () => { login: () => void; validateInput: () => void; showLogin: () => void; resetVerification: () => void } | null;
@@ -122,6 +124,8 @@ export function createEventBindings(options: EventBindingsOptions) {
       postWorkComment: (event) => communityPanels?.postWorkComment(event),
       isMapOpen: () => Boolean(options.getMapController()?.isOpen()),
       toggleMap: options.toggleMapMode,
+      toggleWalkMode: options.toggleWalkMode,
+      isWalkModeActive: options.isWalkModeActive,
       closeModal: options.closeModal,
       closeNpcDialog: options.closeNpcDialog,
       login: () => options.getLoginController()?.login(),

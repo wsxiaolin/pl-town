@@ -43,7 +43,7 @@ export function createBuildingSceneController(options: {
       const building = builder(definition);
       const parameters = (building.body?.geometry as THREE.BoxGeometry | undefined)?.parameters;
       const facade = definition.facade ?? inferFacade(definition.shape);
-      if (parameters && facade && parameters.width !== undefined && parameters.height !== undefined && parameters.depth !== undefined) {
+      if (!building.skipFacadeDecal && parameters && facade && parameters.width !== undefined && parameters.height !== undefined && parameters.depth !== undefined) {
         const offset = 0.024;
         options.addFacade(building.group, facade, parameters.width, parameters.height, building.body!.position.y, parameters.depth / 2 + offset);
         const back = options.addFacade(building.group, facade, parameters.width, parameters.height, building.body!.position.y, -(parameters.depth / 2 + offset));

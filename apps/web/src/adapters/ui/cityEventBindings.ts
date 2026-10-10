@@ -21,6 +21,8 @@ export function bindCityUiEvents(options: {
   postWorkComment: (event: SubmitEvent) => void;
   isMapOpen: () => boolean;
   toggleMap: () => void;
+  toggleWalkMode?: () => void;
+  isWalkModeActive?: () => boolean;
   closeModal: () => void;
   closeNpcDialog: () => void;
   login: () => void;
@@ -42,6 +44,7 @@ export function bindCityUiEvents(options: {
     else void document.documentElement.requestFullscreen();
   }, { signal });
   document.getElementById('spClose')?.addEventListener('click', options.closeStats, { signal });
+  document.getElementById('walkToggle')?.addEventListener('click', () => options.toggleWalkMode?.(), { signal });
   document.getElementById('statsToggle')?.addEventListener('click', options.openStats, { signal });
   document.getElementById('spMemorial')?.addEventListener('click', () => {
     options.openMemorial(options.closeStats);
@@ -63,6 +66,7 @@ export function bindCityUiEvents(options: {
   document.getElementById('workCommentForm')?.addEventListener('submit', options.postWorkComment, { signal });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if (options.isWalkModeActive?.()) return options.toggleWalkMode?.();
     if (options.isMapOpen()) return options.toggleMap();
     if (document.getElementById('academyReader')?.classList.contains('open')) return options.closeAcademyReader();
     options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeMutualAid(); options.closeLibrarySearch(); options.closeModal(); options.closeNpcDialog();
