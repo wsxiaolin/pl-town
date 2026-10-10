@@ -449,6 +449,7 @@ function init() {
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
     getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
+    getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
     teleport: devTeleport,
     focus: devFocus,
   });

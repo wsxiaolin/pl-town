@@ -106,6 +106,10 @@ function createMiniCityApi(options: DebugApiOptions) {
      *  captured snapshot — lets tests observe the boot-time preload without
      *  opening the map (opening would capture lazily and mask the check). */
     mapShotsReady: () => options.getMapShotsReady(),
+    /** True once the boot map-atlas preload attempt has run to completion
+     *  (success or failure), so tests can wait for the attempt to settle
+     *  without requiring both pages to have been captured. */
+    mapShotsPreloadSettled: () => options.getMapShotsPreloadSettled(),
     /** Snap the player (and the camera that follows them) to a world spot. */
     teleport: (x: number, z: number) => options.teleport(x, z),
     /** Teleport + optional orthographic zoom (bigger = wider view). */
@@ -147,6 +151,7 @@ export type DebugApiOptions = {
   getIceSanctum: () => IceSanctumController | null;
   getTutorial: () => OnboardingTutorialController;
   getMapShotsReady: () => { main: boolean; north: boolean };
+  getMapShotsPreloadSettled: () => boolean;
   teleport: (x: number, z: number) => boolean;
   focus: (x: number, z: number, zoom?: number) => boolean;
 };

@@ -57,18 +57,29 @@ export async function waitForCityBooted(page: Page): Promise<void> {
 }
 
 /**
- * Wait for the boot-time map atlas preload to settle: both district pages
- * (主城 main + 星语北城 north) have their snapshot captured. Map specs that
- * count WebGL contexts must call this before opening the map — the preload is
- * scheduled off the boot critical path (idle callback + 2.5s fallback timer)
- * and a late-landing north capture mid-test would otherwise read as an
- * unexpected context in the assertions.
+ * Wait for the boot-time map atlas preload to settle. Resolves once both
+ * district pages (主城 main + 星语北城 north) have a snapshot, OR once the
+ * one-shot preload attempt has completed without producing them (a software-GL
+ * capture can legitimately fail and leaves the page uncached for the on-demand
+ * path). Map specs that count WebGL contexts must call this before opening the
+ * map — the preload is scheduled off the boot critical path (idle callback +
+ * 2.5s fallback timer) and a late-landing capture mid-test would otherwise read
+ * as an unexpected context in the assertions. Callers that actually require
+ * both pages (e.g. the preload smoke test) should assert `mapShotsReady()`
+ * themselves after this settles.
  */
 export async function waitForMapShotsPreloaded(page: Page, timeout = 20_000): Promise<void> {
   await page.waitForFunction(
     () => {
-      const shots = (window as { _mini?: { mapShotsReady?: () => { main: boolean; north: boolean } } })._mini?.mapShotsReady?.();
-      return Boolean(shots?.main && shots?.north);
+      const mini = (window as {
+        _mini?: {
+          mapShotsReady?: () => { main: boolean; north: boolean };
+          mapShotsPreloadSettled?: () => boolean;
+        };
+      })._mini;
+      const shots = mini?.mapShotsReady?.();
+      if (shots?.main && shots?.north) return true;
+      return Boolean(mini?.mapShotsPreloadSettled?.());
     },
     undefined,
     { timeout },

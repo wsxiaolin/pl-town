@@ -55,12 +55,16 @@ type MapRegion = {
   /** Whether a world point belongs on this page (decides icon / house-tag
    *  placement and which page the map opens on for a player standing there). */
   contains: (x: number, z: number) => boolean;
-  /** Objects hidden during this page's capture. Both pages share span 48, so
-   *  each square frame necessarily overlaps the other district near the
-   *  boundary; this rule cuts the foreign side back so a page only paints its
-   *  own district. The main page also keeps its historic z >= 44 rule (far-
-   *  south decorations that would otherwise poke into the frame). */
-  hidesDuringShot: (z: number) => boolean;
+  /** World-space half-space(s) applied to the capture renderer so a page only
+   *  paints its own district. Both pages share span 48, so each square frame
+   *  necessarily reaches across the boundary; clipping cuts the foreign side
+   *  per fragment. This is deliberate instead of toggling object.visible by an
+   *  anchor's world z: lights keep working (hiding them rendered a page near
+   *  black), and whole-city InstancedMesh decor batches — anchored at the
+   *  origin but spread across both districts — are clipped instance by
+   *  instance. The main page also keeps its historic z <= 44 cut (far-south
+   *  decorations that would otherwise poke into the frame). */
+  clipPlanes: THREE.Plane[];
 };
 
 // The boundary between the two pages runs between the ring walkway's outer
@@ -72,9 +76,8 @@ const NORTH_REGION_GATE_Z = -40;
 // north page centres on the district (0,-64) → z∈[-112,-16]. The north frame
 // therefore reaches ~28 world units south of the gate into the main city
 // (ground; buildings at z=-33…-21) while the district's own ground only spans
-// z∈[-44,-86.5] (NORTH_DISTRICT_AREA.ground). `hidesDuringShot` removes that
-// main-city band (and, mirrored on the main page, the north strip above the
-// gate) so neither capture is contaminated by the other district.
+// z∈[-44,-86.5] (NORTH_DISTRICT_AREA.ground). `clipPlanes` cuts each frame at
+// the z=-40 gate so neither capture is contaminated by the other district.
 const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
   main: Object.freeze({
     id: 'main',
@@ -84,7 +87,10 @@ const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
     centerZ: 0,
     span: 48,
     contains: (_x: number, z: number) => z >= NORTH_REGION_GATE_Z,
-    hidesDuringShot: (z: number) => z >= 44 || z < NORTH_REGION_GATE_Z,
+    clipPlanes: [
+      new THREE.Plane(new THREE.Vector3(0, 0, 1), 40), // keep z >= -40
+      new THREE.Plane(new THREE.Vector3(0, 0, -1), 44), // keep z <= 44
+    ],
   }),
   north: Object.freeze({
     id: 'north',
@@ -94,7 +100,9 @@ const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
     centerZ: -64,
     span: 48,
     contains: (_x: number, z: number) => z < NORTH_REGION_GATE_Z,
-    hidesDuringShot: (z: number) => z >= NORTH_REGION_GATE_Z,
+    clipPlanes: [
+      new THREE.Plane(new THREE.Vector3(0, 0, -1), -40), // keep z <= -40
+    ],
   }),
 } satisfies { main: MapRegion; north: MapRegion });
 
@@ -108,6 +116,7 @@ export function createMapController(options: MapControllerOptions) {
   let activeRegion: MapRegion = MAP_REGIONS.main;
   const shotData: Record<MapRegionId, string | null> = { main: null, north: null };
   let shotsPreloaded = false;
+  let shotsPreloadSettled = false;
   let destroyed = false;
   let shotRenderer: THREE.WebGLRenderer | null = null;
   let shotCamera: THREE.OrthographicCamera | null = null;
@@ -180,7 +189,6 @@ export function createMapController(options: MapControllerOptions) {
     const canvas = options.document.createElement('canvas');
     canvas.width = MAP_SHOT;
     canvas.height = MAP_SHOT;
-    const hidden: THREE.Object3D[] = [];
     try {
       shotRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
       shotRenderer.setSize(MAP_SHOT, MAP_SHOT, false);
@@ -188,15 +196,14 @@ export function createMapController(options: MapControllerOptions) {
       shotRenderer.toneMapping = THREE.ACESFilmicToneMapping;
       shotRenderer.toneMappingExposure = 1;
       if (THREE.SRGBColorSpace) shotRenderer.outputColorSpace = THREE.SRGBColorSpace;
-
-      scene.traverse((object) => {
-        const position = new THREE.Vector3();
-        object.getWorldPosition(position);
-        if (region.hidesDuringShot(position.z) && object.visible) {
-          hidden.push(object);
-          object.visible = false;
-        }
-      });
+      // Cut the frame at the district boundary on the capture renderer only;
+      // the live renderer keeps drawing the whole city. A fragment is clipped
+      // when it sits on the negative side of any plane (three keeps
+      // distanceToPoint >= 0), so the north page paints z <= -40 and the main
+      // page z >= -40 (plus its historic z <= 44 cut). Clipping runs in the
+      // shaders, so lights are untouched and whole-city InstancedMesh decor
+      // batches are cut instance by instance.
+      shotRenderer.clippingPlanes = region.clipPlanes;
       shotRenderer.render(scene, shotCamera);
       shotData[region.id] = shotRenderer.domElement.toDataURL('image/png');
     } catch {
@@ -204,10 +211,9 @@ export function createMapController(options: MapControllerOptions) {
       // toDataURL can fail on a lost context. Leave the page uncached so the
       // on-demand capture retries when the map next opens, and never let a
       // failed shot throw out of the boot preload or leak a half-built
-      // renderer / left-hidden object.
+      // renderer.
       shotData[region.id] = null;
     } finally {
-      hidden.forEach((object) => { object.visible = true; });
       shotRenderer?.dispose();
       shotRenderer?.forceContextLoss();
       shotRenderer = null;
@@ -232,6 +238,11 @@ export function createMapController(options: MapControllerOptions) {
       shotsPreloaded = true;
       if (!shotData.main) captureShot(MAP_REGIONS.main);
       if (!shotData.north) captureShot(MAP_REGIONS.north);
+      // The one-shot attempt has finished, whether or not a capture succeeded.
+      // Tests use this to distinguish "preload failed (page left uncached)" from
+      // "preload still pending", so a genuine SwiftShader capture failure does
+      // not leave unrelated specs waiting out the timeout.
+      shotsPreloadSettled = true;
     };
     if (typeof view.requestIdleCallback === 'function') {
       view.requestIdleCallback(capture, { timeout: 2_000 });
@@ -591,6 +602,7 @@ export function createMapController(options: MapControllerOptions) {
     shotData.main = null;
     shotData.north = null;
     shotsPreloaded = false;
+    shotsPreloadSettled = false;
     destroyed = true;
     iconsBuilt = false;
     tipBuilding = null;
@@ -616,6 +628,10 @@ export function createMapController(options: MapControllerOptions) {
     isOpen: () => open,
     areIconsBuilt: () => iconsBuilt,
     shotsReady: () => ({ main: Boolean(shotData.main), north: Boolean(shotData.north) }),
+    /** True once the boot preload attempt has run to completion — success or
+     *  failure. Lets tests wait for the attempt to settle without assuming it
+     *  produced both pages (a software-GL capture may legitimately fail). */
+    shotsPreloadSettled: () => shotsPreloadSettled,
     /** Project a world point onto the ACTIVE atlas page as percentages of
      *  the captured image. Returns null when the point belongs to the other
      *  page (its icon would land outside the visible paper). */
