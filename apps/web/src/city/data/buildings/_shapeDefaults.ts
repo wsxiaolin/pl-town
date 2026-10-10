@@ -64,6 +64,7 @@ export const SHAPE_PLOTS: Record<string, BuildingPlotSpec> = {
   television_tower: { tex: 'ground5', size: 5.4, color: 0xD5DFE2 },
   fried_chicken_shop: { tex: 'ground2', size: 4.6, color: 0xE6D2B2 },
   tavern: { tex: 'ground4', size: 4.8, color: 0xC6B18C },
+  painting_ai: { tex: 'ground5', size: 3.6, color: 0xE4E3E0 },
 };
 
 export const DEFAULT_PLOT: BuildingPlotSpec = { tex: 'ground5', size: 3.5, color: 0xE4E3E0 };
