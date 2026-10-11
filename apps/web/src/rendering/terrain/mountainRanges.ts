@@ -103,10 +103,10 @@ const SNOW_MIN_PEAK_HEIGHT = 44;
 
 // ── 世界裙板（apron）────────────────────────────────────────────
 // createCitySurfaces farMat 配方（220×220 / repeat 24 → ≈9.17 单位/格）
-// 换算到裙板尺寸；色调比白昼 farMat(0xd8d4cc) 略暗（远处压暗可接受；
+// 换算到裙板尺寸；色调比白昼 farMat(0xc7bd9a) 略暗（远处压暗可接受；
 // 夜间主题同步只遍历 groundMats 数组，裙板不参与，色差有限）。
 const APRON_TEXTURE_KEY = 'ground6';
-const APRON_COLOR = 0xcdc9c0;
+const APRON_COLOR = 0xbab492;
 const APRON_TILES_PER_UNIT = 24 / 220;
 // 三片裙板：与既有 220×220 地表基面（±110）同高（SURFACE_Y.base=0）、
 // 仅边缘相接不重叠；东瓣 z 收到 ±110 与北/南瓣相接，避免三瓣之间

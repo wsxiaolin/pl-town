@@ -23,6 +23,7 @@ import { CITY_LIMIT, NORTH_DISTRICT_AREA, PALETTE, ROAD_COORDS } from './data/ci
 import { addCityFountain } from './citySceneBootstrap';
 import type { CityGraphics } from './cityGraphics';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
+import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 
 type RoadNavigation = {
   registerObstacleGroup: (group: THREE.Object3D) => void;
@@ -177,8 +178,9 @@ export function assembleCityWorld(options: {
   options.roadNavigation.cacheBuildingBoxes();
   worldDecorations.addDecorations();
   // 星语北城公园内容（树阵与长椅走世界装饰批次，与主城基础设施同级）。
-  worldDecorations.addTrees(NORTH_DISTRICT_AREA.parkTrees.map(([x, z]) => [x, 0, z] as const));
-  NORTH_DISTRICT_AREA.parkBenches.forEach(([x, z, rotY]) => worldDecorations.addBench(x, 0, z, rotY));
+  // 北城树阵/长椅 y 走唯一采样器（方案 §6.2；北城在台地内 → 数值恒 0）。
+  worldDecorations.addTrees(NORTH_DISTRICT_AREA.parkTrees.map(([x, z]) => [x, terrainHeight(x, z), z] as const));
+  NORTH_DISTRICT_AREA.parkBenches.forEach(([x, z, rotY]) => worldDecorations.addBench(x, terrainHeight(x, z), z, rotY));
   npcSystem.addCharacters();
   const sceneInterestPoints = createSceneInterestPoints({
     scene,

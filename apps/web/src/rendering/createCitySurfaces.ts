@@ -6,6 +6,7 @@ import { CITY_GROUND_PLAN } from '../city/data/terrain/_cityGround';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 import { createGroundReliefGeometry, createPlazaPavingGeometry } from './cityGroundModel';
+import { createWorldGroundGeometry } from './terrain/worldGroundMesh';
 
 type MaterialOptions = MaterialParameters;
 
@@ -70,10 +71,15 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
   batchStaticMeshes(scene, scene.children.filter((child) => !existingSceneChildren.has(child)));
 
   function addGround(): void {
-    const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
-    const farGround = createMesh(new THREE.PlaneGeometry(220, 220), farMat);
-    farGround.rotation.x = -Math.PI / 2;
-    farGround.position.y = SURFACE_Y.base;
+    // 城外世界基面用干草/壤土暖色调（VLM 建立镜头评审 2026-10-11：旧灰白
+    // 0xd8d4cc 观感「混凝土测试底」）；ground6 纹理近白，材质色即最终色调，
+    // 与草甸绿 0x8fae72 形成「绿草→干草缘」的自然过渡。
+    const farMat = createMaterial({ color: isNight ? 0x8d8873 : 0xc7bd9a, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
+    // 可信地形 D7：全域非均匀格点地形网格（顶点 y = terrainHeight，10,164
+    // tris / 单 draw call）取代 y=0 平面——台地内仍恒 base 层，城区层差
+    // （district 0.018 等 ≥ 0.014）原样保留；城外草甸/河谷/海床/步道槽
+    // 的真实地势由此面承载（方案 §8）。
+    const farGround = createMesh(createWorldGroundGeometry(), farMat);
     farGround.receiveShadow = true;
     farGround.renderOrder = RENDER_ORDER.base;
     scene.add(farGround);
@@ -133,7 +139,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     scene.add(echoGround);
 
     groundMaterials.push(
-      { mat: farMat, day: 0xd8d4cc, night: 0x9a988e },
+      { mat: farMat, day: 0xc7bd9a, night: 0x8d8873 },
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },

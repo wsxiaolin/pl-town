@@ -1,11 +1,28 @@
 // massif 几何生成器：岚屏岭山脉的「形状层」（v5 从 mountainRanges.ts 拆出，
 // 应对单文件 ≤1000 行的体积上限，也符合 AI review 建议的「形状生成与
 // Three.js 网格组装分离」）。本文件只含纯函数与类型：
-// - 确定性随机/噪声（mulberry32、格点哈希、周期 value noise、fBm）
 // - lobe 高度场（单峰剖面 + 裂瓣底缘 + 山脊角谐波 + 多峰 max 融合）
 // - 圆盘高度场 → non-indexed 折面网格（buildRadialFieldGeometry）
 // 山体材质、麓原裙、碎石带、森林与装配见 mountainRanges.ts。
+//
+// 可信地形改造 T2（方案 §2.1）：确定性噪声内核（hashString / mulberry32 /
+// hashNoise / latticeNoise / valueNoise2 / fbm2 / smoothStep / clamp01）
+// 已逐字平移至 city/data/terrain/heightfield/noiseCore.ts（全域地形
+// 高度场的共享底层），本文件 re-export 保持既有 import 路径零改动；
+// 函数体一字未变，山体/麓原渲染的噪声值零漂移。
 import * as THREE from 'three';
+import { fbm2, latticeNoise, smoothStep } from '../../city/data/terrain/heightfield/noiseCore';
+
+export {
+  hashString,
+  mulberry32,
+  hashNoise,
+  latticeNoise,
+  valueNoise2,
+  fbm2,
+  smoothStep,
+  clamp01,
+} from '../../city/data/terrain/heightfield/noiseCore';
 
 // 峰体基座埋入深度：底环永远在地表以下，不露缝隙。
 export const BASE_BURY = 0.35;
@@ -15,76 +32,6 @@ export const DETAIL_ANGULAR_CELLS = 10;
 export const DETAIL_RADIAL_CELLS = 6;
 
 export type Vec2 = readonly [number, number];
-
-export function hashString(text: string): number {
-  // FNV-1a 32bit
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-export function mulberry32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** 旧抖动锥遗留的纯位置哈希噪声：松树锥面微抖动仍复用（确定性）。 */
-export function hashNoise(angle: number, ring: number, seed: number): number {
-  const value = Math.sin(angle * 127.1 + ring * 311.7 + seed * 74.7) * 43758.5453;
-  return (value - Math.floor(value)) * 2 - 1;
-}
-
-// ── 确定性噪声工具（整数格点哈希 → 周期 value noise → fBm）───────────
-
-/** 整数格点哈希，返回 [0,1)。同格点同种子永远同值。 */
-export function latticeNoise(ix: number, iy: number, seed: number): number {
-  let hash = (Math.imul(ix, 0x27d4eb2f) ^ Math.imul(iy, 0x165667b1) ^ Math.imul(seed, 0x9e3779b1)) >>> 0;
-  hash = Math.imul(hash ^ (hash >>> 15), 0x85ebca6b) >>> 0;
-  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35) >>> 0;
-  hash = (hash ^ (hash >>> 16)) >>> 0;
-  return hash / 4294967296;
-}
-
-/** 二维 value noise；x 方向按 periodX 取模回绕，沿圆周采样时天然无缝。 */
-export function valueNoise2(x: number, y: number, seed: number, periodX: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const x0 = ((ix % periodX) + periodX) % periodX;
-  const x1 = (x0 + 1) % periodX;
-  const n00 = latticeNoise(x0, iy, seed);
-  const n10 = latticeNoise(x1, iy, seed);
-  const n01 = latticeNoise(x0, iy + 1, seed);
-  const n11 = latticeNoise(x1, iy + 1, seed);
-  return (n00 * (1 - ux) + n10 * ux) * (1 - uy) + (n01 * (1 - ux) + n11 * ux) * uy;
-}
-
-/** 2~3 阶 fBm，返回约 [-1,1]。角向频率逐阶翻倍且保持整数周期。 */
-export function fbm2(x: number, y: number, seed: number, periodX: number, octaves: number): number {
-  let amplitude = 1;
-  let sum = 0;
-  let norm = 0;
-  let frequency = 1;
-  for (let octave = 0; octave < octaves; octave += 1) {
-    sum += amplitude * (valueNoise2(x * frequency, y * frequency, seed + octave * 40503, periodX * frequency) * 2 - 1);
-    norm += amplitude;
-    amplitude *= 0.5;
-    frequency *= 2;
-  }
-  return sum / norm;
-}
 
 /** 角谐波（2/3/5/7 倍频正弦叠加，相位由种子哈希）：山脊折线的基底。
  * 7 倍频小项是 v5 加的：加密网格上显出细碎棱线，主脊不再光秃。 */
@@ -105,15 +52,6 @@ export function angularLobes(angle: number, seed: number): number {
   const phase4 = latticeNoise(53, 19, seed) * Math.PI * 2;
   const phase5 = latticeNoise(97, 31, seed) * Math.PI * 2;
   return 0.5 * Math.sin(angle * 3 + phase3) + 0.32 * Math.sin(angle * 4 + phase4) + 0.18 * Math.sin(angle * 5 + phase5);
-}
-
-export function smoothStep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-export function clamp01(x: number): number {
-  return Math.min(1, Math.max(0, x));
 }
 
 // ── 径向高度场 massif ───────────────────────────────────────────
