@@ -100,6 +100,7 @@ test.describe('account lifecycle', () => {
       localStorage.setItem('minicityRenderSettings', settings);
       localStorage.setItem('minicityServerToken', 'gate-token');
       localStorage.setItem('minicityUser', '老居民');
+      (window as unknown as { __residentName?: string }).__residentName = '老居民';
     }, RENDER_SETTINGS);
     await page.goto('/');
     await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });

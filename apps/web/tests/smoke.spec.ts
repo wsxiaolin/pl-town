@@ -972,8 +972,17 @@ test('an expired session returns the resident to the email login overlay', async
       send(raw: string) {
         const request = JSON.parse(raw);
         if (request.type !== 'hello') return;
-        // The stored token is always rejected here.
-        const response = { type: 'error', message: '登录已过期，请重新登录' };
+        // The expired token is rejected; the renewed one signs the resident in.
+        const response = request.token === 'expired-token'
+          ? { type: 'error', message: '登录已过期，请重新登录' }
+          : {
+            type: 'hello', token: request.token,
+            user: { id: 'user-1', nickname: 'tester', email: 'tester@example.com', verified: false, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [],
+            progress: { currency: 0, inventory: {}, achievements: [], unlockedBuildings: [], visitedBuildings: [] },
+            catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
+            weather: 'clear',
+          };
         queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
       }
       close() {
