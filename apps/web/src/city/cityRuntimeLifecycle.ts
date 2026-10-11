@@ -1,5 +1,5 @@
 import { gsap } from 'gsap';
-import { destroyCG, initCG, OPENING_CG_ENABLED } from './cg';
+import { destroyCG, initCG, OPENING_CG_ENABLED, shouldShowCG } from './cg';
 import { destroyMusterCG } from './musterCg';
 import { stopInvasionCG } from './invasionCg';
 import { preloadTextureResources } from './textureResourcePreloader';
@@ -105,6 +105,10 @@ export function createCityRuntimeLifecycle(options: {
       onFinish: () => { if (started) options.onIntroFinished?.(); },
       reduced: options.reduced,
     });
+    // The opening CG is disabled/skipped (see OPENING_CG_ENABLED): no onFinish
+    // will fire, so release the intro gate directly and let the resident card /
+    // city entrance proceed once the download lands.
+    if (!shouldShowCG()) options.onIntroFinished?.();
 
     // The moment still paints synchronously — today's sky greets the visitor
     // while the boot decision (and any heavy pipeline) resolves in background.
