@@ -55,15 +55,18 @@ export type AnimatedWaterSurface = {
 
 let sharedWaterNormals: THREE.Texture | null = null;
 
-// Aqua the sea eases toward near the waterline, so the shallows read as
-// lit-through water without a glaring white rim. Authoring note: this must be
-// a *uniform lerped with the daylight clock*, not a shader literal — a literal
-// keeps shining at full brightness after dark while the rest of the sea dims.
-// It pairs with the surf strip in westBeach.ts: this band is deliberately
-// wider than the strip's seaward extent (SURF_SEAWARD there, `width` here),
-// so the strip's root fade always happens over already-tinted water.
-const SHALLOW_TINT_DAY = new THREE.Color(0x3f9fb5);
-const SHALLOW_TINT_NIGHT = new THREE.Color(0x123642);
+// Near-shore colour the sea eases toward, simulating lit-through shallows.
+// Kept deliberately muted (blue-teal rather than vivid aqua) so the contrast
+// with the deep navy open ocean stays low — a saturated tint reads as a
+// visible halo or colour band from any zoomed-out view, even with a wide
+// smoothstep gradient. Authoring note: must be a *uniform lerped with the
+// daylight clock*, not a shader literal — a literal keeps shining at full
+// brightness after dark while the rest of the sea dims. Pairs with the surf
+// strip in westBeach.ts: this band is deliberately wider than the strip's
+// seaward extent (SURF_SEAWARD there, `width` here) so the strip's root fade
+// always happens over already-tinted water.
+const SHALLOW_TINT_DAY = new THREE.Color(0x1e7a96);
+const SHALLOW_TINT_NIGHT = new THREE.Color(0x0e2e3c);
 
 function getWaterNormals(): THREE.Texture {
   if (!sharedWaterNormals) {
@@ -294,16 +297,29 @@ export function createAnimatedWaterSurface(
           fragmentAnchor,
           /* glsl */ `
           {
-            // Shallow-water tint: a long, gradual fade from the open sea to
-            // the waterline so the deep→shallow change never reads as a band
-            // or a hard line. Stays opaque — the sea floor and any offshore
-            // models (ships!) must not bleed through the deep sheet.
-            vec3 shallowTint = mix(waterColor, shoreTint, 0.55);
-            outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(0.0, ${width}, vShoreDist)) * 0.4);
-            // Broad moving crests read from the city camera, while the normal
-            // map keeps the small ripples. Tint with daylight so night stays dark.
-            float crest = pow(max(0.0, sin(dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35)), 6.0);
-            outgoingLight += shoreTint * crest * 0.055;
+            // Two-stage depth gradient: the near band (0-20 world units from
+            // shore) blends strongly toward the shallow-water tint, simulating
+            // sunlight penetrating the water column over the sand shelf. The
+            // outer hint (0-${width} units) adds a faint depth cue across the
+            // full ribbon so the open ocean reads as gradually lighter without
+            // a visible transition band or hard line at any zoom level. Using
+            // a muted tint (see SHALLOW_TINT_DAY) keeps the colour delta small
+            // enough that the combined blend is never jarring. Stays opaque —
+            // the sea floor and any offshore models must not bleed through.
+            vec3 shallowTint = mix(waterColor, shoreTint, 0.62);
+            float nearBlend = (1.0 - smoothstep(0.0, 20.0, vShoreDist)) * 0.44;
+            float midBlend  = (1.0 - smoothstep(0.0, ${width}, vShoreDist)) * 0.11;
+            outgoingLight = mix(outgoingLight, shallowTint, nearBlend + midBlend);
+            // Two crossing swell directions at different speeds give a
+            // naturally irregular open-ocean surface rather than a single set
+            // of parallel corduroy bands. pow(4) broadens the crest peaks so
+            // they read as rolling swells visible from the city camera; the
+            // crest colour leans slightly brighter than the shore tint for a
+            // subtle foam glint without blowing out white.
+            float swellA = pow(max(0.0, sin(dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35)), 4.0);
+            float swellB = pow(max(0.0, sin(dot(worldPosition.xz, vec2(-0.20, 0.98)) - time * 0.84 + 1.7)), 4.0);
+            vec3 crestTint = mix(shoreTint, vec3(0.72, 0.88, 0.95), 0.40);
+            outgoingLight += crestTint * (swellA * 0.80 + swellB * 0.48) * 0.068;
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );
