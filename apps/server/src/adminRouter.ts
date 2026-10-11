@@ -18,7 +18,7 @@ import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './r
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
 import { applyShopCatalog, resolveBuildingUnlockStates } from './progression.js';
-import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, type WeatherConfig } from './worldConfig.js';
+import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, getThemeConfig, setThemeConfig, sanitizeThemeId, type ThemeConfig, type WeatherConfig } from './worldConfig.js';
 import { missingStoryReferencedItems, SHOP_NAME_MAX, SHOP_PRICE_MAX, SHOP_PRODUCT_MAX } from './shopCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 import { sanitizeHouseName, validateNickname } from './textLimits.js';
@@ -38,6 +38,9 @@ type Context = {
   setWeatherConfig: (config: WeatherConfig) => WeatherConfig;
   resetWorldConfig: () => void;
   broadcastWorldCatalog: () => void;
+  getThemeConfig: () => ThemeConfig;
+  setThemeConfig: (config: ThemeConfig) => ThemeConfig;
+  broadcastTheme: () => void;
 };
 
 type AdminAsset = { type: string; body: Buffer };
@@ -171,6 +174,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
   if (request.method === 'GET' && path === '/admin/api/world') {
     respond(response, 200, {
       weather: context.getWeatherConfig(),
+      theme: context.getThemeConfig(),
       states: resolveBuildingUnlockStates(),
       shop: getShopProducts(),
       shopLimits: { nameMax: SHOP_NAME_MAX, priceMax: SHOP_PRICE_MAX, productMax: SHOP_PRODUCT_MAX },
@@ -205,6 +209,15 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const config = context.setWeatherConfig({ value: weather, autoBroadcast });
     db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather, autoBroadcast });
     respond(response, 200, { ok: true, weather: config }); return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/world/theme') {
+    const body = await readJson(request, 1_024);
+    const theme = sanitizeThemeId(body.theme);
+    if (!theme) { error(response, 400, 'INVALID_THEME', '主题值无效'); return true; }
+    const saved = context.setThemeConfig({ id: theme });
+    db.recordAdminAudit(principal.actor, 'world.theme.update', undefined, { theme: saved.id });
+    context.broadcastTheme();
+    respond(response, 200, { ok: true, theme: saved }); return true;
   }
   if (request.method === 'POST' && path === '/admin/api/world/buildings') {
     const body = await readJson(request, 32_000);

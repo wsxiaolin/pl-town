@@ -66,9 +66,12 @@ export type NetStoryProgress = {
 };
 export type NetWeather = Weather;
 export type NetChatMessage = { messageId: number; userId: string; nickname: string; text: string; createdAt: string };
+export type NetTheme = { id: string };
+/** fireworks.* 透传消息（结构见 city/fireworks/fireworksClient.ts）。 */
+export type NetFireworksMessage = { type: string; [key: string]: unknown };
 
 type ServerMessage =
-  | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather }
+  | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather; theme?: NetTheme }
   | { type: 'player.joined'; player: NetUser }
   | { type: 'player.moved'; playerId: string; position: NetPosition }
   | { type: 'player.left'; playerId: string }
@@ -80,9 +83,11 @@ type ServerMessage =
   | { type: 'progress.updated'; progress: NetPlayerProgress; catalog: NetProgressionCatalog; event?: Record<string, unknown> }
   | { type: 'story.updated'; story: NetStoryProgress; event?: Record<string, unknown> }
   | { type: 'world.weather'; weather: NetWeather }
+  | { type: 'world.theme'; theme?: NetTheme }
   | { type: 'world.catalog'; catalog?: NetProgressionCatalog }
   | { type: 'market.listings'; listings?: NetMarketListings }
   | { type: 'city.updated'; state: unknown }
+  | { type: 'fireworks.listed' | 'fireworks.saved' | 'fireworks.deleted' | 'fireworks.library'; [key: string]: unknown }
   | { type: 'error'; message?: string; code?: string };
 
 type Callbacks = {
@@ -99,6 +104,8 @@ type Callbacks = {
   progress?: (progress: NetPlayerProgress, catalog: NetProgressionCatalog, event?: Record<string, unknown>) => void;
   story?: (story: NetStoryProgress, event?: Record<string, unknown>) => void;
   weather?: (weather: NetWeather) => void;
+  theme?: (theme: NetTheme) => void;
+  fireworks?: (message: NetFireworksMessage) => void;
   worldCatalog?: (catalog: NetProgressionCatalog) => void;
   marketListings?: (listings: NetMarketListings) => void;
   authenticationFailed?: (message: string, code?: string) => void;
@@ -147,7 +154,7 @@ export class MultiplayerClient {
   private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(this.credentials.nickname, this.credentials.password, this.credentials.pl), 2500); }
   private handle(raw: string) {
     let message: ServerMessage; try { message = JSON.parse(raw) as ServerMessage; } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.credentials.pl = undefined; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); trackEvent('player.connect', { nickname: message.user?.nickname }); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.credentials.pl = undefined; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); this.callbacks.theme?.(message.theme ?? { id: 'default' }); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
@@ -159,8 +166,10 @@ export class MultiplayerClient {
     else if (message.type === 'progress.updated') this.callbacks.progress?.(message.progress, message.catalog, message.event);
     else if (message.type === 'story.updated') this.callbacks.story?.(message.story, message.event);
     else if (message.type === 'world.weather' && isWeather(message.weather)) this.callbacks.weather?.(message.weather);
+    else if (message.type === 'world.theme') this.callbacks.theme?.(message.theme ?? { id: 'default' });
     else if (message.type === 'world.catalog' && message.catalog) this.callbacks.worldCatalog?.(message.catalog);
     else if (message.type === 'market.listings' && message.listings) this.callbacks.marketListings?.(message.listings);
+    else if (message.type === 'fireworks.listed' || message.type === 'fireworks.saved' || message.type === 'fireworks.deleted' || message.type === 'fireworks.library') this.callbacks.fireworks?.(message);
     else if (message.type === 'city.updated') applyCityState(message.state);
     else if (message.type === 'error') {
       const errorMessage = message.message ?? '服务器请求失败';

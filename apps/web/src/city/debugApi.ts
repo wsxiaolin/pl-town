@@ -136,6 +136,12 @@ function createMiniCityApi(options: DebugApiOptions) {
         ),
       }),
     },
+    fireworks: {
+      openDesigner: () => options.fireworks.openDesigner(),
+      startShow: () => options.fireworks.startShow(),
+      setTheme: (id: string) => options.fireworks.setTheme(id),
+      launch: (design: unknown, x = -58, z = -12) => options.fireworks.launch(design, x, z),
+    },
   };
 }
 
@@ -188,6 +194,12 @@ export type DebugApiOptions = {
   getMapShotsPreloadSettled: () => boolean;
   teleport: (x: number, z: number) => boolean;
   focus: (x: number, z: number, zoom?: number) => boolean;
+  fireworks: {
+    openDesigner: () => void;
+    startShow: () => void;
+    setTheme: (id: string) => void;
+    launch: (design: unknown, x: number, z: number) => void;
+  };
 };
 
 export function installDebugApi(options: DebugApiOptions) {

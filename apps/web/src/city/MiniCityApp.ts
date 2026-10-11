@@ -29,6 +29,7 @@ import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernance
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createFirstPersonController, type FirstPersonController } from './navigation/firstPersonController';
+import { createFirstPersonInteract, setWalkModeButtonState } from './navigation/firstPersonWalkAssist';
 import { createToonWorld } from '../rendering/toon/toonWorld';
 import { createToonSky } from '../rendering/toon/toonSky';
 import { createProgressionController } from './progression/progressionController';
@@ -70,6 +71,7 @@ import { createCityViewControls } from './cityViewControls';
 import { createNpcDistrictFilter } from './npcDistrictFilter';
 import { createIceKingCityHooks } from './iceKingCityHooks';
 import { createCityThemeSync } from './cityThemeSync';
+import { createFireworksPlaykit, fireworksDebug, fireworksHandlers, type FireworksPlaykit } from './fireworks/fireworksPlaykit';
 import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
@@ -163,6 +165,8 @@ buildingFeatureRegistry.register(createIceKingBuildingFeature({
   getSanctum: () => iceKingFeature?.sanctum ?? null,
   showLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
 }));
+// 烟花玩法装配件：烟花铺 → 设计台；海边观景台 → 云上烟花秀（见 fireworksPlaykit）。
+let fireworksPlaykit: FireworksPlaykit | null = null;
 let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
 let navigationTargetMarker: ReturnType<typeof createNavigationTargetMarker> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
@@ -170,7 +174,6 @@ let questEventSequence = 0;
 const questRuntime = new QuestRuntime(SIDE_QUESTS, new LocalStorageQuestJournalRepository());
 let gameClock = townGameHour();
 const mouse2D = new THREE.Vector2(-9999, -9999);
-const firstPersonCenter2D = new THREE.Vector2(0, 0);
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const cursorWorld = new THREE.Vector3();
@@ -247,6 +250,12 @@ const interactionPointer = createInteractionPointer({
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
 });
 
+const firstPersonInteract = createFirstPersonInteract({
+  getActiveCamera: () => (firstPersonController?.getActiveCamera() ?? null) as THREE.Camera | null,
+  raycaster, getRaycastGroups: () => raycastBuildingGroups, findBuilding: findRaycastBuilding, exit: () => firstPersonController?.exit(),
+  showToast: showUnlockToast, interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
+});
+
 const interactionTracker = createInteractionTracker({
   getStats,
   saveStats,
@@ -287,6 +296,7 @@ const frameLoop = createFrameLoop({
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
   updateWeather: (delta) => weatherEffect?.update(delta),
+  updateFireworks: (delta, elapsed) => fireworksPlaykit?.update(delta, elapsed),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer: (npc) => npcSystem.npcYieldToPlayer(npc),
@@ -493,6 +503,7 @@ function init() {
     getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
     teleport: devTeleport,
     focus: devFocus,
+    fireworks: fireworksDebug,
   });
   addCityLighting(scene, MOBILE, isNight);
   navigationTargetMarker = createNavigationTargetMarker(scene);
@@ -560,6 +571,7 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
     onWorldCatalog: applyWorldCatalog,
+    ...fireworksHandlers,
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -667,7 +679,7 @@ function init() {
       if (cursorChar) view.setTarget(cursorChar.position.x, cursorChar.position.z, true);
     },
     onFrame: (delta) => { firstPersonToonSky.update(delta, isNight); },
-    interactInFront: firstPersonInteractInFront,
+    interactInFront: firstPersonInteract,
     isBlocked: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(mapController?.isOpen())
       || view.isCinematic() || Boolean(stories?.echo.isInteriorView()) || Boolean(iceKingFeature?.sanctum.isActive()),
     showToast: showUnlockToast,
@@ -762,6 +774,11 @@ function init() {
   });
   graphics.setWeatherVisual(weatherEffect);
   weatherEffect.set(graphics.weather.get());
+  fireworksPlaykit = createFireworksPlaykit({
+    scene, view, camera: cameraController, movement: movementInputController, decorHelpers: graphics.mesh, document,
+    getViewportHeight: () => renderer.domElement.height, getIsNight: () => isNight, getDialogs: () => cityDialogs, signal: lifecycle.signal,
+    getMultiplayer: () => multiplayerHousing, showToast: showUnlockToast, registry: buildingFeatureRegistry,
+  });
   const iceHooks = createIceKingCityHooks({
     defaultZoom: CONFIG.cameraNearSize,
     wellZoom: 5.2,
@@ -878,6 +895,8 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
 
 function disposeSession() {
   filmCityExperience.dispose();
+  fireworksPlaykit?.dispose();
+  fireworksPlaykit = null;
   genshinInstitute.dispose();
   frameLoop.stop();
   clearInterval(clockInterval);
@@ -932,24 +951,6 @@ function devTeleport(x: number, z: number): boolean {
 function devFocus(x: number, z: number, zoom?: number): boolean {
   if (zoom !== undefined) view.applyZoom(zoom);
   return devTeleport(x, z);
-}
-
-/** First-person: interact with whatever building sits under the crosshair,
- *  falling back to the ordinary walk-to flow (which exits the mode first). */
-function firstPersonInteractInFront(): void {
-  const activeCamera = firstPersonController?.getActiveCamera();
-  if (!activeCamera) return;
-  raycaster.setFromCamera(firstPersonCenter2D, activeCamera);
-  const building = findRaycastBuilding(raycaster.intersectObjects(raycastBuildingGroups, true));
-  if (!building) { showUnlockToast('准星附近没有可互动的建筑'); return; }
-  firstPersonController?.exit();
-  interactionPointer.interactOrWalk(building);
-}
-
-function setWalkModeButtonState(active: boolean): void {
-  const button = document.getElementById('walkToggle');
-  button?.classList.toggle('active', active);
-  button?.setAttribute('aria-pressed', String(active));
 }
 
 const lifecycle = createCityRuntimeLifecycle({

@@ -71,6 +71,8 @@ import northNightKiosk from './north_night_kiosk';
 import northJukebox from './north_jukebox';
 import northBackroomsDoor from './north_backrooms_door';
 import northKomorebi from './north_komorebi';
+import fireworksShop from './fireworks_shop';
+import observationDeck from './observation_deck';
 import northGenshinInstitute from './north_genshin_institute';
 
 import type { BuildingConfig, BuildingContentLike } from './_types';
@@ -147,6 +149,8 @@ export const BUILDING_REGISTRY: readonly BuildingConfig[] = [
   northJukebox,
   northBackroomsDoor,
   northKomorebi,
+  fireworksShop,
+  observationDeck,
   northGenshinInstitute,
 ];
 
