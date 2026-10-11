@@ -7,6 +7,8 @@ import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
 import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA } from '../../src/city/data/cityConfig';
 import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
+import { TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
+import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 
 // 世界地形配置的数值审计（v5，2026-10-04）：把 range-lanping.ts /
 // sea-minglan.ts 头注释里逐条核对的 keep-out 约束固化成回归测试——
@@ -15,7 +17,8 @@ import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
 // 坐标事实的来源（改动须两侧同步）：
 // - 星语北城（PR #196）：建筑/路网占 x∈[-33.5,33.5]、z∈[-36,-80]，
 //   审计按包围盒外扩 8（x∈[-41,41]、z∈[-88,-33]）。
-// - 导航可步行区（WORLD_BOUNDS）：x∈[-50,84]、z∈[-88,42]。
+// - 导航可步行区（WORLD_BOUNDS，R2 随出城步道外扩）：x∈[-50,76]、
+//   z∈[-88.2,104]（S4 观景平台 96 + 8 边距）。
 // - 观星走廊：x∈[36,88]、z∈[-12,12]。
 // - 西海滩既有道具（westBeach.ts / sea-minglan.ts 头注释）：俾斯麦
 //   (-61, z -16..8)、希佩尔 (-55, z 16..34)、海鸥群 (x -60..-46,
@@ -37,27 +40,44 @@ const RIVER_VALLEY_BOX: Box = { x0: -62, x1: 68, z0: -110, z1: -86 };
 // 两份真值，南侧 8 个单位的漏洞可让越界地形通过审计。这里按
 // roadNavigation.ts 的同一公式从纯数据配置推导，并对文档快照断言——
 // 任一侧漂移（改公式、改节点、改 CITY_LIMIT）都会让快照断言变红。
-const EXTRA_ROAD_NODES = [...ECHO_OBSERVATORY_AREA.roadNodes, ...NORTH_DISTRICT_AREA.roadNodes];
+// R2（2026-10-11）：出城步道并入推导（roadNavigation.meadowTrail 的
+// roadNodes = heightfield TRAIL_NODES，S4 观景平台 z=96）——运行时
+// WORLD_BOUNDS 已随步道外扩到 z1=104，快照同步，恢复「快照一致」效力。
+const EXTRA_ROAD_NODES = [
+  ...ECHO_OBSERVATORY_AREA.roadNodes,
+  ...NORTH_DISTRICT_AREA.roadNodes,
+  ...TRAIL_NODES.map(({ x, z }) => [x, z] as [number, number]),
+];
 const NAVIGABLE_AREA: Box = {
   x0: Math.min(-CITY_LIMIT, ...EXTRA_ROAD_NODES.map(([x]) => x)) - 8,
   x1: Math.max(CITY_LIMIT, ...EXTRA_ROAD_NODES.map(([x]) => x)) + 8,
   z0: Math.min(-CITY_LIMIT, ...EXTRA_ROAD_NODES.map(([, z]) => z)) - 8,
   z1: Math.max(CITY_LIMIT, ...EXTRA_ROAD_NODES.map(([, z]) => z)) + 8,
 };
+/** 城区导航区（旧快照盒，z ≤ 50）：出城步道把可步行区扩入南草甸是方案
+ * §5.3 的有意变更（观景可达）；台地平坦/草甸 keep-out 等城区语义断言
+ * 继续以本盒为准（方案 §9.2：新导航区草甸段「允许」起伏——那正是坡度
+ * 判定的辖区，不属于「城区可走区地面平」的审计目标）。 */
+const CITY_NAVIGABLE_AREA: Box = { x0: -50, x1: 76, z0: -88.2, z1: 50 };
 test('NAVIGABLE_AREA 与 roadNavigation 运行时边界快照一致', () => {
-  const snapshot = { x0: -50, x1: 76, z0: -88.2, z1: 50 };
+  const snapshot = { x0: -50, x1: 76, z0: -88.2, z1: 104 };
   for (const key of ['x0', 'x1', 'z0', 'z1'] as const) {
     assert.ok(
       Math.abs(NAVIGABLE_AREA[key] - snapshot[key]) < 1e-6,
       `导航边界快照漂移：${key} = ${NAVIGABLE_AREA[key]}（快照 ${snapshot[key]}）。`
-      + '若 roadNavigation 公式或 cityConfig 路网节点有意变更，'
-      + '请同步复核山体/草甸各审计与渲染层 WALKABLE_MARGIN_BOX（cityGround.ts）',
+      + '若 roadNavigation 公式或 cityConfig 路网节点（含出城步道 TRAIL_NODES）'
+      + '有意变更，请同步复核山体/草甸各审计与 cityGround 的步道切槽剔除',
     );
   }
 });
 
 function boxesOverlap(a: Box, b: Box): boolean {
   return !(a.x1 < b.x0 || a.x0 > b.x1 || a.z1 < b.z0 || a.z0 > b.z1);
+}
+
+/** 正内部相交（接触不算）：仅供「山体 vs 导航区」keep-out（论证见用例注释）。 */
+function boxesInteriorOverlap(a: Box, b: Box): boolean {
+  return !(a.z1 <= b.z0 || a.z0 >= b.z1 || a.x1 <= b.x0 || a.x0 >= b.x1);
 }
 
 test('岚屏岭山体/崖壁全部按包围盒脱开星语北城 keep-out', () => {
@@ -78,7 +98,15 @@ test('大型山体（h ≥ 10）不进导航可步行区（观星崖等小地形
     if ((feature.height ?? 0) < 10) continue; // 小型阻挡物由 navigationBlocking 声明绕行
     const r = Math.max(feature.width ?? 0, feature.depth ?? 0) / 2;
     const box: Box = { x0: feature.x - r, x1: feature.x + r, z0: feature.z - r, z1: feature.z + r };
-    assert.ok(!boxesOverlap(box, NAVIGABLE_AREA), `${feature.id} 包围盒进入导航可步行区`);
+    // R2（2026-10-11，方案 §9.2 论证修正）：导航区随出城步道外扩至 z1=104
+    // 后，南麓丘二（s-f2，z 152 − r 48 = 104）包围盒北缘与导航边界恰相接
+    // （零面积接触）。方案原文「最近为松涛林·南麓盒 z≥125」核对为笔误
+    // ——z≥125 是松涛林针叶集群，麓丘链配置契约为 z − r ≥ 100（f2 = 104）。
+    // 相接无害的三重依据：①可达域为闭盒 z ≤ 104，山体盒内域 z > 104 不可
+    // 达；②massif 在包围盒缘线处高度 ≈ 0（底环贴地渐灭），接触线上无可见
+    // 山体；③麓丘 navigationBlocking，寻路障碍双保险。故本 keep-out 语义
+    // 明确为「正内部相交」（boxesInteriorOverlap），边界接触不算进入。
+    assert.ok(!boxesInteriorOverlap(box, NAVIGABLE_AREA), `${feature.id} 包围盒 ${JSON.stringify(box)} 进入导航可步行区`);
   }
 });
 
@@ -156,14 +184,17 @@ test('河口湾完整落在西海滩道具清空区之外（沙洲/湾面不压�
 
 // ── 城缘草甸（v7 城市地面建模）──────────────────────────────────────────
 
-test('城缘草甸包围盒脱开导航区/观星走廊/晨溪河谷/河口湾（v7）', () => {
+test('城缘草甸包围盒脱开城区导航区/观星走廊/晨溪河谷/河口湾（v7→R2 修订）', () => {
   assert.ok(CITYSIDE_MEADOW.length >= 2, '城缘草甸至少包含南瓣与东北瓣');
   for (const feature of CITYSIDE_MEADOW) {
     assert.equal(feature.kind, 'meadow');
     const w = feature.width ?? 0;
     const d = feature.depth ?? 0;
     const box: Box = { x0: feature.x - w / 2, x1: feature.x + w / 2, z0: feature.z - d / 2, z1: feature.z + d / 2 };
-    assert.ok(!boxesOverlap(box, NAVIGABLE_AREA), `${feature.id} 包围盒 ${JSON.stringify(box)} 进入导航可步行区`);
+    // R2（方案 §9.2）：导航区已随出城步道扩入南草甸（z1=104，观景可达是
+    // 方案目的），keep-out 目标收窄为「城区可走区（旧快照盒 z ≤ 50）不被
+    // 草甸包围盒覆盖」——南瓣 z0=56 vs 旧 z1=50，仍脱开。
+    assert.ok(!boxesOverlap(box, CITY_NAVIGABLE_AREA), `${feature.id} 包围盒 ${JSON.stringify(box)} 进入城区导航可步行区`);
     assert.ok(!boxesOverlap(box, OBSERVATORY_CORRIDOR), `${feature.id} 包围盒进入观星走廊`);
     assert.ok(!boxesOverlap(box, RIVER_VALLEY_BOX), `${feature.id} 包围盒进入晨溪河谷带`);
     assert.ok(!boxesOverlap(box, ESTUARY_BBOX as unknown as Box), `${feature.id} 包围盒进入河口湾排除盒`);
@@ -172,16 +203,24 @@ test('城缘草甸包围盒脱开导航区/观星走廊/晨溪河谷/河口湾�
   }
 });
 
-test('城缘草甸高度场在导航可步行区全程埋地（表面不可见、零起伏）', () => {
-  // 渲染层约定：keep-out 区域内软塌陷把草甸压回埋地基线 -0.08——
-  // 网格脚印虽可过界，表面必须低于地表面（不透明地表面将其完全遮挡）。
-  // 此处按 1 单位步长扫导航区，任何点 y > -0.075 即为可见起伏。
-  for (let x = NAVIGABLE_AREA.x0; x <= NAVIGABLE_AREA.x1; x += 1) {
-    for (let z = NAVIGABLE_AREA.z0; z <= NAVIGABLE_AREA.z1; z += 1) {
+test('城缘草甸高度场在城区可步行区严格归零（台地平坦，表面零起伏）', () => {
+  // 可信地形改造 T2 语义修订（方案 §2.4，论证记录）：
+  // 旧断言「y ≤ -0.075 埋地」对应旧场语义（可步行区软塌陷压回埋地基线
+  // -0.08）。T2 收编后 sampleCitysideMeadowY = swell × (1 - plateauFlat)
+  // ——0 基线正场，台地内严格 0（城区导航盒 ⊂ PLATEAU_MAIN 盒
+  // x[-75,78]/z[-90,78]，几何包含可由常量直接验证）。防共面埋地责任
+  // 已移至渲染消费端（cityGround.ts：y ≤ 0 区下沉 0.08）。本断言由
+  // 「埋地不可见」收紧为「严格归零」——比旧语义更强：任何非零值都是
+  // 台地平坦性（治理布局/寻路网格/碰撞的 2D 语义）的破坏。
+  // R2（方案 §9.2）：扫描域改城区导航盒（旧快照盒 z ≤ 50）——完整
+  // NAVIGABLE_AREA 已随出城步道扩入南草甸（z1=104），草甸段允许起伏，
+  // 那是坡度判定（WALKABLE_SLOPE_MAX）的辖区，不属于本审计目标。
+  for (let x = CITY_NAVIGABLE_AREA.x0; x <= CITY_NAVIGABLE_AREA.x1; x += 1) {
+    for (let z = CITY_NAVIGABLE_AREA.z0; z <= CITY_NAVIGABLE_AREA.z1; z += 1) {
       const y = sampleCitysideMeadowY(CITYSIDE_MEADOW[0]!, x, z);
       assert.ok(
-        y <= -0.075,
-        `南瓣草甸在可步行区 (${x.toFixed(0)}, ${z.toFixed(0)}) 处 y=${y.toFixed(3)} 未埋地`,
+        y === 0,
+        `南瓣草甸在城区可步行区 (${x.toFixed(0)}, ${z.toFixed(0)}) 处 y=${y.toFixed(3)} 未严格归零（台地平坦性破坏）`,
       );
     }
   }
@@ -190,17 +229,20 @@ test('城缘草甸高度场在导航可步行区全程埋地（表面不可见�
 test('城缘草甸核心区真实隆起（防"全程埋地"式空实现回归）', () => {
   // 南瓣隆起带核心（z 76..96，配置中心附近）必须出现 > 1.2 的草坡；
   // 东北瓣隆起核心（x 82..102, z -97..-104）必须出现 > 0.5 的草坡。
+  // R2（方案 §9.2）：采样源改 terrainHeight——场已收编，直接测采样器
+  // 才能抓住「聚合接线断裂」（meadow 未进 worldReliefAt）式回归；
+  // 阈值承接 v7 现值。步道切槽只切低槽线，不影响核心区峰值断言。
   let southPeak = 0;
   for (let x = -30; x <= 100; x += 2) {
     for (let z = 76; z <= 96; z += 2) {
-      southPeak = Math.max(southPeak, sampleCitysideMeadowY(CITYSIDE_MEADOW[0]!, x, z));
+      southPeak = Math.max(southPeak, terrainHeight(x, z));
     }
   }
   assert.ok(southPeak > 1.2, `南瓣草甸峰值 ${southPeak.toFixed(2)} 过低（应 > 1.2）`);
   let northeastPeak = 0;
   for (let x = 82; x <= 102; x += 2) {
     for (let z = -104; z <= -97; z += 2) {
-      northeastPeak = Math.max(northeastPeak, sampleCitysideMeadowY(CITYSIDE_MEADOW[1]!, x, z));
+      northeastPeak = Math.max(northeastPeak, terrainHeight(x, z));
     }
   }
   assert.ok(northeastPeak > 0.5, `东北瓣草甸峰值 ${northeastPeak.toFixed(2)} 过低（应 > 0.5）`);
