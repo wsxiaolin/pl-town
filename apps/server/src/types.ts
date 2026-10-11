@@ -5,7 +5,7 @@ export type User = {
   id: string;
   nickname: string;
   email: string | null;
-  plUserId: string | null;
+  verified: boolean;
   position: Position;
 };
 
@@ -55,7 +55,7 @@ export type ChatMessage = {
 };
 
 export type ClientMessage =
-  | { type: 'hello'; token?: string; nickname?: string; password?: string; pl?: { login: string; password: string } }
+  | { type: 'hello'; token?: string; email?: string; password?: string; name?: string }
   | { type: 'position'; position: Position }
   | { type: 'chat'; text: string }
   | { type: 'chat.history' }

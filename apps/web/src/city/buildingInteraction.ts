@@ -5,8 +5,6 @@ import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 import { openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 import { isConstructionPending } from './cityGovernanceClient';
 
-type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
-
 export type BuildingInteractionOptions = {
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
   getMultiplayerHousing: () => { progression: { interactBuilding: (id: string, onUnlock: () => void) => void; openShop: () => void } } | null;
@@ -24,12 +22,6 @@ export type BuildingInteractionOptions = {
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
   getFilmCityController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
-};
-
-const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
-  bulletin: ['inventory'], news: ['inventory'],
-  community: ['social', 'profile'], records: ['social', 'mine'],
-  tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
 };
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
@@ -80,12 +72,6 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();
-      options.trackInteraction(b.id);
-      return;
-    }
-    const phoneEntry = PHONE_BUILDINGS[b.id];
-    if (phoneEntry) {
-      options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1]);
       options.trackInteraction(b.id);
       return;
     }

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { MultiplayerClient, type House, type HousingRequest, type NetPlayerProgress, type NetProgressionCatalog, type NetUser, type NetWeather } from '../../network/MultiplayerClient';
 import { createCloudProgressionController } from './cloudProgressionController';
-import { createCommunityPanelController, type SocialKind } from './communityPanelController';
+import { createCommunityPanelController } from './communityPanelController';
 import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
 import { renderVerifiedName } from './verifiedBadge';
@@ -55,10 +55,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     getLoginGate = () => null,
     onWorldCatalog = () => {},
   } = options;
-  const {
-    loadPhoneMessages, openWorksPanel, openPhoneBinding, bindPhysicsLabAccount,
-    updatePhoneBindingState, loadPhoneSocial,
-  } = communityPanels;
+  const { openWorksPanel } = communityPanels;
   let multiplayer: MultiplayerClient | null = null;
   const remotePlayers = new Map<string, RemotePlayer>();
   const verifiedIds = new Set<string>();
@@ -127,16 +124,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     document.getElementById('phoneKnowledge')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('knowledgebase');},{signal:signal});
     document.getElementById('phoneSenate')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('senate');},{signal:signal});
     document.getElementById('phoneDiscussions')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('discussion');},{signal:signal});
-    document.getElementById('phoneBindFromSocial')?.addEventListener('click',()=>openPhoneBinding(),{signal:signal});
-    document.getElementById('phoneBindForm')?.addEventListener('submit',bindPhysicsLabAccount,{signal:signal});
-    updatePhoneBindingState();
     document.getElementById('phoneOpenWorks')?.addEventListener('click',()=>{setPhoneOpen(false);openWorksPanel('all');},{signal:signal});
-    document.querySelectorAll('[data-pl-social]').forEach(button=>button.addEventListener('click',()=>{
-      const socialKind = (button as HTMLElement).dataset.plSocial;
-      if (socialKind && ['profile', 'mine', 'favorites', 'following', 'volunteers'].includes(socialKind)) {
-        loadPhoneSocial(socialKind as SocialKind);
-      }
-    },{signal:signal}));
     claimClose?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimCancel?.addEventListener('click', closeResidencePanel, { signal: signal });
     claimSubmit?.addEventListener('click', () => {
@@ -204,7 +192,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     updatePhoneBadge();
   }
   
-  function setupMultiplayer(nickname: string, password?: string, pl?: { login: string; password: string }) {
+  function setupMultiplayer() {
     if (multiplayer) return;
     multiplayer = new MultiplayerClient({
       connection: (state) => {
@@ -232,7 +220,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       connected: (user, players, houses) => {
         verifiedIds.clear();
         [user, ...players].forEach((player) => { if (player.verified) verifiedIds.add(player.id); });
-        getLoginGate()?.onAuthorized(user.verified);
+        getLoginGate()?.onAuthorized(user);
         onlinePlayers = players.filter((player) => player.id !== user.id);
         const owner = document.getElementById('phoneOwner');
         if (owner) renderVerifiedName(owner, user.nickname, Boolean(user.verified), { suffix: ' 的手机' });
@@ -284,35 +272,12 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       },
       weather: setWeather,
       worldCatalog: (catalog) => { progression.applyCatalog(catalog); onWorldCatalog(catalog); },
-      authenticationFailed: (message, code) => {
-        const gate = getLoginGate();
-        gate?.onAuthFailed();
-        const previousNickname = localStorage.getItem('minicityUser') || nickname;
-        localStorage.removeItem('minicityUser');
+      authenticationFailed: (message) => {
+        // The stored session was rejected: drop it, stop retrying, and hand
+        // control back to the email/password overlay.
         multiplayer?.close();
         multiplayer = null;
-        const input = document.getElementById('loginInput') as HTMLInputElement | null;
-        const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
-        const error = document.getElementById('loginError');
-        if (input) input.value = previousNickname;
-        if (error) { error.textContent = message; error.hidden = false; }
-        // Nickname belongs to a Physics Lab account: reveal the ownership
-        // verification fields so the claimant can prove they are the owner.
-        // The verify-section heading/sub copy already explains the situation, so
-        // do not also surface the red error line.
-
-        // The town password is kept so the retry only needs the Physics Lab
-        // credentials; other failures clear it as before.
-
-        const verifySection = document.getElementById('plVerifySection');
-        if (code === 'pl-verification-required' && verifySection) {
-          if (error) { error.textContent = ''; error.hidden = true; }
-          gate?.onVerificationRequired();
-        } else if (passwordInput && verifySection?.hidden !== false) {
-          passwordInput.value = '';
-        }
-        showLoginEntry();
-        showLoginOverlay();
+        getLoginGate()?.onAuthFailed(message);
         showUnlockToast(message);
       },
       error: (message) => {
@@ -322,7 +287,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         showUnlockToast(message);
       },
     });
-    multiplayer.connect(nickname, password, pl);
+    multiplayer.connect();
   }
   
   function updateOnlineCount(count: number) {
@@ -756,6 +721,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
     setupUI: setupMultiplayerUI, connect: setupMultiplayer, updateRemotePlayers,
     setPhoneOpen, renderMapHouseTags, openResidence, closeResidencePanel,
     navigateToResidence, raycastUserData, sendLocalPosition, destroy,
+    getLocalUser: () => multiplayer?.user ?? null,
     progression,
   };
 }

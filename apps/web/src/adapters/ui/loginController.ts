@@ -2,15 +2,14 @@ import type { LegacyStats } from '../../city/progression/legacyStats';
 import { renderVerifiedName } from './verifiedBadge';
 
 /**
- * Bridges the WebSocket auth lifecycle into the login-overlay state machine:
- * the city entrance is held back and the button stays busy until the server
- * confirms the resident, and every failure branch hands control back.
+ * Bridges the account lifecycle into the login/居民证 overlays. Residents sign
+ * up or log in with an email + password before the city assets download, then
+ * sign a display name on the 居民证 once the download completes.
  */
 export interface LoginGate {
   isWaiting: () => boolean;
-  onAuthorized: (verified?: boolean) => void;
-  onAuthFailed: () => void;
-  onVerificationRequired: () => void;
+  onAuthorized: (user: { nickname: string; verified?: boolean }) => void;
+  onAuthFailed: (message: string) => void;
   onConnectionLost: () => void;
 }
 
@@ -19,16 +18,18 @@ export type LoginControllerOptions = {
   saveStats: (stats: LegacyStats) => void;
   ensureUserId: () => void;
   checkAchievements: () => void;
-  shouldShowIntro: () => boolean;
-  startIntro: () => void;
-  proceed: (nickname?: string, password?: string, pl?: { login: string; password: string }) => void;
+  /** Register or log in over HTTP with the given credentials. */
+  submitCredentials: (email: string, password: string) => void;
+  /** Sign the display name on the 居民证. */
+  submitResidentName: (name: string) => void;
+  /** Identity confirmed (login or token restore): begin downloading the city. */
+  beginDownload: () => void;
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function createLoginController(options: LoginControllerOptions) {
-  let nicknameFeedbackTimer = 0;
   let verifying = false;
-  let verifyStep = false;
-  let pendingCityEntrance: (() => void) | null = null;
 
   function setError(message: string): void {
     const error = document.getElementById('loginError');
@@ -37,7 +38,13 @@ export function createLoginController(options: LoginControllerOptions) {
     error.hidden = !message;
   }
 
-  /** Hold the overlay with a busy button while the server verifies identity. */
+  function setResidentCardError(message: string): void {
+    const error = document.getElementById('residentCardError');
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = !message;
+  }
+
   function beginVerifying(): void {
     const button = document.getElementById('loginBtn') as HTMLButtonElement | null;
     if (verifying) return;
@@ -52,42 +59,9 @@ export function createLoginController(options: LoginControllerOptions) {
     const button = document.getElementById('loginBtn') as HTMLButtonElement | null;
     verifying = false;
     if (button) {
-      button.textContent = verifyStep ? '确认物实身份' : '签下名字，进入小城';
+      button.textContent = '注册 / 登录，进入小城';
       button.disabled = false;
     }
-  }
-
-  /** Close the overlay only after the server has confirmed the resident. */
-  function closeAfterAuth(): void {
-    const overlay = document.getElementById('loginOverlay');
-    endVerifying();
-    hidePlVerification();
-    overlay?.classList.add('hidden');
-    window.setTimeout(() => {
-      if (overlay) overlay.style.display = 'none';
-    }, 550);
-  }
-
-  /** Called by proceedToCity for fresh sign-ins: run the entrance on success. */
-  function holdCityEntrance(entrance: () => void): void {
-    pendingCityEntrance = entrance;
-  }
-
-  function asLoginGate(): LoginGate {
-    return {
-      isWaiting: () => verifying,
-      onAuthorized: (verified) => {
-        const entrance = pendingCityEntrance;
-        pendingCityEntrance = null;
-        if (entrance) entrance();
-        const name = localStorage.getItem('minicityUser');
-        if (name) applyUsername(name, Boolean(verified));
-        closeAfterAuth();
-      },
-      onAuthFailed: () => endVerifying(),
-      onVerificationRequired: () => { endVerifying(); showPlVerification(); },
-      onConnectionLost: () => { endVerifying(); setError('暂时无法连接小城服务器，请稍后重试'); },
-    };
   }
 
   function applyUsername(name: string, verified = false): void {
@@ -113,106 +87,103 @@ export function createLoginController(options: LoginControllerOptions) {
     const overlay = document.getElementById('loginOverlay');
     if (!overlay) return;
     overlay.style.display = 'flex';
-    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.remove('hidden')));
-    window.setTimeout(() => document.getElementById('loginInput')?.focus(), 300);
+    // Force a reflow while `.hidden` still applies so removing it animates in;
+    // a bare double-rAF can be throttled and leave the overlay click-blocking.
+    void overlay.offsetWidth;
+    overlay.classList.remove('hidden');
+    window.setTimeout(() => document.getElementById('loginEmail')?.focus(), 300);
   }
 
-  function checkLogin(): void {
+  function hideLogin(): void {
+    endVerifying();
     const overlay = document.getElementById('loginOverlay');
-    const name = localStorage.getItem('minicityUser');
-    if (overlay) overlay.style.display = 'none';
-    if (name) applyUsername(name);
-    else showLoginEntry();
-    if (options.shouldShowIntro()) options.startIntro();
-    else if (name) options.proceed();
+    overlay?.classList.add('hidden');
+    window.setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 550);
+  }
+
+  function showResidentCard(): void {
+    const overlay = document.getElementById('residentCardOverlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    void overlay.offsetWidth;
+    overlay.classList.remove('hidden');
+    window.setTimeout(() => document.getElementById('residentCardName')?.focus(), 300);
+  }
+
+  function hideResidentCard(): void {
+    const overlay = document.getElementById('residentCardOverlay');
+    overlay?.classList.add('hidden');
+    window.setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 550);
+  }
+
+  /**
+   * Entry point at boot: a stored session token skips the login overlay and
+   * starts the download; otherwise the resident must register or log in first.
+   */
+  function startAuth(): void {
+    if (localStorage.getItem('minicityServerToken')) options.beginDownload();
     else showLogin();
-  }
-
-  /** Read the Physics Lab ownership-verification fields when they are shown. */
-  function collectPlCredentials(): { login: string; password: string } | undefined | null {
-    const section = document.getElementById('plVerifySection');
-    if (!section || section.hidden) return undefined;
-    const login = (document.getElementById('plLoginInput') as HTMLInputElement | null)?.value.trim() ?? '';
-    const password = (document.getElementById('plPasswordInput') as HTMLInputElement | null)?.value ?? '';
-    if (!login || !password) return null;
-    return { login, password };
-  }
-
-  function showPlVerification(): void {
-    verifyStep = true;
-    document.querySelectorAll<HTMLElement>('.login-credential').forEach((element) => { element.hidden = true; });
-    const section = document.getElementById('plVerifySection');
-    if (section) section.hidden = false;
-    const button = document.getElementById('loginBtn');
-    if (button && !verifying) button.textContent = '确认物实身份';
-    (document.getElementById('plLoginInput') as HTMLInputElement | null)?.focus();
-  }
-
-  function hidePlVerification(focusNickname = false): void {
-    verifyStep = false;
-    const section = document.getElementById('plVerifySection');
-    if (section) section.hidden = true;
-    document.querySelectorAll<HTMLElement>('.login-credential').forEach((element) => { element.hidden = false; });
-    const login = document.getElementById('plLoginInput') as HTMLInputElement | null;
-    const password = document.getElementById('plPasswordInput') as HTMLInputElement | null;
-    if (login) login.value = '';
-    if (password) password.value = '';
-    const button = document.getElementById('loginBtn');
-    if (button && !verifying) button.textContent = '签下名字，进入小城';
-    if (focusNickname) (document.getElementById('loginInput') as HTMLInputElement | null)?.focus();
-  }
-
-  function resetVerification(): void {
-    hidePlVerification(true);
-    setError('');
   }
 
   function login(): void {
     if (verifying) return;
-    const input = document.getElementById('loginInput') as HTMLInputElement | null;
+    const emailInput = document.getElementById('loginEmail') as HTMLInputElement | null;
     const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
-    const name = input?.value.trim() ?? '';
+    const email = emailInput?.value.trim() ?? '';
     const password = passwordInput?.value ?? '';
-    if (name.length < 2) return setError('Nickname must contain at least two characters.');
-    if (!/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
-    if (!password) return setError('Enter a password.');
-    const pl = collectPlCredentials();
-    if (pl === null) return setError('请填写物实账号和密码完成身份验证，或换一个昵称。');
-    localStorage.setItem('minicityUser', name);
+    if (!email) return setError('请输入邮箱。');
+    if (!EMAIL_PATTERN.test(email)) return setError('邮箱格式不正确。');
+    if (!password) return setError('请输入密码。');
     const stats = options.getStats();
     if (!stats.joinDate) {
       stats.joinDate = Date.now();
       options.saveStats(stats);
     }
     options.ensureUserId();
-    applyUsername(name);
-    options.checkAchievements();
-    // Keep the overlay up and hold the button in a waiting state until the
-    // server confirms the resident; the city opens on the `hello` success
-    // callback (closeAfterAuth), so verification always completes first.
     beginVerifying();
     setError('');
-    options.proceed(name, password, pl);
+    options.submitCredentials(email, password);
   }
 
-  function validateInput(): void {
-    const input = document.getElementById('loginInput') as HTMLInputElement | null;
-    if (!input) return;
-    const name = input.value.trim();
-    window.clearTimeout(nicknameFeedbackTimer);
-    // The verification request is nickname-specific: editing the nickname
-    // invalidates it, so put the form back into its plain state.
-    hidePlVerification();
-    if (name && !/^[\p{L}\p{N}]{2,40}$/u.test(name)) return setError('Use only letters or numbers in your nickname.');
-    if (name.length === 1) {
-      nicknameFeedbackTimer = window.setTimeout(() => {
-        const current = (document.getElementById('loginInput') as HTMLInputElement | null)?.value.trim() ?? '';
-        if (current === name && current.length < 2) setError('Nickname must contain at least two characters.');
-      }, 700);
-      return;
-    }
-    setError('');
+  function signResidentCard(): void {
+    const input = document.getElementById('residentCardName') as HTMLInputElement | null;
+    const name = input?.value.trim() ?? '';
+    if (!name) return setResidentCardError('请签上你的名字。');
+    if (name.length > 40) return setResidentCardError('名字最多 40 个字符。');
+    setResidentCardError('');
+    options.submitResidentName(name);
   }
 
-  return { checkLogin, showLogin, showLoginEntry, login, validateInput, hidePlVerification, resetVerification, setError, endVerifying, holdCityEntrance, asLoginGate };
+  function asLoginGate(): LoginGate {
+    return {
+      isWaiting: () => verifying,
+      onAuthorized: (user) => {
+        const name = user.nickname?.trim();
+        if (name) {
+          localStorage.setItem('minicityUser', name);
+          applyUsername(name, Boolean(user.verified));
+        }
+      },
+      onAuthFailed: (message) => {
+        endVerifying();
+        localStorage.removeItem('minicityServerToken');
+        showLoginEntry();
+        showLogin();
+        setError(message);
+      },
+      onConnectionLost: () => { endVerifying(); setError('暂时无法连接小城服务器，请稍后重试'); },
+    };
+  }
+
+  return {
+    startAuth, showLogin, hideLogin, login, signResidentCard, showResidentCard, hideResidentCard,
+    showLoginError: (message: string) => {
+      endVerifying();
+      const passwordInput = document.getElementById('loginPassword') as HTMLInputElement | null;
+      if (passwordInput) passwordInput.value = '';
+      setError(message);
+    },
+    showResidentCardError: setResidentCardError,
+    applyUsername, showLoginEntry, asLoginGate, endVerifying,
+  };
 }

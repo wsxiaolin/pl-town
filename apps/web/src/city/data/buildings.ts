@@ -862,6 +862,15 @@ export const BUILDING_CONTENT: Record<string, BuildingContentLike> = {
       "你要参与这个故事的话，就请签上你的名字。",
       "「签名之后，你就是这座城的人了。」",
     ],
+    dialogTree: [
+      {
+        text: "石台侧面还有一行小字：如果你的名字与物实社区昵称同名，可以在此证明它属于你。",
+        options: [
+          { text: "认证我的物实昵称", next: null, action: "certify" },
+          { text: "知道了", next: null },
+        ],
+      },
+    ],
   },
   newsstand: {
     name: "报摊",

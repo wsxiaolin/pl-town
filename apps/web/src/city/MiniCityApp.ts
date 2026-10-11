@@ -30,6 +30,7 @@ import { createProgressionController } from './progression/progressionController
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
 import { createLoginController } from '../adapters/ui/loginController';
+import { createCertifyController } from '../adapters/ui/certifyController';
 import { createOnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
@@ -117,6 +118,7 @@ let cityDialogs: CityDialogController | null = null;
 let stories: StoryOrchestration;
 let mapController: ReturnType<typeof createMapController>;
 let loginController: ReturnType<typeof createLoginController>;
+let certifyController: ReturnType<typeof createCertifyController>;
 let onboardingTutorial: ReturnType<typeof createOnboardingTutorialController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>;
@@ -598,15 +600,6 @@ function init() {
     isCinematicCameraActive: () => view.isCinematic(),
     isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
   });
-  loginController = createLoginController({
-    getStats,
-    saveStats,
-    ensureUserId: getUserId,
-    checkAchievements,
-    shouldShowIntro: shouldShowCG,
-    startIntro: startCG,
-    proceed: proceedToCity,
-  });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });
   statsPanelController = createStatsPanelController({
     getStats,
@@ -628,6 +621,7 @@ function init() {
     onDialogueAction: (action) => {
       if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if (action.startsWith('open-url:')) window.location.href = action.slice(9);
+      if (action === 'certify') certifyController?.show();
       if (action.startsWith('achievement:')) {
         const id = action.slice('achievement:'.length);
         const achievement = ACHIEVEMENTS.find((entry) => entry.id === id);
@@ -726,21 +720,112 @@ function init() {
   themeSync.syncTimeAndTheme();
   document.getElementById('labelsWrap')?.classList.add('hidden');
   frameLoop.start();
-  loginController.checkLogin();
   multiplayerHousing.setupUI();
 }
 
-function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
-  const entrance = () => {
-    sceneAnimations.entranceAnimation();
-    if (cursorChar) cursorChar.visible = true;
-    trackingInterval = startTimeTracking();
-    localStorage.removeItem('minicityPassword');
-  };
-  // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
-  if (password === undefined && pl === undefined) entrance();
-  else loginController?.holdCityEntrance(entrance);
-  multiplayerHousing.connect(nickname, password, pl);
+// Account controllers live outside the scene so the email/password gate can run
+// before (and trigger) the city download; they only touch the DOM and the
+// module-level helpers below.
+function setupAccountControllers(): void {
+  loginController = createLoginController({
+    getStats,
+    saveStats,
+    ensureUserId: getUserId,
+    checkAchievements,
+    submitCredentials: (email, password) => { void loginWithCredentials(email, password); },
+    submitResidentName: (name) => { void signResidentCard(name); },
+    beginDownload: beginCityDownload,
+  });
+  certifyController = createCertifyController({
+    onVerified: (verified) => {
+      const client = multiplayerHousing?.getLocalUser();
+      if (client) client.verified = verified;
+      const name = localStorage.getItem('minicityUser') ?? '';
+      if (name) loginController.applyUsername(name, verified);
+    },
+    showUnlockToast,
+  });
+  document.getElementById('certifySubmit')?.addEventListener('click', () => { void certifyController.submit(); }, { signal: lifecycle.signal });
+  document.getElementById('certifyClose')?.addEventListener('click', () => certifyController.hide(), { signal: lifecycle.signal });
+  document.getElementById('certifyLogin')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void certifyController.submit(); }, { signal: lifecycle.signal });
+  document.getElementById('certifyPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') void certifyController.submit(); }, { signal: lifecycle.signal });
+  // The account overlays are shown before the city downloads, so their controls
+  // must be wired here rather than in the post-boot city event bindings.
+  document.getElementById('loginBtn')?.addEventListener('click', () => loginController.login(), { signal: lifecycle.signal });
+  document.getElementById('loginEmail')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loginController.login(); }, { signal: lifecycle.signal });
+  document.getElementById('loginPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loginController.login(); }, { signal: lifecycle.signal });
+  document.getElementById('residentCardSign')?.addEventListener('click', () => loginController.signResidentCard(), { signal: lifecycle.signal });
+  document.getElementById('residentCardName')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') loginController.signResidentCard(); }, { signal: lifecycle.signal });
+}
+
+// ── Account lifecycle ────────────────────────────────────────────────────────
+// Register/login happens over HTTP before any city assets download, so the
+// display name (居民证) can be signed after the download finishes.
+async function loginWithCredentials(email: string, password: string): Promise<void> {
+  try {
+    const response = await fetch('/town-api/account/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const payload = await response.json().catch(() => ({})) as { token?: string; user?: { nickname?: string; verified?: boolean }; error?: string };
+    if (!response.ok || !payload.token) throw new Error(payload.error || '登录失败，请稍后重试');
+    localStorage.setItem('minicityServerToken', payload.token);
+    const nickname = payload.user?.nickname?.trim() ?? '';
+    if (nickname) localStorage.setItem('minicityUser', nickname);
+    else localStorage.removeItem('minicityUser');
+    loginController.hideLogin();
+    if (nickname) loginController.applyUsername(nickname, Boolean(payload.user?.verified));
+    beginCityDownload();
+  } catch (error) {
+    loginController.showLoginError(error instanceof Error ? error.message : '登录失败，请稍后重试');
+  }
+}
+
+async function signResidentCard(name: string): Promise<void> {
+  const token = localStorage.getItem('minicityServerToken') ?? '';
+  try {
+    const response = await fetch('/town-api/account/name', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, name }),
+    });
+    const payload = await response.json().catch(() => ({})) as { user?: { nickname?: string }; error?: string };
+    if (!response.ok) throw new Error(payload.error || '签署失败，请稍后重试');
+    const displayName = payload.user?.nickname?.trim() || name;
+    localStorage.setItem('minicityUser', displayName);
+    loginController.applyUsername(displayName);
+    loginController.hideResidentCard();
+    enterCity();
+  } catch (error) {
+    loginController.showResidentCardError(error instanceof Error ? error.message : '签署失败，请稍后重试');
+  }
+}
+
+let cityDownloaded = false;
+let introFinished = false;
+
+/** Start the city download + opening CG after the identity is confirmed. */
+function beginCityDownload(): void {
+  cityDownloaded = false;
+  introFinished = false;
+  lifecycle.startDownload();
+  if (shouldShowCG()) startCG();
+  else introFinished = true;
+  maybeEnterCity();
+}
+
+/** Enter the city once download and intro are done, after signing the 居民证. */
+function maybeEnterCity(): void {
+  if (!cityDownloaded || !introFinished) return;
+  if (!localStorage.getItem('minicityUser')) loginController.showResidentCard();
+  else enterCity();
+}
+
+function enterCity(): void {
+  sceneAnimations.entranceAnimation();
+  if (cursorChar) cursorChar.visible = true;
+  trackingInterval = startTimeTracking();
+  multiplayerHousing.connect();
+  onboardingTutorial?.start();
   checkAchievements();
 }
 
@@ -777,10 +862,18 @@ const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
-  startTutorial: () => onboardingTutorial?.start(),
-  proceedToCity,
   showLogin: () => loginController?.showLogin(),
   disposeSession,
+  onIntroFinished: () => {
+    showUnlockToast('全屏效果更好哦');
+    introFinished = true;
+    maybeEnterCity();
+  },
+});
+
+window.addEventListener('minicity:city-ready', () => {
+  cityDownloaded = true;
+  maybeEnterCity();
 });
 
 export function destroyBuilding(buildingId: string): boolean {
@@ -801,5 +894,9 @@ export function restoreResidence(residenceId: string): boolean {
 export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
-export function startMiniCity() { lifecycle.start(); }
+export function startMiniCity() {
+  setupAccountControllers();
+  lifecycle.start();
+  loginController.startAuth();
+}
 export function destroyMiniCity() { lifecycle.destroy(); }

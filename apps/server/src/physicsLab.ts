@@ -86,33 +86,6 @@ export async function requestAccount(session: ApiSession, path: string, body: un
   return data as Record<string, unknown>;
 }
 
-export type PhysicsLabUserLookup = { exists: boolean; userId: string | null };
-
-/**
- * Check whether a nickname already belongs to a Physics Lab community account.
- * Called when a new resident signs a nickname so that a claimed Physics Lab
- * name can only be granted after its owner proves their identity.
- *
- * Fails closed: only a definitive "user not found" answer (Status 404) reports
- * `exists: false`; network errors and unexpected responses throw so the
- * registration is rejected instead of silently skipping the ownership check.
- */
-export async function findPhysicsLabUser(name: string): Promise<PhysicsLabUserLookup> {
-  const credentials = await authenticate();
-  const response = await fetchUpstream(`${API_BASE}/Users/GetUser`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-API-Token': credentials.token, 'x-API-AuthCode': credentials.authCode, 'x-API-Version': String(API_VERSION) },
-    body: JSON.stringify({ Name: name }), signal: AbortSignal.timeout(15_000),
-  });
-  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-  // The upstream uses both HTTP 404 and HTTP 200 with a business-level 404.
-  if (data.Status === 404 && (response.status === 404 || response.status === 200)) return { exists: false, userId: null };
-  const user = (data.Data as { User?: { ID?: unknown } } | undefined)?.User;
-  if (!response.ok || data.Status !== 200 || !user || typeof user.ID !== 'string' || !user.ID) {
-    throw new Error(typeof data.Message === 'string' && data.Message ? data.Message : 'Physics Lab user lookup failed');
-  }
-  return { exists: true, userId: user.ID };
-}
-
 function imageUrl(id: string, image = 0) {
   return `${STATIC_BASE}/experiments/images/${id.slice(0, 4)}/${id.slice(4, 6)}/${id.slice(6, 8)}/${id.slice(8, 24)}/${image}.jpg`;
 }

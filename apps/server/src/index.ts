@@ -1,10 +1,9 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { getCityState } from './cityGovernance.js';
 import { handleCityRequest } from './cityGovernanceRouter.js';
-import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleAdminError, handleAdminRequest } from './adminRouter.js';
-import { authenticate, PhysicsLabVerificationRequiredError, RegistrationLimitError, tokenHash } from './auth.js';
+import { authenticate, RegistrationLimitError, tokenHash, normalizeDisplayName } from './auth.js';
 import { createBackup, startAutomaticBackups, stopAutomaticBackups, waitForBackup } from './backup.js';
 import { handleDeploySnapshot } from './deploySnapshot.js';
 import { discardStaleStagedBackups, restoreLatestOffsiteBackupIfEmpty, uploadOffsiteBackup } from './offsiteBackup.js';
@@ -15,7 +14,7 @@ import { HttpBodyError, readJson } from './httpBody.js';
 import { closeLogger, logger } from './logger.js';
 import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
-import { authenticateAccount, getPublicWorks, queryPublicWorks, requestAccount } from './physicsLab.js';
+import { authenticateAccount, getPublicWorks, queryPublicWorks } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_REWARDS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
 import { getWeatherConfig, resetWorldConfig, setWeatherConfig } from './worldConfig.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
@@ -31,8 +30,6 @@ const authAttempts = new Map<string, { count: number; startedAt: number }>();
 const physicsLoginAttempts = new Map<string, { count: number; startedAt: number }>();
 const messageWindows = new WeakMap<WebSocket, { startedAt: number; count: number }>();
 const chatWindows = new Map<string, { startedAt: number; count: number }>();
-const physicsSessions = new Map<string, { token: string; authCode: string; user: Omit<User, 'plUserId'>; expiresAt: number }>();
-const PHYSICS_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGES_PER_SECOND = 60;
 const MAX_CHAT_MESSAGES_PER_TEN_SECONDS = 5;
 const CHAT_HISTORY_LIMIT = 100;
@@ -52,9 +49,9 @@ const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // budget used by WebSocket `hello` logins. Password sign-ins still use the
 // global limiter to stay consistent with the game login path.
 const npcEditTokenRestoreRate = new FixedWindowRateLimiter(20, 60_000);
-// Shared per-IP + global budget for every Physics Lab credential path
-// (ownership verification during sign-in and direct credential relays) so the
-// call sites cannot drift apart.
+// Shared per-IP + global budget for Physics Lab credential checks: the optional
+// city certification building verifies that a resident's display name matches a
+// Physics Lab account they own. Keeping one limiter stops credential guessing.
 function consumePhysicsLoginAttempt(ip: string): boolean {
   const attempt = physicsLoginAttempts.get(ip) ?? { count: 0, startedAt: Date.now() };
   if (Date.now() - attempt.startedAt >= 60_000) { attempt.startedAt = Date.now(); attempt.count = 0; }
@@ -67,9 +64,9 @@ let serverWeather: Weather = getWeatherConfig().value;
 // catalog carries hundreds of KB of dialog text that the page never shows.
 const npcEditCatalogItems = NPC_CATALOG.map(({ id, name, role, npcType }) => ({ id, name, role, npcType }));
 const send = (socket: WebSocket, message: ServerMessage) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); };
-// Residents' email addresses and upstream IDs must never be broadcast to other
-// players: only the derived verification flag is public.
-const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position, verified: user.plUserId !== null });
+// Residents' email addresses must never be broadcast to other players: only the
+// derived certification flag is public.
+const publicUser = (user: User): PublicUser => ({ id: user.id, nickname: user.nickname, position: user.position, verified: user.verified });
 const broadcast = (message: ServerMessage, except?: string) => clients.forEach((client, id) => { if (id !== except) send(client.socket, message); });
 const fail = (socket: WebSocket, message: string, code?: string) => send(socket, { type: 'error', message, ...(code ? { code } : {}) });
 const chatModeration = new ChatModerationService((messageId) => broadcast({ type: 'chat.removed', messageId, reason: 'moderation' }));
@@ -136,7 +133,6 @@ setInterval(() => {
   for (const [ip, attempt] of authAttempts) if (attempt.startedAt < cutoff) authAttempts.delete(ip);
   for (const [ip, attempt] of physicsLoginAttempts) if (attempt.startedAt < cutoff) physicsLoginAttempts.delete(ip);
   const now = Date.now();
-  for (const [id, session] of physicsSessions) if (session.expiresAt <= now) physicsSessions.delete(id);
   for (const [id, window] of chatWindows) if (window.startedAt < now - 10_000) chatWindows.delete(id);
 }, 60_000).unref();
 
@@ -154,9 +150,9 @@ async function handle(client: Client, raw: string) {
   if (message.type === 'hello') {
     if (client.ready || client.authInProgress) { fail(client.socket, 'Already authenticating'); return; }
     if ((message.token !== undefined && typeof message.token !== 'string')
-      || (message.nickname !== undefined && typeof message.nickname !== 'string')
+      || (message.email !== undefined && typeof message.email !== 'string')
       || (message.password !== undefined && typeof message.password !== 'string')
-      || (message.pl !== undefined && (typeof message.pl !== 'object' || message.pl === null || typeof message.pl.login !== 'string' || typeof message.pl.password !== 'string' || message.pl.login.length > 160 || message.pl.password.length > 256))) return fail(client.socket, 'Invalid authentication message');
+      || (message.name !== undefined && typeof message.name !== 'string')) return fail(client.socket, 'Invalid authentication message');
     client.authInProgress = true;
     const address = client.ip;
     const attempt = authAttempts.get(address) ?? { count: 0, startedAt: now };
@@ -165,28 +161,23 @@ async function handle(client: Client, raw: string) {
     authAttempts.set(address, attempt);
     let result: Awaited<ReturnType<typeof authenticate>>;
     try {
-      const sinceIso = new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString();
       result = await authenticate({
-        token: message.token, nickname: message.nickname, password: message.password, ip: address,
-        registrationLimit: { sinceIso, max: MAX_REGISTRATIONS_PER_IP },
-        pl: message.pl,
-        // Physics Lab ownership verification relays a credential check to the
-        // upstream account API; it shares the Physics Lab login budget so
-        // would-be relays cannot use residents as a guessing proxy.
-        plVerifyGuard: () => {
-          if (!consumePhysicsLoginAttempt(address)) {
-            logger.warn('Physics Lab verification rate limit exceeded', { ip: address });
-            throw new Error('物实验证尝试过于频繁，请稍后再试');
-          }
-        },
+        token: message.token, email: message.email, password: message.password, ip: address,
+        registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : '登录失败';
-      const code = error instanceof PhysicsLabVerificationRequiredError ? error.code : undefined;
       logger.warn('Login failed', { ip: address, reason });
-      fail(client.socket, reason, code);
+      fail(client.socket, reason);
       client.authInProgress = false;
       return;
+    }
+    // A freshly registered resident may pick a display name in the same
+    // handshake; the name is server-unique-free and can be changed later from
+    // the 居民证. Existing sessions never get renamed by a stray `name`.
+    if (result.registered && message.name) {
+      const displayName = normalizeDisplayName(message.name);
+      if (displayName) { db.setUserDisplayName(result.user.id, displayName); result.user = db.getUser(result.user.id)!; }
     }
     if (client.socket.readyState !== WebSocket.OPEN) { client.authInProgress = false; return; }
     const previous = clients.get(result.user.id);
@@ -454,36 +445,26 @@ const http = createServer(async (request, response) => {
         response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
         return;
       }
-      const plBody = typeof body.pl === 'object' && body.pl !== null ? body.pl as { login?: unknown; password?: unknown } : null;
-      if (plBody && (typeof plBody.login !== 'string' || typeof plBody.password !== 'string' || plBody.login.length > 160 || plBody.password.length > 256)) {
-        throw new HttpBodyError('物实账号信息格式不正确', 400);
-      }
       const result = isRestore
         ? await authenticate({ token: body.token as string })
         : await authenticate({
-            nickname: typeof body.nickname === 'string' ? body.nickname : '',
+            email: typeof body.email === 'string' ? body.email : '',
             password: typeof body.password === 'string' ? body.password : '',
             ip: requestIp,
             registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
-            pl: typeof plBody?.login === 'string' && typeof plBody.password === 'string'
-              ? { login: plBody.login, password: plBody.password }
-              : undefined,
-            plVerifyGuard: () => {
-              if (!consumePhysicsLoginAttempt(requestIp)) {
-                logger.warn('Physics Lab verification rate limit exceeded', { ip: requestIp });
-                throw new Error('物实验证尝试过于频繁，请稍后再试');
-              }
-            },
           });
+      if (result.registered && typeof body.name === 'string') {
+        const displayName = normalizeDisplayName(body.name);
+        if (displayName) { db.setUserDisplayName(result.user.id, displayName); result.user = db.getUser(result.user.id)!; }
+      }
       response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
       response.end(JSON.stringify({ token: result.token, user: result.user }));
     } catch (error) {
       if (respondHttpBodyError(response, error)) return;
       const message = error instanceof Error ? error.message : '登录失败';
       const status = error instanceof RegistrationLimitError ? 429 : 401;
-      const code = error instanceof PhysicsLabVerificationRequiredError ? error.code : undefined;
       response.writeHead(status, { ...headers, 'cache-control': 'no-store' });
-      response.end(JSON.stringify(code ? { error: message, code } : { error: message }));
+      response.end(JSON.stringify({ error: message }));
     }
     return;
   }
@@ -545,87 +526,112 @@ const http = createServer(async (request, response) => {
     catch(error){ if (respondHttpBodyError(response, error)) return; logApiError(request, error); response.writeHead(502,{...headers,'cache-control':'no-store'}); response.end(JSON.stringify({error:error instanceof Error?error.message:'Upstream unavailable'})); }
     return;
   }
-  if (request.method === 'POST' && request.url === '/town-api/pl/login') {
+  // Email + password account endpoints. Email is the single credential (never
+  // verified); the display name is chosen separately when signing the 居民证.
+  if (request.method === 'POST' && (request.url === '/town-api/account/login' || request.url === '/town-api/account/register')) {
     try {
-      if (!consumePhysicsLoginAttempt(requestIp)) {
-        logger.warn('Physics Lab login rate limit exceeded', { ip: requestIp });
-        response.writeHead(429, { ...headers, 'cache-control': 'no-store', 'retry-after': '60' });
-        response.end(JSON.stringify({ error: 'Too many login attempts' }));
+      const body = await readJson(request, 4_096);
+      if (typeof body.token === 'string' && body.token) {
+        if (!npcEditTokenRestoreRate.consume(requestIp).allowed) {
+          response.writeHead(429, { ...headers, 'retry-after': '60' });
+          response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
+          return;
+        }
+        const user = db.getUserByToken(tokenHash(body.token));
+        if (!user) throw new HttpBodyError('会话已过期，请重新登录', 401);
+        response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+        response.end(JSON.stringify({ token: body.token, user: publicUser(user) }));
         return;
       }
-      const body = await readJson(request); const login = typeof body.login === 'string' ? body.login.trim() : ''; const password = typeof body.password === 'string' ? body.password : '';
-      if (!login || !password || login.length > 160 || password.length > 256) throw new Error('Login details are invalid');
-      const result = await authenticateAccount(login, password); const id = randomUUID();
-      const user = { id: String(result.user?.ID || id), nickname: String(result.user?.Nickname || login), email: null, position: { x: 0, y: 0, z: -6 } };
-      physicsSessions.set(id, { token: result.token, authCode: result.authCode, user, expiresAt: Date.now() + PHYSICS_SESSION_TTL_MS });
-      while (physicsSessions.size > 10_000) physicsSessions.delete(physicsSessions.keys().next().value as string);
-      response.writeHead(200, headers); response.end(JSON.stringify({ session: id, user }));
-    } catch (error) { if (respondHttpBodyError(response, error)) return; logApiError(request, error); response.writeHead(401, { ...headers, 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' })); }
+      if (!npcEditLoginRate.consume(requestIp).allowed || !globalAuthenticationRate.consume('global').allowed) {
+        response.writeHead(429, { ...headers, 'retry-after': '60' });
+        response.end(JSON.stringify({ error: '登录尝试过于频繁，请稍后再试' }));
+        return;
+      }
+      const result = await authenticate({
+        email: typeof body.email === 'string' ? body.email : '',
+        password: typeof body.password === 'string' ? body.password : '',
+        ip: requestIp,
+        registrationLimit: { sinceIso: new Date(Date.now() - REGISTRATION_WINDOW_MINUTES * 60_000).toISOString(), max: MAX_REGISTRATIONS_PER_IP },
+      });
+      if (result.registered && typeof body.name === 'string') {
+        const displayName = normalizeDisplayName(body.name);
+        if (displayName) { db.setUserDisplayName(result.user.id, displayName); result.user = db.getUser(result.user.id)!; }
+      }
+      response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ token: result.token, user: publicUser(result.user) }));
+    } catch (error) {
+      if (respondHttpBodyError(response, error)) return;
+      const message = error instanceof Error ? error.message : '登录失败';
+      const status = error instanceof RegistrationLimitError ? 429 : 401;
+      response.writeHead(status, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: message }));
+    }
     return;
   }
-  const accountMatch = request.url?.match(/^\/town-api\/pl\/(messages|notifications)(?:\?(.*))?$/);
-  if (request.method === 'GET' && accountMatch) {
-    const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
-    if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
+  // Sign or rename the 居民证. Display names are free-form, may repeat, and may
+  // be changed at any time; no ownership check is performed.
+  if (request.method === 'POST' && request.url === '/town-api/account/name') {
     try {
-      const path = '/Messages/GetMessages';
-      const params = new URLSearchParams(accountMatch[2] || '');
-      const skip = Math.max(0, Number.parseInt(params.get('skip') || '0', 10) || 0);
-      const take = Math.min(24, Math.max(1, Number.parseInt(params.get('take') || '20', 10) || 20));
-      const body = { CategoryID: 3, Skip: skip, Take: take, NoTemplates: accountMatch[1] === 'messages' };
-      const data = await requestAccount(account, path, body);
-      const collection = (value: unknown): unknown[] => Array.isArray(value) ? value : (typeof value === 'object' && value !== null && Array.isArray((value as { $values?: unknown[] }).$values) ? (value as { $values: unknown[] }).$values : []);
-      const dataRecord = data.Data as { Messages?: unknown; Templates?: unknown } | undefined;
-      const items = collection(dataRecord?.Messages).length ? collection(dataRecord?.Messages) : collection(data.Data);
-      const templates = collection(dataRecord?.Templates);
-      response.writeHead(200, headers); response.end(JSON.stringify({ data: items, templates, hasMore: items.length >= take }));
-    } catch (error) { logApiError(request, error); response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
+      const body = await readJson(request, 1_024);
+      const token = typeof body.token === 'string' ? body.token : '';
+      if (!token || token.length > 128) throw new HttpBodyError('请先登录', 401);
+      const user = db.getUserByToken(tokenHash(token));
+      if (!user) throw new HttpBodyError('请先登录', 401);
+      const displayName = normalizeDisplayName(typeof body.name === 'string' ? body.name : '');
+      if (!displayName) throw new HttpBodyError('请输入名字', 400);
+      db.setUserDisplayName(user.id, displayName);
+      const updated = db.getUser(user.id)!;
+      const client = clients.get(user.id);
+      if (client) { client.user.nickname = updated.nickname; broadcast({ type: 'player.updated', player: publicUser(client.user) }); }
+      response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ user: publicUser(updated) }));
+    } catch (error) {
+      if (respondHttpBodyError(response, error)) return;
+      logApiError(request, error);
+      response.writeHead(500, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Request failed' }));
+    }
     return;
   }
-  const socialMatch = request.url?.match(/^\/town-api\/pl\/social\?kind=(profile|following|followers|volunteers|mine|favorites)$/);
-  if (request.method === 'GET' && socialMatch) {
-    const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
-    if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
+  // City certification building: verify that the resident owns the Physics Lab
+  // account whose nickname exactly matches their current display name. Success
+  // flips the persisted `verified` flag that powers the certification badge.
+  if (request.method === 'POST' && request.url === '/town-api/account/verify') {
     try {
-      const kind = socialMatch[1]; let result: Record<string, unknown>;
-      if (kind === 'profile') result = await requestAccount(account, '/Users/GetUser', { ID: account.user.id });
-      else if (kind === 'following' || kind === 'followers' || kind === 'volunteers') result = await requestAccount(account, '/Users/GetRelations', { UserID: account.user.id, DisplayType: kind === 'following' ? 1 : kind === 'followers' ? 0 : 3, Skip: 0, Take: 24, Query: '' });
-      else result = await requestAccount(account, '/Contents/QueryExperiments', { Query: { Category: 'Experiment', Languages: [], ExcludeLanguages: null, Tags: null, ExcludeTags: null, ModelTags: null, ModelID: null, ParentID: null, UserID: kind === 'mine' ? account.user.id : 'Favorite', Special: null, From: null, Skip: 0, Take: 24, Days: 0, Sort: 0, ShowAnnouncement: false } });
-      response.writeHead(200, headers); response.end(JSON.stringify({ kind, data: result.Data }));
-    } catch (error) { logApiError(request, error); response.writeHead(502, headers); response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab request failed' })); }
+      const body = await readJson(request, 4_096);
+      const token = typeof body.token === 'string' ? body.token : '';
+      if (!token || token.length > 128) throw new HttpBodyError('请先登录', 401);
+      const user = db.getUserByToken(tokenHash(token));
+      if (!user) throw new HttpBodyError('请先登录', 401);
+      if (!user.nickname) throw new HttpBodyError('请先在居民证上签字', 400);
+      const login = typeof body.login === 'string' ? body.login.trim() : '';
+      const password = typeof body.password === 'string' ? body.password : '';
+      if (!login || !password || login.length > 160 || password.length > 256) throw new HttpBodyError('物实账号信息格式不正确', 400);
+      if (!consumePhysicsLoginAttempt(requestIp)) {
+        logger.warn('Physics Lab verification rate limit exceeded', { ip: requestIp });
+        response.writeHead(429, { ...headers, 'cache-control': 'no-store', 'retry-after': '60' });
+        response.end(JSON.stringify({ error: '验证尝试过于频繁，请稍后再试' }));
+        return;
+      }
+      const result = await authenticateAccount(login, password);
+      const upstreamName = String(result.user?.Nickname || '').trim();
+      if (!upstreamName || upstreamName !== user.nickname) {
+        throw new HttpBodyError('物实昵称与当前展示名不一致，无法认证', 400);
+      }
+      db.setUserVerified(user.id, true);
+      const updated = db.getUser(user.id)!;
+      const client = clients.get(user.id);
+      if (client) { client.user.verified = true; broadcast({ type: 'player.updated', player: publicUser(client.user) }); }
+      response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ verified: true, user: publicUser(updated) }));
+    } catch (error) {
+      if (respondHttpBodyError(response, error)) return;
+      logApiError(request, error);
+      response.writeHead(401, { ...headers, 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Physics Lab login failed' }));
+    }
     return;
-  }
-  const workMatch = request.url?.match(/^\/town-api\/pl\/work\/([A-Za-z0-9]+)(?:\/(comments|star|star-status|support|supporters|derivatives))?$/);
-  if (workMatch && (request.method === 'GET' || request.method === 'POST')) {
-    const key = request.headers['x-town-pl-session']; const account = typeof key === 'string' ? physicsSessions.get(key) : undefined;
-    if (!account || account.expiresAt <= Date.now()) { response.writeHead(401, headers); response.end(JSON.stringify({ error: 'Physics Lab session expired' })); return; }
-    try {
-      const id=workMatch[1]; const action=workMatch[2]; const category=request.headers['x-town-work-category']==='Discussion'?'Discussion':'Experiment'; let path='/Contents/GetSummary'; let body: Record<string, unknown> = { ContentID:id, Category:category };
-      if(action==='comments'&&request.method==='GET'){path='/Messages/GetComments';body={TargetID:id,TargetType:category,Skip:0,Take:16};}
-      if(action==='comments'&&request.method==='POST'){const input=await readJson(request);const content=typeof input.content==='string'?input.content.trim().slice(0,1200):'';if(!content)throw new Error('Comment cannot be empty');path='/Messages/PostComment';body={TargetID:id,TargetType:category,Content:content,Language:'Chinese'};}
-      if(action==='star'){const input=await readJson(request);path='/Contents/StarContent';body={ContentID:id,Category:category,Status:input.action!==0,Type:0};}
-      if(action==='star-status'){path='/Contents/IsStarred';body={ContentID:id,Category:category};}
-      if(action==='support'){const input=await readJson(request);path='/Contents/StarContent';body={ContentID:id,Category:category,Status:input.action!==0,Type:1};}
-      if(action==='supporters'){path='/Contents/GetSupporters';body={ContentID:id,Category:category,Skip:0,Take:20};}
-      if(action==='derivatives'){path='/Contents/GetDerivatives';body={ContentID:id,Category:category,WithSummary:true,Language:'Chinese'};}
-      const data=await requestAccount(account,path,body); response.writeHead(200,headers); response.end(JSON.stringify({data:data.Data}));
-    } catch(error){if(respondHttpBodyError(response,error))return;logApiError(request, error);response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Work request failed'}));}
-    return;
-  }
-  const libraryMatch=request.url?.match(/^\/town-api\/pl\/library\?kind=(experiments|discussions)$/);
-  if(request.method==='GET'&&libraryMatch){
-    const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
-    if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
-    try{const identifier=libraryMatch[1]==='discussions'?'Discussions':'Experiments';const data=await requestAccount(account,'/Contents/GetLibrary',{Identifier:identifier,Language:'Chinese'});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}catch(error){logApiError(request, error);response.writeHead(502,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Library unavailable'}));}return;
-  }
-  if(request.method==='POST'&&request.url==='/town-api/pl/logout'){
-    const key=request.headers['x-town-pl-session'];if(typeof key==='string')physicsSessions.delete(key);response.writeHead(200,{...headers,'cache-control':'no-store'});response.end(JSON.stringify({ok:true}));return;
-  }
-  if(request.method==='POST'&&request.url==='/town-api/pl/social/follow'){
-    const key=request.headers['x-town-pl-session'];const account=typeof key==='string'?physicsSessions.get(key):undefined;
-    if(!account||account.expiresAt<=Date.now()){response.writeHead(401,headers);response.end(JSON.stringify({error:'Physics Lab session expired'}));return;}
-    try{const input=await readJson(request);const targetId=typeof input.targetId==='string'?input.targetId:'';if(!/^[A-Za-z0-9]{12,40}$/.test(targetId))throw new Error('Invalid user');const data=await requestAccount(account,'/Users/Follow',{TargetID:targetId,Action:input.action===0?0:1});response.writeHead(200,headers);response.end(JSON.stringify({data:data.Data}));}
-    catch(error){if(respondHttpBodyError(response,error))return;logApiError(request, error);response.writeHead(400,headers);response.end(JSON.stringify({error:error instanceof Error?error.message:'Follow request failed'}));}return;
   }
   response.writeHead(404, { 'x-content-type-options': 'nosniff' }); response.end();
   } catch (error) {

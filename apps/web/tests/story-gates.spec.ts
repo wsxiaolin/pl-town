@@ -5,6 +5,7 @@ test('echo story entry stays suspended and the guide header stays hidden', async
   await page.addInitScript(({ settings }) => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'echo-gate-tester');
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.setItem('minicityRenderSettings', settings);
   }, { settings: RENDER_SETTINGS });
   await waitForCityBooted(page);
@@ -24,6 +25,7 @@ test('an in-progress story locks other story entries with a toast', async ({ pag
   await page.addInitScript(({ settings }) => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'mutex-tester');
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.setItem('minicityRenderSettings', settings);
     // Resume 昨日之歌 mid-story so its phase is "active".
     localStorage.setItem('minicityStory.side.yesterday.spring-1997.v1', JSON.stringify({

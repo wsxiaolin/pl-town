@@ -6,6 +6,7 @@ async function prepareIceWallInventory(page: Page, hasLemonade = true): Promise<
   await page.addInitScript(({ settings, initialHasLemonade }) => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'ice-wall-tester');
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.setItem('minicityRenderSettings', settings);
     const NativeWebSocket = window.WebSocket;
     class IceWallGameWebSocket extends EventTarget {

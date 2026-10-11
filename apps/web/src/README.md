@@ -24,7 +24,7 @@ its existing responsibilities are migrated incrementally.
 - `city/navigation/interiorNavigation.ts`: feature-neutral interior walk bounds, obstacle discovery, and pathfinding shared by narrative scenes.
 - `city/progression/`: legacy `minicityStats` compatibility and time-tracking boundary.
 - `rendering/buildingMeshFactory.ts`: building shape catalog; `proceduralTextureLibrary.ts`: canvas textures; `worldDecorations.ts`: trees, lamps, houses, ponds, and street props.
-- `adapters/ui/cityDialogController.ts`: building/NPC dialog DOM; `communityPanelController.ts`: Physics Lab panels; `multiplayerHousingController.ts`: WebSocket presence and housing UI.
+- `adapters/ui/cityDialogController.ts`: building/NPC dialog DOM; `communityPanelController.ts`: anonymous public-works browsing; `multiplayerHousingController.ts`: WebSocket presence and housing UI.
 
 ## Ice King feature split
 

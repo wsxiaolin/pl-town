@@ -67,7 +67,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 600;
+  /* Above the first-paint boot screen (z-index 1000): the account gate is shown
+     before the city assets download, while the boot screen is still visible. */
+  z-index: 1100;
   transition: opacity 0.5s ease;
 }
 .login-overlay.hidden { opacity: 0; pointer-events: none; }

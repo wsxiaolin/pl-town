@@ -12,12 +12,12 @@ test('new resident tour highlights controls once and stays dismissed', async ({ 
       readyState = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
-        const request = JSON.parse(raw) as { type: string; nickname?: string };
+        const request = JSON.parse(raw) as { type: string };
         if (request.type !== 'hello') return;
         queueMicrotask(() => {
           this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
             type: 'hello', token: 'tour-token',
-            user: { id: 'tour-user', nickname: request.nickname, email: null, position: { x: 0, y: 0, z: -6 } },
+            user: { id: 'tour-user', nickname: 'touruser', email: null, position: { x: 0, y: 0, z: -6 } },
             players: [], houses: [], requests: [],
             progress: { currency: 0, inventory: {}, achievements: [], unlockedBuildings: [], visitedBuildings: [] },
             catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
@@ -37,14 +37,21 @@ test('new resident tour highlights controls once and stays dismissed', async ({ 
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityRenderSettings', settings);
   }, { settings: RENDER_SETTINGS });
+  await page.route('**/town-api/account/login', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'tour-token', user: { id: 'tour-user', nickname: '', email: 'tour@example.com', verified: false, position: { x: 0, y: 0, z: -6 } } }) }));
+  await page.route('**/town-api/account/name', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'tour-user', nickname: 'touruser', verified: false } }) }));
+
   await page.goto('/', { timeout: 60_000, waitUntil: 'commit' });
+  await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 30_000 });
+  await page.locator('#loginEmail').fill('tour@example.com');
+  await page.locator('#loginPassword').fill('tour-password');
+  await page.locator('#loginBtn').click({ force: true });
+
+  // The 居民证 appears once the city download finishes; sign it to enter.
+  await expect(page.locator('#residentCardOverlay')).toBeVisible({ timeout: 90_000 });
+  await page.locator('#residentCardName').fill('touruser');
+  await page.locator('#residentCardSign').click();
   await page.waitForFunction(() => Boolean((window as any)._mini), undefined, { timeout: 90_000 });
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 90_000 });
-
-  await expect(page.locator('#loginOverlay')).toBeVisible();
-  await page.locator('#loginInput').fill('touruser');
-  await page.locator('#loginPassword').fill('tour-pass');
-  await page.locator('#loginBtn').click();
 
   const overlay = page.locator('#tutorialOverlay');
   await expect(overlay).toHaveClass(/open/, { timeout: 20_000 });

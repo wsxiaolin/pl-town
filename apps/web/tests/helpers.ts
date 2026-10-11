@@ -20,6 +20,9 @@ export async function seedCityStorage(page: Page, user = 'tester'): Promise<void
   await page.addInitScript(({ settings, u }) => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', u);
+    // A stored session token skips the email/password overlay so the city
+    // downloads immediately; tests that exercise login seed no token.
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.setItem('minicityRenderSettings', settings);
   }, { settings: RENDER_SETTINGS, u: user });
 }

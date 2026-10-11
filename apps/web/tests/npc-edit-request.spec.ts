@@ -6,7 +6,7 @@ async function mockTownApi(page: Page): Promise<void> {
   await page.route('**/town-api/npc-edit-catalog', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(CATALOG) }));
   await page.route('**/town-api/npc-edit-login', (route) => {
     const body = route.request().postDataJSON();
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: body.token ? 'restored-token' : 'npc-test-token', user: { nickname: body.nickname ?? 'tester' } }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: body.token ? 'restored-token' : 'npc-test-token', user: { nickname: 'tester' } }) });
   });
 }
 
@@ -16,7 +16,7 @@ test('resident submits an NPC edit request through the standalone page', async (
 
   await page.goto('/npc-edit-request.html');
   await expect(page.locator('#loginPanel')).toBeVisible();
-  await page.locator('#loginNickname').fill('tester');
+  await page.locator('#loginEmail').fill('tester@example.com');
   await page.locator('#loginPassword').fill('long-enough-password');
   await page.locator('#loginForm button[type="submit"]').click();
   await expect(page.locator('#requestPanel')).toBeVisible();
@@ -34,7 +34,7 @@ test('add-kind requests use a stable placeholder NPC id', async ({ page }) => {
   await page.route('**/town-api/npc-change-requests', async (route) => { posted = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 8 }) }); });
 
   await page.goto('/npc-edit-request.html');
-  await page.locator('#loginNickname').fill('tester');
+  await page.locator('#loginEmail').fill('tester@example.com');
   await page.locator('#loginPassword').fill('long-enough-password');
   await page.locator('#loginForm button[type="submit"]').click();
   await expect(page.locator('#requestPanel')).toBeVisible();
@@ -62,7 +62,7 @@ test('logout clears the shared session token', async ({ page }) => {
   await mockTownApi(page);
 
   await page.goto('/npc-edit-request.html');
-  await page.locator('#loginNickname').fill('tester');
+  await page.locator('#loginEmail').fill('tester@example.com');
   await page.locator('#loginPassword').fill('long-enough-password');
   await page.locator('#loginForm button[type="submit"]').click();
   await expect(page.locator('#requestPanel')).toBeVisible();
@@ -76,7 +76,7 @@ test('a catalog load failure surfaces on the request panel', async ({ page }) =>
   await page.route('**/town-api/npc-edit-catalog', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'upstream down' }) }));
 
   await page.goto('/npc-edit-request.html');
-  await page.locator('#loginNickname').fill('tester');
+  await page.locator('#loginEmail').fill('tester@example.com');
   await page.locator('#loginPassword').fill('long-enough-password');
   await page.locator('#loginForm button[type="submit"]').click();
   await expect(page.locator('#requestPanel')).toBeVisible();

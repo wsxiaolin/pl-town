@@ -25,8 +25,7 @@ export type EventBindingsOptions = {
   toggleMapMode: () => void;
   closeModal: () => void;
   closeNpcDialog: () => void;
-  getLoginController: () => { login: () => void; validateInput: () => void; showLogin: () => void; resetVerification: () => void } | null;
-  isMovementOnlyMode?: () => boolean;
+  getLoginController: () => { login: () => void; showLogin: () => void; signResidentCard: () => void } | null;  isMovementOnlyMode?: () => boolean;
 };
 
 export function createEventBindings(options: EventBindingsOptions) {
@@ -108,20 +107,10 @@ export function createEventBindings(options: EventBindingsOptions) {
       closeAcademy: () => options.getAcademyController()?.close(),
       closeAcademyReader: () => options.getAcademyController()?.closeReader(),
       closeMutualAid: () => options.getMutualAidController?.()?.close(),
-      closeWorkDetail: () => communityPanels?.closeWorkDetail(),
-      toggleWorkStar: () => communityPanels?.toggleWorkStar(),
-      loadWorkComments: () => communityPanels?.loadWorkComments(),
-      loadWorkDerivatives: () => communityPanels?.loadWorkDerivatives(),
-      loadWorkSupporters: () => communityPanels?.loadWorkSupporters(),
-      toggleWorkSupport: () => communityPanels?.toggleWorkSupport(),
-      postWorkComment: (event) => communityPanels?.postWorkComment(event),
       isMapOpen: () => Boolean(options.getMapController()?.isOpen()),
       toggleMap: options.toggleMapMode,
       closeModal: options.closeModal,
       closeNpcDialog: options.closeNpcDialog,
-      login: () => options.getLoginController()?.login(),
-      loginFeedback: () => options.getLoginController()?.validateInput(),
-      resetVerification: () => options.getLoginController()?.resetVerification(),
       showLogin: () => options.getLoginController()?.showLogin(),
       resize: () => {
         options.getRenderer().setSize(window.innerWidth, window.innerHeight);

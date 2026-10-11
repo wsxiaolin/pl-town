@@ -2,17 +2,11 @@ import { expect, type Page, test } from '@playwright/test';
 import { RENDER_SETTINGS } from './helpers';
 
 /**
- * Pl-verification gate: a fresh sign-in must stay on the signing overlay until
- * the server confirms the resident. When the nickname belongs to a Physics Lab
- * account, the ownership-verification fields appear in place; the city only
- * opens after the verification handshake succeeds.
- *
- * The multiplayer socket is stubbed at the WebSocket constructor level (same
- * pattern as stubNewsstandWebSocket); the scripted response depends on
- * `window.__gateStage`, which each test sets before submitting.
+ * Account lifecycle: registration/login happens over HTTP before the city
+ * assets download; the display name is signed on the 居民证 after the download
+ * completes. The multiplayer socket is stubbed at the WebSocket constructor
+ * level so entering the city never reaches a real server.
  */
-type GateStage = 'verify' | 'ok' | 'ok-verified';
-
 function stubGateWebSocket(page: Page): void {
   void page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket;
@@ -22,17 +16,11 @@ function stubGateWebSocket(page: Page): void {
       catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
-        const request = JSON.parse(raw) as { type: string; nickname?: string };
+        const request = JSON.parse(raw) as { type: string; token?: string };
         if (request.type !== 'hello') return;
-        const stage = (window as unknown as { __gateStage?: GateStage }).__gateStage;
+        const nickname = (window as unknown as { __residentName?: string }).__residentName ?? 'tester';
         queueMicrotask(() => {
-          if (stage === 'verify') {
-            this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'error', message: '这个昵称已属于物实社区，请用同名的物实账号登录凭据只用于本次验证，小城不会存储', code: 'pl-verification-required' }) }));
-            return;
-          }
-          if (stage === 'ok' || stage === 'ok-verified') {
-            this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'hello', token: 'gate-token', user: { id: 'gate-user', nickname: request.nickname, verified: stage === 'ok-verified', position: { x: 0, y: 0, z: -6 } }, players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog }) }));
-          }
+          this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'hello', token: 'gate-token', user: { id: 'gate-user', nickname, verified: false, position: { x: 0, y: 0, z: -6 } }, players: [], houses: [], requests: [], progress: this.progress, catalog: this.catalog }) }));
         });
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
@@ -43,23 +31,7 @@ function stubGateWebSocket(page: Page): void {
   });
 }
 
-/** Stub whose socket dies before opening: exercises the connection-lost branch. */
-function stubDeadWebSocket(page: Page): void {
-  void page.addInitScript(() => {
-    const NativeWebSocket = window.WebSocket;
-    class DeadWebSocket extends EventTarget {
-      readyState = NativeWebSocket.CLOSED;
-      constructor() { super(); queueMicrotask(() => { this.dispatchEvent(new Event('close')); }); }
-      send() {}
-      close() {}
-    }
-    Object.defineProperty(window, 'WebSocket', { configurable: true, value: new Proxy(NativeWebSocket, {
-      construct(Target, args) { return String(args[0]).includes(':8787') ? new DeadWebSocket() : Reflect.construct(Target, args); },
-    }) });
-  });
-}
-
-/** Skip the CG intro and renderer heaviness, but keep the visitor unsigned-in. */
+/** Skip the CG intro and renderer heaviness, but keep the visitor signed out. */
 async function seedVisitorStorage(page: Page): Promise<void> {
   await page.addInitScript((settings) => {
     localStorage.setItem('minicityCGSeenV3', 'true');
@@ -67,94 +39,85 @@ async function seedVisitorStorage(page: Page): Promise<void> {
   }, RENDER_SETTINGS);
 }
 
-async function openSigningOverlay(page: Page): Promise<void> {
-  await page.goto('/');
-  await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 30_000 });
+/** Mock the email/password account endpoints. */
+async function mockAccountApi(page: Page, options: { existingName?: string; failLogin?: boolean } = {}): Promise<void> {
+  await page.route('**/town-api/account/login', (route) => {
+    if (options.failLogin) return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: '邮箱或密码不正确' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'gate-token', user: { id: 'gate-user', nickname: options.existingName ?? '', email: 'story@example.com', verified: false, position: { x: 0, y: 0, z: -6 } } }) });
+  });
+  await page.route('**/town-api/account/name', (route) => {
+    const body = route.request().postDataJSON() as { name?: string };
+    const name = body?.name ?? 'tester';
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'gate-user', nickname: name, verified: false } }) });
+  });
 }
 
-test.describe('Physics Lab verification gate', () => {
-  test('requires ownership verification before entering the city', async ({ page }) => {
+test.describe('account lifecycle', () => {
+  test('requires an email and password before downloading the city', async ({ page }) => {
     stubGateWebSocket(page);
     await seedVisitorStorage(page);
-    await openSigningOverlay(page);
-    await page.evaluate(() => { (window as unknown as { __gateStage?: GateStage }).__gateStage = 'verify'; });
+    await mockAccountApi(page);
+    await page.goto('/');
+    await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 30_000 });
 
-    await page.locator('#loginInput').fill('故事里的人');
-    await page.locator('#loginPassword').fill('a-very-long-password');
-    await page.locator('#loginBtn').click();
+    // Empty credentials are rejected client-side.
+    await page.locator('#loginBtn').click({ force: true });
+    await expect(page.locator('#loginError')).toHaveText('请输入邮箱。');
 
-    const verifySection = page.locator('#plVerifySection');
-    await expect(verifySection).toBeVisible();
-    await expect(page.locator('#plVerifySection .pl-verify-sub')).toContainText('请用同名的物实账号登录，凭据只用于本次验证，小城不会存储');
-    await expect(page.locator('#loginError')).toBeHidden();
-    const button = page.locator('#loginBtn');
-    await expect(button).toBeEnabled();
-    await expect(button).toHaveText('确认物实身份');
-    await expect(page.locator('#loginOverlay')).toBeVisible();
-    await expect(page.locator('#loginInput')).toHaveValue('故事里的人');
-    await expect(page.locator('#loginInput')).toBeHidden();
-    await expect(page.locator('#loginPassword')).toBeHidden();
-    await expect(page.locator('.login-warning')).toBeHidden();
-
-    await page.locator('#plLoginInput').fill('story@example.com');
-    await page.locator('#plPasswordInput').fill('pl-secret');
-    await page.locator('#plVerifyBack').click();
-    await expect(verifySection).toBeHidden();
-    await expect(page.locator('#loginInput')).toBeVisible();
-    await expect(page.locator('#loginPassword')).toBeVisible();
-    await expect(page.locator('#plLoginInput')).toHaveValue('');
-    await expect(page.locator('#plPasswordInput')).toHaveValue('');
-    await expect(button).toHaveText('签下名字，进入小城');
+    await page.locator('#loginEmail').fill('story@example.com');
+    await page.locator('#loginBtn').click({ force: true });
+    await expect(page.locator('#loginError')).toHaveText('请输入密码。');
   });
 
-  test('enters the city only after the verification succeeds', async ({ page }) => {
+  test('signs the 居民证 after download, then enters the city', async ({ page }) => {
     stubGateWebSocket(page);
     await seedVisitorStorage(page);
-    await openSigningOverlay(page);
-    await page.evaluate(() => { (window as unknown as { __gateStage?: GateStage }).__gateStage = 'verify'; });
+    await mockAccountApi(page);
+    await page.goto('/');
+    await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 30_000 });
 
-    await page.locator('#loginInput').fill('故事里的人');
+    await page.locator('#loginEmail').fill('story@example.com');
     await page.locator('#loginPassword').fill('a-very-long-password');
-    await page.locator('#loginBtn').click();
-    await expect(page.locator('#plVerifySection')).toBeVisible();
+    await page.evaluate(() => { (window as unknown as { __residentName?: string }).__residentName = '故事里的人'; });
+    await page.locator('#loginBtn').click({ force: true });
 
-    await page.evaluate(() => { (window as unknown as { __gateStage?: GateStage }).__gateStage = 'ok-verified'; });
-    await page.locator('#plLoginInput').fill('story@example.com');
-    await page.locator('#plPasswordInput').fill('pl-secret');
-    await page.locator('#loginBtn').click();
-
+    // The login overlay closes and the 居民证 appears once the city finished
+    // downloading.
     await expect(page.locator('#loginOverlay')).toBeHidden({ timeout: 15_000 });
+    await expect(page.locator('#residentCardOverlay')).toBeVisible({ timeout: 60_000 });
+
+    await page.locator('#residentCardName').fill('故事里的人');
+    await page.locator('#residentCardSign').click();
+    await expect(page.locator('#residentCardOverlay')).toBeHidden({ timeout: 15_000 });
     await expect(page.locator('#logoUser')).toContainText('故事里的人');
-    await expect(page.locator('#logoUser .verified-badge')).toHaveAttribute('title', '已认证');
-    await expect(page.locator('#phoneOwner .verified-badge')).toHaveAttribute('title', '已认证');
-  });
-
-  test('signs straight in when no verification is required', async ({ page }) => {
-    stubGateWebSocket(page);
-    await seedVisitorStorage(page);
-    await openSigningOverlay(page);
-    await page.evaluate(() => { (window as unknown as { __gateStage?: GateStage }).__gateStage = 'ok'; });
-
-    await page.locator('#loginInput').fill('自由居民');
-    await page.locator('#loginPassword').fill('a-very-long-password');
-    await page.locator('#loginBtn').click();
-
-    await expect(page.locator('#loginOverlay')).toBeHidden({ timeout: 15_000 });
-    await expect(page.locator('#logoUser')).toContainText('自由居民');
     await expect(page.locator('#logoUser .verified-badge')).toHaveCount(0);
   });
 
-  test('connection failure keeps the visitor on the signing overlay', async ({ page }) => {
-    stubDeadWebSocket(page);
+  test('a stored token skips the login overlay', async ({ page }) => {
+    stubGateWebSocket(page);
+    await page.addInitScript((settings) => {
+      localStorage.setItem('minicityCGSeenV3', 'true');
+      localStorage.setItem('minicityRenderSettings', settings);
+      localStorage.setItem('minicityServerToken', 'gate-token');
+      localStorage.setItem('minicityUser', '老居民');
+    }, RENDER_SETTINGS);
+    await page.goto('/');
+    await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
+    await expect(page.locator('#loginOverlay')).toBeHidden();
+    await expect(page.locator('#logoUser')).toContainText('老居民');
+  });
+
+  test('a rejected login keeps the overlay open with an error', async ({ page }) => {
+    stubGateWebSocket(page);
     await seedVisitorStorage(page);
-    await openSigningOverlay(page);
+    await mockAccountApi(page, { failLogin: true });
+    await page.goto('/');
+    await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 30_000 });
 
-    await page.locator('#loginInput').fill('故事里的人');
-    await page.locator('#loginPassword').fill('a-very-long-password');
-    await page.locator('#loginBtn').click();
-
-    await expect(page.locator('#loginError')).toContainText('暂时无法连接小城服务器');
-    await expect(page.locator('#loginBtn')).toBeEnabled();
+    await page.locator('#loginEmail').fill('story@example.com');
+    await page.locator('#loginPassword').fill('wrong-password');
+    await page.locator('#loginBtn').click({ force: true });
+    await expect(page.locator('#loginError')).toHaveText('邮箱或密码不正确');
     await expect(page.locator('#loginOverlay')).toBeVisible();
   });
 });
