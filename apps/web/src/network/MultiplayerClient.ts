@@ -73,6 +73,7 @@ export type NetFireworksMessage = { type: string; [key: string]: unknown };
 type ServerMessage =
   | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather; theme?: NetTheme }
   | { type: 'player.joined'; player: NetUser }
+  | { type: 'player.updated'; player: NetUser }
   | { type: 'player.moved'; playerId: string; position: NetPosition }
   | { type: 'player.left'; playerId: string }
   | { type: 'chat'; messageId: number; userId: string; nickname: string; text: string }
@@ -94,6 +95,7 @@ type Callbacks = {
   connected?: (user: NetUser, players: NetUser[], houses: House[]) => void;
   connection?: (state: 'connecting' | 'connected' | 'disconnected') => void;
   playerJoined?: (player: NetUser) => void;
+  playerUpdated?: (player: NetUser) => void;
   playerMoved?: (id: string, position: NetPosition) => void;
   playerLeft?: (id: string) => void;
   chat?: (message: { messageId: number; userId: string; nickname: string; text: string }) => void;
@@ -154,6 +156,7 @@ export class MultiplayerClient {
     let message: ServerMessage; try { message = JSON.parse(raw) as ServerMessage; } catch { return; }
     if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); this.callbacks.theme?.(message.theme ?? { id: 'default' }); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
+    else if (message.type === 'player.updated') this.callbacks.playerUpdated?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
     else if (message.type === 'chat') this.callbacks.chat?.(message);

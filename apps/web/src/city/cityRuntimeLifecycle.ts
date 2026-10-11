@@ -75,8 +75,10 @@ export function createCityRuntimeLifecycle(options: {
     document.body.classList.remove('day', 'night');
     document.body.classList.add(options.isNight() ? 'night' : 'day');
     // Dev visual-verification portal enters without the login gate; the normal
-    // path waits for `confirmAuth()` after the resident signs in.
-    if (options.shouldSkipLoginGate?.()) launchBoot();
+    // path waits for `confirmAuth()` after the resident signs in. Defer the
+    // portal boot to a microtask so the composition root finishes wiring the
+    // account controllers before `boot()` can fire `onIntroFinished`.
+    if (options.shouldSkipLoginGate?.()) queueMicrotask(launchBoot);
   }
 
   /**

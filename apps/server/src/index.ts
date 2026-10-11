@@ -766,7 +766,10 @@ const http = createServer(async (request, response) => {
       }
       const result = await authenticateAccount(login, password);
       const upstreamName = String(result.user?.Nickname || '').trim();
-      if (!upstreamName || upstreamName !== user.nickname) {
+      // Compare the display name and the upstream nickname case/width-insensitively
+      // (legacy parity): NFKC + lower-case both sides.
+      const prettyName = (value: string) => value.normalize('NFKC').toLowerCase();
+      if (!upstreamName || prettyName(upstreamName) !== prettyName(user.nickname)) {
         throw new HttpBodyError('物实昵称与当前展示名不一致，无法认证', 400);
       }
       db.setUserVerified(user.id, true);

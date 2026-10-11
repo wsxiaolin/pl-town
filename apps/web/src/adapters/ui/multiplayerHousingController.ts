@@ -254,6 +254,13 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
         requestChatHistory();
       },
       playerJoined: (player) => { if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id); onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
+      // A remote resident renamed the 居民证 or earned the certification badge.
+      playerUpdated: (player) => {
+        if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id);
+        onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player];
+        const remote = remotePlayers.get(player.id);
+        if (remote) remote.nickname = player.nickname;
+      },
       playerMoved: (id, position) => {
         const remote = remotePlayers.get(id);
         if (remote) { remote.target.set(position.x, position.y, position.z); remote.rotation = position.rotation ?? remote.rotation; }

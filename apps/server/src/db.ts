@@ -288,6 +288,10 @@ db.exec('DROP INDEX IF EXISTS users_nickname_unique');
   const duplicates = db.prepare(`SELECT COUNT(*) AS count FROM (SELECT email FROM users WHERE email IS NOT NULL GROUP BY email COLLATE NOCASE HAVING COUNT(*) > 1)`).get() as { count: number };
   if (duplicates.count === 0) {
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email COLLATE NOCASE) WHERE email IS NOT NULL');
+  } else {
+    // Legacy rows predate the email credential; a duplicate blocks the unique
+    // index. Surface it instead of silently leaving lookups ambiguous.
+    console.warn(`users has ${duplicates.count} duplicate email group(s); users_email_unique not created until reconciled`);
   }
 }
 initializeCityGovernance(db);

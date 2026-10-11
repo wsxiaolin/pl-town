@@ -721,6 +721,35 @@ try {
   const wrongPassword = await connectExpectingError('Alice', { password: 'wrong-pass' });
   if (!wrongPassword) throw new Error('Wrong password should be rejected');
 
+  // ── HTTP 账号接口：注册 / 登录 / 居民证 ───────────────────────
+  const accountEmail = 'http-account@example.com';
+  const accountPassword = 'http-account-password';
+  const register = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: accountEmail, password: accountPassword }),
+  });
+  const registered = await register.json();
+  if (!register.ok || !registered.token) throw new Error('Registering via /town-api/account/login must return a session token');
+  const relogin = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: accountEmail, password: accountPassword }),
+  });
+  const reloggedIn = await relogin.json();
+  if (!relogin.ok || !reloggedIn.token) throw new Error('Logging back in with the same email and password must succeed');
+  const rejectedLogin = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: accountEmail, password: 'wrong-account-password' }),
+  });
+  if (rejectedLogin.status !== 401) throw new Error('A wrong password must be rejected with 401');
+  const signResident = await fetch(`${adminOrigin}/town-api/account/name`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: reloggedIn.token, name: 'HttpResident' }),
+  });
+  const signedResident = await signResident.json();
+  if (!signResident.ok || signedResident.user?.nickname !== 'HttpResident' || signedResident.user?.verified !== false) {
+    throw new Error('Signing the resident card over HTTP must set an unverified display name');
+  }
+
   // ── 认证徽标（可选）：物实昵称核验 ─────────────────────────────
   const certifyResident = await connect('TakenPlResident', { email: 'taken-pl@example.com' });
   if (certifyResident.hello.user.verified !== false) throw new Error('A resident must start unverified');
