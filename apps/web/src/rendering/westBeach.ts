@@ -112,10 +112,10 @@ const SURF_FRAG = /* glsl */ `
     float breakup = foamNoise(vec2(vSurfPosition.y * 0.65, time * 0.18));
     float detail = foamNoise(vec2(vSurfPosition.y * 2.8, vFront * 15.0 + time * 0.25));
     float foamFront = 0.66 + (breakup - 0.5) * 0.10;
-    float foamBand = exp(-pow((vFront - foamFront) * 35.0, 2.0));
+    float foamBand = exp(-pow((vFront - foamFront) * 30.0, 2.0));
     float foam = smoothstep(0.05, 0.55, lap) * smoothstep(0.25, 0.7, breakup)
       * mix(0.5, 1.0, detail) * foamBand;
-    shallow = mix(shallow, mix(vec3(0.055, 0.09, 0.11), vec3(0.62, 0.73, 0.70), daylight), foam * 0.42);
+    shallow = mix(shallow, mix(vec3(0.04, 0.08, 0.10), vec3(0.82, 0.90, 0.86), daylight), foam * 0.52);
     // Translucency: the strip fades in gently from the sea sheet so its
     // seaward edge never shows as a line, then feathers to zero on the sand.
     float alpha = mix(0.24, 0.42, smoothstep(0.0, 0.7, vFront));
@@ -340,10 +340,10 @@ export function createWestBeach(options: BeachOptions): {
         specularScale: 0.65,
         timeScale: SEA_TIME_SCALE,
         // The sea sheet only takes the near-shore tint: the open water stays
-        // deep and opaque, and the tint fades over tens of world units so the
-        // deep→shallow change is a smooth gradient rather than a band edge.
-        // The lapping waterline lives on the surf strip below.
-        shoreBlend: { ribbonDepth: 96, width: 34 },
+        // deep and opaque, and the tint fades over 56 world units (over half
+        // the ribbon) so the deep→shallow change is a very smooth gradient
+        // without any band edge. The lapping waterline lives on the surf strip below.
+        shoreBlend: { ribbonDepth: 96, width: 56 },
       })
     : null;
   const water = waterSurface
