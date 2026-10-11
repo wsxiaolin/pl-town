@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { AsyncGate } from './asyncGate.js';
 import { SESSION_TTL_DAYS } from './config.js';
-import { createUser, getUserByEmail, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
+import { createUser, getLegacyUserByNickname, getUserByEmail, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
 import type { User } from './types.js';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -74,12 +74,27 @@ export async function authenticate(input: AuthenticateInput): Promise<{ user: Us
     throw new Error('会话已过期，请重新登录');
   }
 
-  const email = (input.email ?? '').normalize('NFKC').trim().toLowerCase();
-  const emailError = validateEmail(email);
-  if (emailError) throw new Error(emailError);
+  const credential = (input.email ?? '').normalize('NFKC').trim();
   const password = input.password ?? '';
   if (!password) throw new Error('请输入密码');
   if (password.length > 128) throw new Error('密码过长');
+
+  // Grandfathered pre-email accounts: a credential without '@' is treated as a
+  // legacy nickname so residents who predate the email credential can still
+  // sign in. Brand-new accounts must use an email address.
+  if (credential && !credential.includes('@')) {
+    const legacy = getLegacyUserByNickname(credential);
+    if (legacy && !legacy.disabled && legacy.passwordHash && await verifyPassword(password, legacy.passwordHash)) {
+      const legacyToken = randomBytes(32).toString('base64url');
+      updateUserToken(legacy.id, hash(legacyToken), sessionExpiry());
+      return { user: getUserByToken(hash(legacyToken))!, token: legacyToken, registered: false };
+    }
+    throw new Error('昵称或密码不正确');
+  }
+
+  const email = credential.toLowerCase();
+  const emailError = validateEmail(email);
+  if (emailError) throw new Error(emailError);
 
   const existing = getUserByEmail(email);
   if (existing) {

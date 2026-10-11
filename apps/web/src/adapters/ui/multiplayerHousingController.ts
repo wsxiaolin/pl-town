@@ -256,6 +256,9 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       playerJoined: (player) => { if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id); onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player]; addRemotePlayer(player); updateOnlineCount(remotePlayers.size + 1); },
       // A remote resident renamed the 居民证 or earned the certification badge.
       playerUpdated: (player) => {
+        // Never fold our own update back into the remote roster; the local user
+        // is kept out of `onlinePlayers` (see the hello handler).
+        if (player.id === multiplayer?.user?.id) return;
         if (player.verified) verifiedIds.add(player.id); else verifiedIds.delete(player.id);
         onlinePlayers = [...onlinePlayers.filter((item) => item.id !== player.id), player];
         const remote = remotePlayers.get(player.id);

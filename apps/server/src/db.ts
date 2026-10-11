@@ -366,6 +366,15 @@ export function getUserByEmail(email: string): { id: string; nickname: string; e
   const row = db.prepare('SELECT id, nickname, email, password_hash, disabled_at FROM users WHERE email = ? COLLATE NOCASE').get(email) as { id: string; nickname: string; email: string | null; password_hash: string | null; disabled_at: string | null } | undefined;
   return row ? { id: row.id, nickname: row.nickname, email: row.email, passwordHash: row.password_hash, disabled: Boolean(row.disabled_at) } : null;
 }
+/**
+ * Legacy lookup for accounts created before email became the credential
+ * (email IS NULL). Lets pre-email residents keep signing in with their old
+ * nickname + password instead of being locked out after their token expires.
+ */
+export function getLegacyUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null; disabled: boolean } | null {
+  const row = db.prepare('SELECT id, nickname, password_hash, disabled_at FROM users WHERE email IS NULL AND nickname = ? COLLATE NOCASE').get(nickname) as { id: string; nickname: string; password_hash: string | null; disabled_at: string | null } | undefined;
+  return row ? { id: row.id, nickname: row.nickname, passwordHash: row.password_hash, disabled: Boolean(row.disabled_at) } : null;
+}
 export function setUserDisplayName(id: string, nickname: string): User | null {
   db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?').run(nickname, now(), id);
   return getUser(id);

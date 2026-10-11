@@ -134,7 +134,9 @@ export function createLoginController(options: LoginControllerOptions) {
     const email = emailInput?.value.trim() ?? '';
     const password = passwordInput?.value ?? '';
     if (!email) return setError('请输入邮箱。');
-    if (!EMAIL_PATTERN.test(email)) return setError('邮箱格式不正确。');
+    // A bare legacy nickname has no '@'; only validate the format when one is
+    // present so pre-email residents can still sign in.
+    if (email.includes('@') && !EMAIL_PATTERN.test(email)) return setError('邮箱格式不正确。');
     if (!password) return setError('请输入密码。');
     const stats = options.getStats();
     if (!stats.joinDate) {

@@ -223,6 +223,13 @@ const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e'
   for (const project of config.projects.filter((entry) => entry.buildingId && entry.buildingId !== 'library')) {
     db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
   }
+  // A pre-email resident: nickname + password with email NULL. Must still sign in.
+  const { scryptSync, randomBytes } = await import('node:crypto');
+  const salt = randomBytes(16);
+  const derived = scryptSync('legacy-password-1234', salt, 64);
+  const passwordHash = salt.toString('hex') + ':' + derived.toString('hex');
+  const stamp = new Date().toISOString();
+  db.prepare('INSERT INTO users (id, nickname, email, password_hash, token_hash, session_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('legacy-resident-id', 'LegacyResident', null, passwordHash, 'legacy-token-hash', '2099-01-01T00:00:00.000Z', stamp, stamp);
   closeDatabase();
 `], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
 if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout
@@ -484,7 +491,7 @@ try {
 
   const overview = await fetch(`${adminBase}/overview`, { headers: { cookie } });
   const overviewPayload = await overview.json();
-  if (!overview.ok || overviewPayload.summary.users !== 3 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');
+  if (!overview.ok || overviewPayload.summary.users !== 4 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');
   const backupResponse = await fetch(`${adminBase}/backups`, {
     method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
   });
@@ -749,6 +756,20 @@ try {
   if (!signResident.ok || signedResident.user?.nickname !== 'HttpResident' || signedResident.user?.verified !== false) {
     throw new Error('Signing the resident card over HTTP must set an unverified display name');
   }
+  // A pre-email resident (email NULL) signs in with the legacy nickname.
+  const legacyLogin = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: 'LegacyResident', password: 'legacy-password-1234' }),
+  });
+  const legacyBody = await legacyLogin.json();
+  if (!legacyLogin.ok || !legacyBody.token || legacyBody.user?.nickname !== 'LegacyResident') {
+    throw new Error('A pre-email resident must still sign in with their nickname and password');
+  }
+  const legacyWrong = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: 'LegacyResident', password: 'wrong-legacy-password' }),
+  });
+  if (legacyWrong.status !== 401) throw new Error('A wrong legacy password must be rejected with 401');
 
   // ── 认证徽标（可选）：物实昵称核验 ─────────────────────────────
   const certifyResident = await connect('TakenPlResident', { email: 'taken-pl@example.com' });
