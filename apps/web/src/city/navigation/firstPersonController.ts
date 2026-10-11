@@ -39,7 +39,7 @@ export type FirstPersonControllerOptions = {
   getIsoMovement: () => { x: number; z: number };
   resolveMovement: (from: THREE.Vector3, target: THREE.Vector3, result?: THREE.Vector3) => THREE.Vector3;
   walkSpeed: number;
-  sendPosition: (x: number, z: number, rotationY: number) => void;
+  sendPosition: (x: number, y: number, z: number, rotationY: number) => void;
   /** Clear walk paths / pending interactions when the mode takes over. */
   onEnter: () => void;
   /** Re-focus the overhead camera on the player when leaving the mode. */
@@ -282,8 +282,11 @@ export function createFirstPersonController(options: FirstPersonControllerOption
         if (resolved.x !== cursor.position.x || resolved.z !== cursor.position.z) {
           cursor.position.x = resolved.x;
           cursor.position.z = resolved.z;
+          // 光标 y 跟随地形（方案 §6.2）：resolveMovement 已返回地面高，
+          // 第一人称与俯视共享光标，多人同步与回归俯视都拿到真实 y。
+          cursor.position.y = resolved.y;
           cursor.rotation.y = Math.atan2(stepX, stepZ);
-          options.sendPosition(cursor.position.x, cursor.position.z, cursor.rotation.y);
+          options.sendPosition(cursor.position.x, cursor.position.y, cursor.position.z, cursor.rotation.y);
         }
       }
     } else {
@@ -308,7 +311,8 @@ export function createFirstPersonController(options: FirstPersonControllerOption
     // Gentle breathing while standing still.
     const breathY = Math.sin(idleTime * 1.7) * IDLE_BREATH_AMPLITUDE;
 
-    camera.position.set(cursor.position.x, eyeHeight + bobY + breathY, cursor.position.z);
+    // 视点高度 = 地面高 + 眼高（+呼吸/步行摆动）。城内地面恒 0，与旧实现逐帧等值。
+    camera.position.set(cursor.position.x, cursor.position.y + eyeHeight + bobY + breathY, cursor.position.z);
     camera.rotation.set(pitch, yaw, bobRoll);
 
     // Sprint widens the view a touch — a chase-cam energy without changing speed feel.

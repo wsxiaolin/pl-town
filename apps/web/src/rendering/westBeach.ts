@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH, shorelineX, westBeachWaterlineMaxX } from '../city/data/cityConfig';
+import { seaBedCutAt } from '../city/data/terrain/heightfield/worldReliefField';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -70,7 +71,13 @@ const SURF_VERT = /* glsl */ `
     // feathered landward edge (where alpha also fades) so the thin edge stays
     // glued to the sand instead of hovering above it as a 40%-opacity lip.
     float edge = 1.0 - smoothstep(0.72, 1.0, uv.x);
-    p.y = ${SURF_SURFACE_Y} + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3) * edge;
+    // Bed wiring (terrain-trust R2 / D6): the ribbon's position.y carries the
+    // seabed cut height (0 across today's footprint — the cut domain starts
+    // west of x = -75). Blend it in toward the sand side only: the seaward
+    // root stays pinned to the fixed sea sheet, the landward crest rides the
+    // bed so a future cut under the beach keeps the surf glued to the sand.
+    float bed = position.y * smoothstep(0.35, 1.0, uv.x);
+    p.y = ${SURF_SURFACE_Y} + bed + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3) * edge;
     vFront = uv.x;
     vZ = position.z;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
@@ -142,7 +149,8 @@ function createShoreSurf(
 ): ShoreSurf {
   // 44 columns across a ~5-unit band ≈ 0.11 units per quad — fine enough
   // for a crisp 1-2 unit waterline without touching the heavy sea sheet.
-  const geometry = createShoreRibbonGeometry(innerX, outerX, minZ, maxZ, 44, 220);
+  // yAt = seaBedCutAt: 浪带顶点携带海床高度（现状全域 0，见 shader 注释）。
+  const geometry = createShoreRibbonGeometry(innerX, outerX, minZ, maxZ, 44, 220, seaBedCutAt);
   geometry.computeBoundingSphere();
   // The vertex displacement pushes past the computed bounds; widen it so
   // frustum culling keeps working on honest data instead of being disabled.
@@ -264,6 +272,11 @@ function createShoreRibbonGeometry(
   maxZ: number,
   columns = 18,
   rows = 72,
+  // 可信地形 R2（方案 D6）：滩面类资产贴海床场。传 yAt 时顶点 y = yAt(x,z)
+  // （海面类资产不传——海面是固定水位的设计锚定）。现状沙面/浪带脚印
+  // （x ≥ -46.2）在海床下切域（x < -75）之外，yAt 恒 0，数值零变化；
+  // 接线保证未来海床若东延，滩面随之起伏而非悬空/陷地。
+  yAt?: (x: number, z: number) => number,
 ): THREE.BufferGeometry {
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -272,7 +285,8 @@ function createShoreRibbonGeometry(
     const z = minZ + (maxZ - minZ) * row / rows;
     for (let column = 0; column <= columns; column += 1) {
       const t = column / columns;
-      positions.push(THREE.MathUtils.lerp(innerX(z), outerX(z), t), 0, z);
+      const x = THREE.MathUtils.lerp(innerX(z), outerX(z), t);
+      positions.push(x, yAt ? yAt(x, z) : 0, z);
       uvs.push(t, row / rows);
     }
   }
@@ -305,7 +319,9 @@ export function createWestBeach(options: BeachOptions): {
 
   const minZ = WEST_BEACH.minZ - 14;
   const maxZ = WEST_BEACH.maxZ + 14;
-  const sand = addMesh(object, options, createShoreRibbonGeometry(shorelineX, (z) => shorelineX(z) + 10, minZ, maxZ, 8, 96), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [0, 0.07, 0]);
+  // 沙面贴海床场（可信地形 R2 / 方案 D6）：顶点 y = seaBedCutAt，层偏移
+  // 0.07 由 mesh 位置承载——现状脚印内海床恒 0，数值与旧绝对层 0.07 全等。
+  const sand = addMesh(object, options, createShoreRibbonGeometry(shorelineX, (z) => shorelineX(z) + 10, minZ, maxZ, 8, 96, seaBedCutAt), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [0, 0.07, 0]);
   sand.renderOrder = 4;
   // The sea must sit above the city base ground plane (y = 0) or it is hidden
   // underneath it, and it spans past the ground edge so no land shows beyond.

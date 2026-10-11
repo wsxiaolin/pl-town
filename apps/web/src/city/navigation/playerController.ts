@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { terrainHeight } from '../data/terrain/heightfield/terrainHeight';
 
 type Cursor = THREE.Object3D & { visible: boolean; rotation: THREE.Euler };
 type Npc = { mesh: THREE.Object3D & { visible: boolean } };
@@ -88,7 +89,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
     if (cursor && manual.x * manual.x + manual.z * manual.z > 0.01 ** 2 && !options.isDialogOpen() && !options.isMapOpen()) {
       options.setPlayerPath([]);
       const step = options.playerSpeed * delta;
-      manualTarget.set(cursor.position.x + manual.x * step, 0, cursor.position.z + manual.z * step);
+      manualTarget.set(cursor.position.x + manual.x * step, terrainHeight(cursor.position.x + manual.x * step, cursor.position.z + manual.z * step), cursor.position.z + manual.z * step);
       const navigation = specialNavigation ?? echo?.navigation();
       const resolved = navigation && (specialNavigation || echo?.isInteriorView())
         ? navigation.clampToWalkable(manualTarget)
@@ -120,13 +121,15 @@ export function createPlayerController(options: PlayerControllerOptions) {
     const distance = Math.hypot(dx, dz);
     const step = options.playerSpeed * delta;
     if (distance <= step) {
-      cursor.position.set(target.x, 0, target.z);
+      cursor.position.set(target.x, target.y, target.z);
       options.setPlayerPath(path.slice(1));
       return;
     }
     cursor.position.x += (dx / distance) * step;
     cursor.position.z += (dz / distance) * step;
-    cursor.position.y = 0;
+    // y 跟随地形（方案 §6.2）：路径段两端同为 terrainHeight 采样，途中逐帧
+    // 取落点下方地面高，坡段上自然贴合（台地内恒 0，零回归）。
+    cursor.position.y = terrainHeight(cursor.position.x, cursor.position.z);
     for (const npc of options.getNpcs()) {
       if (!npc.mesh.visible) continue;
       const offsetX = cursor.position.x - npc.mesh.position.x;

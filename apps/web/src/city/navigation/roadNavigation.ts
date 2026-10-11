@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { terrainHeight, slopeAlong, WALKABLE_SLOPE_MAX } from '../data/terrain/heightfield/terrainHeight';
+import { TRAIL_NODES } from '../data/terrain/heightfield/worldReliefField';
 
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
@@ -14,9 +16,25 @@ export interface RoadNavigationOptions {
   roadCoords: readonly number[];
   echoObservatoryArea?: { roadNodes: readonly Coord2[]; roadSegments: readonly RoadSegment4[] };
   northDistrictArea?: { roadNodes: readonly Coord2[]; avenueSegment: readonly [number, number, number, number]; laneSegments: readonly RoadSegment4[]; roadJunctions?: readonly RoadSegment4[] };
+  /** 南草甸出城步道（方案 §5.3/§6.1）：S1..S4 挂接路网，WORLD_BOUNDS 随新节点外扩至观景平台。 */
+  meadowTrail?: { roadNodes: readonly Coord2[]; roadSegments: readonly RoadSegment4[] };
   westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
+}
+
+/**
+ * 南草甸出城步道的导航图（roadNavigation.meadowTrail 选项的工厂）：
+ * TRAIL_NODES 与 heightfield 切槽场同源常量——导航图与地形面永远一致；
+ * 首段把城市网格节点 [6,36] 接进 S1，末节点即观景平台（bounds 外扩锚点）。
+ */
+export function buildMeadowTrailGraph(): { roadNodes: [number, number][]; roadSegments: [number, number, number, number][] } {
+  const nodes = TRAIL_NODES.map(({ x, z }) => [x, z] as [number, number]);
+  const segments: [number, number, number, number][] = [[6, 36, nodes[0]![0], nodes[0]![1]]];
+  for (let index = 1; index < nodes.length; index += 1) {
+    segments.push([nodes[index - 1]![0], nodes[index - 1]![1], nodes[index]![0], nodes[index]![1]]);
+  }
+  return { roadNodes: nodes, roadSegments: segments };
 }
 
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
@@ -28,10 +46,11 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     laneSegments: [...(options.northDistrictArea?.laneSegments ?? [])] as RoadSegment4[],
     roadJunctions: [...(options.northDistrictArea?.roadJunctions ?? [])] as RoadSegment4[],
   };
+  const MEADOW_TRAIL = { roadNodes: [...(options.meadowTrail?.roadNodes ?? [])] as Coord2[], roadSegments: [...(options.meadowTrail?.roadSegments ?? [])] as RoadSegment4[] };
   const CITY_LIMIT = options.cityLimit;
   const PLAYER_CLEARANCE = 0.2;
   const WEST_BEACH = options.westBeach;
-  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes, ...NORTH_DISTRICT_AREA.roadNodes];
+  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes, ...NORTH_DISTRICT_AREA.roadNodes, ...MEADOW_TRAIL.roadNodes];
   const WORLD_BOUNDS = {
     minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
     maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
@@ -140,7 +159,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const gridPath=aStarRoad(sNode,eNode,graph);
       if(gridPath&&gridPath.length){
         const pts: THREE.Vector3[]=[start];
-        for(let i=1;i<gridPath.length;i++){ const n=gridPath[i]; if(n) pts.push(new THREE.Vector3(n.x,0,n.z)); }
+        for(let i=1;i<gridPath.length;i++){ const n=gridPath[i]; if(n) pts.push(new THREE.Vector3(n.x,n.y,n.z)); }
         // Never end a leg inside a building footprint, and never strike the final
         // approach across a building: stop on the road instead.
         const last=pts[pts.length-1];
@@ -185,6 +204,22 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   });
   let roadGraph: RoadGraph | null = null;
   
+  // 地面点构造（唯一权威采样器落位，GOAL 红线：禁止硬编码 0）。
+  function groundPoint(x: number,z: number): THREE.Vector3 {
+    return new THREE.Vector3(x,terrainHeight(x,z),z);
+  }
+
+  // 坡度可通行判定（方案 §6.1）：建边时对两端点与中点沿边方向采样
+  // slopeAlong，任一点超阈值即阻断该边（更陡的谷坡/滩涂外缘为障碍）。
+  // 台地内坡度恒 0 → 既有全部边零变化（回归不破坏）。
+  function edgeTooSteep(a: RoadNode,b: RoadNode): boolean {
+    const dx=b.x-a.x, dz=b.z-a.z;
+    if(dx*dx+dz*dz<1e-9) return false;
+    if(slopeAlong(a.x,a.z,dx,dz)>WALKABLE_SLOPE_MAX) return true;
+    if(slopeAlong(b.x,b.z,-dx,-dz)>WALKABLE_SLOPE_MAX) return true;
+    return slopeAlong((a.x+b.x)/2,(a.z+b.z)/2,dx,dz)>WALKABLE_SLOPE_MAX;
+  }
+
   function getRoadGraph(): RoadGraph {
     if(roadGraph) return roadGraph;
     const coords=ROAD_COORDS;
@@ -194,7 +229,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const key=x+','+z;
       const existing=nodeIdx.get(key);
       if(existing!==undefined) return nodes[existing]!;
-      const node=new THREE.Vector3(x,0,z) as RoadNode;
+      const node=groundPoint(x,z) as RoadNode;
       node.i=nodes.length;
       node.adj=[];
       nodeIdx.set(key,nodes.length);
@@ -205,6 +240,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     nodes.forEach((n,i)=>{ n.i=i; n.adj=[]; });
     const addEdge=(a: RoadNode,b: RoadNode)=>{
       if(pathBlocked(a.x,a.z,b.x,b.z)) return;
+      if(edgeTooSteep(a,b)) return;
       a.adj.push(b); b.adj.push(a);
     };
     coords.forEach((x,i)=>coords.forEach((z,j)=>{
@@ -234,6 +270,16 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
     ECHO_OBSERVATORY_AREA.roadSegments.forEach(([x1,z1,x2,z2])=>{
+      const aIdx=nodeIdx.get(x1+','+z1);
+      const bIdx=nodeIdx.get(x2+','+z2);
+      if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
+    });
+
+    // 南草甸出城步道（方案 §5.3）：S1..S4 串联成边并接入主城网格
+    //（segments 首段即 [6,36]→S1 的网格连接边）。步道床纵坡 ≤ 7%，
+    // 远低于 WALKABLE_SLOPE_MAX——边坡度判定对步道恒放行。
+    MEADOW_TRAIL.roadNodes.forEach(([x,z])=>addNode(x,z));
+    MEADOW_TRAIL.roadSegments.forEach(([x1,z1,x2,z2])=>{
       const aIdx=nodeIdx.get(x1+','+z1);
       const bIdx=nodeIdx.get(x2+','+z2);
       if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
@@ -290,10 +336,18 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     return cx*cx+cz*cz < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR;
   }
 
+  // 深水兜底阈值（方案 §6.3）：低于所有可行走地面场的最大下切滩涂值 +
+  // 水深余量。河谷河槽（床 -0.45..-0.85）与深海床判定为深水不可走；
+  // 湿岸带（-0.45..0）仍可走。z 先裁剪：可行走域 z ≥ minZ=-88.2，仅河谷
+  // 北坡地带会真正算到高度场，台地内零额外采样成本。
+  const DEEP_TERRAIN_MIN_Y = -0.35;
+  const DEEP_TERRAIN_Z_GATE = -85.5;
+
   function positionBlocked(x: number,z: number): boolean {
     if(x<WORLD_BOUNDS.minX||x>WORLD_BOUNDS.maxX||z<WORLD_BOUNDS.minZ||z>WORLD_BOUNDS.maxZ) return true;
     if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
     if(WEST_BEACH && x<WEST_BEACH.deepWaterX && z>=WEST_BEACH.minZ && z<=WEST_BEACH.maxZ) return true;
+    if(z<DEEP_TERRAIN_Z_GATE && terrainHeight(x,z)<DEEP_TERRAIN_MIN_Y) return true;
     return pointInAnyBuilding(x,z);
   }
 
@@ -301,22 +355,32 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const fromX=from.x, fromZ=from.z;
     const desiredX=clamp(target.x,WORLD_BOUNDS.minX,WORLD_BOUNDS.maxX);
     const desiredZ=clamp(target.z,WORLD_BOUNDS.minZ,WORLD_BOUNDS.maxZ);
-    result.set(desiredX,0,desiredZ);
+    // 落点 y 一律由唯一权威采样器赋值（方案 §6.2；台地内恒 0 零回归）。
+    result.set(desiredX,terrainHeight(desiredX,desiredZ),desiredZ);
     if(WEST_BEACH && desiredX<WEST_BEACH.deepWaterX && desiredZ>=WEST_BEACH.minZ && desiredZ<=WEST_BEACH.maxZ) {
-      return result.set(WEST_BEACH.safeReturnX,0,clamp(desiredZ,WEST_BEACH.minZ,WEST_BEACH.maxZ));
+      const returnZ=clamp(desiredZ,WEST_BEACH.minZ,WEST_BEACH.maxZ);
+      return result.set(WEST_BEACH.safeReturnX,terrainHeight(WEST_BEACH.safeReturnX,returnZ),returnZ);
     }
-    if(positionBlocked(fromX,fromZ)) return positionBlocked(desiredX,desiredZ) ? result.set(fromX,0,fromZ) : result;
-    if(!positionBlocked(desiredX,desiredZ)&&!pathBlocked(fromX,fromZ,desiredX,desiredZ)) return result;
-    const alongXClear=!positionBlocked(desiredX,fromZ)&&!pathBlocked(fromX,fromZ,desiredX,fromZ);
-    const alongZClear=!positionBlocked(fromX,desiredZ)&&!pathBlocked(fromX,fromZ,fromX,desiredZ);
+    // 坡度可通行判定（方案 §6.1 movement 层兜底）：图外自由移动时按
+    // 「落点处沿运动方向」采样 slopeAlong，超阈值视为不可走，与建筑
+    // 阻挡共用分轴钳制回退。台地内坡度恒 0 → 行为与现状完全一致。
+    const stepTooSteep=(x: number,z: number): boolean=>{
+      const dx=x-fromX, dz=z-fromZ;
+      if(dx*dx+dz*dz<1e-9) return false;
+      return slopeAlong(x,z,dx,dz)>WALKABLE_SLOPE_MAX;
+    };
+    if(positionBlocked(fromX,fromZ)) return positionBlocked(desiredX,desiredZ) ? result.set(fromX,terrainHeight(fromX,fromZ),fromZ) : result;
+    if(!positionBlocked(desiredX,desiredZ)&&!pathBlocked(fromX,fromZ,desiredX,desiredZ)&&!stepTooSteep(desiredX,desiredZ)) return result;
+    const alongXClear=!positionBlocked(desiredX,fromZ)&&!pathBlocked(fromX,fromZ,desiredX,fromZ)&&!stepTooSteep(desiredX,fromZ);
+    const alongZClear=!positionBlocked(fromX,desiredZ)&&!pathBlocked(fromX,fromZ,fromX,desiredZ)&&!stepTooSteep(fromX,desiredZ);
     if(alongXClear&&alongZClear){
       const alongXDistance=(fromZ-desiredZ)**2;
       const alongZDistance=(fromX-desiredX)**2;
-      return alongXDistance<=alongZDistance ? result.set(desiredX,0,fromZ) : result.set(fromX,0,desiredZ);
+      return alongXDistance<=alongZDistance ? result.set(desiredX,terrainHeight(desiredX,fromZ),fromZ) : result.set(fromX,terrainHeight(fromX,desiredZ),desiredZ);
     }
-    if(alongXClear) return result.set(desiredX,0,fromZ);
-    if(alongZClear) return result.set(fromX,0,desiredZ);
-    return result.set(fromX,0,fromZ);
+    if(alongXClear) return result.set(desiredX,terrainHeight(desiredX,fromZ),fromZ);
+    if(alongZClear) return result.set(fromX,terrainHeight(fromX,desiredZ),desiredZ);
+    return result.set(fromX,terrainHeight(fromX,fromZ),fromZ);
   }
   
   function aStarRoad(sNode: RoadNode, eNode: RoadNode, _graph: RoadGraph): RoadNode[] | null {
@@ -446,13 +510,13 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const z = x>=owner.minX&&x<=owner.maxX
         ? (Math.abs(owner.minZ-0.6)<Math.abs(owner.maxZ+0.6) ? owner.minZ-0.6 : owner.maxZ+0.6)
         : p.z;
-      candidates.push(new THREE.Vector3(x,0,z));
+      candidates.push(groundPoint(x,z));
     });
     ROAD_COORDS.forEach((z:number)=>{
       const x = z>=owner.minZ&&z<=owner.maxZ
         ? (Math.abs(owner.minX-0.6)<Math.abs(owner.maxX+0.6) ? owner.minX-0.6 : owner.maxX+0.6)
         : p.x;
-      candidates.push(new THREE.Vector3(x,0,z));
+      candidates.push(groundPoint(x,z));
     });
     // The echo house sits beside a short, dedicated road rather than on a
     // main-grid centerline. Add perimeter points so an interaction target can
@@ -463,14 +527,14 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const x = clamp(p.x, owner.minX, owner.maxX);
       const z = clamp(p.z, owner.minZ, owner.maxZ);
       candidates.push(
-        new THREE.Vector3(x, 0, owner.minZ - clearance),
-        new THREE.Vector3(x, 0, owner.maxZ + clearance),
-        new THREE.Vector3(owner.minX - clearance, 0, z),
-        new THREE.Vector3(owner.maxX + clearance, 0, z),
+        groundPoint(x, owner.minZ - clearance),
+        groundPoint(x, owner.maxZ + clearance),
+        groundPoint(owner.minX - clearance, z),
+        groundPoint(owner.maxX + clearance, z),
       );
     }
     if(p.x>=44){
-      ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>candidates.push(new THREE.Vector3(x,0,z)));
+      ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>candidates.push(groundPoint(x,z)));
     }
     candidates.sort((a,b)=>{
       const da=a.distanceTo(p), db=b.distanceTo(p);
@@ -526,13 +590,22 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     if(isRoadPoint(p)) return snapToRoadClear(p);
     if(p.z<=-42 && NORTH_DISTRICT_AREA.roadNodes.length){
       const nearest=NORTH_DISTRICT_AREA.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
-      const q=new THREE.Vector3(nearest[0],0,nearest[1]);
+      const q=groundPoint(nearest[0],nearest[1]);
       if(!pointInAnyBuilding(p.x,p.z) && !pathBlocked(p.x,p.z,q.x,q.z)) return p.clone();
+      return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
+    }
+    // 南草甸步道（方案 §6.1）：主城网格以南（z ≥ 42，镜像北城 -42 门）的
+    // 目标吸附到最近的步道节点——草甸深处的点击由此改走切槽步道路径。
+    if(p.z>=42 && MEADOW_TRAIL.roadNodes.length){
+      const nearest=MEADOW_TRAIL.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
+      const q=groundPoint(nearest[0],nearest[1]);
+      const nearTrail=Math.hypot(p.x-q.x,p.z-q.z)<=8;
+      if(nearTrail && !pointInAnyBuilding(p.x,p.z) && !pathBlocked(p.x,p.z,q.x,q.z)) return p.clone();
       return pointInAnyBuilding(q.x,q.z) ? p.clone() : q;
     }
     if(p.x>=44 && ECHO_OBSERVATORY_AREA.roadNodes.length){
       const nearest=ECHO_OBSERVATORY_AREA.roadNodes.slice().sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.z)-Math.hypot(b[0]-p.x,b[1]-p.z))[0]!;
-      const q=new THREE.Vector3(nearest[0],0,nearest[1]);
+      const q=groundPoint(nearest[0],nearest[1]);
       // Echo story markers (notably the porch ring) live a few metres off the
       // short road. Keep a nearby clear marker as the final approach target so
       // pending interactions can complete instead of stopping at [68, 0].
@@ -543,9 +616,9 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     // Otherwise snap to the NEAREST road-line point that can be reached with a
     // straight clear hop — for the fountain plaza this is the closest plaza
     // node, so the player never gets pushed toward a far corner first.
-    let best=new THREE.Vector3(0,0,0), bestD=Infinity;
+    let best: THREE.Vector3|null=null, bestD=Infinity;
     const tryPoint=(cx: number,cz: number)=>{
-      const q=new THREE.Vector3(cx,0,cz);
+      const q=groundPoint(cx,cz);
       const d=q.distanceTo(p);
       if(d<bestD&&!pathBlocked(p.x,p.z,cx,cz)&&!pointInAnyBuilding(cx,cz)){
         best=q; bestD=d;
@@ -556,14 +629,15 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     PLAZA_POINTS.forEach(([x,z])=>tryPoint(x,z));
     ECHO_OBSERVATORY_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
     NORTH_DISTRICT_AREA.roadNodes.forEach(([x,z])=>tryPoint(x,z));
-    if(bestD<Infinity) return best;
+    MEADOW_TRAIL.roadNodes.forEach(([x,z])=>tryPoint(x,z));
+    if(best) return best;
     return nearestRoadPoint(p);
   }
   
   function nearestRoadPoint(p: THREE.Vector3): THREE.Vector3 {
     const x=clamp(p.x,-CITY_LIMIT,CITY_LIMIT), z=clamp(p.z,-CITY_LIMIT,CITY_LIMIT);
     const rx=nearestRoadCoord(x), rz=nearestRoadCoord(z);
-    return Math.abs(x-rx)<Math.abs(z-rz) ? new THREE.Vector3(rx,0,z) : new THREE.Vector3(x,0,rz);
+    return Math.abs(x-rx)<Math.abs(z-rz) ? groundPoint(rx,z) : groundPoint(x,rz);
   }
   
   function nearestRoadCoord(v: number): number {

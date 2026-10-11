@@ -4,6 +4,7 @@ import { gsap } from 'gsap';
 import { getNpcType } from './data/npcTypes';
 import type { NpcType } from './data/npcTypes';
 import type { LegacyDialogueNode } from '../adapters/ui/cityDialogController';
+import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 
 export type NpcProfile = {
   id: string;
@@ -28,6 +29,14 @@ export type NpcProfile = {
 };
 
 type NpcTween = gsap.core.Tween;
+
+/** NPC 地面落点（方案 §6.2）：出生/家/工作/巡逻点 y 一律走唯一采样器。
+ *  参数容错沿用旧 THREE.Vector3 构造语义（undefined → 0）。 */
+function groundPoint(x: number | undefined, z: number | undefined): THREE.Vector3 {
+  const px = x ?? 0;
+  const pz = z ?? 0;
+  return new THREE.Vector3(px, terrainHeight(px, pz), pz);
+}
 
 export type Npc = {
   profile: NpcProfile;
@@ -164,11 +173,11 @@ export function createNpcSystem(options: NpcSystemOptions) {
     NPC_PROFILES.forEach((profile: NpcProfile)=>{
       const g=makeCharacter(profile.head,profile.body);
       g.traverse((c: THREE.Object3D)=>{ if('isMesh' in c && c.isMesh) { c.userData.npcId=profile.id; c.userData.npcType=getNpcType(profile); } });
-      const start=randomSpawnPosition(profile) ?? new THREE.Vector3(profile.home[0],0,profile.home[1]);
+      const start=randomSpawnPosition(profile) ?? groundPoint(profile.home[0],profile.home[1]);
       g.position.copy(start); scene.add(g);
-      const homeTarget=new THREE.Vector3(profile.home[0],0,profile.home[1]);
+      const homeTarget=groundPoint(profile.home[0],profile.home[1]);
       const workPosition=profile.work||profile.home;
-      const workTarget=new THREE.Vector3(workPosition[0],0,workPosition[1]);
+      const workTarget=groundPoint(workPosition[0],workPosition[1]);
       const npc={
         profile, mesh:g, tween:null, spawnTimer:profile.spawnChance===1?0:Math.random()*10, idleTimer:0,
         homeTarget, workTarget,
@@ -213,14 +222,14 @@ export function createNpcSystem(options: NpcSystemOptions) {
     const radiusSquared=radius*radius;
     for(const x of ROAD_COORDS) for(const z of ROAD_COORDS){
       const dx=x-center.x,dz=z-center.z,distanceSquared=dx*dx+dz*dz;
-      if(distanceSquared<=radiusSquared&&distanceSquared>0.25) pool.push(new THREE.Vector3(x,0,z));
+      if(distanceSquared<=radiusSquared&&distanceSquared>0.25) pool.push(groundPoint(x,z));
     }
     // Also consider road-line points right beside the destination, so NPCs don't
     // only stand at the intersection grid.
     const rx=nearestRoadCoord(center.x), rz=nearestRoadCoord(center.z);
     for(const [x,z] of [[rx,center.z],[center.x,rz],[rx,rz]] as [number, number][]){
       const dx=x-center.x,dz=z-center.z,distanceSquared=dx*dx+dz*dz;
-      if(distanceSquared<=radiusSquared&&distanceSquared>0.25) pool.push(new THREE.Vector3(x,0,z));
+      if(distanceSquared<=radiusSquared&&distanceSquared>0.25) pool.push(groundPoint(x,z));
     }
     return pool;
   }
@@ -356,7 +365,8 @@ export function createNpcSystem(options: NpcSystemOptions) {
     const dx=target.x-fromX,dz=target.z-fromZ;
     const dur=Math.max(0.6,Math.sqrt(dx*dx+dz*dz)/1.4);
     gsap.to(npc.mesh.rotation,{y:Math.atan2(dx,dz),duration:0.3,ease:'power1.out'});
-    npc.tween=gsap.to(npc.mesh.position,{x:target.x,z:target.z,duration:dur,ease:'power1.inOut',
+    // y 随路径点补间（buildRoadPath 节点已带 terrainHeight；台地内恒 0）
+    npc.tween=gsap.to(npc.mesh.position,{x:target.x,y:target.y,z:target.z,duration:dur,ease:'power1.inOut',
       onComplete:()=>{ npc.tween=null; walkAlongPath(npc,path); }});
   }
   

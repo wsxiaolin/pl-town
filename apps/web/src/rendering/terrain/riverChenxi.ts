@@ -30,15 +30,29 @@
 // （x∈[-41,41], z∈[-88,-33]）、导航区（z ≥ -88）、district 平面（±75）
 // 三者地理脱开，旧隐患一并消除。
 //
-// ── y 层约定（与其他地表保持明确间距；参见 rendering/layers.ts 的
-//    SURFACE_Y 体系与 AGENTS.md 的远镜头 z-fighting 规则）────────────────
-//   河床 RIVERBED_Y = 0.02：高于地面(0) 0.02。与 SURFACE_Y.district(0.018)
-//     名义只差 0.002，但 district 平面（150×150，±75）与本河全程 z ≤ -95
-//     地理不相交，不存在同屏共面网格，无 z-fighting 风险。
-//   河岸 BANK_Y     = 0.024：高于河床 0.004（层间允许的最小间距），
-//     低于 landscape(0.04) 0.016。
-//   水面 WATER_Y    = 0.048：高于河岸 0.024；低于西海面(0.06) 0.012 ——
-//     河口从海面下方滑入；高于 landscape(0.04) 0.008；远在沙滩(0.07)以南。
+// v7 水位表接线（2026-10-11，可信地形改造 R2 / 方案 D6 §7.3）：
+// - 河床/河岸条带从绝对层高改为贴河谷场（riverValleyAt，河域内 ===
+//   terrainHeight）；水面从常量 WATER_Y 改为沿程水位 riverWaterYAt；
+// - 岸景（松树/砾石/湾缘礁石）落点 y 改 terrainHeight 采样，keep-out
+//   剔除逻辑不变；河口湾/羽流/沙洲资产维持绝对高（方案 §7.1）。
+//
+// ── y 层约定（v7 · 可信地形改造 R2 / 方案 D6：贴场 + 沿程水位）──────────
+//   绝对层高体系（床 0.02 / 岸 0.024 / 水 0.048）退役，改为采样 heightfield：
+//   - 河床条带：逐顶点 riverValleyAt + 0.004（河域内 riverValleyAt ===
+//     terrainHeight，见 worldReliefField.ts 聚合模型）——纵剖床（源头
+//     -0.45 → 中游 -0.85 → 河口 -0.285）与湿岸抬升由场承载，+0.004 是
+//     相对 farGround 地形网格的共面红线间距（AGENTS.md ≥ 0.004）。
+//   - 河岸环带：逐顶点 riverValleyAt + 0.008——高于床层 0.004，维持
+//     「水线外露窄条湿河床沿」的既有层差观感（方案 §7.2）。
+//   - 水面：沿程 riverWaterYAt（源头 -0.10 → 中游 -0.45 → 河口 0.075，
+//     与河口湾 0.08 相接）。羽流海内端以西的环被不透明海面（0.06）完全
+//     遮盖，水位钳到海面 −0.005 之下——水位表河口端 0.075 高于海面，
+//     不钳会在海面上翘出一段「悬河」亮条。
+//   - 河口湾面/羽流/沙洲维持绝对高（湾 0.08 / 羽流 0.064 / 沙洲底
+//     -0.3，方案 §7.1：海 0.06 / 湾 0.08 不变）。
+//   z-fighting 复核：床(+0.004)/岸(+0.008)对 farGround 的间隔满足红线；
+//   水面贴床 0.05 以上（数据层契约 terrainElevation 单测 4：床 < 水 −0.05），
+//   河口段水位 0.0145~0.053 持续低于所压湾面/羽流（0.08/0.064+）。
 //
 // ── 排除区（硬约束；条带顶点级钳制 + 岸景剔除双保险）──────────────────
 //   - 星语北城与导航区（z ≥ -88 可步行）：全部条带顶点 min(z, -89.2)，
@@ -57,11 +71,15 @@
 import * as THREE from 'three';
 import { createPondWaterSurface } from '../animatedWater';
 import { CHENXI_RIVER, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../city/data/terrain/river-chenxi';
+import { WEST_BEACH } from '../../city/data/cityConfig';
+import { riverValleyAt, riverWaterYAt } from '../../city/data/terrain/heightfield/worldReliefField';
+import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
 
 // ── y 层（本文件唯一事实来源，间距论证见头注释）───────────────────────
-const RIVERBED_Y = 0.02;
-const BANK_Y = 0.024;
-const WATER_Y = 0.048;
+const BED_LIFT = 0.004; // 河床条带相对采样地形的抬升（共面红线最小间距）
+const BANK_LIFT = 0.008; // 河岸环带相对采样地形的抬升（高于床层 0.004）
+const SEA_SURFACE_Y = 0.06; // 西海面固定水位（westBeach，方案 D6）
+const SEA_ZFIGHT_MARGIN = 0.004; // 环面与不透明海面的最小 z-fighting 间隔（海面重叠域钳制值 = 海面 − 0.004，对齐 GOAL 红线 0.004）
 
 // ── 形状参数 ──────────────────────────────────────────────────────────
 const RING_COUNT = 140; // 曲线采样环数（141 个中心点；河长约 121 → ≈0.86 单位/环）
@@ -128,20 +146,29 @@ function buildWidthWobble(ringCount: number): number[] {
 type StripInput = {
   centers: readonly THREE.Vector3[];
   perps: readonly THREE.Vector3[];
-  /** 环 i 的两条边在 +perp 方向上的偏移（须 offsetA ≤ offsetB，见下）。 */
-  offsetA: (index: number) => number;
-  offsetB: (index: number) => number;
-  y: number;
+  /** 环 i 的横向偏移列（含两端，随列号递增；各环列数必须一致）。 */
+  offsets: (index: number) => number[];
+  /** 顶点 y：按环号与顶点世界坐标采样（贴场 / 沿程水位的唯一来源）。 */
+  y: (index: number, x: number, z: number) => number;
 };
 
+/** [a, b] 区间 n 列均匀取点（含两端；n ≥ 2）。 */
+function stripeColumns(a: number, b: number, n: number): number[] {
+  const columns: number[] = [];
+  for (let column = 0; column < n; column += 1) columns.push(a + ((b - a) * column) / (n - 1));
+  return columns;
+}
+
 /**
- * 沿曲线构建贴地水平条带：每环两个顶点（A → B 沿 +perp 递增，保证三角形
- * 绕向朝上、法线 +y 时为正面）。法线逐顶点手填 +y——水平条带不需要
- * computeVertexNormals，也避免钳制产生的零面积三角形引入退化法线。
+ * 沿曲线构建贴场条带：每环 n 列顶点（沿 +perp 递增，保证三角形绕向朝上、
+ * 法线 +y 时为正面）。法线逐顶点手填 +y——条带坡度 ≤ ~9°（湿岸 0.3/2、
+ * 谷坡 ~0.12/u），+y 法线的光照误差可忽略，也避免钳制产生的零面积三角
+ * 形引入退化法线。y 逐顶点采样（v7：床/岸贴 riverValleyAt、水面沿程水位）。
  */
 function buildStrip(input: StripInput): THREE.BufferGeometry {
-  const { centers, perps, offsetA, offsetB, y } = input;
+  const { centers, perps, offsets, y } = input;
   const ringCount = centers.length;
+  const columnCount = offsets(0)!.length;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -149,19 +176,24 @@ function buildStrip(input: StripInput): THREE.BufferGeometry {
     const center = centers[i]!;
     const perp = perps[i]!;
     const v = i / (ringCount - 1);
-    const offsets = [offsetA(i), offsetB(i)];
-    for (let side = 0; side < 2; side += 1) {
-      const offset = offsets[side]!;
+    const columns = offsets(i);
+    for (let column = 0; column < columnCount; column += 1) {
+      const offset = columns[column]!;
       let vz = center.z + perp.z * offset;
-      // 排除区钳制：星语北城/导航区以南（对 z 单调，环内 A≤B 保序 → 无折叠）。
+      // 排除区钳制：星语北城/导航区以南（对 z 单调，环内列序保序 → 无折叠）。
       vz = Math.min(vz, NAV_EDGE_Z);
-      positions.push(center.x + perp.x * offset, y, vz);
-      uvs.push(side, v);
+      const vx = center.x + perp.x * offset;
+      // y 在钳定后的最终顶点位置采样：安全网若触发，条带落在平地上而非悬空。
+      positions.push(vx, y(i, vx, vz), vz);
+      uvs.push(column / (columnCount - 1), v);
     }
   }
   for (let i = 0; i < ringCount - 1; i += 1) {
-    const a = i * 2;
-    indices.push(a, a + 2, a + 3, a, a + 3, a + 1);
+    const a = i * columnCount;
+    for (let column = 0; column + 1 < columnCount; column += 1) {
+      const b = a + column;
+      indices.push(b, b + columnCount, b + columnCount + 1, b, b + columnCount + 1, b + 1);
+    }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -251,27 +283,52 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   const bankMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c49c, roughness: 0.98, metalness: 0 });
   disposables.push(bedMaterial, bankMaterial);
 
+  // 沿程水位（D6 契约）：环心采样 riverWaterYAt。与不透明海面水平重叠
+  // 的环（x < 海岸线 WEST_BEACH.coastlineX）统一钳到海面 − SEA_ZFIGHT_MARGIN：
+  // 水位表河口端 0.075 高于海面 0.06，不钳会在海面上翘出「悬河」亮条。
+  // R3 东扩（原只钳羽流海内端 ESTUARY_PROFILE 首站以西）：羽流尖区
+  // x=-50.03 的环水位爬到 0.057，距海面仅 0.003 < 0.004 z-fighting 裕度
+  // （R2 验收探针 8/9）。~0.002 的水面台阶远小于滩面起伏，视觉无感；
+  // 羽流舌面（0.064..0.08）恒高于钳制值，间隙只增不减（实测 0.0073 →
+  // ≥ 0.0083）。海岸线常量取 cityConfig 权威值——河流走廊段（z≈-95..-99）
+  // 的实际岸线摆幅 ≤ -43.6，固定 -43.2 完整覆盖重叠域。
+  const SEA_OVERLAP_X = WEST_BEACH.coastlineX;
+  const waterLevels = centers.map((center) => {
+    // 环心贴折线（d ≈ 0）必命中水道域；防御回退取中游站水位 -0.45。
+    const level = riverWaterYAt(center.x, center.z) ?? -0.45;
+    return center.x < SEA_OVERLAP_X ? Math.min(level, SEA_SURFACE_Y - SEA_ZFIGHT_MARGIN) : level;
+  });
+
+  // 河床条带：逐顶点贴 riverValleyAt + 0.004（纵剖床 + 湿岸抬升由场承载，
+  // 7 列细分让暗色湿床沿横向贴合 smoothstep 剖面，弦高误差 ≤ ~0.005）
   addStrip(
     buildStrip({
       centers,
       perps,
-      y: RIVERBED_Y,
-      offsetA: (i) => -(halfWidths[i]! + BED_EXTRA) * mouthFades[i]!,
-      offsetB: (i) => (halfWidths[i]! + BED_EXTRA) * mouthFades[i]!,
+      offsets: (i) => stripeColumns(
+        -(halfWidths[i]! + BED_EXTRA) * mouthFades[i]!,
+        (halfWidths[i]! + BED_EXTRA) * mouthFades[i]!,
+        7,
+      ),
+      y: (_i, x, z) => riverValleyAt(x, z) + BED_LIFT,
     }),
     bedMaterial,
     'river-chenxi-bed',
   );
 
   // 河岸是两侧的环带（内缘水线外 0.15 → 外缘 +3.5），不整片盖住河床：
-  // 水下看得到暗色河床，水线外是 0.004 高的浅色滩岸
+  // 水下看得到暗色河床，水线外是 0.004 高的浅色滩岸。逐顶点贴
+  // riverValleyAt + 0.008，6 列细分贴合岸坡剖面。
   addStrip(
     buildStrip({
       centers,
       perps,
-      y: BANK_Y,
-      offsetA: (i) => (halfWidths[i]! + BANK_INNER_EXTRA) * mouthFades[i]!,
-      offsetB: (i) => (halfWidths[i]! + BANK_EXTRA) * mouthFades[i]!,
+      offsets: (i) => stripeColumns(
+        (halfWidths[i]! + BANK_INNER_EXTRA) * mouthFades[i]!,
+        (halfWidths[i]! + BANK_EXTRA) * mouthFades[i]!,
+        6,
+      ),
+      y: (_i, x, z) => riverValleyAt(x, z) + BANK_LIFT,
     }),
     bankMaterial,
     'river-chenxi-bank-north',
@@ -280,22 +337,25 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     buildStrip({
       centers,
       perps,
-      y: BANK_Y,
-      offsetA: (i) => -(halfWidths[i]! + BANK_EXTRA) * mouthFades[i]!,
-      offsetB: (i) => -(halfWidths[i]! + BANK_INNER_EXTRA) * mouthFades[i]!,
+      offsets: (i) => stripeColumns(
+        -(halfWidths[i]! + BANK_EXTRA) * mouthFades[i]!,
+        -(halfWidths[i]! + BANK_INNER_EXTRA) * mouthFades[i]!,
+        6,
+      ),
+      y: (_i, x, z) => riverValleyAt(x, z) + BANK_LIFT,
     }),
     bankMaterial,
     'river-chenxi-bank-south',
   );
 
-  // 水面条带：源头细、河口宽，全程等高 WATER_Y（河口滑入 0.06 的海面下方，
-  // 与海面 0.012 间距、与 landscape 0.008 间距，远镜头不闪）
+  // 水面条带：源头细、河口宽，沿程水位 waterLevels（每环横向恒平——与
+  // riverWaterYAt 在水道域内横向恒定的语义一致）；河口段没入海面/湾面
+  // 之下（见 waterLevels 钳制论证），远镜头不闪
   const waterGeometry = buildStrip({
     centers,
     perps,
-    y: WATER_Y,
-    offsetA: (i) => -halfWidths[i]!,
-    offsetB: (i) => halfWidths[i]!,
+    offsets: (i) => [-halfWidths[i]!, halfWidths[i]!],
+    y: (i) => waterLevels[i]!,
   });
   // renderHint.color（0x7fb5c9 淡青）作日间水色：与 PALETTE 的冷青水系
   // （RIVER 0x5a8fb8、海面 0x0d3b5e）同族但更浅，呼应 CG 启动图里的淡青河带
@@ -452,7 +512,9 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     const scale = 0.4 + estuaryRand() * 0.9;
     const stone = new THREE.Mesh(boulderGeometry, boulderMaterials[Math.floor(estuaryRand() * boulderMaterials.length)]!);
     stone.name = `river-chenxi-estuary-stone-${index}`;
-    stone.position.set(stoneX, scale * 0.38, stoneZ);
+    // v7：落点改 terrainHeight 采样（湾缘河谷 rim 地形 −0.3 左右，原绝对
+    // 0.38×scale 会悬空）；湾面 0.08 资产不动（方案 §7.1）。
+    stone.position.set(stoneX, terrainHeight(stoneX, stoneZ) + scale * 0.38, stoneZ);
     stone.scale.setScalar(scale);
     stone.rotation.set(estuaryRand() * Math.PI, estuaryRand() * Math.PI, estuaryRand() * Math.PI);
     stone.castShadow = true;
@@ -537,7 +599,8 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     const z = center.z + perp.z * offset * side + tangent.z * along;
     if (!isScenerySpotClear(x, z, 1.6)) continue;
     const pine = createPine();
-    pine.position.set(x, -0.05, z);
+    // v7：贴 terrainHeight 采样（原绝对 -0.05，河谷下切后会悬空）
+    pine.position.set(x, terrainHeight(x, z) - 0.05, z);
     object.add(pine);
     placedPines += 1;
   }
@@ -556,6 +619,8 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
     const boulder = createBoulder();
     boulder.position.x = x;
     boulder.position.z = z;
+    // v7：贴 terrainHeight 采样（原绝对层高 0.02 附近，河谷下切后会悬空）
+    boulder.position.y = terrainHeight(x, z) + boulder.scale.y * 0.45; // 半嵌入地面/岸线
     object.add(boulder);
     placedBoulders += 1;
   }

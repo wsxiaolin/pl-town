@@ -64,7 +64,10 @@ export function createNavigationTargetMarker(scene: THREE.Scene) {
   }
 
   function show(position: THREE.Vector3): void {
-    root.position.set(position.x, 0, position.z);
+    // y 跟随调用方路径点（R3 漏网①）：台地内数值不变（terrainHeight=0），
+    // 城外点击/寻路目标不再被压回 y=0 沉地。环/八面体的层偏移仍由
+    // SURFACE_Y.navigationTarget 相对 root 承载。
+    root.position.set(position.x, position.y, position.z);
     root.visible = true;
     elapsedSeconds = 0;
     octahedron.rotation.y = 0;

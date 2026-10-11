@@ -6,6 +6,9 @@ import { isLanYuPreludeCGActive, playLanYuPreludeCG, stopLanYuPreludeCG } from '
 import { musterCGActive, startMusterCG, stopMusterCG } from './musterCg';
 import { isWeather, type Weather } from './weather';
 import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from '../adapters/ui/iceKing/catDeathCGController';
+import { terrainHeight, slopeAlong } from './data/terrain/heightfield/terrainHeight';
+import { plateauFlat } from './data/terrain/heightfield/plateauField';
+import { riverWaterYAt } from './data/terrain/heightfield/worldReliefField';
 import type { OnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 
 type NpcEntity = Npc;
@@ -66,7 +69,7 @@ function createMiniCityApi(options: DebugApiOptions) {
       if (!entity) return false;
       const cursor = options.getCursorChar();
       if (!cursor) return false;
-      cursor.position.set(entity.interactionPosition.x + 0.5, 0, entity.interactionPosition.z);
+      cursor.position.set(entity.interactionPosition.x + 0.5, terrainHeight(entity.interactionPosition.x + 0.5, entity.interactionPosition.z), entity.interactionPosition.z);
       options.interactWithSceneInterestPoint(id as SceneInterestPointId);
       return true;
     },
@@ -117,6 +120,22 @@ function createMiniCityApi(options: DebugApiOptions) {
     teleport: (x: number, z: number) => options.teleport(x, z),
     /** Teleport + optional orthographic zoom (bigger = wider view). */
     focus: (x: number, z: number, zoom?: number) => options.focus(x, z, zoom),
+    /** 地形运行时探针（可信地形 DoD）：任意 (x,z) 的权威采样器读数。 */
+    terrain: {
+      /** terrainHeight 原值：_mini.terrain.height(34, 96) → 观景平台地面高。 */
+      height: (x: number, z: number) => terrainHeight(x, z),
+      /** 诊断聚合：高程 / 台地平坦权重（1=台地外，0=台地内）/ 河道沿程水位 /
+       *  最大梯度方向坡度（与 WALKABLE_SLOPE_MAX=0.45 比较即知可否步行）。 */
+      sample: (x: number, z: number) => ({
+        height: terrainHeight(x, z),
+        plateau: plateauFlat(x, z),
+        riverWaterY: riverWaterYAt(x, z),
+        slope: Math.max(
+          slopeAlong(x, z, 1, 0), slopeAlong(x, z, -1, 0),
+          slopeAlong(x, z, 0, 1), slopeAlong(x, z, 0, -1),
+        ),
+      }),
+    },
   };
 }
 
