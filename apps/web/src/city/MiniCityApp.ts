@@ -854,9 +854,7 @@ function init() {
   // Entrance plays once the render gate releases; see createEntranceGate.
   const entranceGate = createEntranceGate(() => scheduleGenshinIdlePrefetch());
 
-// Account controllers live outside the scene so the email/password gate can run
-// before (and trigger) the city download; they only touch the DOM and the
-// module-level helpers below.
+// Account controllers live outside the scene: the gate runs before the download.
 function setupAccountControllers(): void {
   account = createAccountSessionController({
     getStats,
@@ -866,6 +864,7 @@ function setupAccountControllers(): void {
     getLocalUser: () => multiplayerHousing?.getLocalUser() ?? null,
     beginBoot: () => lifecycle.confirmAuth(),
     onEnterCity: enterCity,
+    isDevPortal: isDevPortalRequested,
     signal: lifecycle.signal,
   });
   loginController = account.loginController;
@@ -880,7 +879,8 @@ function enterCity(): void {
     localStorage.removeItem('minicityPassword');
   };
   entranceGate.run(entrance);
-  multiplayerHousing.connect();
+  // The dev portal stays offline (no session); connecting would reopen login.
+  if (!isDevPortalRequested()) multiplayerHousing.connect();
 }
 
 function disposeSession() {

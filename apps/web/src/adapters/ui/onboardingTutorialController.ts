@@ -110,7 +110,9 @@ export function createOnboardingTutorialController(options: OnboardingTutorialCo
   function isCalm(): boolean {
     return !isOverlayBlocking(doc.getElementById('bootScreen'))
       && !isOverlayBlocking(doc.getElementById('loginOverlay'))
-      && !isOverlayBlocking(doc.getElementById('cgOverlay'));
+      && !isOverlayBlocking(doc.getElementById('cgOverlay'))
+      && !isOverlayBlocking(doc.getElementById('residentCardOverlay'))
+      && !isOverlayBlocking(doc.getElementById('certifyOverlay'));
   }
 
   function step(): TutorialStep {

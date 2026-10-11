@@ -13,6 +13,8 @@ export type AccountSessionOptions = {
   beginBoot: () => void;
   /** Play the city entrance and connect the multiplayer socket. */
   onEnterCity: () => void;
+  /** Dev visual portal: enter offline without the 居民证 or a multiplayer link. */
+  isDevPortal?: () => boolean;
   signal: AbortSignal;
 };
 
@@ -111,6 +113,8 @@ export function createAccountSessionController(options: AccountSessionOptions) {
 
   function maybeEnterCity(): void {
     if (!cityDownloaded || !introFinished) return;
+    // The dev portal stays offline and skips the 居民证 entirely.
+    if (options.isDevPortal?.()) { options.onEnterCity(); return; }
     if (!localStorage.getItem('minicityUser')) loginController.showResidentCard();
     else options.onEnterCity();
   }

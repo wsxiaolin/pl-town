@@ -247,7 +247,13 @@ db.exec(`
   if (!columns.some((column) => column.name === 'session_expires_at')) db.exec('ALTER TABLE users ADD COLUMN session_expires_at TEXT');
   // Certification badge: set when a resident proves that their current display
   // name is the nickname of a Physics Lab account they own.
-  if (!columns.some((column) => column.name === 'verified')) db.exec('ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0');
+  const hadVerified = columns.some((column) => column.name === 'verified');
+  if (!hadVerified) db.exec('ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0');
+  // Preserve legacy verification: upgraded databases still carry pl_user_id for
+  // residents whose Physics Lab account was bound, so carry that badge over.
+  if (!hadVerified && columns.some((column) => column.name === 'pl_user_id')) {
+    db.exec("UPDATE users SET verified = 1 WHERE pl_user_id IS NOT NULL AND pl_user_id <> ''");
+  }
   if (!columns.some((column) => column.name === 'disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
 }
 {
