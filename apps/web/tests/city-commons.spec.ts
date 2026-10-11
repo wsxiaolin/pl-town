@@ -333,7 +333,7 @@ test('an expired session closes the top-layer panel before showing login', async
   await panel.locator('[data-building-id="catcafe"]').getByRole('button', { name: '投票建设' }).click();
   await expect(panel).not.toBeVisible();
   await expect(page.locator('#loginOverlay')).toBeVisible();
-  await expect(page.locator('#loginInput')).toBeFocused();
+  await expect(page.locator('#loginEmail')).toBeFocused();
   const closedPanel = page.locator('.city-governance-panel');
   await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveText('');
   await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveJSProperty('hidden', true);
@@ -345,7 +345,7 @@ test('a rejected vote leaves its closed dialog clear while login takes focus', a
   const panel = page.getByRole('dialog', { name: '众议院', exact: true });
   await panel.locator('[data-building-id="catcafe"]').getByRole('button', { name: '投票建设' }).click();
   await expect(panel).not.toBeVisible();
-  await expect(page.locator('#loginInput')).toBeFocused();
+  await expect(page.locator('#loginEmail')).toBeFocused();
   await settlePaint(page);
   const closedPanel = page.locator('.city-governance-panel');
   await expect(closedPanel.locator('[data-city-vote-feedback]')).toHaveText('');

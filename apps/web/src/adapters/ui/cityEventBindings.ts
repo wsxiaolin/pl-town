@@ -11,23 +11,12 @@ export function bindCityUiEvents(options: {
   closeAcademy: () => void;
   closeAcademyReader: () => void;
   closeMutualAid: () => void;
-  closeLibrarySearch: () => void;
-  closeWorkDetail: () => void;
-  toggleWorkStar: () => void;
-  loadWorkComments: () => void;
-  loadWorkDerivatives: () => void;
-  loadWorkSupporters: () => void;
-  toggleWorkSupport: () => void;
-  postWorkComment: (event: SubmitEvent) => void;
   isMapOpen: () => boolean;
   toggleMap: () => void;
   toggleWalkMode?: () => void;
   isWalkModeActive?: () => boolean;
   closeModal: () => void;
   closeNpcDialog: () => void;
-  login: () => void;
-  loginFeedback: () => void;
-  resetVerification: () => void;
   showLogin: () => void;
   resize: () => void;
 }) {
@@ -56,28 +45,13 @@ export function bindCityUiEvents(options: {
   document.getElementById('academyClose')?.addEventListener('click', options.closeAcademy, { signal });
   document.getElementById('academyReaderClose')?.addEventListener('click', options.closeAcademyReader, { signal });
   document.getElementById('mutualAidClose')?.addEventListener('click', options.closeMutualAid, { signal });
-  document.getElementById('librarySearchClose')?.addEventListener('click', options.closeLibrarySearch, { signal });
-  document.getElementById('workDetailClose')?.addEventListener('click', options.closeWorkDetail, { signal });
-  document.getElementById('workStar')?.addEventListener('click', options.toggleWorkStar, { signal });
-  document.getElementById('workCommentsTab')?.addEventListener('click', options.loadWorkComments, { signal });
-  document.getElementById('workDerivatives')?.addEventListener('click', options.loadWorkDerivatives, { signal });
-  document.getElementById('workSupport')?.addEventListener('click', options.toggleWorkSupport, { signal });
-  document.getElementById('workSupporters')?.addEventListener('click', options.loadWorkSupporters, { signal });
-  document.getElementById('workCommentForm')?.addEventListener('submit', options.postWorkComment, { signal });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (options.isWalkModeActive?.()) return options.toggleWalkMode?.();
     if (options.isMapOpen()) return options.toggleMap();
     if (document.getElementById('academyReader')?.classList.contains('open')) return options.closeAcademyReader();
-    options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeMutualAid(); options.closeLibrarySearch(); options.closeModal(); options.closeNpcDialog();
+    options.closeRenderSettings(); options.closeStats(); options.closeWorks(); options.closeWriterCatalog(); options.closeAcademy(); options.closeMutualAid(); options.closeModal(); options.closeNpcDialog();
   }, { signal });
-  document.getElementById('loginBtn')?.addEventListener('click', options.login, { signal });
-  document.getElementById('loginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
-  document.getElementById('loginPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
-  document.getElementById('plLoginInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
-  document.getElementById('plPasswordInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') options.login(); }, { signal });
-  document.getElementById('plVerifyBack')?.addEventListener('click', options.resetVerification, { signal });
-  document.getElementById('loginInput')?.addEventListener('input', options.loginFeedback, { signal });
   document.getElementById('logoUser')?.addEventListener('click', (event) => {
     if ((event.currentTarget as HTMLElement).classList.contains('login-required')) options.showLogin();
   }, { signal });

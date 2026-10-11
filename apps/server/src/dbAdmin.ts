@@ -64,7 +64,7 @@ export function listAdminAudit(limit: number): AdminAuditEntry[] {
 export function updateAdminUserNickname(userId: string, nickname: string): { ok: boolean; reason?: string } {
   const trimmed = nickname.trim();
   if (!trimmed) return { ok: false, reason: '昵称不能为空' };
-  if (db.prepare('SELECT id FROM users WHERE nickname = ? COLLATE NOCASE AND id <> ?').get(trimmed, userId)) return { ok: false, reason: '昵称已被占用' };
+  // Display names may repeat across residents; no uniqueness check is enforced.
   return { ok: db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?').run(trimmed, now(), userId).changes > 0 };
 }
 export function moveUserToHouse(userId: string, buildingId: string | null): { ok: boolean; reason?: string } {

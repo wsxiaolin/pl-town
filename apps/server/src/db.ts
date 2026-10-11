@@ -33,8 +33,9 @@ try {
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    nickname TEXT NOT NULL,
+    nickname TEXT NOT NULL DEFAULT '',
     email TEXT,
+    verified INTEGER NOT NULL DEFAULT 0,
     password_hash TEXT,
     token_hash TEXT NOT NULL UNIQUE,
     session_expires_at TEXT,
@@ -244,9 +245,9 @@ db.exec(`
   const columns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'password_hash')) db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
   if (!columns.some((column) => column.name === 'session_expires_at')) db.exec('ALTER TABLE users ADD COLUMN session_expires_at TEXT');
-  // Physics Lab account link: set when a resident proved ownership of a
-  // nickname that already exists in the Physics Lab community.
-  if (!columns.some((column) => column.name === 'pl_user_id')) db.exec('ALTER TABLE users ADD COLUMN pl_user_id TEXT');
+  // Certification badge: set when a resident proves that their current display
+  // name is the nickname of a Physics Lab account they own.
+  if (!columns.some((column) => column.name === 'verified')) db.exec('ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0');
   if (!columns.some((column) => column.name === 'disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT');
 }
 {
@@ -280,15 +281,13 @@ db.prepare(`
   INSERT OR IGNORE INTO player_achievement_rewards (user_id, achievement_id, currency, granted_at)
   SELECT user_id, achievement_id, 0, unlocked_at FROM player_achievements
 `).run();
+// Display names are player-chosen and may repeat, while the email address is
+// the single account credential, so it carries a case-insensitive unique index.
+db.exec('DROP INDEX IF EXISTS users_nickname_unique');
 {
-  const existing = db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'users_nickname_unique'`).get() as { count: number };
-  if (!existing.count) {
-    const duplicates = db.prepare(`SELECT nickname FROM users GROUP BY nickname COLLATE NOCASE HAVING COUNT(*) > 1`).all() as Array<{ nickname: string }>;
-    for (const duplicate of duplicates) {
-      const rows = db.prepare(`SELECT rowid FROM users WHERE nickname = ? COLLATE NOCASE ORDER BY rowid`).all(duplicate.nickname) as Array<{ rowid: number }>;
-      rows.slice(1).forEach((row) => db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE rowid = ?').run(`${duplicate.nickname}${row.rowid}`, new Date().toISOString(), row.rowid));
-    }
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_unique ON users (nickname COLLATE NOCASE)');
+  const duplicates = db.prepare(`SELECT COUNT(*) AS count FROM (SELECT email FROM users WHERE email IS NOT NULL GROUP BY email COLLATE NOCASE HAVING COUNT(*) > 1)`).get() as { count: number };
+  if (duplicates.count === 0) {
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email COLLATE NOCASE) WHERE email IS NOT NULL');
   }
 }
 initializeCityGovernance(db);
@@ -350,20 +349,30 @@ const cityBuildingBuilt = (buildingId: string): boolean => {
   return !project || Boolean((db.prepare('SELECT built FROM city_projects WHERE id = ?').get(project.id) as { built: number } | undefined)?.built);
 };
 
-const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, plUserId: row.pl_user_id, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
+const rowUser = (row: UserRow): User => ({ id: row.id, nickname: row.nickname, email: row.email, verified: row.verified !== 0, position: { x: row.position_x, y: row.position_y, z: row.position_z, rotation: row.rotation ?? undefined } });
 
-export function createUser(id: string, tokenHash: string, nickname: string, passwordHash: string, sessionExpiresAt: string, plUserId: string | null = null): User {
+// A fresh account starts without a display name: the resident signs one on the
+// 居民证 (resident certificate) step. The email is the only login credential.
+export function createUser(id: string, tokenHash: string, email: string, passwordHash: string, sessionExpiresAt: string): User {
   const timestamp = now();
-  db.prepare('INSERT INTO users (id, nickname, password_hash, token_hash, session_expires_at, pl_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, nickname, passwordHash, tokenHash, sessionExpiresAt, plUserId, timestamp, timestamp);
+  db.prepare('INSERT INTO users (id, nickname, email, password_hash, token_hash, session_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, '', email, passwordHash, tokenHash, sessionExpiresAt, timestamp, timestamp);
   return getUser(id)!;
+}
+export function getUserByEmail(email: string): { id: string; nickname: string; email: string | null; passwordHash: string | null; disabled: boolean } | null {
+  const row = db.prepare('SELECT id, nickname, email, password_hash, disabled_at FROM users WHERE email = ? COLLATE NOCASE').get(email) as { id: string; nickname: string; email: string | null; password_hash: string | null; disabled_at: string | null } | undefined;
+  return row ? { id: row.id, nickname: row.nickname, email: row.email, passwordHash: row.password_hash, disabled: Boolean(row.disabled_at) } : null;
+}
+export function setUserDisplayName(id: string, nickname: string): User | null {
+  db.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?').run(nickname, now(), id);
+  return getUser(id);
+}
+export function setUserVerified(id: string, verified: boolean): User | null {
+  db.prepare('UPDATE users SET verified = ?, updated_at = ? WHERE id = ?').run(verified ? 1 : 0, now(), id);
+  return getUser(id);
 }
 export function getUserByToken(tokenHash: string): User | null {
   const row = db.prepare("SELECT * FROM users WHERE token_hash = ? AND disabled_at IS NULL AND session_expires_at > ?").get(tokenHash, now()) as UserRow | undefined;
   return row ? rowUser(row) : null;
-}
-export function getUserByNickname(nickname: string): { id: string; nickname: string; passwordHash: string | null; disabled: boolean } | null {
-  const row = db.prepare('SELECT id, nickname, password_hash, disabled_at FROM users WHERE nickname = ? COLLATE NOCASE').get(nickname) as { id: string; nickname: string; password_hash: string | null; disabled_at: string | null } | undefined;
-  return row ? { id: row.id, nickname: row.nickname, passwordHash: row.password_hash, disabled: Boolean(row.disabled_at) } : null;
 }
 export function updateUserToken(id: string, tokenHash: string, sessionExpiresAt: string): void {
   db.prepare('UPDATE users SET token_hash = ?, session_expires_at = ?, updated_at = ? WHERE id = ?').run(tokenHash, sessionExpiresAt, now(), id);
@@ -371,9 +380,6 @@ export function updateUserToken(id: string, tokenHash: string, sessionExpiresAt:
 export function getUser(id: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
   return row ? rowUser(row) : null;
-}
-export function updateUserProfile(id: string, nickname: string, email?: string): void {
-  db.prepare('UPDATE users SET nickname = ?, email = COALESCE(?, email), updated_at = ? WHERE id = ?').run(nickname, email ?? null, now(), id);
 }
 export function savePosition(id: string, position: Position): void {
   db.prepare('UPDATE users SET position_x = ?, position_y = ?, position_z = ?, rotation = ?, updated_at = ? WHERE id = ?').run(position.x, position.y, position.z, position.rotation ?? null, now(), id);
@@ -798,17 +804,16 @@ export function countRegistrationsForIp(ip: string, sinceIso: string): number {
 export function registerUserAtomic(
   userId: string,
   tokenHash: string,
-  nickname: string,
+  email: string,
   passwordHash: string,
   expiresAt: string,
   ip: string,
   sinceIso: string,
   max: number,
-  plUserId: string | null = null,
 ): { allowed: boolean } {
   return db.transaction(() => {
     if (countRegistrationsForIp(ip, sinceIso) >= max) return { allowed: false };
-    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
+    createUser(userId, tokenHash, email, passwordHash, expiresAt);
     db.prepare('INSERT OR IGNORE INTO account_registrations (ip, user_id, created_at) VALUES (?, ?, ?)').run(ip, userId, now());
     return { allowed: true };
   })();

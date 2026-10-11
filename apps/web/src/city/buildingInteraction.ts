@@ -3,8 +3,6 @@ import type { BuildingEntity } from './buildingEntity';
 import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { WildMushroomInteractResult } from './wildMushroomRestaurant';
 
-type SocialKind = 'profile' | 'mine' | 'favorites' | 'following' | 'followers' | 'volunteers';
-
 export type BuildingInteractionOptions = {
   /** Injected by the composition root; domain code must not import UI by value. */
   openGovernancePanel?: (buildingId: string) => void;
@@ -27,12 +25,6 @@ export type BuildingInteractionOptions = {
   getFilmCityController?: () => { interact: () => void } | null;
   getGenshinInstituteController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
-};
-
-const PHONE_BUILDINGS: Record<string, [string, import('../adapters/ui/communityPanelController').SocialKind?]> = {
-  bulletin: ['inventory'], news: ['inventory'],
-  community: ['social', 'profile'], records: ['social', 'mine'],
-  tradingpost: ['social', 'favorites'], guildhall: ['social', 'volunteers'],
 };
 
 export function createBuildingInteraction(options: BuildingInteractionOptions) {
@@ -96,12 +88,6 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     }
     if (b.id === 'mall_south' || b.id === 'mall_west') {
       options.getMultiplayerHousing()?.progression.openShop();
-      options.trackInteraction(b.id);
-      return;
-    }
-    const phoneEntry = PHONE_BUILDINGS[b.id];
-    if (phoneEntry) {
-      options.getCommunityPanels()?.openPhoneApp(phoneEntry[0], phoneEntry[1]);
       options.trackInteraction(b.id);
       return;
     }

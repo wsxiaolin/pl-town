@@ -27,7 +27,7 @@ its existing responsibilities are migrated incrementally.
 - `city/cityConstructionLayout.ts`: derives the default city decorations from the curated `personalBlocks` catalog now that personal construction is retired.
 - `adapters/ui/cityGovernancePanel.ts`: collective construction and voting dialog; `cityGovernanceDom.ts` owns shared DOM and focus helpers.
 - `rendering/buildingMeshFactory.ts`: building shape catalog; `proceduralTextureLibrary.ts`: canvas textures; `worldDecorations.ts`: trees, lamps, houses, ponds, and street props.
-- `adapters/ui/cityDialogController.ts`: building/NPC dialog DOM; `communityPanelController.ts`: Physics Lab panels; `multiplayerHousingController.ts`: WebSocket presence and housing UI.
+- `adapters/ui/cityDialogController.ts`: building/NPC dialog DOM; `communityPanelController.ts`: anonymous public-works browsing; `multiplayerHousingController.ts`: WebSocket presence and housing UI.
 
 ## Ice King feature split
 
