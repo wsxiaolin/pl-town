@@ -44,6 +44,8 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
   expect(viewport.overflow).toBeLessThanOrEqual(1);
 
   expect(await page.evaluate(() => (window as any)._mini.cinematics.stopLanYuPrelude())).toBe(true);
-  await expect(overlay).toHaveCount(0, { timeout: 2_000 });
+  // The overlay fades out (is-closing) and is removed on a 620ms timer; under a
+  // loaded software-GL runner that timer can slip well past 2s.
+  await expect(overlay).toHaveCount(0, { timeout: 15_000 });
   expect(await page.evaluate(() => (window as any)._mini.cinematics.isLanYuPreludeActive())).toBe(false);
 });
