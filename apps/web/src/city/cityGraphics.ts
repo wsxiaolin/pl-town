@@ -16,7 +16,6 @@ export function createCityGraphics(
 ) {
   let weatherVisual: WeatherVisual | null = null;
   let refreshLooks = () => {};
-  let toonSync = () => {};
 
   const weather = createWeatherController({
     apply: (next, changed) => {
@@ -46,9 +45,6 @@ export function createCityGraphics(
   refreshLooks = () => {
     mesh.refreshWeather();
     textures.refreshWeather();
-    // Cel-shaded twins follow the repainted originals while the toon world
-    // is active (first-person mode).
-    toonSync();
   };
 
   return {
@@ -59,9 +55,6 @@ export function createCityGraphics(
     buildingBuilders: buildingMeshes.builders,
     setWeatherVisual(visual: WeatherVisual | null) {
       weatherVisual = visual;
-    },
-    setToonSync(sync: () => void) {
-      toonSync = sync;
     },
     refreshWeatherLooks() {
       refreshLooks();

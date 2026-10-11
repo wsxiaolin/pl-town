@@ -133,7 +133,7 @@ test('leaving first person restores the overhead follow camera on the player', a
   expect(restored.cameraOnPlayer).toBeLessThan(36);
 });
 
-test('first person restyles the city into the cel-shaded toon world and restores it on exit', async ({ page }) => {
+test('first person keeps the normal world style (no toon restyle, no extra fog)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const before = await page.evaluate(() => {
@@ -142,12 +142,8 @@ test('first person restyles the city into the cel-shaded toon world and restores
     mini.scene.traverse((object: any) => {
       if (object.isMesh && object.material?.isMeshStandardMaterial) standardMeshes += 1;
     });
-    return {
-      toonActive: Boolean(mini.firstPerson?.worldStyle?.toonActive?.()),
-      standardMeshes,
-    };
+    return { standardMeshes, fog: Boolean(mini.scene.fog) };
   });
-  expect(before.toonActive).toBe(false);
   expect(before.standardMeshes).toBeGreaterThan(50);
 
   await page.evaluate(() => (window as any)._mini.firstPerson.enter());
@@ -165,21 +161,16 @@ test('first person restyles the city into the cel-shaded toon world and restores
     });
     return {
       active: Boolean(mini.firstPerson?.isActive()),
-      toonActive: Boolean(mini.firstPerson?.worldStyle?.toonActive?.()),
-      skyActive: Boolean(mini.firstPerson?.worldStyle?.skyActive?.()),
       skyDome: Boolean(mini.scene.getObjectByName('toon-sky-dome')),
-      fogged: Boolean(mini.scene.fog),
       toonMeshes,
       standardMeshes,
     };
   });
   expect(during.active).toBe(true);
-  expect(during.toonActive).toBe(true);
-  expect(during.skyActive).toBe(true);
-  expect(during.skyDome).toBe(true);
-  expect(during.fogged).toBe(true);
-  expect(during.toonMeshes).toBeGreaterThan(50);
-  expect(during.standardMeshes).toBe(0);
+  // 世界观感不变：无手绘天穹、无 toon 材质替换、材质保持 standard。
+  expect(during.skyDome).toBe(false);
+  expect(during.toonMeshes).toBe(0);
+  expect(during.standardMeshes).toBe(before.standardMeshes);
 
   await page.evaluate(() => (window as any)._mini.firstPerson.exit());
 
@@ -193,19 +184,9 @@ test('first person restyles the city into the cel-shaded toon world and restores
         else if (object.material.isMeshStandardMaterial) standardMeshes += 1;
       }
     });
-    return {
-      toonActive: Boolean(mini.firstPerson?.worldStyle?.toonActive?.()),
-      skyDome: Boolean(mini.scene.getObjectByName('toon-sky-dome')),
-      fogged: Boolean(mini.scene.fog),
-      toonMeshes,
-      standardMeshes,
-    };
+    return { skyDome: Boolean(mini.scene.getObjectByName('toon-sky-dome')), toonMeshes, standardMeshes };
   });
-  expect(after.toonActive).toBe(false);
   expect(after.skyDome).toBe(false);
-  // 退出后基础场景雾（weatherEffect 启动时创建）应被还原，而非被抹成
-  // null——否则后续雨/雪雾永久丢失（曾为此审查 BLOCKER，此断言为修复固化）。
-  expect(after.fogged).toBe(true);
   expect(after.toonMeshes).toBe(0);
-  expect(after.standardMeshes).toBeGreaterThan(50);
+  expect(after.standardMeshes).toBe(before.standardMeshes);
 });
