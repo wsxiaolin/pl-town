@@ -434,7 +434,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     });
     return counts;
   });
-  expect(terrainMeshes.massif).toBeGreaterThanOrEqual(40); // 41 条岚屏岭主脊/麓丘/侧丘
+  expect(terrainMeshes.massif).toBeGreaterThanOrEqual(18); // v9 单面山：北主脊 7 + 溪谷侧丘 5 + 北麓 6
   expect(terrainMeshes.river).toBe(2); // 晨溪河面 + 河口湾面
   expect(terrainMeshes.farGround).toBe(1); // 全域地形网格（草甸/河谷/海床起伏承载面）
   expect(terrainMeshes.meadowDecor).toBeGreaterThan(0); // 城缘草甸装饰仍在场

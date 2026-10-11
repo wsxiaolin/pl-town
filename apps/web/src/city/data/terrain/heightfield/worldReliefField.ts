@@ -327,34 +327,44 @@ export function seaBedCutAt(x: number, z: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// 出城步道（南草甸观景步道）切槽 —— 方案 §5.3 / D5（切槽压平，T4 落位）。
+// 出城步道切槽系统（v9 双走廊）——方案 §5.3 / D5 + sin 2026-10-11「山要
+// 修路、可探索」：南线（既有，南草甸观景步道）+ 北线（晨溪谷地观景道，
+// 从台地东北缘下到溪口丘/溪北丘之间的谷地走廊，观晨溪河口湾与北山墙）。
 //
-// 走向（方案定稿节点表）：S1 主城南出口外 → S2 → S3 裙坡中段 → S4 观景
-// 平台。槽床纵剖面不取方案草图的单调 smoothstep 直坡（0→≈2.4）：实测
-// 裙坡自然坡 ~13.6%（z 78→92 抬 ~1.9），直坡剖面会在裙坡段架空出 ~1.3
-// 高的填方堤、在上段切深 ~0.5，均超 §9.1 连续性 b 预算。改为工程化的
-// 「坡度受限贴面纵剖」：沿中心线 0.5 步长采样自然场，双向 clamp 钳制
-// |纵坡| ≤ TRAIL_MAX_GRADE（前向从 S1 出发、端点钉在 S4 自然高程后回
-// 向收紧）——切/填有界（实测 ≤ ~0.5），槽床始终贴着草甸面爬升。
+// 走向（节点表）：南线 S1 主城南出口外 → S2 → S3 裙坡中段 → S4 观景平台；
+// 北线 N1 台地东北缘（北城 keep-out 东侧）→ N2 北裙坡中段 → N3 谷地草甸
+// → N4 溪口观景平台（v1/v5 侧丘之间的无水走廊 x 47..76，东避河口湾
+// RIVER_X_RANGE 东缘 66、西避 v1 包围盒）。槽床纵剖面统一走「坡度受限
+// 贴面纵剖」：沿中心线 0.5 步长采样自然场，双向 clamp 钳制 |纵坡| ≤
+// TRAIL_MAX_GRADE——切/填有界，槽床始终贴着草甸面爬升/下行。
 // 槽内横向恒平（床高只依赖弧长）；两侧 TRAIL_BLEND_W 融合坡回自然场；
-// S4 观景平台半径 TRAIL_PLATFORM_R 压平在终点高程（与所在草甸面齐平）。
+// 末端观景平台压平半径 TRAIL_PLATFORM_R（与所在草甸面齐平）。
 // ---------------------------------------------------------------------------
-export const TRAIL_NODES = [
+export const SOUTH_TRAIL_NODES = [
   { x: 6, z: 44 },   // S1 主城南出口外（台地内，床高 0，与主城路面层直接相接）
   { x: 18, z: 66 },  // S2 裙坡前草坡
   { x: 30, z: 86 },  // S3 裙坡中段
   { x: 34, z: 96 },  // S4 观景平台（压平半径 3）
 ] as const;
+
+export const NORTH_TRAIL_NODES = [
+  { x: 70, z: -86 },  // N1 台地东北缘（北城 keep-out x≤41 东侧，台地内床高 0）
+  { x: 73, z: -96 },  // N2 北裙坡中段（距晨溪源头 (64,-95) ≥8u，不扰源头河床快照）
+  { x: 74, z: -106 }, // N3 谷地草甸（河口湾水域以东 x>66）
+  { x: 74, z: -113 }, // N4 溪口观景平台（v1/v5 侧丘走廊，压平半径 3）
+] as const;
+
 /** 槽半宽：路宽 2.4（方案 §5.3）。 */
 export const TRAIL_SLOT_HALF = 1.2;
 /** 两侧融合坡宽（方案 3.0 → 4.5：走廊邻域草甸 2u 基线实测 ~0.66，需给连续性 b 预算留余量）。 */
 export const TRAIL_BLEND_W = 4.5;
-/** S4 观景平台压平半径（方案 §5.3）。 */
+/** 观景平台压平半径（方案 §5.3）。 */
 export const TRAIL_PLATFORM_R = 3;
 /** 槽床纵坡上限（方案预算 ≤ 8%，取 7% 留余量）。 */
 export const TRAIL_MAX_GRADE = 0.07;
 /** 槽床台地缘渐显宽：中心线越出台地后床高在 2u 内渐显（对角泄漏保险）。 */
 const TRAIL_PLATEAU_FADE_W = 2;
+const TRAIL_SAMPLE_STEP = 0.5;
 
 interface TrailSegment {
   readonly ax: number; readonly az: number;
@@ -363,37 +373,75 @@ interface TrailSegment {
   readonly acc: number; // 段起点累计弧长
 }
 
-const TRAIL_SEGMENTS: readonly TrailSegment[] = (() => {
+/** 一条步道走廊：节点折线 + 段表 + 走廊包围盒 + 床表（模块初始化构建）。 */
+interface TrailCorridor {
+  readonly id: 'south' | 'north';
+  readonly nodes: ReadonlyArray<{ readonly x: number; readonly z: number }>;
+  readonly segments: readonly TrailSegment[];
+  readonly totalLength: number;
+  readonly bbox: { x0: number; x1: number; z0: number; z1: number };
+  readonly sampleCount: number;
+  readonly bed: readonly number[];
+  readonly end: { readonly x: number; readonly z: number };
+  readonly endElev: number;
+}
+
+function buildTrailCorridor(id: TrailCorridor['id'], nodes: ReadonlyArray<{ readonly x: number; readonly z: number }>): TrailCorridor {
   let acc = 0;
-  return TRAIL_NODES.slice(1).map((node, index) => {
-    const a = TRAIL_NODES[index]!;
+  const segments = nodes.slice(1).map((node, index) => {
+    const a = nodes[index]!;
     const len = Math.hypot(node.x - a.x, node.z - a.z);
     const segment: TrailSegment = { ax: a.x, az: a.z, ux: (node.x - a.x) / len, uz: (node.z - a.z) / len, len, acc };
     acc += len;
     return segment;
   });
-})();
-/** 折线总弧长。 */
-export const TRAIL_TOTAL_LENGTH = TRAIL_SEGMENTS.reduce((sum, s) => sum + s.len, 0);
+  const totalLength = segments.reduce((sum, s) => sum + s.len, 0);
+  const pad = TRAIL_SLOT_HALF + TRAIL_BLEND_W + TRAIL_PLATFORM_R + 1;
+  const xs = nodes.map((n) => n.x);
+  const zs = nodes.map((n) => n.z);
+  const bbox = { x0: Math.min(...xs) - pad, x1: Math.max(...xs) + pad, z0: Math.min(...zs) - pad, z1: Math.max(...zs) + pad };
+  const sampleCount = Math.ceil(totalLength / TRAIL_SAMPLE_STEP);
+  const natural = new Array<number>(sampleCount + 1);
+  const plateauFade = new Array<number>(sampleCount + 1);
+  for (let i = 0; i <= sampleCount; i += 1) {
+    const s = Math.min(totalLength, i * TRAIL_SAMPLE_STEP);
+    const hit = nearestTrailHitOnCenterline(segments, totalLength, s);
+    natural[i] = naturalWorldReliefAt(hit.x, hit.z);
+    // 台地缘渐显保险：中心线斜穿台地边界时，域外弧段的床高会把台地内
+    // 的投影点拉上床（对角泄漏，单测「台地主盒严格为 0」曾捕获 0.0031
+    // 级残差）。床高乘中心线台地外距离的 2u 渐显——台地内严格 0。
+    plateauFade[i] = smoothStep(0, TRAIL_PLATEAU_FADE_W, distanceOutsidePlateau(hit.x, hit.z));
+  }
+  const grade = TRAIL_MAX_GRADE * TRAIL_SAMPLE_STEP;
+  const bed = new Array<number>(sampleCount + 1);
+  bed[0] = 0; // 首节点在台地内（自然场 0，槽床归 0）
+  for (let i = 1; i <= sampleCount; i += 1) {
+    // 前向双侧级差限制：床贴自然场（缓坡段床=自然，陡坡段滞后成切槽），
+    // 每采样步 ±grade。不做终点硬钉与回扫——级差不可达时末端平台即
+    // 「草甸起伏内的压平切台」（方案 §5.3 观景平台语义），且回扫会把
+    // 终点高程沿纵坡倒拉进台地（台地平坦红线）。
+    const clamped = Math.min(bed[i - 1]! + grade, Math.max(bed[i - 1]! - grade, natural[i]!));
+    bed[i] = clamped * plateauFade[i]!;
+  }
+  return {
+    id, nodes, segments, totalLength, bbox, sampleCount, bed,
+    end: { x: nodes[nodes.length - 1]!.x, z: nodes[nodes.length - 1]!.z },
+    endElev: bed[sampleCount]!,
+  };
+}
 
-/** 走廊包围盒（槽半宽+融合坡与平台外扩，含余量；域外免算折线投影）。 */
-const TRAIL_BBOX = { x0: 0, x1: 42, z0: 36, z1: 106 };
-
-function nearestTrailHit(x: number, z: number): { dist: number; s: number } | null {
-  if (x < TRAIL_BBOX.x0 || x > TRAIL_BBOX.x1 || z < TRAIL_BBOX.z0 || z > TRAIL_BBOX.z1) return null;
-  let bestDist = Infinity;
-  let bestS = 0;
-  for (const segment of TRAIL_SEGMENTS) {
-    const rel = Math.min(segment.len, Math.max(0, (x - segment.ax) * segment.ux + (z - segment.az) * segment.uz));
-    const px = segment.ax + segment.ux * rel;
-    const pz = segment.az + segment.uz * rel;
-    const d = Math.hypot(x - px, z - pz);
-    if (d < bestDist) {
-      bestDist = d;
-      bestS = segment.acc + rel;
+/** 中心线上弧长 s 处的坐标（床表采样专用；段表为空时返回原点）。 */
+function nearestTrailHitOnCenterline(segments: readonly TrailSegment[], totalLength: number, s: number): { x: number; z: number } {
+  if (segments.length === 0) return { x: 0, z: 0 };
+  const clamped = Math.min(totalLength, Math.max(0, s));
+  for (const segment of segments) {
+    if (clamped <= segment.acc + segment.len || segment === segments[segments.length - 1]) {
+      const rel = clamped - segment.acc;
+      return { x: segment.ax + segment.ux * rel, z: segment.az + segment.uz * rel };
     }
   }
-  return { dist: bestDist, s: bestS };
+  const last = segments[segments.length - 1]!;
+  return { x: last.ax + last.ux * last.len, z: last.az + last.uz * last.len };
 }
 
 /** 未切槽自然场（terrainHeight 的聚合公式去掉步道项；床表与切槽混合共用）。 */
@@ -405,74 +453,58 @@ function naturalWorldReliefAt(x: number, z: number): number {
   return openWeight * meadow + bedCut;
 }
 
-const TRAIL_SAMPLE_STEP = 0.5;
-const TRAIL_SAMPLE_COUNT = Math.ceil(TRAIL_TOTAL_LENGTH / TRAIL_SAMPLE_STEP);
-
-/** 槽床纵剖面采样表（模块初始化时按未切槽场构建，纯函数确定性）。 */
-const TRAIL_BED: readonly number[] = (() => {
-  const natural = new Array<number>(TRAIL_SAMPLE_COUNT + 1);
-  const plateauFade = new Array<number>(TRAIL_SAMPLE_COUNT + 1);
-  for (let i = 0; i <= TRAIL_SAMPLE_COUNT; i += 1) {
-    const s = Math.min(TRAIL_TOTAL_LENGTH, i * TRAIL_SAMPLE_STEP);
-    const hit = nearestTrailHitOnCenterline(s);
-    natural[i] = naturalWorldReliefAt(hit.x, hit.z);
-    // 台地缘渐显保险：中心线斜穿台地边界时，域外弧段的床高会把台地内
-    // 的投影点拉上床（对角泄漏，单测「台地主盒严格为 0」曾捕获 0.0031
-    // 级残差）。床高乘中心线台地外距离的 2u 渐显——台地内严格 0。
-    plateauFade[i] = smoothStep(0, TRAIL_PLATEAU_FADE_W, distanceOutsidePlateau(hit.x, hit.z));
-  }
-  const grade = TRAIL_MAX_GRADE * TRAIL_SAMPLE_STEP;
-  const bed = new Array<number>(TRAIL_SAMPLE_COUNT + 1);
-  bed[0] = 0; // S1 在台地内（自然场 0，槽床归 0）
-  for (let i = 1; i <= TRAIL_SAMPLE_COUNT; i += 1) {
-    // 前向双侧级差限制：床贴自然场（缓坡段床=自然，陡坡段滞后成切槽），
-    // 每采样步 ±grade。不做 S4 硬钉与回扫——级差不可达时 S4 平台即
-    // 「草甸起伏内的压平切台」（方案 §5.3 观景平台语义，实测低于自然
-    // 峰 ≈0.35），且回扫会把终点高程沿纵坡倒拉进台地（台地平坦红线）。
-    const clamped = Math.min(bed[i - 1]! + grade, Math.max(bed[i - 1]! - grade, natural[i]!));
-    bed[i] = clamped * plateauFade[i]!;
-  }
-  return bed;
-})();
-
-/** S4 槽床高程（= 未切槽自然场在 S4 的高，观景平台面）。 */
-export const TRAIL_END_ELEV: number = TRAIL_BED[TRAIL_BED.length - 1]!;
-
-/** 中心线上弧长 s 处的坐标（床表采样专用）。 */
-function nearestTrailHitOnCenterline(s: number): { x: number; z: number } {
-  const clamped = Math.min(TRAIL_TOTAL_LENGTH, Math.max(0, s));
-  for (const segment of TRAIL_SEGMENTS) {
-    if (clamped <= segment.acc + segment.len || segment === TRAIL_SEGMENTS[TRAIL_SEGMENTS.length - 1]) {
-      const rel = clamped - segment.acc;
-      return { x: segment.ax + segment.ux * rel, z: segment.az + segment.uz * rel };
-    }
-  }
-  const last = TRAIL_SEGMENTS[TRAIL_SEGMENTS.length - 1]!;
-  return { x: last.ax + last.ux * last.len, z: last.az + last.uz * last.len };
-}
+/** 双走廊（南线/北线；naturalWorldReliefAt 为函数声明有提升，初始化可用）。 */
+const TRAIL_CORRIDORS: readonly TrailCorridor[] = [
+  buildTrailCorridor('south', SOUTH_TRAIL_NODES),
+  buildTrailCorridor('north', NORTH_TRAIL_NODES),
+];
 
 /** 槽床纵剖面（弧长线性插值；槽内横向恒平由混合权重保证）。 */
-function trailBedAt(s: number): number {
-  const clamped = Math.min(TRAIL_TOTAL_LENGTH, Math.max(0, s));
+function trailBedAt(corridor: TrailCorridor, s: number): number {
+  const clamped = Math.min(corridor.totalLength, Math.max(0, s));
   const fi = clamped / TRAIL_SAMPLE_STEP;
-  const i = Math.min(TRAIL_SAMPLE_COUNT - 1, Math.floor(fi));
+  const i = Math.min(corridor.sampleCount - 1, Math.floor(fi));
   const k = fi - i;
-  return TRAIL_BED[i]! * (1 - k) + TRAIL_BED[i + 1]! * k;
+  return corridor.bed[i]! * (1 - k) + corridor.bed[i + 1]! * k;
 }
+
+/** 观景平台末端高程（南线 S4 / 北线 N4，各自未切槽自然场压平面）。 */
+export const SOUTH_TRAIL_END_ELEV: number = TRAIL_CORRIDORS[0]!.endElev;
+export const NORTH_TRAIL_END_ELEV: number = TRAIL_CORRIDORS[1]!.endElev;
 
 /**
  * 步道切槽权重（0..1）：槽内/平台为 1，融合坡内平滑衰减，域外 0。
- * 供渲染层装饰剔除（cityGround 草甸散布避让路面）与单测消费。
+ * 双走廊取最大值。供渲染层装饰剔除（cityGround 草甸散布避让路面）与
+ * 单测消费。
  */
 export function trailCutAt(x: number, z: number): number {
-  const hit = nearestTrailHit(x, z);
-  const s4 = TRAIL_NODES[TRAIL_NODES.length - 1]!;
-  const platform = 1 - smoothStep(TRAIL_PLATFORM_R, TRAIL_PLATFORM_R + TRAIL_BLEND_W, Math.hypot(x - s4.x, z - s4.z));
-  if (hit === null) return platform;
-  const corridor = 1 - smoothStep(TRAIL_SLOT_HALF, TRAIL_SLOT_HALF + TRAIL_BLEND_W, hit.dist);
-  return Math.max(corridor, platform);
+  let best = 0;
+  for (const corridor of TRAIL_CORRIDORS) {
+    const b = corridor.bbox;
+    const end = corridor.end;
+    const platform = 1 - smoothStep(TRAIL_PLATFORM_R, TRAIL_PLATFORM_R + TRAIL_BLEND_W, Math.hypot(x - end.x, z - end.z));
+    let corridorWeight = platform;
+    if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) {
+      let bestDist = Infinity;
+      let bestS = 0;
+      for (const segment of corridor.segments) {
+        const rel = Math.min(segment.len, Math.max(0, (x - segment.ax) * segment.ux + (z - segment.az) * segment.uz));
+        const px = segment.ax + segment.ux * rel;
+        const pz = segment.az + segment.uz * rel;
+        const d = Math.hypot(x - px, z - pz);
+        if (d < bestDist) { bestDist = d; bestS = segment.acc + rel; }
+      }
+      const corridorCut = 1 - smoothStep(TRAIL_SLOT_HALF, TRAIL_SLOT_HALF + TRAIL_BLEND_W, bestDist);
+      corridorWeight = Math.max(corridorWeight, corridorCut);
+      if (corridorCut > 0) trailBedAt(corridor, bestS); // 床表路径采样（纯函数，预热无副作用）
+    }
+    if (corridorWeight > best) best = corridorWeight;
+  }
+  return best;
 }
 
+/** 导航用步道节点（双走廊合表——roadNavigation 图与地形切槽场同源）。 */
+export const TRAIL_NAV_NODES = [...SOUTH_TRAIL_NODES, ...NORTH_TRAIL_NODES];
 /**
  * 城外世界起伏场（terrainHeight 的主体实现，含台地平坦压制与步道切槽）：
  *   = trailCutBlend(openWeight × meadowRelief + bedCut)
@@ -485,22 +517,40 @@ export function trailCutAt(x: number, z: number): number {
  */
 export function worldReliefAt(x: number, z: number): number {
   const natural = naturalWorldReliefAt(x, z);
-  const hit = nearestTrailHit(x, z);
-  const s4 = TRAIL_NODES[TRAIL_NODES.length - 1]!;
-  const platformW = 1 - smoothStep(TRAIL_PLATFORM_R, TRAIL_PLATFORM_R + TRAIL_BLEND_W, Math.hypot(x - s4.x, z - s4.z));
-  const corridorW = hit === null ? 0 : 1 - smoothStep(TRAIL_SLOT_HALF, TRAIL_SLOT_HALF + TRAIL_BLEND_W, hit.dist);
-  const wSum = corridorW + platformW;
-  if (wSum <= 0) return natural;
-  const bed = (corridorW * (hit === null ? TRAIL_END_ELEV : trailBedAt(hit.s)) + platformW * TRAIL_END_ELEV) / wSum;
-  const w = Math.max(corridorW, platformW);
-  // 采样点台地门（R3 红①）：TRAIL_BED 的台地渐显按「垂足」预烘焙（见
-  // plateauFade 注释），但走廊 S2→S3 段斜穿台地南缘 z=78 时，台地内的
-  // 采样点会把垂足投到缘线外的弧段上、拿到台外床值——缘线上 25 点泄漏
-  // （(27,78)=0.0056、(28,78)=0.021）。此门按采样点自身的台地外距离
-  // 渐显床贡献：台地内（含缘线本身）床项严格归 0。与垂足门的双重衰减
-  // 只落在缘线外 2u 带（该带床值 ≤ ~0.15，本就是刚从 0 爬起的床头），
-  // 每 0.1 步床贡献增量 ≤ 0.15 × smoothstep 最大斜率 0.75 × 0.1 ≈ 0.011，
-  // 远低于连续性 c 的 0.12 预算（实测见单测「台地南缘 z=78」扫描）。
   const plateauGate = smoothStep(0, TRAIL_PLATEAU_FADE_W, distanceOutsidePlateau(x, z));
-  return bed * plateauGate * w + natural * (1 - w);
+  // 双走廊求最大切槽权重者胜（两走廊包围盒相距 >100u，恒不重叠）。
+  let bestW = 0;
+  let bestBed = 0;
+  for (const corridor of TRAIL_CORRIDORS) {
+    const b = corridor.bbox;
+    const end = corridor.end;
+    const platformW = 1 - smoothStep(TRAIL_PLATFORM_R, TRAIL_PLATFORM_R + TRAIL_BLEND_W, Math.hypot(x - end.x, z - end.z));
+    let corridorW = 0;
+    let s = 0;
+    if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) {
+      let bestDist = Infinity;
+      let bestS = 0;
+      for (const segment of corridor.segments) {
+        const rel = Math.min(segment.len, Math.max(0, (x - segment.ax) * segment.ux + (z - segment.az) * segment.uz));
+        const px = segment.ax + segment.ux * rel;
+        const pz = segment.az + segment.uz * rel;
+        const d = Math.hypot(x - px, z - pz);
+        if (d < bestDist) { bestDist = d; bestS = segment.acc + rel; }
+      }
+      corridorW = 1 - smoothStep(TRAIL_SLOT_HALF, TRAIL_SLOT_HALF + TRAIL_BLEND_W, bestDist);
+      s = bestS;
+    }
+    const wSum = corridorW + platformW;
+    if (wSum <= 0) continue;
+    // 走廊/平台双权重按加权和混合床高（平台床 = 末端自然场压平值）。
+    const bed = (corridorW * (corridorW > 0 ? trailBedAt(corridor, s) : corridor.endElev) + platformW * corridor.endElev) / wSum;
+    const w = Math.max(corridorW, platformW);
+    if (w > bestW) { bestW = w; bestBed = bed; }
+  }
+  if (bestW <= 0) return natural;
+  // 采样点台地门（R3 红①）：TRAIL_BED 的台地渐显按「垂足」预烘焙（见
+  // plateauFade 注释），但走廊斜穿台地南/北缘时，台地内的采样点会把垂足
+  // 投到缘线外的弧段上、拿到台外床值。此门按采样点自身的台地外距离渐显
+  // 床贡献：台地内（含缘线本身）床项严格归 0。
+  return bestBed * plateauGate * bestW + natural * (1 - bestW);
 }

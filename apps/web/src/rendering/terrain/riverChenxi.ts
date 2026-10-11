@@ -76,8 +76,8 @@ import { riverValleyAt, riverWaterYAt } from '../../city/data/terrain/heightfiel
 import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
 
 // ── y 层（本文件唯一事实来源，间距论证见头注释）───────────────────────
-const BED_LIFT = 0.004; // 河床条带相对采样地形的抬升（共面红线最小间距）
-const BANK_LIFT = 0.008; // 河岸环带相对采样地形的抬升（高于床层 0.004）
+const BED_LIFT = 0.015; // 河床条带相对采样地形的抬升——v9 实证抬高：0.004 只够共面下限，farGround 77×66 网格插值误差在起伏段可超 0.004，掠射角下水线闪烁（sin 视频 182639 实证）；加宽到 0.015 覆盖插值偏差
+const BANK_LIFT = 0.022; // 河岸环带相对采样地形的抬升（高于床层 0.007，同上插值偏差余量）
 const SEA_SURFACE_Y = 0.06; // 西海面固定水位（westBeach，方案 D6）
 const SEA_ZFIGHT_MARGIN = 0.004; // 环面与不透明海面的最小 z-fighting 间隔（海面重叠域钳制值 = 海面 − 0.004，对齐 GOAL 红线 0.004）
 

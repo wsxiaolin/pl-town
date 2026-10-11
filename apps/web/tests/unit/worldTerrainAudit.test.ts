@@ -7,7 +7,7 @@ import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
 import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA } from '../../src/city/data/cityConfig';
 import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
-import { TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
+import { TRAIL_NAV_NODES, SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES, TRAIL_SLOT_HALF } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 
 // 世界地形配置的数值审计（v5，2026-10-04）：把 range-lanping.ts /
@@ -41,12 +41,12 @@ const RIVER_VALLEY_BOX: Box = { x0: -62, x1: 68, z0: -110, z1: -86 };
 // roadNavigation.ts 的同一公式从纯数据配置推导，并对文档快照断言——
 // 任一侧漂移（改公式、改节点、改 CITY_LIMIT）都会让快照断言变红。
 // R2（2026-10-11）：出城步道并入推导（roadNavigation.meadowTrail 的
-// roadNodes = heightfield TRAIL_NODES，S4 观景平台 z=96）——运行时
+// roadNodes = heightfield TRAIL_NAV_NODES（双走廊 S4 z=96 / N4 z=-114）——运行时
 // WORLD_BOUNDS 已随步道外扩到 z1=104，快照同步，恢复「快照一致」效力。
 const EXTRA_ROAD_NODES = [
   ...ECHO_OBSERVATORY_AREA.roadNodes,
   ...NORTH_DISTRICT_AREA.roadNodes,
-  ...TRAIL_NODES.map(({ x, z }) => [x, z] as [number, number]),
+  ...TRAIL_NAV_NODES.map(({ x, z }) => [x, z] as [number, number]),
 ];
 const NAVIGABLE_AREA: Box = {
   x0: Math.min(-CITY_LIMIT, ...EXTRA_ROAD_NODES.map(([x]) => x)) - 8,
@@ -60,14 +60,40 @@ const NAVIGABLE_AREA: Box = {
  * 判定的辖区，不属于「城区可走区地面平」的审计目标）。 */
 const CITY_NAVIGABLE_AREA: Box = { x0: -50, x1: 76, z0: -88.2, z1: 50 };
 test('NAVIGABLE_AREA 与 roadNavigation 运行时边界快照一致', () => {
-  const snapshot = { x0: -50, x1: 76, z0: -88.2, z1: 104 };
+  // v9 北线步道（N4 z=-113, x=74）：可步行区北扩入晨溪谷地（sin「山可
+  // 探索」）——运行时由山体 navigationBlocking 逐点阻挡，_bounds 仅外框。
+  const snapshot = { x0: -50, x1: 82, z0: -121, z1: 104 };
   for (const key of ['x0', 'x1', 'z0', 'z1'] as const) {
     assert.ok(
       Math.abs(NAVIGABLE_AREA[key] - snapshot[key]) < 1e-6,
       `导航边界快照漂移：${key} = ${NAVIGABLE_AREA[key]}（快照 ${snapshot[key]}）。`
-      + '若 roadNavigation 公式或 cityConfig 路网节点（含出城步道 TRAIL_NODES）'
+      + '若 roadNavigation 公式或 cityConfig 路网节点（含出城步道 TRAIL_NAV_NODES）'
       + '有意变更，请同步复核山体/草甸各审计与 cityGround 的步道切槽剔除',
     );
+  }
+});
+
+test('步道走廊净空：双走廊折线 ± 槽半宽不被大型山体包围盒侵入', () => {
+  const corridors = [SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES];
+  for (const nodes of corridors) {
+    for (let i = 0; i + 1 < nodes.length; i += 1) {
+      const a = nodes[i]!; const b = nodes[i + 1]!;
+      // 段包围盒 = 端点盒 ∪ 槽半宽外扩（折线段无斜率外延歧义，端点覆盖足够）
+      const seg: Box = {
+        x0: Math.min(a.x, b.x) - TRAIL_SLOT_HALF, x1: Math.max(a.x, b.x) + TRAIL_SLOT_HALF,
+        z0: Math.min(a.z, b.z) - TRAIL_SLOT_HALF, z1: Math.max(a.z, b.z) + TRAIL_SLOT_HALF,
+      };
+      for (const feature of LANPING_RANGE) {
+        if (feature.kind !== 'mountain') continue;
+        if ((feature.height ?? 0) < 10) continue;
+        const r = Math.max(feature.width ?? 0, feature.depth ?? 0) / 2;
+        const box: Box = { x0: feature.x - r, x1: feature.x + r, z0: feature.z - r, z1: feature.z + r };
+        assert.ok(
+          !boxesInteriorOverlap(seg, box),
+          `${feature.id} 包围盒 ${JSON.stringify(box)} 侵入步道段 (${a.x},${a.z})→(${b.x},${b.z})`,
+        );
+      }
+    }
   }
 });
 
@@ -106,7 +132,12 @@ test('大型山体（h ≥ 10）不进导航可步行区（观星崖等小地形
     // 达；②massif 在包围盒缘线处高度 ≈ 0（底环贴地渐灭），接触线上无可见
     // 山体；③麓丘 navigationBlocking，寻路障碍双保险。故本 keep-out 语义
     // 明确为「正内部相交」（boxesInteriorOverlap），边界接触不算进入。
-    assert.ok(!boxesInteriorOverlap(box, NAVIGABLE_AREA), `${feature.id} 包围盒 ${JSON.stringify(box)} 进入导航可步行区`);
+    // v9（2026-10-11）：北线步道把可步行区外框扩入晨溪谷地（z0=-121），
+    // 溪谷侧丘/北麓包围盒与「外框」相切或部分重叠属有意布局（sin「山可
+    // 探索」——谷地走廊从侧丘间穿过）。大山 vs 步行区的硬契约改为两段：
+    // ①城区盒（CITY_NAVIGABLE_AREA，z ≥ -88.2）内无大型山体（本用例）；
+    // ②步道走廊本身不被山体包围盒侵入（下一用例「步道走廊净空」）。
+    assert.ok(!boxesInteriorOverlap(box, CITY_NAVIGABLE_AREA), `${feature.id} 包围盒 ${JSON.stringify(box)} 进入城区导航可步行区`);
   }
 });
 

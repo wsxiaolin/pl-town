@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { terrainHeight, slopeAlong, WALKABLE_SLOPE_MAX } from '../data/terrain/heightfield/terrainHeight';
-import { TRAIL_NODES } from '../data/terrain/heightfield/worldReliefField';
+import { TRAIL_NAV_NODES } from '../data/terrain/heightfield/worldReliefField';
 
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
@@ -25,11 +25,11 @@ export interface RoadNavigationOptions {
 
 /**
  * 南草甸出城步道的导航图（roadNavigation.meadowTrail 选项的工厂）：
- * TRAIL_NODES 与 heightfield 切槽场同源常量——导航图与地形面永远一致；
+ * TRAIL_NAV_NODES 与 heightfield 切槽场同源常量——导航图与地形面永远一致；
  * 首段把城市网格节点 [6,36] 接进 S1，末节点即观景平台（bounds 外扩锚点）。
  */
 export function buildMeadowTrailGraph(): { roadNodes: [number, number][]; roadSegments: [number, number, number, number][] } {
-  const nodes = TRAIL_NODES.map(({ x, z }) => [x, z] as [number, number]);
+  const nodes = TRAIL_NAV_NODES.map(({ x, z }) => [x, z] as [number, number]);
   const segments: [number, number, number, number][] = [[6, 36, nodes[0]![0], nodes[0]![1]]];
   for (let index = 1; index < nodes.length; index += 1) {
     segments.push([nodes[index - 1]![0], nodes[index - 1]![1], nodes[index]![0], nodes[index]![1]]);
