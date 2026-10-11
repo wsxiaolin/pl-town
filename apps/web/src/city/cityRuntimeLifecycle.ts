@@ -53,8 +53,8 @@ export function createCityRuntimeLifecycle(options: {
   /** Dev visual-verification portal (?dev): enter without the login gate. */
   shouldSkipLoginGate?: () => boolean;
   disposeSession: () => void;
-  /** Opening CG finished: the resident card / city entrance may proceed. */
-  onIntroFinished?: () => void;
+  /** Opening CG finished (or was skipped): the resident card / entrance may proceed. */
+  onIntroFinished?: (playedCG: boolean) => void;
 }) {
   let started = false;
   let booting = false;
@@ -102,13 +102,13 @@ export function createCityRuntimeLifecycle(options: {
     booting = true;
     const signal = eventController.signal;
     initCG({
-      onFinish: () => { if (started) options.onIntroFinished?.(); },
+      onFinish: () => { if (started) options.onIntroFinished?.(true); },
       reduced: options.reduced,
     });
     // The opening CG is disabled/skipped (see OPENING_CG_ENABLED): no onFinish
     // will fire, so release the intro gate directly and let the resident card /
     // city entrance proceed once the download lands.
-    if (!shouldShowCG()) options.onIntroFinished?.();
+    if (!shouldShowCG()) options.onIntroFinished?.(false);
 
     // The moment still paints synchronously — today's sky greets the visitor
     // while the boot decision (and any heavy pipeline) resolves in background.

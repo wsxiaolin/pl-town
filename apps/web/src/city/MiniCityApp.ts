@@ -954,8 +954,8 @@ const lifecycle = createCityRuntimeLifecycle({
   showLogin: () => loginController?.showLogin(),
   shouldSkipLoginGate: isDevPortalRequested,
   disposeSession,
-  onIntroFinished: () => {
-    showUnlockToast('全屏效果更好哦');
+  onIntroFinished: (playedCG) => {
+    if (playedCG) showUnlockToast('全屏效果更好哦');
     account.markIntroFinished();
   },
 });
