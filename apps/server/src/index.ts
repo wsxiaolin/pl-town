@@ -727,9 +727,13 @@ const http = createServer(async (request, response) => {
       const displayName = normalizeDisplayName(typeof body.name === 'string' ? body.name : '');
       if (!displayName) throw new HttpBodyError('请输入名字', 400);
       db.setUserDisplayName(user.id, displayName);
+      // The certification badge is bound to the display name proven at verify
+      // time, so renaming revokes it: the badge must never migrate onto an
+      // arbitrary (possibly someone else's) physics-lab nickname.
+      if (user.verified) db.setUserVerified(user.id, false);
       const updated = db.getUser(user.id)!;
       const client = clients.get(user.id);
-      if (client) { client.user.nickname = updated.nickname; broadcast({ type: 'player.updated', player: publicUser(client.user) }); }
+      if (client) { client.user.nickname = updated.nickname; client.user.verified = updated.verified; broadcast({ type: 'player.updated', player: publicUser(client.user) }); }
       response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
       response.end(JSON.stringify({ user: publicUser(updated) }));
     } catch (error) {

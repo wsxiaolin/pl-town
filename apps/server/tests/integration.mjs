@@ -739,6 +739,17 @@ try {
     body: JSON.stringify({ token: certifyResident.hello.token, login: 'owner@example.com', password: 'pl-owner-password' }),
   });
   if (!certifyOk.ok) throw new Error('Owning the matching Physics Lab account must certify the resident');
+  // Renaming the resident card revokes the badge: it is bound to the name that
+  // was proven at verify time, not to the account.
+  const certifyRename = await fetch(`${adminOrigin}/town-api/account/name`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: certifyResident.hello.token, name: 'RenamedAfterCert' }),
+  });
+  if (!certifyRename.ok) throw new Error('Renaming a resident card should succeed');
+  const certifyRenamed = await certifyRename.json();
+  if (certifyRenamed.user?.verified !== false || certifyRenamed.user?.nickname !== 'RenamedAfterCert') {
+    throw new Error('Renaming the resident card must revoke the certification badge');
+  }
   certifyResident.socket.close();
 
   const buildingId = 'residence:3.00:4.00';

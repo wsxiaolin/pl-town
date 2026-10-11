@@ -990,8 +990,10 @@ export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
 export function startMiniCity() {
-  setupAccountControllers();
+  // start() swaps in a fresh AbortController, so the account listeners must be
+  // wired afterwards to bind the live signal (destroy() then aborts them).
   lifecycle.start();
-  loginController.startAuth();
+  setupAccountControllers();
+  if (!isDevPortalRequested()) loginController.startAuth();
 }
 export function destroyMiniCity() { lifecycle.destroy(); }

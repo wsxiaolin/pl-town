@@ -95,7 +95,13 @@ export function createAccountSessionController(options: AccountSessionOptions) {
   }
 
   function beginCityDownload(): void {
-    cityDownloaded = false;
+    if (cityDownloaded) {
+      // The city is already running: this is a re-login after the session
+      // dropped, so re-enter directly instead of waiting for a boot the
+      // lifecycle guard would refuse to re-run.
+      options.onEnterCity();
+      return;
+    }
     introFinished = false;
     options.beginBoot();
     maybeEnterCity();
