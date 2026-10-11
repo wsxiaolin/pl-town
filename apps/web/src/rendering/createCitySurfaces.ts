@@ -80,6 +80,9 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     // （district 0.018 等 ≥ 0.014）原样保留；城外草甸/河谷/海床/步道槽
     // 的真实地势由此面承载（方案 §8）。
     const farGround = createMesh(createWorldGroundGeometry(), farMat);
+    // 命名供 e2e 守护（smoke.spec 地形清点）与诊断脚本定位：全域地形
+    // 网格是 v8 架构里草甸/河谷/海床起伏的唯一承载面。
+    farGround.name = 'world-far-ground';
     farGround.receiveShadow = true;
     farGround.renderOrder = RENDER_ORDER.base;
     scene.add(farGround);
