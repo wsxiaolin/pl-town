@@ -122,6 +122,10 @@ async function main() {
   assert.equal(saved.record.authorNickname, 'alice');
   assert.equal(saved.progress.currency, startingBalance - 30, 'save charges 30 coins');
   const designId = saved.record.id;
+  // 客户端只认标准 progress.updated（HUD/设计台余额），保存成功后必须补发，
+  // 否则界面余额会停留在扣费前（review #237 blocker）。
+  const progressAfterSave = await waitFor(alice, 'progress.updated', (message) => message.progress?.currency === startingBalance - 30);
+  assert.equal(progressAfterSave.progress.currency, startingBalance - 30, 'save pushes standard progress.updated');
 
   // ── 同 requestId 重放：不重复扣款 ──
   send(alice, { type: 'fireworks.save', requestId: 'fw-save-1', name: '第一朵', design: baseDesign });

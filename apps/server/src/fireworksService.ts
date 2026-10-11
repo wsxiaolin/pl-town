@@ -28,6 +28,12 @@ export type FireworksDeps = {
   send: (socket: unknown, payload: Record<string, unknown>) => void;
   fail: (socket: unknown, message: string) => void;
   broadcast: (payload: Record<string, unknown>) => void;
+  /**
+   * 保存扣费后向该玩家补发标准 `progress.updated`。Fireworks 是本仓库唯一
+   * 内嵌 progress 的 handler，客户端只认 `progress.updated`，因此必须与其它
+   * 扣费 handler 一样补发，否则 HUD/设计台的余额停留在扣费前。
+   */
+  sendProgress?: (socket: unknown) => void;
   socket: unknown;
 };
 
@@ -65,8 +71,10 @@ export function handleFireworksMessage(user: User, raw: FireworksClientMessage, 
         progress: result.progress,
       });
       // 有新的云端烟花：广播修订号，让打开着的观景台/设计器刷新节目单
-      // （幂等重放不改变库存，不广播）。
+      // （幂等重放不改变库存，不广播）。真正扣费成功的保存同时补发
+      // progress.updated 刷新余额（客户端只认标准 progress 消息）。
       if (!result.replayed) {
+        deps.sendProgress?.(deps.socket);
         deps.broadcast({ type: 'fireworks.library', revision: fireworkLibraryRevision() });
       }
     } catch (error) {

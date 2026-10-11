@@ -406,6 +406,7 @@ async function handle(client: Client, raw: string) {
         send: (socket, payload) => send(socket as WebSocket, payload as ServerMessage),
         fail: (socket, text) => fail(socket as WebSocket, text),
         broadcast: (payload) => broadcast(payload as ServerMessage),
+        sendProgress: (socket) => send(socket as WebSocket, { type: 'progress.updated', ...progressState(userId) }),
         socket: client.socket,
       });
       return;
