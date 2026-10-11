@@ -25,6 +25,8 @@ async function enterCity(page: import('@playwright/test').Page) {
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: OfflineWebSocket });
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'walk-tester');
+    // A stored session token skips the email/password gate so the city boots.
+    localStorage.setItem('minicityServerToken', 'first-person-token');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
   });
   await page.goto('/');
