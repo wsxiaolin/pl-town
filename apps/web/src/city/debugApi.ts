@@ -184,11 +184,6 @@ export type DebugApiOptions = {
     exit: () => void;
     toggle: () => void;
     getActiveCamera: () => unknown;
-    /** Cel-shading world restyle + painted sky dome (first-person only). */
-    worldStyle: {
-      toonActive: () => boolean;
-      skyActive: () => boolean;
-    };
   } | null;
   getMapShotsReady: () => { main: boolean; north: boolean };
   getMapShotsPreloadSettled: () => boolean;

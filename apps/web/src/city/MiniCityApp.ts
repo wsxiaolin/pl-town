@@ -30,8 +30,6 @@ import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createFirstPersonController, type FirstPersonController } from './navigation/firstPersonController';
 import { createFirstPersonInteract, setWalkModeButtonState } from './navigation/firstPersonWalkAssist';
-import { createToonWorld } from '../rendering/toon/toonWorld';
-import { createToonSky } from '../rendering/toon/toonSky';
 import { createProgressionController } from './progression/progressionController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
@@ -497,7 +495,6 @@ function init() {
       isActive: firstPersonController.isActive, enter: firstPersonController.enter,
       exit: firstPersonController.exit, toggle: firstPersonController.toggle,
       getActiveCamera: firstPersonController.getActiveCamera,
-      worldStyle: { toonActive: firstPersonToonWorld.isActive, skyActive: firstPersonToonSky.isActive },
     },
     getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
     getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
@@ -652,12 +649,9 @@ function init() {
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
       || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
   });
-  const firstPersonToonWorld = createToonWorld({ scene, renderer, getIsNight: () => isNight });
-  const firstPersonToonSky = createToonSky({
-    scene,
-    getCamera: () => firstPersonController?.getActiveCamera() ?? null,
-  });
-  graphics.setToonSync(() => { firstPersonToonWorld.syncWeather(); });
+  // 第一人称保留原世界观感（不切 toon/雾/手绘天空）：toon 系统是围着
+  // #230 新建筑调的，配旧建筑+真实地形会灰白糊山（sin 2026-10-11 反馈）。
+  // rendering/toon/ 三件套保留在仓库中休眠，后续可在旧建筑上重新调参接入。
   firstPersonController = createFirstPersonController({
     document, window, signal: lifecycle.signal,
     canvas: document.getElementById('c') as HTMLElement,
@@ -668,17 +662,10 @@ function init() {
     sendPosition: (x, y, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y, z, rotation }, performance.now()),
     onEnter: () => {
       view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget();
-      // Anime stroll mode: cel-shaded materials, painted sky dome, distance fog.
-      firstPersonToonWorld.enter();
-      firstPersonToonSky.enter(isNight);
     },
     onExit: () => {
-      firstPersonToonWorld.exit();
-      firstPersonToonSky.exit();
-      themeClock.restoreSky();
       if (cursorChar) view.setTarget(cursorChar.position.x, cursorChar.position.z, true);
     },
-    onFrame: (delta) => { firstPersonToonSky.update(delta, isNight); },
     interactInFront: firstPersonInteract,
     isBlocked: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(mapController?.isOpen())
       || view.isCinematic() || Boolean(stories?.echo.isInteriorView()) || Boolean(iceKingFeature?.sanctum.isActive()),
