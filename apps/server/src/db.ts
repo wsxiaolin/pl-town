@@ -16,6 +16,7 @@ import type {
 export * from './dbChat.js';
 export * from './dbHousing.js';
 export * from './dbAdmin.js';
+export * from './dbFireworks.js';
 
 acquireRuntimeLock(DATA_DIR, 'server');
 export const db = new Database(DATABASE_PATH);
@@ -217,6 +218,26 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS firework_designs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    author_nickname TEXT NOT NULL,
+    name TEXT NOT NULL,
+    data_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS firework_designs_user_idx ON firework_designs(user_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS firework_designs_updated_idx ON firework_designs(updated_at DESC);
+  CREATE TABLE IF NOT EXISTS firework_save_ops (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    design_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, request_id)
   );
 `);
 {

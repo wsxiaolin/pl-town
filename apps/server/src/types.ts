@@ -85,6 +85,9 @@ export type ClientMessage =
   | { type: 'progress.reward.claim'; rewardId: string; claimSequence?: number }
   | { type: 'story.get'; storyId: string }
   | { type: 'story.update'; storyId: string; definitionVersion?: number; nodeId?: string; flags?: Record<string, StoryFlagValue>; ending?: string | null; visit?: boolean }
+  | { type: 'fireworks.list' }
+  | { type: 'fireworks.save'; requestId: string; designId?: string; name: string; design: unknown }
+  | { type: 'fireworks.delete'; designId: string }
   | { type: 'housing.list' }
   | { type: 'housing.claim'; buildingId: string; name?: string }
   | { type: 'housing.rename'; buildingId: string; name: string }

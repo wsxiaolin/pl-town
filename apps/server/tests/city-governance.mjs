@@ -367,6 +367,10 @@ try {
       'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
       // 木漏时光（2026-10-03）：同上，保持待建。
       'north_komorebi',
+      // 烟花店 / 海边观景台（2026-10-07）：进入 legacy 保留清单以满足
+      // 「每个目录建筑必须有显式政策决定」的覆盖断言；实际落成走
+      // DEFAULT_COMPLETED_BUILDING_IDS 的赠礼补全，不进 legacy 赠礼。
+      'fireworks_shop', 'observation_deck',
       // 绘画+AI 画室（2026-10-06.painting.1）：同上，保持待建不赠礼。
       'painting_ai',
       // 原神研究院（2026-10-07）：同上，保持待建。
