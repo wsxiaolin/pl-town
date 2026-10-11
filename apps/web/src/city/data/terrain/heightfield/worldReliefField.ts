@@ -496,7 +496,6 @@ export function trailCutAt(x: number, z: number): number {
       }
       const corridorCut = 1 - smoothStep(TRAIL_SLOT_HALF, TRAIL_SLOT_HALF + TRAIL_BLEND_W, bestDist);
       corridorWeight = Math.max(corridorWeight, corridorCut);
-      if (corridorCut > 0) trailBedAt(corridor, bestS); // 床表路径采样（纯函数，预热无副作用）
     }
     if (corridorWeight > best) best = corridorWeight;
   }

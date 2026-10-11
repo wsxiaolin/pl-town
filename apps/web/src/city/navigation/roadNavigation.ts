@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { terrainHeight, slopeAlong, WALKABLE_SLOPE_MAX } from '../data/terrain/heightfield/terrainHeight';
-import { TRAIL_NAV_NODES } from '../data/terrain/heightfield/worldReliefField';
+import { SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES } from '../data/terrain/heightfield/worldReliefField';
 
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
@@ -25,15 +25,28 @@ export interface RoadNavigationOptions {
 
 /**
  * 南草甸出城步道的导航图（roadNavigation.meadowTrail 选项的工厂）：
- * TRAIL_NAV_NODES 与 heightfield 切槽场同源常量——导航图与地形面永远一致；
+ * SOUTH/NORTH_TRAIL_NODES 与 heightfield 切槽场同源常量——导航图与地形面永远一致；
  * 首段把城市网格节点 [6,36] 接进 S1，末节点即观景平台（bounds 外扩锚点）。
  */
 export function buildMeadowTrailGraph(): { roadNodes: [number, number][]; roadSegments: [number, number, number, number][] } {
-  const nodes = TRAIL_NAV_NODES.map(({ x, z }) => [x, z] as [number, number]);
-  const segments: [number, number, number, number][] = [[6, 36, nodes[0]![0], nodes[0]![1]]];
-  for (let index = 1; index < nodes.length; index += 1) {
-    segments.push([nodes[index - 1]![0], nodes[index - 1]![1], nodes[index]![0], nodes[index]![1]]);
-  }
+  // v9 双走廊各自成链（AI 审查 🔴 修复：禁止把拼接表首尾连成 S4→N1 跨城
+  // 假边）。南线接主城南路网节点 [6,36]（S1 南出口外 8u 沿 x=6 路轴）；
+  // 北线接星语北城东南街尾 [33,-80]——桥接段 (33,-80)→N1(70,-86) 沿台地
+  // 东北缘平地（建筑扫描无占位、台地内 terrainHeight≡0），北线由此独立
+  // 入城市图。节点表与 heightfield 切槽场同源常量，图与地形永远一致。
+  const south = SOUTH_TRAIL_NODES.map(({ x, z }) => [x, z] as [number, number]);
+  const north = NORTH_TRAIL_NODES.map(({ x, z }) => [x, z] as [number, number]);
+  const nodes: [number, number][] = [...south, ...north];
+  const segments: [number, number, number, number][] = [];
+  const chain = (list: [number, number][]) => {
+    for (let index = 1; index < list.length; index += 1) {
+      segments.push([list[index - 1]![0], list[index - 1]![1], list[index]![0], list[index]![1]]);
+    }
+  };
+  segments.push([6, 36, south[0]![0], south[0]![1]]);
+  chain(south);
+  segments.push([33, -80, north[0]![0], north[0]![1]]);
+  chain(north);
   return { roadNodes: nodes, roadSegments: segments };
 }
 
