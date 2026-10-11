@@ -1,3 +1,5 @@
+import { townApiFetch } from './core/townApi';
+
 type Npc = { id: string; name: string; role: string; npcType: string };
 type Session = { token: string; user: { nickname: string } };
 
@@ -23,7 +25,7 @@ function setStatus(element: HTMLElement, message: string, success = false): void
 }
 
 async function loadCatalog(): Promise<void> {
-  const response = await fetch('/town-api/npc-edit-catalog', { cache: 'no-store' });
+  const response = await townApiFetch('/town-api/npc-edit-catalog', { cache: 'no-store' });
   if (!response.ok) throw new Error('NPC 列表暂时无法加载');
   const payload = await response.json() as { items: Npc[] };
   const select = $('requestNpc') as HTMLSelectElement;
@@ -36,10 +38,10 @@ function showRequestPage(): void {
   if (session) $('signedInAs').textContent = `已登录：${session.user.nickname}`;
 }
 
-async function requestSession(body: { token: string } | { email: string; password: string }): Promise<Session> {
+async function requestSession(body: { token: string } | { email: string; password: string; name?: string }): Promise<Session> {
   let response: Response;
   try {
-    response = await fetch('/town-api/npc-edit-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    response = await townApiFetch('/town-api/npc-edit-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch {
     throw Object.assign(new Error('无法连接服务器，请稍后重试'), { status: 0 });
   }
@@ -72,7 +74,9 @@ async function login(event: SubmitEvent): Promise<void> {
     const email = ($('loginEmail') as HTMLInputElement).value.trim();
     const password = ($('loginPassword') as HTMLInputElement).value;
     if (!email || !password) throw new Error('请填写邮箱和密码');
-    session = await requestSession({ email, password });
+    // A freshly registered account has no display name yet; seed one from the
+    // email local part so the request carries a readable author.
+    session = await requestSession({ email, password, name: email.split('@')[0] || '编辑者' });
     localStorage.setItem(SESSION_KEY, session.token);
     showRequestPage();
   } catch (error) { setStatus(loginStatus, error instanceof Error ? error.message : '登录失败'); return; }
@@ -99,7 +103,7 @@ async function submitRequest(event: SubmitEvent): Promise<void> {
   if (proposedName) change.proposedName = proposedName;
   submit.disabled = true;
   try {
-    const response = await fetch('/town-api/npc-change-requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: session.token, npcId: kind === 'add' ? ADD_PLACEHOLDER_NPC_ID : npcId, kind, title, summary, change }) });
+    const response = await townApiFetch('/town-api/npc-change-requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: session.token, npcId: kind === 'add' ? ADD_PLACEHOLDER_NPC_ID : npcId, kind, title, summary, change }) });
     const payload = await response.json() as { error?: string };
     if (!response.ok) throw Object.assign(new Error(payload.error || '提交失败'), { status: response.status });
     setStatus(requestStatus, '申请已提交，等待开发者审批。', true);

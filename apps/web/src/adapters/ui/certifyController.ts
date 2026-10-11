@@ -1,6 +1,8 @@
 // Optional city certification building: prove ownership of a Physics Lab
 // account whose nickname matches the resident's current display name. On
 // success the resident's name gains the 认证徽标.
+import { townApiFetch } from '../../core/townApi';
+
 export function createCertifyController(options: {
   onVerified: (verified: boolean) => void;
   showUnlockToast: (message: string) => void;
@@ -42,7 +44,7 @@ export function createCertifyController(options: {
     if (button) { button.disabled = true; button.textContent = '正在验证…'; }
     setError('');
     try {
-      const response = await fetch('/town-api/account/verify', {
+      const response = await townApiFetch('/town-api/account/verify', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token, login, password }),
       });

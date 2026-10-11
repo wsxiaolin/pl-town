@@ -1,6 +1,7 @@
 import { createCertifyController } from './certifyController';
 import { closeCityGovernancePanel } from './cityGovernancePanel';
 import { createLoginController } from './loginController';
+import { townApiFetch } from '../../core/townApi';
 import type { LegacyStats } from '../../city/progression/legacyStats';
 
 export type AccountSessionOptions = {
@@ -61,7 +62,7 @@ export function createAccountSessionController(options: AccountSessionOptions) {
 
   async function loginWithCredentials(email: string, password: string): Promise<void> {
     try {
-      const response = await fetch('/town-api/account/login', {
+      const response = await townApiFetch('/town-api/account/login', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
@@ -82,7 +83,7 @@ export function createAccountSessionController(options: AccountSessionOptions) {
   async function signResidentCard(name: string): Promise<void> {
     const token = localStorage.getItem('minicityServerToken') ?? '';
     try {
-      const response = await fetch('/town-api/account/name', {
+      const response = await townApiFetch('/town-api/account/name', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token, name }),
       });

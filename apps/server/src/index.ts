@@ -54,6 +54,8 @@ const marketMutationRate = new FixedWindowRateLimiter(40, 10_000);
 const fireworksMutationRate = new FixedWindowRateLimiter(40, 10_000);
 const chatHistoryRate = new FixedWindowRateLimiter(20, 60_000);
 const npcChangeRequestRate = new FixedWindowRateLimiter(5, 60_000);
+// Renaming broadcasts player.updated to every client, so bound it per resident.
+const accountNameRate = new FixedWindowRateLimiter(10, 60_000);
 const npcEditLoginRate = new FixedWindowRateLimiter(20, 60_000);
 // Token restores (edit-page load with a stored token) are throttled per IP
 // separately so a burst of page loads cannot drain the shared global auth
@@ -724,6 +726,11 @@ const http = createServer(async (request, response) => {
       if (!token || token.length > 128) throw new HttpBodyError('请先登录', 401);
       const user = db.getUserByToken(tokenHash(token));
       if (!user) throw new HttpBodyError('请先登录', 401);
+      if (!accountNameRate.consume(user.id).allowed) {
+        response.writeHead(429, { ...headers, 'retry-after': '60' });
+        response.end(JSON.stringify({ error: '改名过于频繁，请稍后再试' }));
+        return;
+      }
       const displayName = normalizeDisplayName(typeof body.name === 'string' ? body.name : '');
       if (!displayName) throw new HttpBodyError('请输入名字', 400);
       db.setUserDisplayName(user.id, displayName);
