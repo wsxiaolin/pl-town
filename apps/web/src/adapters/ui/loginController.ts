@@ -23,6 +23,8 @@ export type LoginControllerOptions = {
   submitResidentName: (name: string) => void;
   /** Identity confirmed (login or token restore): begin downloading the city. */
   beginDownload: () => void;
+  /** Close any top-layer panel (e.g. city governance) before the gate shows. */
+  beforeShow?: () => void;
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -85,6 +87,7 @@ export function createLoginController(options: LoginControllerOptions) {
   function showLogin(): void {
     const overlay = document.getElementById('loginOverlay');
     if (!overlay) return;
+    options.beforeShow?.();
     overlay.style.display = 'flex';
     // Force a reflow while `.hidden` still applies so removing it animates in;
     // a bare double-rAF can be throttled and leave the overlay click-blocking.

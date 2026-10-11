@@ -1,4 +1,5 @@
 import { createCertifyController } from './certifyController';
+import { closeCityGovernancePanel } from './cityGovernancePanel';
 import { createLoginController } from './loginController';
 import type { LegacyStats } from '../../city/progression/legacyStats';
 
@@ -32,6 +33,7 @@ export function createAccountSessionController(options: AccountSessionOptions) {
     submitCredentials: (email, password) => { void loginWithCredentials(email, password); },
     submitResidentName: (name) => { void signResidentCard(name); },
     beginDownload: beginCityDownload,
+    beforeShow: closeCityGovernancePanel,
   });
   const certifyController = createCertifyController({
     onVerified: (verified) => {
