@@ -59,19 +59,24 @@ const waitForServer = () => new Promise((resolve, reject) => {
   server.once('exit', (code, signal) => { clearTimeout(timeout); reject(new Error(`Server exited (code=${code}, signal=${signal}): ${serverOutput}`)); });
 });
 
-const connect = (nickname, password = 'resident-secret') => new Promise((resolve, reject) => {
+const RESIDENT_PASSWORD = 'resident-secret';
+// Email is the account credential; derive a stable one from the display name so
+// repeated connections for the same resident hit the same account.
+const emailFor = (name) => `${name.toLowerCase().normalize('NFKC').replace(/[^a-z0-9]+/g, '-') || 'resident'}@example.com`;
+const connect = (name, password = RESIDENT_PASSWORD) => new Promise((resolve, reject) => {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages = [];
-  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for hello for ${nickname}`)); }, 5_000);
+  const email = emailFor(name);
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for hello for ${name}`)); }, 5_000);
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
     messages.push(message);
     if (message.type === 'hello') { clearTimeout(timeout); resolve({ socket, hello: message, messages }); }
     // 仅 hello 之前的 error 是认证失败；hello 之后的是被测场景的业务拒绝。
-    else if (message.type === 'error' && !messages.some((entry) => entry.type === 'hello')) { clearTimeout(timeout); socket.terminate(); reject(new Error(`Auth error for ${nickname}: ${message.message}`)); }
+    else if (message.type === 'error' && !messages.some((entry) => entry.type === 'hello')) { clearTimeout(timeout); socket.terminate(); reject(new Error(`Auth error for ${name}: ${message.message}`)); }
   });
   socket.on('error', (event) => { clearTimeout(timeout); reject(event); });
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password })));
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', email, password, name })));
 });
 
 const waitFor = (client, type, predicate = () => true, since = 0) => new Promise((resolve, reject) => {
