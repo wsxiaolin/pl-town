@@ -87,6 +87,7 @@
     </div>
   </div>
   <div class="labels-wrap" id="labelsWrap"></div>
+  <div id="fpsCrosshair" aria-hidden="true"></div>
 
   <!-- UI Chrome -->
   <header class="ui-header">
@@ -100,6 +101,7 @@
        <button class="map-toggle fs-toggle" id="fsToggle" type="button">全屏</button>
        <button class="map-toggle" id="statsToggle" type="button" aria-haspopup="dialog" aria-controls="statsPanel" aria-expanded="false">档案</button>
        <button class="map-toggle" id="mapToggle" type="button">地图</button>
+       <button class="map-toggle walk-toggle" id="walkToggle" type="button" aria-pressed="false" title="第一人称漫步（F）">第一人称</button>
        <button class="settings-toggle" id="renderSettingsToggle" type="button" aria-label="画面设置" aria-expanded="false">
          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.2 13.4 1.2.9-1.8 3.1-1.4-.6a7.7 7.7 0 0 1-1.7 1l-.2 1.5h-3.6l-.2-1.5a7.7 7.7 0 0 1-1.7-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.8l-1.2-.9 1.8-3.1 1.4.6a7.7 7.7 0 0 1 1.7-1l.2-1.5h3.6l.2 1.5a7.7 7.7 0 0 1 1.7 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.8Z"/></svg>
        </button>
@@ -191,7 +193,7 @@
   <div class="map-overlay" id="mapOverlay" role="dialog" aria-label="全景地图">
     <div class="map-paper">
       <button class="map-close" id="mapClose" type="button" aria-label="关闭地图">✕</button>
-      <h2 class="map-title">物实小城 · 全景地图</h2>
+      <h2 class="map-title" id="mapTitle">物实小城 · 主城</h2>
       <div class="map-search" id="mapSearch">
         <label class="map-search-label" for="mapSearchInput">搜索建筑</label>
         <input
@@ -209,7 +211,7 @@
         <div class="map-search-results" id="mapSearchResults" role="listbox" aria-label="建筑搜索结果" hidden></div>
       </div>
       <div class="map-image-wrap" id="mapImageWrap">
-        <img id="mapImage" alt="物实小城全景地图" />
+        <img id="mapImage" alt="物实小城主城全景地图" />
         <div class="map-icons" id="mapIcons"></div>
         <span class="map-marker" id="mapMarker" aria-label="当前位置"></span>
         <span class="map-compass map-compass-n" aria-hidden="true">北 N</span>
@@ -594,6 +596,30 @@
         <p class="npc-line" id="npcLine"></p>
       </div>
       <div class="npc-options" id="npcOptions"></div>
+    </div>
+  </div>
+
+  <!-- 绘画+AI 画室：涂鸦画布，笔画会变形为小城简笔轮廓 -->
+  <div class="painting-overlay" id="paintingOverlay" role="dialog" aria-modal="true" aria-label="绘画+AI 快速课堂">
+    <div class="painting-paper">
+      <header class="painting-head">
+        <div class="painting-heading">
+          <span class="painting-kicker">PAINTING + AI</span>
+          <h2 class="painting-title">绘画+AI · 快速课堂</h2>
+        </div>
+        <button class="painting-close" id="paintingClose" type="button" aria-label="收起画布">✕</button>
+      </header>
+      <div class="painting-easel">
+        <canvas id="paintingCanvas"></canvas>
+        <span class="painting-badge" id="paintingBadge">AI 待命 · 画完点「交给 AI」</span>
+      </div>
+      <footer class="painting-toolbar">
+        <span class="painting-hint">随便画几笔，剩下的交给 AI</span>
+        <div class="painting-actions">
+          <button class="painting-btn" id="paintingClear" type="button">清空</button>
+          <button class="painting-btn painting-btn-primary" id="paintingDone" type="button">交给 AI ✨</button>
+        </div>
+      </footer>
     </div>
   </div>
 

@@ -371,6 +371,10 @@ try {
       // 「每个目录建筑必须有显式政策决定」的覆盖断言；实际落成走
       // DEFAULT_COMPLETED_BUILDING_IDS 的赠礼补全，不进 legacy 赠礼。
       'fireworks_shop', 'observation_deck',
+      // 绘画+AI 画室（2026-10-06.painting.1）：同上，保持待建不赠礼。
+      'painting_ai',
+      // 原神研究院（2026-10-07）：同上，保持待建。
+      'north_genshin_institute',
     ];
     const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
     assert.deepEqual([...LEGACY_UNLOCK_PRESERVATION_BUILDINGS].sort(), [...legacyPendingBuildings].sort());

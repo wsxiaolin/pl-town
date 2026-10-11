@@ -43,8 +43,11 @@ const SURF_VERT = /* glsl */ `
   uniform float lift;
   uniform float limitX;
   varying float vFront;
+  varying float vZ;
+  varying vec2 vSurfPosition;
   void main() {
     vec3 p = position;
+    vSurfPosition = position.xz;
     // uv.x 0 → 1 runs from open water to the wet sand; the first ~1 unit
     // fades the strip into the sea sheet so no seam shows.
     float root = smoothstep(0.0, 0.35, uv.x);
@@ -69,25 +72,54 @@ const SURF_VERT = /* glsl */ `
     float edge = 1.0 - smoothstep(0.72, 1.0, uv.x);
     p.y = ${SURF_SURFACE_Y} + root * (0.03 + crest * lift + max(roll, 0.0) * lift * 0.3) * edge;
     vFront = uv.x;
+    vZ = position.z;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }
 `;
 
 const SURF_FRAG = /* glsl */ `
+  uniform float time;
   uniform float daylight;
   uniform vec3 shallowDay;
   uniform vec3 shallowNight;
+  uniform vec2 mouthGap;
   varying float vFront;
+  varying float vZ;
+  varying vec2 vSurfPosition;
+  float foamHash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+  float foamNoise(vec2 p) {
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(foamHash(cell), foamHash(cell + vec2(1.0, 0.0)), f.x),
+      mix(foamHash(cell + vec2(0.0, 1.0)), foamHash(cell + vec2(1.0)), f.x), f.y);
+  }
   void main() {
-    // Shallow tint only: a slightly lighter, still-saturated sea tone. No
-    // foam — a white foam line read as a glaring, unnatural rim rather than
-    // water, so the strip just carries the lapping edge in water colour.
+    // Broken, low-contrast foam follows arriving waves instead of drawing a
+    // continuous white shoreline. Both foam and shallows dim after sunset.
     vec3 shallow = mix(shallowNight, shallowDay, daylight);
+    float lap = sin(time * 2.1 + vSurfPosition.y * 0.35) * 0.62
+      + sin(time * 3.4 - vSurfPosition.y * 0.22 + 2.1) * 0.30;
+    float breakup = foamNoise(vec2(vSurfPosition.y * 0.65, time * 0.18));
+    float detail = foamNoise(vec2(vSurfPosition.y * 2.8, vFront * 15.0 + time * 0.25));
+    float foamFront = 0.66 + (breakup - 0.5) * 0.10;
+    float foamBand = exp(-pow((vFront - foamFront) * 35.0, 2.0));
+    float foam = smoothstep(0.05, 0.55, lap) * smoothstep(0.25, 0.7, breakup)
+      * mix(0.5, 1.0, detail) * foamBand;
+    shallow = mix(shallow, mix(vec3(0.055, 0.09, 0.11), vec3(0.62, 0.73, 0.70), daylight), foam * 0.42);
     // Translucency: the strip fades in gently from the sea sheet so its
     // seaward edge never shows as a line, then feathers to zero on the sand.
     float alpha = mix(0.24, 0.42, smoothstep(0.0, 0.7, vFront));
     alpha *= smoothstep(0.0, 0.5, vFront);
     alpha = mix(alpha, 0.0, smoothstep(0.72, 1.0, vFront));
+    // 河口水道（v6）：晨溪河口湾 + 入海羽流横穿本条带的 z 区间，真实
+    // 河口是被河流切开的水道——带内把 lapping 压到 15%，两端 2.5 单位
+    // 平滑过渡。羽流水面（y 更高、renderOrder 更早）在重叠区盖在带上方。
+    float inMouth = smoothstep(mouthGap.x - 2.5, mouthGap.x + 2.5, vZ)
+      * (1.0 - smoothstep(mouthGap.y - 2.5, mouthGap.y + 2.5, vZ));
+    alpha *= 1.0 - 0.85 * inMouth;
     gl_FragColor = vec4(shallow, alpha);
     // Same output chain as the sea sheet's Water shader, so the strip and
     // the water it sits on agree under every tone-mapping exposure.
@@ -128,6 +160,9 @@ function createShoreSurf(
       limitX: { value: westBeachWaterlineMaxX(SURF_REACH) },
       shallowDay: { value: new THREE.Color(0x2c8699) },
       shallowNight: { value: new THREE.Color(0x0e2b36) },
+      // 河口带 z 区间（v6 淡出用）：晨溪河口湾 z -106..-89.4 + 羽流
+      // z -105.7..-93.1 的并集取整——见 riverChenxi.ts 的 ESTUARY_BBOX。
+      mouthGap: { value: new THREE.Vector2(-105, -90.5) },
     },
   });
   const mesh = new THREE.Mesh(geometry, material);
@@ -285,6 +320,8 @@ export function createWestBeach(options: BeachOptions): {
         sunColorDay: DAY_SUN_COLOR,
         sunColorNight: NIGHT_SUN_COLOR,
         distortionScale: 3.7,
+        size: 2.4,
+        specularScale: 0.65,
         timeScale: SEA_TIME_SCALE,
         // The sea sheet only takes the near-shore tint: the open water stays
         // deep and opaque, and the tint fades over tens of world units so the

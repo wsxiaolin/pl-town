@@ -1,0 +1,242 @@
+/* 原神启动页全屏覆盖层（原神研究院彩蛋）。DOM 由
+   genshinLaunchOverlay 动态创建/移除；相位用 root class 切换：
+   gl-phase-approach（前飞+标题）→ gl-phase-door（大门+进入）→
+   gl-phase-dive（开门+白闪）→ gl-phase-boot（原神，启动！94.4%）。 */
+
+#genshinLaunch {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  overflow: hidden;
+  background: #07142e;
+  font-family: "Songti SC", "Noto Serif SC", "STSong", serif;
+  color: #f3ead9;
+  opacity: 1;
+  transition: opacity 0.9s ease;
+  user-select: none;
+}
+
+#genshinLaunch.leaving { opacity: 0; }
+
+/* ── 标题（approach 相位浮现）── */
+.gl-title {
+  position: absolute;
+  top: 16%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 2.2s ease, transform 2.2s ease;
+}
+.gl-phase-approach .gl-title,
+.gl-phase-door .gl-title { opacity: 1; transform: none; }
+
+.gl-title-cn {
+  display: block;
+  font-size: clamp(64px, 14vmin, 150px);
+  letter-spacing: 0.28em;
+  margin-left: 0.28em; /* 抵消末字距，保持光学居中 */
+  color: #f7f0dd;
+  text-shadow:
+    0 0 22px rgba(120, 190, 255, 0.35),
+    0 2px 0 rgba(30, 46, 84, 0.9),
+    0 10px 42px rgba(8, 16, 40, 0.8);
+}
+.gl-title-sub {
+  display: block;
+  margin-top: 10px;
+  font-size: clamp(11px, 1.8vmin, 15px);
+  letter-spacing: 0.55em;
+  margin-left: 0.55em;
+  color: rgba(214, 226, 248, 0.72);
+}
+
+/* ── 免责声明（常驻角落，小字）── */
+.gl-disclaimer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 26px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: rgba(196, 208, 232, 0.5);
+  pointer-events: none;
+}
+
+/* ── 「点击任意处进入」── */
+.gl-enter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16%;
+  margin: 0 auto;
+  display: block;
+  padding: 14px 44px;
+  font-family: inherit;
+  font-size: clamp(15px, 2.4vmin, 20px);
+  letter-spacing: 0.5em;
+  margin-left: 0.5em; /* 抵消末字距 */
+  color: #eef4ff;
+  background: rgba(16, 32, 66, 0.42);
+  border: 1px solid rgba(158, 196, 255, 0.55);
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 1.4s ease 1.1s, background 0.3s ease, transform 0.3s ease;
+  animation: gl-breathe 3.2s ease-in-out infinite;
+}
+.gl-enter:hover { background: rgba(38, 64, 118, 0.6); transform: scale(1.03); }
+.gl-phase-approach .gl-enter { opacity: 0.95; }
+.gl-phase-door .gl-enter,
+.gl-phase-dive .gl-enter,
+.gl-phase-boot .gl-enter { display: none; }
+
+@keyframes gl-breathe {
+  0%, 100% { box-shadow: 0 0 0 rgba(140, 190, 255, 0); }
+  50% { box-shadow: 0 0 26px rgba(140, 190, 255, 0.35); }
+}
+
+/* ── 「进入」按钮（door 相位）── */
+.gl-door-enter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14%;
+  margin: 0 auto;
+  display: none;
+  padding: 12px 38px;
+  font-family: inherit;
+  font-size: clamp(14px, 2.2vmin, 18px);
+  letter-spacing: 0.6em;
+  margin-left: 0.6em;
+  color: #f9f2df;
+  background: linear-gradient(180deg, rgba(232, 178, 84, 0.28), rgba(160, 108, 40, 0.34));
+  border: 1px solid rgba(238, 200, 128, 0.75);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.9s ease, box-shadow 0.3s ease;
+}
+.gl-door-enter:hover { box-shadow: 0 0 24px rgba(238, 200, 128, 0.4); }
+.gl-phase-door .gl-door-enter { display: block; opacity: 1; }
+
+/* ── 白闪（dive 相位）── */
+.gl-flash {
+  position: absolute;
+  inset: 0;
+  background: #fdfdff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease-out;
+}
+/* 过门白光：JS 在 0.9s 时挂 flashing、2.0s 摘除（与开门音对齐）。 */
+.flashing .gl-flash { opacity: 0.96; }
+
+/* ── 暗角（相机感）── */
+.gl-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 46%, rgba(6, 14, 34, 0) 52%, rgba(4, 9, 24, 0.5) 100%);
+}
+
+/* ── 启动 loading（boot 相位）── */
+.gl-loading {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  background: #0b1c3f;
+}
+.gl-phase-boot .gl-loading { display: flex; }
+
+.gl-orbit {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  animation: gl-spin 7s linear infinite;
+}
+.gl-orbit i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 14px var(--c);
+}
+.gl-orbit i:nth-child(1) { transform: rotate(0deg)   translateX(57px); --c: #7fd4a1; }
+.gl-orbit i:nth-child(2) { transform: rotate(51deg)  translateX(57px); --c: #e8c15c; }
+.gl-orbit i:nth-child(3) { transform: rotate(102deg) translateX(57px); --c: #b48ae8; }
+.gl-orbit i:nth-child(4) { transform: rotate(154deg) translateX(57px); --c: #7ed0e0; }
+.gl-orbit i:nth-child(5) { transform: rotate(206deg) translateX(57px); --c: #86e08a; }
+.gl-orbit i:nth-child(6) { transform: rotate(257deg) translateX(57px); --c: #e88a86; }
+.gl-orbit i:nth-child(7) { transform: rotate(309deg) translateX(57px); --c: #96b9f0; }
+
+@keyframes gl-spin { to { transform: rotate(360deg); } }
+
+.gl-boot-title {
+  font-size: clamp(30px, 6vmin, 52px);
+  letter-spacing: 0.34em;
+  margin-left: 0.34em;
+  color: #f7efdc;
+  text-shadow: 0 0 30px rgba(120, 180, 255, 0.4);
+}
+
+.gl-bar {
+  width: min(46vw, 380px);
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(140, 170, 220, 0.22);
+  overflow: hidden;
+}
+.gl-bar-fill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9fd8ff, #f3e3b2);
+  box-shadow: 0 0 12px rgba(159, 216, 255, 0.6);
+}
+
+.gl-pct {
+  font-size: 14px;
+  letter-spacing: 0.3em;
+  color: rgba(220, 230, 248, 0.78);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 退出提示（door 起、boot 前显示）── */
+.gl-hint {
+  position: absolute;
+  top: 22px;
+  right: 26px;
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: rgba(200, 214, 240, 0.55);
+  opacity: 0;
+  transition: opacity 1s ease;
+  pointer-events: none;
+}
+.gl-phase-door .gl-hint,
+.gl-phase-dive .gl-hint { opacity: 1; }
+
+/* 触屏/窄屏收敛 */
+@media (max-width: 680px) {
+  .gl-title { top: 12%; }
+  .gl-title-cn { letter-spacing: 0.18em; margin-left: 0.18em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #genshinLaunch, .gl-title, .gl-enter, .gl-door-enter { transition-duration: 0.15s; }
+  .gl-enter { animation: none; }
+  .gl-orbit { animation-duration: 14s; }
+}

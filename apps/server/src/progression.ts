@@ -27,6 +27,8 @@ const BUILDING_IDS = [
   'north_bistro', 'north_night_kiosk', 'north_jukebox', 'north_backrooms_door',
   'north_komorebi',
   'fireworks_shop', 'observation_deck',
+  'painting_ai',
+  'north_genshin_institute',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(

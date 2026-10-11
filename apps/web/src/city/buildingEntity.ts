@@ -28,6 +28,9 @@ export type BuildingEntity = BuildingDefinition & {
   glowMat?: THREE.MeshStandardMaterial;
   labelEl?: HTMLElement | null;
   labelY?: number;
+  /** Builders with real 3D facades (window frames, doors, awnings) set this to
+   *  skip the flat facade-decal pass, which would clip through their details. */
+  skipFacadeDecal?: boolean;
 };
 
 export type ResidenceEntity = {

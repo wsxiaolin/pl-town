@@ -82,9 +82,11 @@ function glslFloat(value: number): string {
 // render target — so it can never nest the mirror pass that breaks the sea.
 const POND_WATER_VERTEX = /* glsl */ `
 varying vec3 vWorldPosition;
+varying vec2 vUv;
 void main() {
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
   vWorldPosition = worldPosition.xyz;
+  vUv = uv;
   gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }
 `;
@@ -97,7 +99,11 @@ uniform vec3 sunDirection;
 uniform vec3 sunColor;
 uniform vec3 waterColor;
 uniform float alpha;
+uniform float mouthEnabled;
+uniform vec2 mouthRange;
+uniform vec3 mouthSeaColor;
 varying vec3 vWorldPosition;
+varying vec2 vUv;
 
 void main() {
   vec2 uv = vWorldPosition.xz * size;
@@ -111,7 +117,18 @@ void main() {
   float sunDiffuse = max(dot(surfaceNormal, normalize(sunDirection)), 0.0);
   vec3 color = waterColor;
   color += sunColor * pow(sunDiffuse, 6.0) * 0.1;
-  gl_FragColor = vec4(color, alpha);
+  // 河口羽流渐变（mouthEnabled = 1 时生效，其余水面走原路径）：从
+  // mouthRange.x（河口侧）向 mouthRange.y（海内，x 更小）把 alpha 渐隐
+  // 至 0、水色混向 mouthSeaColor —— 河水以楔形羽流没入海面，取代两种
+  // 水体之间生硬的几何边界。前 1/4 保持满色，让湾口仍是"水"而非"雾"。
+  float outAlpha = alpha;
+  if (mouthEnabled > 0.5) {
+    float t = clamp((vWorldPosition.x - mouthRange.x) / (mouthRange.y - mouthRange.x), 0.0, 1.0);
+    float ease = smoothstep(0.25, 1.0, t);
+    outAlpha *= 1.0 - ease;
+    color = mix(color, mouthSeaColor, ease * 0.7);
+  }
+  gl_FragColor = vec4(color, outAlpha);
 }
 `;
 
@@ -124,12 +141,22 @@ export type PondWaterConfig = {
   timeScale: number;
   size: number;
   alpha?: number;
+  /** 河口入海羽流渐变（可选）。xStart 是河口侧满色满 alpha 的起点，
+   *  xEnd（更靠海、更小的 x）是 alpha 归零处；水色沿途混向 seaColor。
+   *  仅河口湾等"没入另一片水"的水面使用——普通池塘保持默认直通路径。 */
+  mouthFade?: {
+    xStart: number;
+    xEnd: number;
+    seaColorDay: THREE.Color;
+    seaColorNight: THREE.Color;
+  };
 };
 
 export function createPondWaterSurface(
   geometry: THREE.BufferGeometry,
   config: PondWaterConfig,
 ): AnimatedWaterSurface {
+  const mouth = config.mouthFade;
   const uniforms: Record<string, THREE.IUniform> = {
     normalSampler: { value: getWaterNormals() },
     time: { value: 0 },
@@ -138,6 +165,9 @@ export function createPondWaterSurface(
     sunColor: { value: config.sunColorDay.clone() },
     waterColor: { value: config.waterColorDay.clone() },
     alpha: { value: config.alpha ?? 1 },
+    mouthEnabled: { value: mouth ? 1 : 0 },
+    mouthRange: { value: mouth ? new THREE.Vector2(mouth.xStart, mouth.xEnd) : new THREE.Vector2(0, -1) },
+    mouthSeaColor: { value: (mouth ? mouth.seaColorDay : new THREE.Color(0x000000)).clone() },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -166,6 +196,10 @@ export function createPondWaterSurface(
       waterColor.copy(config.waterColorDay).lerp(config.waterColorNight, 1 - daylight);
       const sunColor = uniforms['sunColor']!.value as THREE.Color;
       sunColor.copy(config.sunColorDay).lerp(config.sunColorNight, 1 - daylight);
+      if (mouth) {
+        const mouthSeaColor = uniforms['mouthSeaColor']!.value as THREE.Color;
+        mouthSeaColor.copy(mouth.seaColorDay).lerp(mouth.seaColorNight, 1 - daylight);
+      }
     },
     setDaylight(value, instant = false) {
       daylightTarget = value;
@@ -206,6 +240,20 @@ export function createAnimatedWaterSurface(
     );
   material.needsUpdate = true;
   if (config.shoreBlend) {
+    // Keep the reflection plane flat; long-wave slopes change the lighting
+    // without moving the sheet through the sand or the mirror clipping plane.
+    // Reuse three's Water normals (https://threejs.org/examples/?q=water).
+    const normalAnchor = 'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );';
+    if (material.fragmentShader.includes(normalAnchor)) {
+      material.fragmentShader = material.fragmentShader.replace(normalAnchor, /* glsl */ `
+        float swellA = dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35;
+        float swellB = dot(worldPosition.xz, vec2(-0.24, 1.12)) - time * 0.85;
+        vec2 swellSlope = vec2(0.78, 0.32) * cos(swellA) * 0.13
+          + vec2(-0.24, 1.12) * cos(swellB) * 0.065;
+        vec3 surfaceNormal = normalize(noise.xzy * vec3(1.15, 1.0, 1.15)
+          + vec3(-swellSlope.x, 0.0, -swellSlope.y));
+      `);
+    }
     // Near-shore shallow tint, measured in world units rather than uv so the
     // band keeps its width no matter how deep the ribbon geometry runs. The
     // `time` uniform here is already time-scaled by the caller.
@@ -252,6 +300,10 @@ export function createAnimatedWaterSurface(
             // models (ships!) must not bleed through the deep sheet.
             vec3 shallowTint = mix(waterColor, shoreTint, 0.55);
             outgoingLight = mix(outgoingLight, shallowTint, (1.0 - smoothstep(0.0, ${width}, vShoreDist)) * 0.4);
+            // Broad moving crests read from the city camera, while the normal
+            // map keeps the small ripples. Tint with daylight so night stays dark.
+            float crest = pow(max(0.0, sin(dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35)), 6.0);
+            outgoingLight += shoreTint * crest * 0.055;
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );

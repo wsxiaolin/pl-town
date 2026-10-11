@@ -413,6 +413,27 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   // software GL needs well past the 5 s default — 60 s matches the is-ready
   // budget every other boot-waiting suite uses (boot-gate, onboarding).
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
+  // 世界地形端到端守护（review #218：新增大幅用户可见地形需有浏览器侧
+  // 断言）：岚屏岭山体、晨溪河（水面/河口湾）与城缘草甸网格必须挂在
+  // 场景里。低配软件 GL 下不做像素断言，只验"地形被构建并进入场景"。
+  const terrainMeshes = await page.evaluate(() => {
+    const scene = (window as any)._mini?.scene;
+    if (!scene) return { massif: 0, river: 0, meadow: 0 };
+    const counts = { massif: 0, river: 0, meadow: 0 };
+    scene.traverse((node: { isMesh?: boolean; name?: string }) => {
+      if (!node.isMesh) return;
+      const name = node.name ?? '';
+      if (name.includes(':massif')) counts.massif += 1;
+      // 精确匹配两张水面：estuary 前缀会把 v5 的湾缘砾石
+      // (river-chenxi-estuary-stone-N) 也吞进计数。
+      if (name === 'river-chenxi-water' || name === 'river-chenxi-estuary') counts.river += 1;
+      if (name.endsWith(':meadow')) counts.meadow += 1;
+    });
+    return counts;
+  });
+  expect(terrainMeshes.massif).toBeGreaterThanOrEqual(40); // 41 条岚屏岭主脊/麓丘/侧丘
+  expect(terrainMeshes.river).toBe(2); // 晨溪河面 + 河口湾面
+  expect(terrainMeshes.meadow).toBe(2); // 城缘草甸南瓣 + 东北瓣
   const phoneToggle = page.locator('#onlinePanelToggle');
   await expect(phoneToggle).toHaveClass(/connected/, { timeout: 30_000 });
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');

@@ -1,0 +1,15 @@
+[workspace]
+name = "minicity"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-arm64", "osx-64"]
+
+[dependencies]
+nodejs = "22.*"
+
+[tasks]
+setup = "npm ci"
+dev = "npm run dev"
+typecheck = "npm run typecheck"
+build = "npm run build"
+test-domain = "npm run test:domain"
+test-server = "npm run test:server"

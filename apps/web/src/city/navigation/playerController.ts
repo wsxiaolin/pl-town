@@ -35,6 +35,8 @@ export type PlayerControllerOptions = {
   isInputLocked?: () => boolean;
   isCinematicCameraActive?: () => boolean;
   isCameraFollowSuspended?: () => boolean;
+  /** First-person mode drives the cursor itself; the overhead movement loop pauses. */
+  isMovementSuspended?: () => boolean;
 };
 
 export function createPlayerController(options: PlayerControllerOptions) {
@@ -72,6 +74,7 @@ export function createPlayerController(options: PlayerControllerOptions) {
 
   function updateMovement(delta: number): void {
     if (options.isInputLocked?.()) return;
+    if (options.isMovementSuspended?.()) return;
     const cursor = options.getCursor();
     const specialInterior = options.getSpecialInterior?.();
     if (specialInterior?.isMovementLocked?.()) {

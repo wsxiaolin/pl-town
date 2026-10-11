@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, NORTH_DISTRICT_AREA, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
 import { BUILDING_DEFS } from '../city/data/buildings';
+import { CITY_GROUND_PLAN } from '../city/data/terrain/_cityGround';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
+import { createGroundReliefGeometry, createPlazaPavingGeometry } from './cityGroundModel';
 
 type MaterialOptions = MaterialParameters;
 
@@ -76,10 +78,15 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     farGround.renderOrder = RENDER_ORDER.base;
     scene.add(farGround);
 
-    const districtMat = createLayerMaterial({ color: isNight ? 0xb4b0a4 : 0xe0d8cc, roughness: 1, tex: 'ground2', rx: 18, ry: 18 });
-    const district = createMesh(new THREE.PlaneGeometry(150, 150), districtMat);
-    district.rotation.x = -Math.PI / 2;
-    district.position.y = SURFACE_Y.district;
+    const districtMat = createLayerMaterial({
+      color: isNight ? 0xb4b0a4 : 0xe0d8cc,
+      roughness: 1,
+      tex: 'ground2',
+      rx: 18,
+      ry: 18,
+      vertexColors: true,
+    });
+    const district = createMesh(createGroundReliefGeometry(CITY_GROUND_PLAN.relief, SURFACE_Y.district), districtMat);
     district.receiveShadow = true;
     district.renderOrder = RENDER_ORDER.district;
     scene.add(district);
@@ -103,12 +110,26 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       scene.add(grass);
     }
 
+    const paving = CITY_GROUND_PLAN.paving;
+    const pavingMat = createLayerMaterial({
+      color: isNight ? paving.nightColor : paving.dayColor,
+      roughness: 0.98,
+      tex: paving.texture,
+      rx: 1,
+      ry: 1,
+      vertexColors: true,
+    });
+    const pavingStones = createMesh(createPlazaPavingGeometry(paving, SURFACE_Y.plaza), pavingMat);
+    pavingStones.receiveShadow = true;
+    pavingStones.renderOrder = RENDER_ORDER.cityGroundDetail;
+    scene.add(pavingStones);
+
     const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 8, ry: 6 });
     const echoGround = createMesh(new THREE.PlaneGeometry(ECHO_OBSERVATORY_AREA.width, ECHO_OBSERVATORY_AREA.depth), echoGroundMat);
     echoGround.rotation.x = -Math.PI / 2;
-    echoGround.position.set(ECHO_OBSERVATORY_AREA.center[0], SURFACE_Y.district, ECHO_OBSERVATORY_AREA.center[1]);
+    echoGround.position.set(ECHO_OBSERVATORY_AREA.center[0], SURFACE_Y.northDistrict, ECHO_OBSERVATORY_AREA.center[1]);
     echoGround.receiveShadow = true;
-    echoGround.renderOrder = RENDER_ORDER.district;
+    echoGround.renderOrder = RENDER_ORDER.northDistrict;
     scene.add(echoGround);
 
     groundMaterials.push(
@@ -116,6 +137,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
+      { mat: pavingMat, day: paving.dayColor, night: paving.nightColor },
       { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
     );
   }
@@ -209,11 +231,11 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     northGround.rotation.x = -Math.PI / 2;
     northGround.position.set(
       (NORTH_DISTRICT_AREA.ground.minX + NORTH_DISTRICT_AREA.ground.maxX) / 2,
-      SURFACE_Y.district,
+      SURFACE_Y.northDistrict,
       (NORTH_DISTRICT_AREA.ground.minZ + NORTH_DISTRICT_AREA.ground.maxZ) / 2,
     );
     northGround.receiveShadow = true;
-    northGround.renderOrder = RENDER_ORDER.district;
+    northGround.renderOrder = RENDER_ORDER.northDistrict;
     scene.add(northGround);
     groundMaterials.push({ mat: northGroundMat, day: 0xe0d8cc, night: 0xb4b0a4 });
 

@@ -58,6 +58,12 @@
   border-color: var(--blue);
   color: #fff;
 }
+/* Narrow portrait: the header just barely fits the base buttons, so the extra
+   walk toggle drops out below 480px (portrait already gates on rotate-to-
+   landscape; back in landscape the button returns and the F key still works). */
+@media (max-width: 480px) {
+  #walkToggle { display: none; }
+}
 .settings-toggle {
   width: 29px;
   height: 29px;

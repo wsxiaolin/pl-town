@@ -27,6 +27,10 @@ import { createMovementInputController } from './navigation/movementInputControl
 import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
+import { createFirstPersonController, type FirstPersonController } from './navigation/firstPersonController';
+import { createFirstPersonInteract, setWalkModeButtonState } from './navigation/firstPersonWalkAssist';
+import { createToonWorld } from '../rendering/toon/toonWorld';
+import { createToonSky } from '../rendering/toon/toonSky';
 import { createProgressionController } from './progression/progressionController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
@@ -43,11 +47,14 @@ import { createSceneAnimations } from './sceneAnimations';
 import { createFrameLoop } from './frameLoop';
 import { createBurnCityEffect } from './burnCityEffect';
 import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
+import { createPaintingAiStudio } from './paintingAiStudio';
+import { createPaintingAiCanvasController } from '../adapters/ui/paintingAiCanvasController';
 import { installDebugApi } from './debugApi';
 import { isDevPortalRequested } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
+import { createGenshinInstituteController, scheduleGenshinIdlePrefetch } from './genshin/genshinInstituteController';
 import { createIceKingFeatureExperience } from './iceKing/createIceKingFeatureExperience';
 import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
 import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatureRegistry';
@@ -63,13 +70,7 @@ import { createCityViewControls } from './cityViewControls';
 import { createNpcDistrictFilter } from './npcDistrictFilter';
 import { createIceKingCityHooks } from './iceKingCityHooks';
 import { createCityThemeSync } from './cityThemeSync';
-import { createFestivalThemeController } from './festivalThemeController';
-import { createSpringFestivalDecor } from '../rendering/springFestivalDecor';
-import { createFireworksEngine } from '../rendering/fireworksEngine';
-import { createFireworksClient } from './fireworks/fireworksClient';
-import { createObservationDeckShow } from './fireworks/observationDeckShow';
-import { createFireworksDesignerController } from '../adapters/ui/fireworksDesignerController';
-import { FIREWORKS_SHOP_FEATURE_ID, OBSERVATION_DECK_FEATURE_ID } from './fireworks/fireworksFeatureIds';
+import { createFireworksPlaykit, fireworksDebug, fireworksHandlers, type FireworksPlaykit } from './fireworks/fireworksPlaykit';
 import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
@@ -140,6 +141,7 @@ let playerController: ReturnType<typeof createPlayerController>;
 let movementInputController: ReturnType<typeof createMovementInputController>;
 let cameraController: ReturnType<typeof createCameraController>;
 let cameraPanController: ReturnType<typeof createCameraPanController>;
+let firstPersonController: FirstPersonController | null = null;
 let progressionController: ReturnType<typeof createProgressionController>;
 let communityPanels: CityHudPanels['communityPanels'];
 let writerCatalogController: CityHudPanels['writerCatalog'];
@@ -153,35 +155,17 @@ let npcSystem: ReturnType<typeof assembleCityWorld>['npcSystem'];
 let buildingLabelController: ReturnType<typeof assembleCityWorld>['buildingLabelController'];
 let sceneInterestPoints: SceneInterestPoints | null = null;
 let constructionScene: ReturnType<typeof assembleCityWorld>['constructionScene'] | null = null;
+let terrain: ReturnType<typeof assembleCityWorld>['terrain'] | null = null;
 let sceneInterestPointController: SceneInterestPointController | null = null;
 let iceKingFeature: ReturnType<typeof createIceKingFeatureExperience> | null = null;
+let paintingAiCanvas: ReturnType<typeof createPaintingAiCanvasController> | null = null;
 const buildingFeatureRegistry = createBuildingFeatureRegistry();
 buildingFeatureRegistry.register(createIceKingBuildingFeature({
   getSanctum: () => iceKingFeature?.sanctum ?? null,
   showLocked: () => showUnlockToast('皇冠建筑已经无法再次进入'),
 }));
-// 烟花玩法：烟花铺 → 设计台；海边观景台 → 云上烟花秀。
-let festivalTheme: ReturnType<typeof createFestivalThemeController> | null = null;
-let fireworksEngine: ReturnType<typeof createFireworksEngine> | null = null;
-let fireworksClient: ReturnType<typeof createFireworksClient> | null = null;
-let fireworksDesigner: ReturnType<typeof createFireworksDesignerController> | null = null;
-let deckShow: ReturnType<typeof createObservationDeckShow> | null = null;
-buildingFeatureRegistry.register({
-  id: FIREWORKS_SHOP_FEATURE_ID,
-  interact: () => {
-    if (!fireworksDesigner) return false;
-    fireworksDesigner.open();
-    return true;
-  },
-});
-buildingFeatureRegistry.register({
-  id: OBSERVATION_DECK_FEATURE_ID,
-  interact: () => {
-    if (!deckShow) return false;
-    deckShow.interact();
-    return true;
-  },
-});
+// 烟花玩法装配件：烟花铺 → 设计台；海边观景台 → 云上烟花秀（见 fireworksPlaykit）。
+let fireworksPlaykit: FireworksPlaykit | null = null;
 let weatherEffect: ReturnType<typeof createWeatherEffect> | null = null;
 let navigationTargetMarker: ReturnType<typeof createNavigationTargetMarker> | null = null;
 let buildingDamageController: ReturnType<typeof createBuildingDamageController>;
@@ -265,6 +249,12 @@ const interactionPointer = createInteractionPointer({
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
 });
 
+const firstPersonInteract = createFirstPersonInteract({
+  getActiveCamera: () => (firstPersonController?.getActiveCamera() ?? null) as THREE.Camera | null,
+  raycaster, getRaycastGroups: () => raycastBuildingGroups, findBuilding: findRaycastBuilding, exit: () => firstPersonController?.exit(),
+  showToast: showUnlockToast, interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
+});
+
 const interactionTracker = createInteractionTracker({
   getStats,
   saveStats,
@@ -287,13 +277,14 @@ const frameLoop = createFrameLoop({
   onFirstRender: () => flushPendingEntrance(),
   getRenderer: () => renderer,
   getScene: () => scene,
-  getCamera: () => camera,
+  getCamera: () => firstPersonController?.getActiveCamera() ?? camera,
   getBuildings: () => buildings,
   getResidences: () => residences,
   getLabelWorldPosition: () => labelWorldPosition,
   getNpcList: () => npcSystem?.getAvoidanceNpcs() ?? npcList,
   getPlayerController: () => playerController,
   getCameraPanController: () => cameraPanController,
+  getFirstPersonController: () => firstPersonController,
   getMultiplayerHousing: () => multiplayerHousing,
   getSceneInterestPoints: () => sceneInterestPoints,
   getSceneInterestPointController: () => sceneInterestPointController,
@@ -301,13 +292,13 @@ const frameLoop = createFrameLoop({
   getMapController: () => mapController,
   getNavigationTargetMarker: () => navigationTargetMarker,
   getBurnOverlay: () => burnCityEffect,
+  getGenshinLaunchOverlay: () => genshinInstitute.getOverlay(),
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
   updateWeather: (delta) => weatherEffect?.update(delta),
-  updateFireworks: (delta, elapsed) => fireworksEngine?.update(delta, elapsed),
-  updateFestival: (elapsed) => festivalTheme?.update(elapsed),
+  updateFireworks: (delta, elapsed) => fireworksPlaykit?.update(delta, elapsed),
   getLastFrameTime: () => lastFrameTime,
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer: (npc) => npcSystem.npcYieldToPlayer(npc),
@@ -336,6 +327,13 @@ const wildMushroomRestaurant = createWildMushroomRestaurant({
   awardAchievement: awardDirectAchievement,
 });
 
+const paintingAiStudio = createPaintingAiStudio({
+  getDialogs: () => cityDialogs,
+  openCanvas: (handlers) => paintingAiCanvas?.open(handlers),
+  closeCanvas: () => paintingAiCanvas?.close(),
+  showToast: showUnlockToast,
+});
+
 const filmCityExperience = createFilmCityExperienceController({
   dialogs: () => cityDialogs,
   getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
@@ -350,6 +348,15 @@ const filmCityExperience = createFilmCityExperienceController({
   },
   clearPlayerPath: () => view.clearPlayerPath(),
   showToast: showUnlockToast,
+});
+
+// 原神研究院：启动页 chunk 在城市空闲时仅预下载（模块零副作用，不建场景），
+// 重代码（场景/shader/每帧渲染）在选择「好想玩原神！」后才运行。
+const genshinInstitute = createGenshinInstituteController({
+  dialogs: () => cityDialogs,
+  getRenderer: () => renderer,
+  showToast: showUnlockToast,
+  reduced: REDUCED,
 });
 
 const buildingInteraction = createBuildingInteraction({
@@ -367,7 +374,9 @@ const buildingInteraction = createBuildingInteraction({
   getLibrarySearchController: () => librarySearchController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
   getWildMushroomRestaurant: () => wildMushroomRestaurant,
+  getPaintingAiStudio: () => paintingAiStudio,
   getFilmCityController: () => filmCityExperience,
+  getGenshinInstituteController: () => genshinInstitute,
   interactWithFeature: buildingFeatureRegistry.interact,
 });
 
@@ -375,8 +384,11 @@ const eventBindings = createEventBindings({
   getCanvas: () => document.getElementById('c') as HTMLElement,
   getSignal: () => lifecycle.signal,
   getRenderer: () => renderer,
-  onMouseMove: (event) => interactionPointer.onMouseMove(event),
-  onCanvasClick: (event) => interactionPointer.onCanvasClick(event),
+  onMouseMove: (event) => { if (!firstPersonController?.isActive()) interactionPointer.onMouseMove(event); },
+  onCanvasClick: (event) => {
+    if (firstPersonController?.isActive()) { firstPersonController.handleCanvasClick(); return; }
+    interactionPointer.onCanvasClick(event);
+  },
   consumeSuppressedCanvasClick: () => cameraPanController?.consumeSuppressedClick() ?? false,
   onViewInteraction: () => cameraPanController?.notifyViewInteraction(),
   clamp: roadNavigation.clamp,
@@ -394,6 +406,8 @@ const eventBindings = createEventBindings({
   getMutualAidController: () => mutualAidController,
   getLibrarySearchController: () => librarySearchController,
   toggleMapMode: () => mapController?.toggle(),
+  toggleWalkMode: () => firstPersonController?.toggle(),
+  isWalkModeActive: () => Boolean(firstPersonController?.isActive()),
   closeModal: () => buildingInteraction.closeModal(),
   openMemorial: (beforeOpen) => cityDialogs?.openMemorial(beforeOpen),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
@@ -479,14 +493,18 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getIceSanctum: () => iceKingFeature?.sanctum ?? null,
     getTutorial: () => onboardingTutorial,
+    getFirstPerson: () => firstPersonController && {
+      // 紧凑单行配对以守住 source-size 护栏（该文件长期 999/1000 临界）。
+      isActive: firstPersonController.isActive, enter: firstPersonController.enter,
+      exit: firstPersonController.exit, toggle: firstPersonController.toggle,
+      getActiveCamera: firstPersonController.getActiveCamera,
+      worldStyle: { toonActive: firstPersonToonWorld.isActive, skyActive: firstPersonToonSky.isActive },
+    },
+    getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
+    getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
     teleport: devTeleport,
     focus: devFocus,
-    fireworks: {
-      openDesigner: () => fireworksDesigner?.open(),
-      startShow: () => deckShow?.interact(),
-      setTheme: (id: string) => festivalTheme?.apply({ id }),
-      launch: (design: unknown, x = -58, z = -12) => fireworksEngine?.launch(design as Parameters<NonNullable<typeof fireworksEngine>['launch']>[0], { x, z }),
-    },
+    fireworks: fireworksDebug,
   });
   addCityLighting(scene, MOBILE, isNight);
   navigationTargetMarker = createNavigationTargetMarker(scene);
@@ -533,6 +551,7 @@ function init() {
   buildingLabelController = world.buildingLabelController;
   sceneInterestPoints = world.sceneInterestPoints;
   constructionScene = world.constructionScene;
+  terrain = world.terrain;
   raycastBuildingGroups = world.raycastBuildingGroups;
   const hud = createCityHudPanels(document, lifecycle.signal, (open) => multiplayerHousing?.setPhoneOpen(open));
   communityPanels = hud.communityPanels;
@@ -545,13 +564,15 @@ function init() {
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
     fountainClear: roadNavigation.fountainClear, getMapIconsBuilt: () => Boolean(mapController?.areIconsBuilt()),
-    mapShotSpan: 48, getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
+    // 标签位置跟随当前打开的那一页地图（主城/星语北城），不在当前页的
+    // 住宅返回 null、不渲染标签。
+    projectToMap: (x, z) => mapController?.projectToActiveMap(x, z) ?? null,
+    getMapMode: () => Boolean(mapController?.isOpen()), toggleMapMode: () => mapController?.toggle(), communityPanels,
     isResidenceUnavailable: availability.isResidenceUnavailable,
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
     onWorldCatalog: applyWorldCatalog,
-    onTheme: (theme) => festivalTheme?.apply(theme),
-    onFireworksMessage: (message) => fireworksClient?.handleServerMessage(message as Parameters<NonNullable<typeof fireworksClient>['handleServerMessage']>[0]),
+    ...fireworksHandlers,
   });
   buildingDamageController = createBuildingDamageController({
     getBuildings: () => buildings,
@@ -632,8 +653,42 @@ function init() {
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
       || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
   });
+  const firstPersonToonWorld = createToonWorld({ scene, renderer, getIsNight: () => isNight });
+  const firstPersonToonSky = createToonSky({
+    scene,
+    getCamera: () => firstPersonController?.getActiveCamera() ?? null,
+  });
+  graphics.setToonSync(() => { firstPersonToonWorld.syncWeather(); });
+  firstPersonController = createFirstPersonController({
+    document, window, signal: lifecycle.signal,
+    canvas: document.getElementById('c') as HTMLElement,
+    getCursor: () => cursorChar,
+    getIsoMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
+    resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
+    walkSpeed: CONFIG.playerSpeed,
+    sendPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
+    onEnter: () => {
+      view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget();
+      // Anime stroll mode: cel-shaded materials, painted sky dome, distance fog.
+      firstPersonToonWorld.enter();
+      firstPersonToonSky.enter(isNight);
+    },
+    onExit: () => {
+      firstPersonToonWorld.exit();
+      firstPersonToonSky.exit();
+      themeClock.restoreSky();
+      if (cursorChar) view.setTarget(cursorChar.position.x, cursorChar.position.z, true);
+    },
+    onFrame: (delta) => { firstPersonToonSky.update(delta, isNight); },
+    interactInFront: firstPersonInteract,
+    isBlocked: () => Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(mapController?.isOpen())
+      || view.isCinematic() || Boolean(stories?.echo.isInteriorView()) || Boolean(iceKingFeature?.sanctum.isActive()),
+    showToast: showUnlockToast,
+    onStateChange: setWalkModeButtonState,
+  });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && filmCityExperience.isActive()) filmCityExperience.stop();
+    if (event.key === 'Escape' && genshinInstitute.isActive()) genshinInstitute.stop();
   }, { signal: lifecycle.signal });
   playerController = createPlayerController({
     getCursor: () => cursorChar,
@@ -659,6 +714,7 @@ function init() {
     isInputLocked: () => view.isCinematic(),
     isCinematicCameraActive: () => view.isCinematic(),
     isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
+    isMovementSuspended: () => Boolean(firstPersonController?.isActive()),
   });
   loginController = createLoginController({
     getStats,
@@ -707,6 +763,7 @@ function init() {
     signal: lifecycle.signal,
   });
   cityDialogs.setup();
+  paintingAiCanvas = createPaintingAiCanvasController({ document, signal: lifecycle.signal });
   weatherEffect = createWeatherEffect({
     scene,
     getCursor: () => cursorChar,
@@ -718,43 +775,10 @@ function init() {
   });
   graphics.setWeatherVisual(weatherEffect);
   weatherEffect.set(graphics.weather.get());
-  // 烟花玩法装配：引擎（粒子）→ 主题（春节装饰）→ 云端客户端 → 设计台与观景秀。
-  fireworksEngine = createFireworksEngine({
-    scene,
-    getZoom: () => view.getZoom(),
-    getViewportHeight: () => renderer.domElement.height,
-  });
-  festivalTheme = createFestivalThemeController({
-    createDecor: () => createSpringFestivalDecor({ scene, helpers: graphics.mesh, getIsNight: () => isNight }),
-    showToast: showUnlockToast,
-  });
-  fireworksClient = createFireworksClient({
-    send: (message) => multiplayerHousing?.sendFireworks(message) ?? false,
-  });
-  fireworksDesigner = createFireworksDesignerController({
-    document,
-    signal: lifecycle.signal,
-    client: fireworksClient,
-    showToast: showUnlockToast,
-    getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
-    isOnline: () => multiplayerHousing?.progression.isOnline() ?? false,
-  });
-  deckShow = createObservationDeckShow({
-    engine: fireworksEngine,
-    client: fireworksClient,
-    document,
-    signal: lifecycle.signal,
-    dialogs: () => cityDialogs,
-    getCameraSnapshot: () => view.snapshot(),
-    focusCamera: (x, z, zoom) => cameraController?.focus(x, z, { zoom, duration: 1.4 }),
-    stopCamera: () => cameraController?.stop(),
-    restoreCamera: (snapshot) => view.restoreSnapshot(snapshot),
-    setCinematicActive: (active) => {
-      view.setCinematic(active);
-      movementInputController?.setLocked(active);
-    },
-    clearPlayerPath: () => view.clearPlayerPath(),
-    showToast: showUnlockToast,
+  fireworksPlaykit = createFireworksPlaykit({
+    scene, view, camera: cameraController, movement: movementInputController, decorHelpers: graphics.mesh, document,
+    getViewportHeight: () => renderer.domElement.height, getIsNight: () => isNight, getDialogs: () => cityDialogs, signal: lifecycle.signal,
+    getMultiplayer: () => multiplayerHousing, showToast: showUnlockToast, registry: buildingFeatureRegistry,
   });
   const iceHooks = createIceKingCityHooks({
     defaultZoom: CONFIG.cameraNearSize,
@@ -850,6 +874,9 @@ function init() {
     entranceGateOpen = true;
     pendingEntrance?.();
     pendingEntrance = null;
+    // 城市首帧已亮相：空闲时预下载原神启动页 chunk（genshinLaunchOverlay
+    // 顶层零副作用，eval 不建场景；重代码推迟到玩家选择「好想玩原神！」）。
+    scheduleGenshinIdlePrefetch();
   }
 
 function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
@@ -869,16 +896,9 @@ function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visit
 
 function disposeSession() {
   filmCityExperience.dispose();
-  deckShow?.dispose();
-  deckShow = null;
-  fireworksDesigner?.dispose();
-  fireworksDesigner = null;
-  fireworksClient?.dispose();
-  fireworksClient = null;
-  festivalTheme?.dispose();
-  festivalTheme = null;
-  fireworksEngine?.dispose();
-  fireworksEngine = null;
+  fireworksPlaykit?.dispose();
+  fireworksPlaykit = null;
+  genshinInstitute.dispose();
   frameLoop.stop();
   clearInterval(clockInterval);
   clearInterval(trackingInterval);
@@ -898,6 +918,8 @@ function disposeSession() {
   sceneInterestPoints?.dispose();
   constructionScene?.dispose();
   constructionScene = null;
+  terrain?.dispose();
+  terrain = null;
   scene?.clear();
   resources.dispose();
   buildingPlotTargets.length = 0;
@@ -936,7 +958,9 @@ const lifecycle = createCityRuntimeLifecycle({
   reduced: REDUCED,
   isNight: () => isNight,
   initCity: init,
+  paintProceduralTextures: () => proceduralTextures.paintPending(),
   prepareFirstFrame,
+  preloadMapShots: () => mapController?.preloadShots(),
   startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
   proceedToCity,
   showLogin: () => loginController?.showLogin(),

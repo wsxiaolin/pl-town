@@ -17,8 +17,30 @@ working directory) and is ignored by Git.
 
 ## Start everything
 
+Use Node.js 22. With [Pixi](https://pixi.sh), the project provides an isolated
+Node.js 22 environment (including npm) on Windows, Linux, and macOS:
+
 ```bash
-npm install
+pixi run setup
+pixi run dev
+```
+
+Pixi manages the Node.js runtime through `pixi.toml` and `pixi.lock`; npm still
+manages JavaScript dependencies through `package-lock.json`. Commit both lockfiles;
+the generated `.pixi/` environment is ignored. Use `pixi run typecheck`,
+`pixi run build`, `pixi run test-domain`, or `pixi run test-server` for validation.
+For other npm commands, use `pixi run npm ...`. Browser tests still require the
+Playwright browser and platform libraries described in `AGENTS.md`.
+
+If installation previously failed under Node.js 24, stop any project processes
+that hold files in `node_modules`, then run `pixi run setup` to reinstall from
+the npm lockfile using Node.js 22. An `EPERM` error indicates a file access or
+locking problem that changing the runtime may not resolve.
+
+Alternatively, with Node.js 22 already installed:
+
+```bash
+npm ci
 npm run dev
 ```
 

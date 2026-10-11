@@ -112,6 +112,10 @@ export interface CityDialogController {
   openNpc(npc: NpcEntityLike, playerPosition?: { x: number; z: number }): void;
   openStory(story: StoryDialogModel): void;
   closeNpc(): void;
+  /** 静默收起对话层：与 closeNpc 的区别是不触发 story.onClose 结算钩子
+   * （供「对话确认后切换到全屏覆盖层」的剧情用——结算仍由覆盖层自己的
+   * 完成/取消路径驱动，避免提前结算）。 */
+  dismissNpc(): void;
 }
 
 function getElement<T extends HTMLElement>(document: Document, id: string): T {
@@ -547,6 +551,18 @@ export function createCityDialogController(options: CityDialogControllerOptions)
       activeNpc = null;
       activeStoryAdvance = undefined;
       activeStoryClose?.();
+      activeStoryClose = undefined;
+      getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('open');
+      options.resumeNpcs();
+    },
+    dismissNpc() {
+      // 静默变体：丢弃 activeStoryClose（不结算），其余与 closeNpc 一致。
+      // 后续 complete 路径再调 closeNpc 时 npcOpen=false 直接返回，无副作用。
+      if (!npcOpen) return;
+      clearOptionRevealTimer();
+      npcOpen = false;
+      activeNpc = null;
+      activeStoryAdvance = undefined;
       activeStoryClose = undefined;
       getElement<HTMLDivElement>(document, 'npcOverlay').classList.remove('open');
       options.resumeNpcs();

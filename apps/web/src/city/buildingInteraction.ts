@@ -23,7 +23,9 @@ export type BuildingInteractionOptions = {
   getLibrarySearchController?: () => { open: () => void; close: () => void } | null;
   trackInteraction: (buildingId: string) => void;
   getWildMushroomRestaurant?: () => { interact: (onComplete?: () => void) => WildMushroomInteractResult } | null;
+  getPaintingAiStudio?: () => { interact: (onComplete?: () => void) => 'opened' | 'no-dialog' } | null;
   getFilmCityController?: () => { interact: () => void } | null;
+  getGenshinInstituteController?: () => { interact: () => void } | null;
   interactWithFeature?: (building: BuildingEntity) => boolean;
 };
 
@@ -68,6 +70,14 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
       openModal(b);
       return;
     }
+    // 点击「绘画+AI」进入速写小课堂：确认 → 涂鸦 → 笔画变形为小城简笔轮廓 → 表扬。
+    if (b.id === 'painting_ai') {
+      const studio = options.getPaintingAiStudio?.();
+      if (studio && studio.interact(() => options.trackInteraction(b.id)) === 'opened') return;
+      options.trackInteraction(b.id);
+      openModal(b);
+      return;
+    }
     const dialogs = options.getCityDialogs();
     const storyRouter = options.getStoryRouter?.();
     const storyResult = dialogs ? storyRouter?.routeBuilding(b.id, dialogs) : 'unhandled';
@@ -76,6 +86,11 @@ export function createBuildingInteraction(options: BuildingInteractionOptions) {
     if (b.isStats) { options.getStatsPanelController()?.open(); options.trackInteraction('stats'); return; }
     if (b.id === 'mutualaid') {
       options.getMutualAidController?.()?.open();
+      options.trackInteraction(b.id);
+      return;
+    }
+    if (b.id === 'north_genshin_institute') {
+      options.getGenshinInstituteController?.()?.interact();
       options.trackInteraction(b.id);
       return;
     }

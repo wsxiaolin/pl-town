@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-07.fireworks.1",
+  "version": "2026-10-10.festival-painting.1",
   "projects": [
     {
       "id": "build-catcafe",
@@ -551,6 +551,22 @@
       "buildingId": "observation_deck",
       "name": "海边观景台",
       "description": "共同筹建海边观景台",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-painting_ai",
+      "buildingId": "painting_ai",
+      "name": "绘画+AI",
+      "description": "共同筹建绘画+AI",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-north_genshin_institute",
+      "buildingId": "north_genshin_institute",
+      "name": "原神研究院",
+      "description": "共同筹建原神研究院",
       "kind": "building",
       "cost": 3000
     },
