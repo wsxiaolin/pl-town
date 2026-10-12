@@ -90,6 +90,7 @@ const MIN_HALF_WIDTH = 0.6; // 抖动下的半宽下限
 const BED_EXTRA = 1.5; // 河床条带每侧比水面外扩
 const BANK_INNER_EXTRA = 0.15; // 河岸内缘：水线外一点，露出窄条湿河床沿
 const BANK_EXTRA = 3.5; // 河岸外缘
+const SOURCE_FADE_END_T = 0.05; // 源头段（t<0.05 ≈ 末端 6u）水面渐细渐潜——v9 修复（sin 2026-10-12「河怎么会突然从草地出现」）：河道切割在端点有 capFade 渐隐而水面满宽怼到路径终点成「水墙」；渐细+水位钳到床顶之下后，溪水从湿砾间渗出而非凭空出现
 const MOUTH_FADE_START_T = 0.86; // 河口段（x < -56 一带）河床/岸按弧长收窄消失
 const MOUTH_FADE_END_T = 0.99; // 水面本身不收窄，继续滑入海面下方
 const WIDTH_WOBBLE = 0.35; // 半宽抖动幅度（世界单位）
@@ -254,12 +255,15 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   // 半宽：源头 1.6 → 中游 2.8（t 0.55）→ 河口 6.0（t 1）分段 smoothstep，
   // + 确定性抖动。v3：下游持续展宽（旧版河口仅 3），入海前河道自然变宽。
   const wobble = buildWidthWobble(centers.length);
+  const sourceFades = centers.map((_, i) => THREE.MathUtils.smoothstep(i / lastRing, 0, SOURCE_FADE_END_T));
   const halfWidths = centers.map((_, i) => {
     const t = i / lastRing;
     const width = t < 0.55
       ? THREE.MathUtils.lerp(SPRING_HALF_WIDTH, MID_HALF_WIDTH, THREE.MathUtils.smoothstep(t, 0, 0.55))
       : THREE.MathUtils.lerp(MID_HALF_WIDTH, MOUTH_HALF_WIDTH, THREE.MathUtils.smoothstep(t, 0.55, 1));
-    return Math.max(MIN_HALF_WIDTH, width + wobble[i]!);
+    // 源头段渐细到 35%：与河道 capFade 渐隐同步收口，末端读作泉眼
+    const narrowed = (width + wobble[i]!) * (0.35 + 0.65 * sourceFades[i]!);
+    return Math.max(MIN_HALF_WIDTH * 0.6, narrowed);
   });
   // 河口段河床/岸按弧长收窄消失；水面不收窄，继续伸到路径终点（在海面下）
   const mouthFades = centers.map((_, i) => (
@@ -296,7 +300,11 @@ export function createRiverChenxi(options: RiverChenxiOptions): RiverChenxiHandl
   const waterLevels = centers.map((center) => {
     // 环心贴折线（d ≈ 0）必命中水道域；防御回退取中游站水位 -0.45。
     const level = riverWaterYAt(center.x, center.z) ?? -0.45;
-    return center.x < SEA_OVERLAP_X ? Math.min(level, SEA_SURFACE_Y - SEA_ZFIGHT_MARGIN) : level;
+    const clamped = center.x < SEA_OVERLAP_X ? Math.min(level, SEA_SURFACE_Y - SEA_ZFIGHT_MARGIN) : level;
+    // 源头渐潜：D6 契约保证开阔段床 ≤ 水位-0.05，此钳只影响 capFade 渐隐
+    // 段（床顶升穿水位时水面没入河床条带之下），溪水从砾石间渗出。
+    const bedCap = riverValleyAt(center.x, center.z) + BED_LIFT - 0.03;
+    return Math.min(clamped, bedCap);
   });
 
   // 河床条带：逐顶点贴 riverValleyAt + 0.004（纵剖床 + 湿岸抬升由场承载，

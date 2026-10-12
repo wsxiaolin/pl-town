@@ -319,7 +319,11 @@ export function createAnimatedWaterSurface(
             float swellA = pow(max(0.0, sin(dot(worldPosition.xz, vec2(0.78, 0.32)) - time * 1.35)), 4.0);
             float swellB = pow(max(0.0, sin(dot(worldPosition.xz, vec2(-0.20, 0.98)) - time * 0.84 + 1.7)), 4.0);
             vec3 crestTint = mix(shoreTint, vec3(0.72, 0.88, 0.95), 0.40);
-            outgoingLight += crestTint * (swellA * 0.80 + swellB * 0.48) * 0.068;
+            // v9 回调（sin 2026-10-12「地面闪烁」复测）：0.068×(0.80+0.48)
+            // 双向叠加从城视角读作频闪光斑（同机位帧差 8.8 万像素主体）。
+            // 降到 0.046×(0.62+0.38)：峰值亮度 -38%、闪烁频率不变，涌动
+            // 特征保留； swelling 斜率（252-255 行顶点法线扰动）不动。
+            outgoingLight += crestTint * (swellA * 0.62 + swellB * 0.38) * 0.046;
             gl_FragColor = vec4( outgoingLight, alpha );
           }`,
         );

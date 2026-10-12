@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH, shorelineX, westBeachWaterlineMaxX } from '../city/data/cityConfig';
-import { seaBedCutAt } from '../city/data/terrain/heightfield/worldReliefField';
+import { seaBedCutAt, shoreSandLiftAt } from '../city/data/terrain/heightfield/worldReliefField';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -150,7 +150,9 @@ function createShoreSurf(
   // 44 columns across a ~5-unit band ≈ 0.11 units per quad — fine enough
   // for a crisp 1-2 unit waterline without touching the heavy sea sheet.
   // yAt = seaBedCutAt: 浪带顶点携带海床高度（现状全域 0，见 shader 注释）。
-  const geometry = createShoreRibbonGeometry(innerX, outerX, minZ, maxZ, 44, 220, seaBedCutAt);
+  // v9：贴 shoreSandLiftAt——浪带过河口湾水道时随切下潜且间隔自适应
+  // （详见 worldReliefField.shoreSandLiftAt 注），不再横穿河道。
+  const geometry = createShoreRibbonGeometry(innerX, outerX, minZ, maxZ, 44, 220, shoreSandLiftAt);
   geometry.computeBoundingSphere();
   // The vertex displacement pushes past the computed bounds; widen it so
   // frustum culling keeps working on honest data instead of being disabled.
@@ -321,7 +323,9 @@ export function createWestBeach(options: BeachOptions): {
   const maxZ = WEST_BEACH.maxZ + 14;
   // 沙面贴海床场（可信地形 R2 / 方案 D6）：顶点 y = seaBedCutAt，层偏移
   // 0.07 由 mesh 位置承载——现状脚印内海床恒 0，数值与旧绝对层 0.07 全等。
-  const sand = addMesh(object, options, createShoreRibbonGeometry(shorelineX, (z) => shorelineX(z) + 10, minZ, maxZ, 8, 96, seaBedCutAt), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [0, 0.07, 0]);
+  // v9：沙面贴 shoreSandLiftAt（原只采 seaBedCutAt，平沙坝横在河口湾水道
+  // 上，与湾面 0.01 间隔整湾闪烁——sin 2026-10-12 实证）。
+  const sand = addMesh(object, options, createShoreRibbonGeometry(shorelineX, (z) => shorelineX(z) + 10, minZ, maxZ, 8, 96, shoreSandLiftAt), { color: 0xe6ce96, roughness: 0.98, tex: 'ground', rx: 4, ry: 18 }, [0, 0.07, 0]);
   sand.renderOrder = 4;
   // The sea must sit above the city base ground plane (y = 0) or it is hidden
   // underneath it, and it spans past the ground edge so no land shows beyond.

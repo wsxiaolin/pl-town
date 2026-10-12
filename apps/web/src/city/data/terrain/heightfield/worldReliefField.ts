@@ -18,6 +18,7 @@
 //   保证台地内恒 0）；
 // - 海床域严格 x < -75（台地西缘），滩涂缓坡从缘外自行展开。
 // 台地平坦不变量由此两剖面 + openWeight 三方共同保证（单测覆盖）。
+import * as THREE from 'three';
 import { CHENXI_RIVER } from '../river-chenxi';
 import { MINGLAN_ISLES } from '../sea-minglan';
 import { meadowReliefAt } from './meadowField';
@@ -168,6 +169,22 @@ function nearestRiverHit(x: number, z: number): RiverHit | null {
  *   远离台地则退化为与北翼同款的完整剖面。
  * 台地内严格返回 0；域外（谷缘肩外沿之外）返回 0。
  */
+/**
+ * 滩面贴场抬升（westBeach 沙/浪条带顶点采样用，采样值 + 0.07 = 沙面终高）：
+ * 平滩（无切割）返回 0——与旧绝对层全等；滩带内有河道/河口湾/海床切割时，
+ * 沙面随切下潜且间隔随深度自适应加宽（0.07 → 0.18）。
+ * v9 修复（2026-10-12，sin「入海口水漫出来 + 不规则几何图形」复现定位）：
+ * 沙带原只采 seaBedCutAt，一条平沙坝（y 0.07）横在河口湾水道上——湾面
+ * 0.08 与沙坝仅 0.01 间隔，掠射角整湾闪烁（同机位帧差 2.7 万像素）。
+ * 首版恒定 0.07 间隔随切失败：粗沙网格（8×96，z 步 2.3u）与细 farGround
+ * （77×66）对同一弯曲场各自线性插值，坡度曲率发散 ~0.07 与间隔同阶，
+ * 互穿更烈（复测 8.9 万像素）。间隔加深区抬到 0.18 > 发散上界后脱开。
+ */
+export function shoreSandLiftAt(x: number, z: number): number {
+  const cut = Math.min(0, seaBedCutAt(x, z), riverValleyAt(x, z));
+  return cut + THREE.MathUtils.lerp(0.07, 0.18, THREE.MathUtils.smoothstep(-cut, 0, 0.35)) - 0.07;
+}
+
 export function riverValleyAt(x: number, z: number): number {
   // 台地北缘安全门：折线各段 z ∈ [-99,-95] 的弯曲段会让「最近点」偏离
   // 查询点所在 x 处的中心线，轴向过渡带宽（southEdge 按 riverCenterZ(x)
