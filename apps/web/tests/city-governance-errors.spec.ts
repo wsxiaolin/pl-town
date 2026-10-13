@@ -135,7 +135,7 @@ for (const [action, failure] of scenarios) {
       await expect.poll(() => page.evaluate(() => (window as unknown as { cityLoginRequests: number }).cityLoginRequests)).toBe(1);
       await expect(page.locator('#loginOverlay')).toBeVisible();
       await expect(panel).not.toHaveAttribute('open');
-      await expect(page.locator('#loginInput')).toBeFocused();
+      await expect(page.locator('#loginEmail')).toBeFocused();
       await expect(panel.locator('[data-city-feedback]')).toBeHidden();
       expect(attempts).toBe(1);
       expect(pageErrors).toEqual([]);

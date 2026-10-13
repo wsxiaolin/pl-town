@@ -223,6 +223,13 @@ const establishedTown = spawnSync(process.execPath, ['--input-type=module', '-e'
   for (const project of config.projects.filter((entry) => entry.buildingId && entry.buildingId !== 'library')) {
     db.prepare('UPDATE city_projects SET funded = ?, built = 1 WHERE id = ?').run(project.cost, project.id);
   }
+  // A pre-email resident: nickname + password with email NULL. Must still sign in.
+  const { scryptSync, randomBytes } = await import('node:crypto');
+  const salt = randomBytes(16);
+  const derived = scryptSync('legacy-password-1234', salt, 64);
+  const passwordHash = salt.toString('hex') + ':' + derived.toString('hex');
+  const stamp = new Date().toISOString();
+  db.prepare('INSERT INTO users (id, nickname, email, password_hash, token_hash, session_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('legacy-resident-id', 'LegacyResident', null, passwordHash, 'legacy-token-hash', '2099-01-01T00:00:00.000Z', stamp, stamp);
   closeDatabase();
 `], { cwd: new URL('..', import.meta.url), env: { ...process.env, NODE_ENV: 'test', DATA_DIR: dataDir }, encoding: 'utf8', timeout: 10_000 });
 if (establishedTown.status !== 0) throw new Error(establishedTown.stderr || establishedTown.stdout
@@ -246,33 +253,42 @@ server.stdout.on('data', (chunk) => {
   serverStartupOutput = `${serverStartupOutput}${chunk}`.slice(-16_384);
 });
 
-const connect = (nickname, password = 'resident-secret', pl) => new Promise((resolve, reject) => {
+const RESIDENT_PASSWORD = 'resident-password-1234';
+// Email is the account credential; derive a stable one from the display name so
+// repeated connections for the same resident hit the same account.
+const emailFor = (name) => `${name.toLowerCase().normalize('NFKC').replace(/[^a-z0-9]+/g, '-') || 'resident'}@example.com`;
+
+const connect = (name, options = {}) => new Promise((resolve, reject) => {
+  const email = options.email ?? emailFor(name);
+  const password = options.password ?? RESIDENT_PASSWORD;
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages = [];
   let ready = false;
-  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for hello for ${nickname}`)); }, 5_000);
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for hello for ${name}`)); }, 5_000);
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
     messages.push(message);
     if (message.type === 'hello') { ready = true; clearTimeout(timeout); resolve({ socket, hello: message, messages }); }
     // Only pre-hello errors are authentication failures; gameplay errors
     // arriving after `hello` belong to the scenario under test.
-    else if (message.type === 'error' && !ready) { clearTimeout(timeout); socket.terminate(); reject(new Error(`Unexpected auth error for ${nickname}: ${message.message}`)); }
+    else if (message.type === 'error' && !ready) { clearTimeout(timeout); socket.terminate(); reject(new Error(`Unexpected auth error for ${name}: ${message.message}`)); }
   });
   socket.on('error', (event) => { clearTimeout(timeout); reject(event); });
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password, ...(pl ? { pl } : {}) })));
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', email, password, name })));
 });
 
-const connectExpectingError = (nickname, password = 'resident-secret', pl) => new Promise((resolve, reject) => {
+const connectExpectingError = (name, options = {}) => new Promise((resolve, reject) => {
+  const email = options.email ?? emailFor(name);
+  const password = options.password ?? RESIDENT_PASSWORD;
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
-  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for auth error for ${nickname}`)); }, 5_000);
+  const timeout = setTimeout(() => { socket.terminate(); reject(new Error(`Timed out waiting for auth error for ${name}`)); }, 5_000);
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
     if (message.type === 'error') { clearTimeout(timeout); socket.close(); resolve(message); }
-    else if (message.type === 'hello') { clearTimeout(timeout); socket.terminate(); reject(new Error(`${nickname} unexpectedly signed in instead of being rejected`)); }
+    else if (message.type === 'hello') { clearTimeout(timeout); socket.terminate(); reject(new Error(`${name} unexpectedly signed in instead of being rejected`)); }
   });
   socket.on('error', (event) => { clearTimeout(timeout); reject(event); });
-  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', nickname, password, ...(pl ? { pl } : {}) })));
+  socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', email, password, name })));
 });
 
 const rejectedWebSocketOrigin = () => new Promise((resolve, reject) => {
@@ -475,7 +491,7 @@ try {
 
   const overview = await fetch(`${adminBase}/overview`, { headers: { cookie } });
   const overviewPayload = await overview.json();
-  if (!overview.ok || overviewPayload.summary.users !== 3 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');
+  if (!overview.ok || overviewPayload.summary.users !== 4 || overviewPayload.online !== 3 || !overviewPayload.integrity.ok) throw new Error('Admin overview must report live and persisted health');
   const backupResponse = await fetch(`${adminBase}/backups`, {
     method: 'POST', headers: { cookie, origin: adminOrigin, 'x-csrf-token': loginPayload.csrf },
   });
@@ -698,41 +714,93 @@ try {
     throw new Error('Chat history must carry the persisted author identity');
   }
 
-    // ── 身份与昵称校验 ─────────────────────────────────────────────
-  const oneChar = await connectExpectingError('A');
-  if (!oneChar) throw new Error('One-character nickname should be rejected');
-  const specialChars = await connectExpectingError('小明!');
-  if (!specialChars) throw new Error('Special characters should be rejected');
-  const tooLongNickname = await connectExpectingError('A'.repeat(41));
-  if (!tooLongNickname) throw new Error('Nicknames longer than 40 characters should be rejected');
-  const controlNickname = await connectExpectingError('小明\u0000');
-  if (!controlNickname) throw new Error('Control characters in nicknames should be rejected');
-  const noPassword = await connectExpectingError('小王', '');
+    // ── 身份校验 ─────────────────────────────────────────────
+  const oneChar = await connect('A');
+  if (oneChar.hello.user?.nickname !== 'A') throw new Error('A one-character display name must be accepted');
+  oneChar.socket.close();
+  const specialChars = await connect('小明!');
+  if (specialChars.hello.user?.nickname !== '小明!') throw new Error('Display names may contain free-form characters');
+  specialChars.socket.close();
+  const noPassword = await connectExpectingError('小王', { password: '' });
   if (!noPassword) throw new Error('Missing password should be rejected');
-  const shortPassword = await connectExpectingError('短密码居民', 'short');
-  if (!shortPassword) throw new Error('Passwords shorter than 10 characters should be rejected');
-  const controlPassword = await connectExpectingError('控制符密码', 'secret\npassword');
-  if (!controlPassword) throw new Error('Control characters in passwords should be rejected');
-  const tooLongPassword = await connectExpectingError('超长密码居民', 'x'.repeat(129));
-  if (!tooLongPassword) throw new Error('Passwords longer than 128 characters should be rejected');
-  const wrongPassword = await connectExpectingError('Alice', 'wrong-pass');
+  const shortPassword = await connectExpectingError('短密码', { password: 'short' });
+  if (!shortPassword) throw new Error('A new account password shorter than 10 characters should be rejected');
+  const wrongPassword = await connectExpectingError('Alice', { password: 'wrong-pass' });
   if (!wrongPassword) throw new Error('Wrong password should be rejected');
 
-  // ── 物实昵称占用与本人验证 ───────────────────────────────────
-  const plClaim = await connectExpectingError('TakenPlResident');
-  if (!plClaim || plClaim.code !== 'pl-verification-required') throw new Error('A nickname owned by a Physics Lab account must demand ownership verification');
-  const plWrongPassword = await connectExpectingError('TakenPlResident', 'resident-secret', { login: 'owner@example.com', password: 'wrong-password' });
-  if (!plWrongPassword) throw new Error('Wrong Physics Lab credentials must not verify nickname ownership');
-  const plMismatched = await connectExpectingError('TakenPlResident', 'resident-secret', { login: 'other@example.com', password: 'pl-other-password' });
-  if (!plMismatched) throw new Error('A different Physics Lab account must not verify nickname ownership');
-  const plOwner = await connect('TakenPlResident', 'resident-secret', { login: 'owner@example.com', password: 'pl-owner-password' });
-  if (!plOwner.hello.user?.nickname) throw new Error('Proving Physics Lab ownership must grant the claimed nickname');
-  if (plOwner.hello.user.verified !== true) throw new Error('A Physics Lab verified resident must be marked verified');
-  plOwner.socket.close();
-  const plFreeName = await connect('UnclaimedPlName');
-  if (!plFreeName.hello.user?.nickname) throw new Error('A nickname absent from Physics Lab must register without verification');
-  if (plFreeName.hello.user.verified !== false) throw new Error('An unverified resident must not be marked verified');
-  plFreeName.socket.close();
+  // ── HTTP 账号接口：注册 / 登录 / 居民证 ───────────────────────
+  const accountEmail = 'http-account@example.com';
+  const accountPassword = 'http-account-password';
+  const register = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: accountEmail, password: accountPassword }),
+  });
+  const registered = await register.json();
+  if (!register.ok || !registered.token) throw new Error('Registering via /town-api/account/login must return a session token');
+  const relogin = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: accountEmail, password: accountPassword }),
+  });
+  const reloggedIn = await relogin.json();
+  if (!relogin.ok || !reloggedIn.token) throw new Error('Logging back in with the same email and password must succeed');
+  const rejectedLogin = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: accountEmail, password: 'wrong-account-password' }),
+  });
+  if (rejectedLogin.status !== 401) throw new Error('A wrong password must be rejected with 401');
+  const signResident = await fetch(`${adminOrigin}/town-api/account/name`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: reloggedIn.token, name: 'HttpResident' }),
+  });
+  const signedResident = await signResident.json();
+  if (!signResident.ok || signedResident.user?.nickname !== 'HttpResident' || signedResident.user?.verified !== false) {
+    throw new Error('Signing the resident card over HTTP must set an unverified display name');
+  }
+  // A pre-email resident (email NULL) signs in with the legacy nickname.
+  const legacyLogin = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: 'LegacyResident', password: 'legacy-password-1234' }),
+  });
+  const legacyBody = await legacyLogin.json();
+  if (!legacyLogin.ok || !legacyBody.token || legacyBody.user?.nickname !== 'LegacyResident') {
+    throw new Error('A pre-email resident must still sign in with their nickname and password');
+  }
+  const legacyWrong = await fetch(`${adminOrigin}/town-api/account/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ email: 'LegacyResident', password: 'wrong-legacy-password' }),
+  });
+  if (legacyWrong.status !== 401) throw new Error('A wrong legacy password must be rejected with 401');
+
+  // ── 认证徽标（可选）：物实昵称核验 ─────────────────────────────
+  const certifyResident = await connect('TakenPlResident', { email: 'taken-pl@example.com' });
+  if (certifyResident.hello.user.verified !== false) throw new Error('A resident must start unverified');
+  const certifyWrong = await fetch(`${adminOrigin}/town-api/account/verify`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: certifyResident.hello.token, login: 'owner@example.com', password: 'wrong-password' }),
+  });
+  if (certifyWrong.status === 200) throw new Error('Wrong Physics Lab credentials must not certify a resident');
+  const certifyMismatch = await fetch(`${adminOrigin}/town-api/account/verify`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: certifyResident.hello.token, login: 'other@example.com', password: 'pl-other-password' }),
+  });
+  if (certifyMismatch.status === 200) throw new Error('A mismatched Physics Lab nickname must not certify a resident');
+  const certifyOk = await fetch(`${adminOrigin}/town-api/account/verify`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: certifyResident.hello.token, login: 'owner@example.com', password: 'pl-owner-password' }),
+  });
+  if (!certifyOk.ok) throw new Error('Owning the matching Physics Lab account must certify the resident');
+  // Renaming the resident card revokes the badge: it is bound to the name that
+  // was proven at verify time, not to the account.
+  const certifyRename = await fetch(`${adminOrigin}/town-api/account/name`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
+    body: JSON.stringify({ token: certifyResident.hello.token, name: 'RenamedAfterCert' }),
+  });
+  if (!certifyRename.ok) throw new Error('Renaming a resident card should succeed');
+  const certifyRenamed = await certifyRename.json();
+  if (certifyRenamed.user?.verified !== false || certifyRenamed.user?.nickname !== 'RenamedAfterCert') {
+    throw new Error('Renaming the resident card must revoke the certification badge');
+  }
+  certifyResident.socket.close();
 
   const buildingId = 'residence:3.00:4.00';
   bob.messages.length = 0;
@@ -1202,7 +1270,7 @@ try {
   if (!catalogIdentity || typeof catalogIdentity.name !== 'string' || typeof catalogIdentity.role !== 'string' || typeof catalogIdentity.npcType !== 'string' || 'dialogNodes' in catalogIdentity) throw new Error('NPC edit catalog must expose only trimmed identity fields');
   const npcEditLogin = await fetch(`${adminOrigin}/town-api/npc-edit-login`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: adminOrigin },
-    body: JSON.stringify({ nickname: 'NpcEditor', password: 'npc-edit-test-password' }),
+    body: JSON.stringify({ email: 'npceditor@example.com', password: 'npc-edit-test-password', name: 'NpcEditor' }),
   });
   const npcEditLoginPayload = await npcEditLogin.json();
   if (!npcEditLogin.ok || !npcEditLoginPayload.token || npcEditLoginPayload.user?.nickname !== 'NpcEditor') throw new Error(`NPC edit page must support independent resident sign-in: status=${npcEditLogin.status} body=${JSON.stringify(npcEditLoginPayload).slice(0, 300)}`);

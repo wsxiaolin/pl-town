@@ -5,7 +5,6 @@ import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
 import { NPC_PROFILES } from './data/npcs';
-import { shouldShowCG, startCG } from './cg';
 import { startInvasionCG, stopInvasionCG } from './invasionCg';
 import { SIDE_QUESTS } from '../gameplay/content/quests/sideQuests';
 import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalStorageQuestJournalRepository';
@@ -24,7 +23,7 @@ import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
 import { createMovementInputController } from './navigation/movementInputController';
-import { closeCityGovernancePanel, isCityGovernancePanelOpen, openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
+import { isCityGovernancePanelOpen, openCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
 import { createCameraController } from './navigation/cameraController';
 import { createCameraPanController } from './navigation/cameraPanController';
 import { createFirstPersonController, type FirstPersonController } from './navigation/firstPersonController';
@@ -32,7 +31,8 @@ import { createFirstPersonInteract, setWalkModeButtonState } from './navigation/
 import { createProgressionController } from './progression/progressionController';
 import { findBuildingFromRaycastHits } from './buildingRaycast';
 import { createBuildingDamageController } from './buildingDamageController';
-import { createLoginController } from '../adapters/ui/loginController';
+import { createAccountSessionController } from '../adapters/ui/accountSessionController';
+import { createEntranceGate } from './entranceGate';
 import { createOnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
@@ -132,7 +132,9 @@ function applyWorldCatalog(catalog: { globallyUnlockedBuildings?: readonly strin
 let cityDialogs: CityDialogController | null = null;
 let stories: StoryOrchestration;
 let mapController: ReturnType<typeof createMapController>;
-let loginController: ReturnType<typeof createLoginController>;
+let account: ReturnType<typeof createAccountSessionController>;
+let loginController: ReturnType<typeof createAccountSessionController>['loginController'];
+let certifyController: ReturnType<typeof createAccountSessionController>['certifyController'];
 let onboardingTutorial: ReturnType<typeof createOnboardingTutorialController>;
 let statsPanelController: ReturnType<typeof createStatsPanelController>;
 let playerController: ReturnType<typeof createPlayerController>;
@@ -272,7 +274,7 @@ const sceneAnimations = createSceneAnimations({
 });
 
 const frameLoop = createFrameLoop({
-  onFirstRender: () => flushPendingEntrance(),
+  onFirstRender: () => entranceGate.flush(),
   getRenderer: () => renderer,
   getScene: () => scene,
   getCamera: () => firstPersonController?.getActiveCamera() ?? camera,
@@ -703,16 +705,6 @@ function init() {
     isCameraFollowSuspended: () => cameraPanController?.isFollowSuspended() ?? false,
     isMovementSuspended: () => Boolean(firstPersonController?.isActive()),
   });
-  loginController = createLoginController({
-    getStats,
-    saveStats,
-    ensureUserId: getUserId,
-    shouldShowIntro: shouldShowCG,
-    startIntro: startCG,
-    beforeShow: closeCityGovernancePanel,
-    isDevPortal: isDevPortalRequested,
-    proceed: proceedToCity,
-  });
   onboardingTutorial = createOnboardingTutorialController({ document, signal: lifecycle.signal });
   statsPanelController = createStatsPanelController({
     getStats,
@@ -735,6 +727,7 @@ function init() {
     onDialogueAction: (action) => {
       if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if (action.startsWith('open-url:')) window.location.href = action.slice(9);
+      if (action === 'certify') certifyController?.show();
       if (action.startsWith('achievement:')) {
         const id = action.slice('achievement:'.length);
         const achievement = ACHIEVEMENTS.find((entry) => entry.id === id);
@@ -842,43 +835,39 @@ function init() {
   // Rendering is withheld until the boot precompile finished (see
   // prepareFirstFrame) so the first visible frame is never a freeze.
   frameLoop.holdRender();
-  loginController.checkLogin();
   multiplayerHousing.setupUI();
 }
 
-  // The entrance animation must START when the render gate releases, not
-  // when the login resolves: the gate is held through the shader precompile,
-  // and starting the growth earlier means the first visible frame already
-  // shows the buildings settled (review r8#1). runEntrance defers until the
-  // first rendered frame (frameLoop onFirstRender), then runs immediately.
-  let pendingEntrance: (() => void) | null = null;
-  let entranceGateOpen = false;
-  function runEntrance(entrance: () => void): void {
-    if (entranceGateOpen) entrance();
-    else pendingEntrance = entrance;
-  }
-  function flushPendingEntrance(): void {
-    entranceGateOpen = true;
-    pendingEntrance?.();
-    pendingEntrance = null;
-    // 城市首帧已亮相：空闲时预下载原神启动页 chunk（genshinLaunchOverlay
-    // 顶层零副作用，eval 不建场景；重代码推迟到玩家选择「好想玩原神！」）。
-    scheduleGenshinIdlePrefetch();
-  }
+  // Entrance plays once the render gate releases; see createEntranceGate.
+  const entranceGate = createEntranceGate(() => scheduleGenshinIdlePrefetch());
 
-function proceedToCity(nickname = localStorage.getItem('minicityUser') || 'visitor', password?: string, pl?: { login: string; password: string }) {
+// Account controllers live outside the scene: the gate runs before the download.
+function setupAccountControllers(): void {
+  account = createAccountSessionController({
+    getStats,
+    saveStats,
+    ensureUserId: getUserId,
+    showUnlockToast,
+    getLocalUser: () => multiplayerHousing?.getLocalUser() ?? null,
+    beginBoot: () => lifecycle.confirmAuth(),
+    onEnterCity: enterCity,
+    isDevPortal: isDevPortalRequested,
+    signal: lifecycle.signal,
+  });
+  loginController = account.loginController;
+  certifyController = account.certifyController;
+}
+
+function enterCity(): void {
   const entrance = () => {
     sceneAnimations.entranceAnimation();
     if (cursorChar) cursorChar.visible = true;
     trackingInterval = startTimeTracking();
     localStorage.removeItem('minicityPassword');
   };
-  // Token restores carry no credentials and enter at once; a fresh sign-in holds the entrance until the server confirms the resident.
-  if (password === undefined && pl === undefined) runEntrance(entrance);
-  else loginController?.holdCityEntrance(() => runEntrance(entrance));
-  // Dev portal stays offline: a credential-less connect would bounce off the
-  // auth gate and re-open the login overlay we just skipped.
-  if (!isDevPortalRequested()) multiplayerHousing.connect(nickname, password, pl);
+  entranceGate.run(entrance);
+  // The dev portal stays offline (no session); connecting would reopen login.
+  if (!isDevPortalRequested()) multiplayerHousing.connect();
 }
 
 function disposeSession() {
@@ -949,10 +938,24 @@ const lifecycle = createCityRuntimeLifecycle({
   prepareFirstFrame,
   preloadMapShots: () => mapController?.preloadShots(),
   startTutorial: () => { if (!isDevPortalRequested()) onboardingTutorial?.start(); },
-  proceedToCity,
   showLogin: () => loginController?.showLogin(),
   shouldSkipLoginGate: isDevPortalRequested,
   disposeSession,
+  onIntroFinished: (playedCG) => {
+    if (playedCG) showUnlockToast('全屏效果更好哦');
+    account.markIntroFinished();
+  },
+});
+
+window.addEventListener('minicity:city-ready', () => {
+  account.markCityReady();
+});
+
+window.addEventListener('minicity:boot-error', () => {
+  // A failed boot chain must never leave the visitor sealed behind the splash:
+  // release the render gate and surface the failure so the shell reveals.
+  frameLoop.releaseRender();
+  forceRevealBootScreen('小城启动遇到问题，请刷新重试');
 });
 
 export function destroyBuilding(buildingId: string): boolean {
@@ -974,13 +977,10 @@ export function restoreAll(): number {
   return buildingDamageController?.restoreAll() ?? 0;
 }
 export function startMiniCity() {
-  lifecycle.start().catch((error: unknown) => {
-    // A rejected boot chain must never leave the visitor sealed behind the
-    // splash: release the render gate, surface the failure, and let the
-    // reveal proceed. Completion markers stay unset — the next visit retries.
-    console.error('City boot failed', error);
-    frameLoop.releaseRender();
-    forceRevealBootScreen('小城启动遇到问题，请刷新重试');
-  });
+  // start() swaps in a fresh AbortController, so the account listeners must be
+  // wired afterwards to bind the live signal (destroy() then aborts them).
+  lifecycle.start();
+  setupAccountControllers();
+  if (!isDevPortalRequested()) loginController.startAuth();
 }
 export function destroyMiniCity() { lifecycle.destroy(); }

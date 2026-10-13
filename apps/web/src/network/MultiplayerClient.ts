@@ -73,6 +73,7 @@ export type NetFireworksMessage = { type: string; [key: string]: unknown };
 type ServerMessage =
   | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather; theme?: NetTheme }
   | { type: 'player.joined'; player: NetUser }
+  | { type: 'player.updated'; player: NetUser }
   | { type: 'player.moved'; playerId: string; position: NetPosition }
   | { type: 'player.left'; playerId: string }
   | { type: 'chat'; messageId: number; userId: string; nickname: string; text: string }
@@ -94,6 +95,7 @@ type Callbacks = {
   connected?: (user: NetUser, players: NetUser[], houses: House[]) => void;
   connection?: (state: 'connecting' | 'connected' | 'disconnected') => void;
   playerJoined?: (player: NetUser) => void;
+  playerUpdated?: (player: NetUser) => void;
   playerMoved?: (id: string, position: NetPosition) => void;
   playerLeft?: (id: string) => void;
   chat?: (message: { messageId: number; userId: string; nickname: string; text: string }) => void;
@@ -133,29 +135,28 @@ export class MultiplayerClient {
   private closed = false;
   private authorized = false;
   private callbacks: Callbacks;
-  private credentials: { nickname: string; password?: string; pl?: { login: string; password: string } } = { nickname: '' };
   user: NetUser | null = null;
-  restoringIdentity = false;
 
   constructor(callbacks: Callbacks) { this.callbacks = callbacks; }
-  connect(nickname: string, password?: string, pl?: { login: string; password: string }) {
+  connect() {
     this.closed = false; this.authorized = false; this.callbacks.connection?.('connecting');
-    this.restoringIdentity = Boolean(localStorage.getItem(TOKEN_KEY));
-    this.credentials = { nickname, password, pl };
     try { this.socket = new WebSocket(serverUrl()); } catch { this.scheduleReconnect(); return; }
     this.socket.addEventListener('open', () => {
+      // The session token obtained from the email/password HTTP login is the
+      // only credential the socket needs.
       const token = localStorage.getItem(TOKEN_KEY) ?? undefined;
-      this.send({ type: 'hello', token, nickname, password: token ? undefined : password, pl: token ? undefined : pl });
+      this.send({ type: 'hello', token });
     });
     this.socket.addEventListener('message', (event) => this.handle(event.data));
     this.socket.addEventListener('close', () => { this.socket = null; this.callbacks.connection?.('disconnected'); if (!this.closed) this.scheduleReconnect(); });
     this.socket.addEventListener('error', () => this.socket?.close());
   }
-  private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(this.credentials.nickname, this.credentials.password, this.credentials.pl), 2500); }
+  private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(), 2500); }
   private handle(raw: string) {
     let message: ServerMessage; try { message = JSON.parse(raw) as ServerMessage; } catch { return; }
-    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.credentials.pl = undefined; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); this.callbacks.theme?.(message.theme ?? { id: 'default' }); trackEvent('player.connect', { nickname: message.user?.nickname }); }
+    if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); this.callbacks.theme?.(message.theme ?? { id: 'default' }); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
+    else if (message.type === 'player.updated') this.callbacks.playerUpdated?.(message.player);
     else if (message.type === 'player.moved') this.callbacks.playerMoved?.(message.playerId, message.position);
     else if (message.type === 'player.left') this.callbacks.playerLeft?.(message.playerId);
     else if (message.type === 'chat') this.callbacks.chat?.(message);

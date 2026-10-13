@@ -1,5 +1,5 @@
 import { gsap } from 'gsap';
-import { destroyCG, initCG, OPENING_CG_ENABLED } from './cg';
+import { destroyCG, initCG, OPENING_CG_ENABLED, shouldShowCG } from './cg';
 import { destroyMusterCG } from './musterCg';
 import { stopInvasionCG } from './invasionCg';
 import { preloadTextureResources } from './textureResourcePreloader';
@@ -43,7 +43,6 @@ export function createCityRuntimeLifecycle(options: {
    */
   prepareFirstFrame: (onProgress?: (fraction: number) => void, signal?: AbortSignal) => Promise<void>;
   startTutorial: () => void;
-  proceedToCity: () => void;
   showLogin: () => void;
   /**
    * Preload both map atlas pages (主城 + 星语北城) while the splash still
@@ -54,31 +53,70 @@ export function createCityRuntimeLifecycle(options: {
   /** Dev visual-verification portal (?dev): enter without the login gate. */
   shouldSkipLoginGate?: () => boolean;
   disposeSession: () => void;
+  /** Opening CG finished (or was skipped): the resident card / entrance may proceed. */
+  onIntroFinished?: (playedCG: boolean) => void;
 }) {
   let started = false;
+  let booting = false;
   let eventController = new AbortController();
 
-  async function start() {
+  /**
+   * Mount the runtime shell and wire the login gate. The city asset download
+   * stays gated behind authentication: a stored session token (or the dev
+   * portal) boots immediately, otherwise the email/password overlay is shown
+   * and `confirmAuth()` releases the boot once the resident signs in.
+   */
+  function start(): void {
     if (started) return;
     started = true;
+    booting = false;
     eventController = new AbortController();
     window.addEventListener('minicity:login-required', options.showLogin, { signal: eventController.signal });
-    initCG({
-      onFinish: () => {
-        if (options.shouldSkipLoginGate?.() || localStorage.getItem('minicityUser')) options.proceedToCity();
-        else options.showLogin();
-      },
-      reduced: options.reduced,
-    });
     document.body.classList.remove('day', 'night');
     document.body.classList.add(options.isNight() ? 'night' : 'day');
+    // Dev visual-verification portal enters without the login gate; the normal
+    // path waits for `confirmAuth()` after the resident signs in. Defer the
+    // portal boot to a microtask so the composition root finishes wiring the
+    // account controllers before `boot()` can fire `onIntroFinished`.
+    if (options.shouldSkipLoginGate?.()) queueMicrotask(launchBoot);
+  }
+
+  /**
+   * Identity confirmed (email/password login or token restore): start
+   * downloading the city assets and play the opening CG. Idempotent so the
+   * token path and an explicit `beginDownload` never boot twice.
+   */
+  function confirmAuth(): void {
+    if (!started) return;
+    launchBoot();
+  }
+
+  /** Runs the boot chain, surfacing failures so the shell can reveal the city. */
+  function launchBoot(): void {
+    void boot().catch((error: unknown) => {
+      console.error('City boot failed', error);
+      window.dispatchEvent(new CustomEvent('minicity:boot-error'));
+    });
+  }
+
+  async function boot() {
+    if (booting) return;
+    booting = true;
+    const signal = eventController.signal;
+    initCG({
+      onFinish: () => { if (started) options.onIntroFinished?.(true); },
+      reduced: options.reduced,
+    });
+    // The opening CG is disabled/skipped (see OPENING_CG_ENABLED): no onFinish
+    // will fire, so release the intro gate directly and let the resident card /
+    // city entrance proceed once the download lands.
+    if (!shouldShowCG()) options.onIntroFinished?.(false);
 
     // The moment still paints synchronously — today's sky greets the visitor
     // while the boot decision (and any heavy pipeline) resolves in background.
     configureMomentSplash({ reduced: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches });
     showMomentSplash();
     const pipeline = createBootPipelineUi();
-    const signal = eventController.signal;
     // Governance is mode-independent (8 s self-timeout) and network-bound —
     // start it BEFORE the decision so the light path never idles behind the
     // 4.5 s probe first (review r7#2).
@@ -319,6 +357,7 @@ export function createCityRuntimeLifecycle(options: {
   function destroy() {
     if (!started) return;
     started = false;
+    booting = false;
     options.disposeSession();
     closeCityGovernancePanel();
     disposeCityGovernancePanel();
@@ -338,6 +377,7 @@ export function createCityRuntimeLifecycle(options: {
     get started() { return started; },
     get signal() { return eventController.signal; },
     start,
+    confirmAuth,
     destroy,
   };
 }
@@ -353,4 +393,3 @@ function bootReasonShort(decision: BootDecision): string {
     default: return '资源同步';
   }
 }
-

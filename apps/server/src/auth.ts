@@ -1,12 +1,8 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { AsyncGate } from './asyncGate.js';
 import { SESSION_TTL_DAYS } from './config.js';
-import { createUser, getUserByNickname, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
-import { authenticateAccount, findPhysicsLabUser } from './physicsLab.js';
+import { createUser, getLegacyUserByNickname, getUserByEmail, getUserByToken, registerUserAtomic, updateUserToken } from './db.js';
 import type { User } from './types.js';
-import { PASSWORD_MIN_LENGTH, NICKNAME_PATTERN, validateNickname, validatePassword } from './textLimits.js';
-
-export { NICKNAME_PATTERN, validateNickname };
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 /** Public SHA-256 token digest used to look up game-resident sessions over HTTP. */
@@ -32,28 +28,45 @@ const sessionExpiry = () => new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000)
 /** Thrown when a per-IP registration cap rejects a new account. */
 export class RegistrationLimitError extends Error {
   constructor() {
-    super('该 IP 注册已达上限');
+    super('该 IP 的注册数量已达上限，请稍后再试');
     this.name = 'RegistrationLimitError';
   }
 }
 
-/**
- * Thrown when a newly signed nickname already belongs to a Physics Lab
- * community account and no proof of ownership was provided. Clients answer
- * this by collecting the claimant's Physics Lab credentials and retrying the
- * sign-in with `pl` credentials attached.
- */
-export class PhysicsLabVerificationRequiredError extends Error {
-  readonly code = 'pl-verification-required';
-  constructor() {
-    super('该昵称已属于物实社区，请用同名账号验证。凭据只用于本次验证，不会存储。');
-    this.name = 'PhysicsLabVerificationRequiredError';
-  }
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export function validateEmail(email: string): string | null {
+  if (!email) return '请输入邮箱';
+  if (email.length > 160) return '邮箱过长';
+  if (!EMAIL_PATTERN.test(email)) return '邮箱格式不正确';
+  return null;
 }
 
-export type PhysicsLabCredentials = { login: string; password: string };
+export const DISPLAY_NAME_MAX = 40;
+/**
+ * Normalize a resident-chosen display name for the 居民证 (resident
+ * certificate). Display names carry no uniqueness or ownership requirement and
+ * may repeat in the server; only control characters are stripped and the
+ * length is bounded.
+ */
+export function normalizeDisplayName(name: string): string {
+  return name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, DISPLAY_NAME_MAX);
+}
 
-export async function authenticate(input: { token?: string; nickname?: string; password?: string; ip?: string; registrationLimit?: { sinceIso: string; max: number }; pl?: PhysicsLabCredentials; plVerifyGuard?: () => void }): Promise<{ user: User; token: string; registered: boolean }> {
+export type AuthenticateInput = {
+  token?: string;
+  email?: string;
+  password?: string;
+  ip?: string;
+  registrationLimit?: { sinceIso: string; max: number };
+};
+
+/**
+ * Authenticate a resident by session token, or by email + password. An unknown
+ * email is registered on the spot; the email address is the single account
+ * credential and no display name is assigned until the resident signs the
+ * 居民证. No Physics Lab account is ever required or linked.
+ */
+export async function authenticate(input: AuthenticateInput): Promise<{ user: User; token: string; registered: boolean }> {
   if (input.token) {
     if (input.token.length > 128) throw new Error('会话无效');
     const user = getUserByToken(hash(input.token));
@@ -61,59 +74,50 @@ export async function authenticate(input: { token?: string; nickname?: string; p
     throw new Error('会话已过期，请重新登录');
   }
 
-  const nickname = (input.nickname ?? '').normalize('NFKC').trim();
-  const nicknameError = validateNickname(nickname);
-  if (nicknameError) throw new Error(nicknameError);
+  const credential = (input.email ?? '').normalize('NFKC').trim();
   const password = input.password ?? '';
-  const passwordError = validatePassword(password);
-  if (passwordError) throw new Error(passwordError);
+  if (!password) throw new Error('请输入密码');
+  if (password.length > 128) throw new Error('密码过长');
 
-  const existing = getUserByNickname(nickname);
+  // Grandfathered pre-email accounts: a credential without '@' is treated as a
+  // legacy nickname so residents who predate the email credential can still
+  // sign in. Brand-new accounts must use an email address.
+  if (credential && !credential.includes('@')) {
+    const legacy = getLegacyUserByNickname(credential);
+    if (legacy && !legacy.disabled && legacy.passwordHash && await verifyPassword(password, legacy.passwordHash)) {
+      const legacyToken = randomBytes(32).toString('base64url');
+      updateUserToken(legacy.id, hash(legacyToken), sessionExpiry());
+      return { user: getUserByToken(hash(legacyToken))!, token: legacyToken, registered: false };
+    }
+    throw new Error('昵称或密码不正确');
+  }
+
+  const email = credential.toLowerCase();
+  const emailError = validateEmail(email);
+  if (emailError) throw new Error(emailError);
+
+  const existing = getUserByEmail(email);
   if (existing) {
     if (existing.disabled || !existing.passwordHash || !await verifyPassword(password, existing.passwordHash)) {
-      throw new Error('昵称或密码不正确');
+      throw new Error('邮箱或密码不正确');
     }
     const newToken = randomBytes(32).toString('base64url');
     updateUserToken(existing.id, hash(newToken), sessionExpiry());
     return { user: getUserByToken(hash(newToken))!, token: newToken, registered: false };
   }
-  if (password.length < PASSWORD_MIN_LENGTH) throw new Error('新密码至少需要 10 个字符');
-
-  // Nickname ownership: a name that already belongs to a Physics Lab account
-  // can only be signed by that account's owner. Fail closed on lookup errors.
-  let plUserId: string | null = null;
-  const plLookup = await findPhysicsLabUser(nickname).catch(() => {
-    throw new Error('暂时无法确认物实昵称，请稍后再试');
-  });
-  if (plLookup.exists) {
-    const pl = input.pl?.login && input.pl?.password ? input.pl : undefined;
-    if (!pl) throw new PhysicsLabVerificationRequiredError();
-    input.plVerifyGuard?.();
-    const plSession = await authenticateAccount(pl.login, pl.password).catch(() => {
-      throw new Error('物实账号或密码不正确');
-    });
-    const plNickname = String(plSession.user?.Nickname ?? '').trim();
-    const plId = String(plSession.user?.ID ?? '').trim();
-    if (!plNickname || plNickname.toLowerCase() !== nickname.toLowerCase()) {
-      throw new Error('物实账号与该昵称不一致');
-    }
-    if (plLookup.userId && plId && plLookup.userId !== plId) {
-      throw new Error('请使用持有该昵称的物实账号');
-    }
-    plUserId = plId || plLookup.userId;
-  }
+  if (password.length < 10) throw new Error('新密码至少需要 10 个字符');
 
   const newToken = randomBytes(32).toString('base64url');
-  const tokenHash = hash(newToken);
+  const newTokenHash = hash(newToken);
   const passwordHash = await hashPassword(password);
   const expiresAt = sessionExpiry();
   const userId = randomUUID();
   if (input.ip && input.registrationLimit) {
     const { sinceIso, max } = input.registrationLimit;
-    const result = registerUserAtomic(userId, tokenHash, nickname, passwordHash, expiresAt, input.ip, sinceIso, max, plUserId);
+    const result = registerUserAtomic(userId, newTokenHash, email, passwordHash, expiresAt, input.ip, sinceIso, max);
     if (!result.allowed) throw new RegistrationLimitError();
   } else {
-    createUser(userId, tokenHash, nickname, passwordHash, expiresAt, plUserId);
+    createUser(userId, newTokenHash, email, passwordHash, expiresAt);
   }
-  return { user: getUserByToken(tokenHash)!, token: newToken, registered: true };
+  return { user: getUserByToken(newTokenHash)!, token: newToken, registered: true };
 }

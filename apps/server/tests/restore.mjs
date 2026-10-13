@@ -78,7 +78,7 @@ const connect = () => new Promise((resolve, reject) => {
     clearTimeout(timeout);
     reject(error);
   });
-  socket.once('open', () => socket.send(JSON.stringify({ type: 'hello', nickname: 'RestoreAlice', password: 'resident-secret' })));
+  socket.once('open', () => socket.send(JSON.stringify({ type: 'hello', email: 'restorealice@example.com', password: 'resident-password-1234', name: 'RestoreAlice' })));
   socket.on('message', (raw) => {
     const message = JSON.parse(raw);
     if (message.type === 'hello') {

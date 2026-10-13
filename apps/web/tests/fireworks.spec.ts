@@ -136,7 +136,9 @@ test('海边观景台：进入观景模式轮播云端烟花并可退出', async
   const hud = page.locator('#deckShowHud');
   await expect(hud).toBeVisible();
   await expect(page.locator('[data-deck-act]')).toContainText('第 1 /');
-  await expect(page.locator('[data-deck-names]')).toContainText('《金牡丹》');
+  // The programme is shuffled into random acts, so wait for 金牡丹 to rotate in
+  // rather than assuming it lands in the first act.
+  await expect(page.locator('[data-deck-names]')).toContainText('《金牡丹》', { timeout: 20_000 });
 
   // 退出观景。
   await page.locator('[data-deck-exit]').click();

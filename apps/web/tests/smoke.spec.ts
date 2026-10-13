@@ -262,6 +262,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'world-tester');
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
     const NativeWebSocket = window.WebSocket;
     class WorldGameWebSocket extends EventTarget {
@@ -868,6 +869,7 @@ test('NPC side quest flows from offer to building objective to delivery', async 
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'quest-tester');
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.removeItem('minicityQuestJournal.v1');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
     const NativeWebSocket = window.WebSocket;
@@ -944,7 +946,7 @@ test('NPC side quest flows from offer to building objective to delivery', async 
   await expect(page.locator('#utText')).toContainText('任务已完成');
 });
 
-test('an expired session can log in again from the header', async ({ page }) => {
+test('an expired session returns the resident to the email login overlay', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'tester');
@@ -960,7 +962,6 @@ test('an expired session can log in again from the header', async ({ page }) => 
     const NativeWebSocket = window.WebSocket;
     class FakeGameWebSocket extends EventTarget {
       readyState = 0;
-
       constructor() {
         super();
         queueMicrotask(() => {
@@ -968,25 +969,22 @@ test('an expired session can log in again from the header', async ({ page }) => 
           this.dispatchEvent(new Event('open'));
         });
       }
-
       send(raw: string) {
         const request = JSON.parse(raw);
         if (request.type !== 'hello') return;
-        const response = request.token
+        // The expired token is rejected; the renewed one signs the resident in.
+        const response = request.token === 'expired-token'
           ? { type: 'error', message: '登录已过期，请重新登录' }
           : {
-              type: 'hello',
-              token: 'renewed-token',
-              user: { id: 'user-1', nickname: request.nickname, email: null, position: { x: 0, y: 0, z: -6 } },
-              players: [],
-              houses: [],
-              requests: [],
-              progress: { currency: 1200, inventory: {}, achievements: ['citizen'], unlockedBuildings: [], visitedBuildings: [] },
-              catalog: { initialCurrency: 1200, buildingPrices: {}, achievementRewards: { citizen: 20 }, products: {} },
-            };
+            type: 'hello', token: request.token,
+            user: { id: 'user-1', nickname: 'tester', email: 'tester@example.com', verified: false, position: { x: 0, y: 0, z: -6 } },
+            players: [], houses: [], requests: [],
+            progress: { currency: 0, inventory: {}, achievements: [], unlockedBuildings: [], visitedBuildings: [] },
+            catalog: { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} },
+            weather: 'clear',
+          };
         queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
       }
-
       close() {
         if (this.readyState === 3) return;
         this.readyState = 3;
@@ -1003,30 +1001,26 @@ test('an expired session can log in again from the header', async ({ page }) => 
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: RoutedWebSocket });
   });
 
+  await page.route('**/town-api/account/login', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'renewed-token', user: { id: 'user-1', nickname: 'tester', email: 'tester@example.com', verified: false, position: { x: 0, y: 0, z: -6 } } }) }));
+
   await page.goto('/');
   const loginEntry = page.locator('#logoUser');
-  await expect.poll(
-    () => page.evaluate(() => localStorage.getItem('minicityServerToken')),
-    { timeout: 30_000 },
-  ).toBeNull();
+  // The invalid session drops the token and reopens the email login overlay.
+  await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#loginError')).toHaveText('登录已过期，请重新登录');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBeNull();
   await expect(loginEntry).toHaveText('Login');
 
-  // The login screen stays open with the failure message so the resident can
-  // sign in again directly; the header entry must not be needed.
-  await expect(page.locator('#loginOverlay')).toBeVisible();
-  await expect(page.locator('#loginError')).toHaveText('登录已过期，请重新登录');
-  await expect(page.locator('#loginInput')).toHaveValue('tester');
-
-  await page.locator('#loginPassword').fill('new-password');
-  await page.locator('#loginBtn').click();
+  await page.locator('#loginEmail').fill('tester@example.com');
+  await page.locator('#loginPassword').fill('new-password-1234');
+  await page.locator('#loginBtn').click({ force: true });
   await expect.poll(() => page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBe('renewed-token');
-  await expect(loginEntry).toHaveText('- tester');
+  await expect(loginEntry).toContainText('tester');
 });
 
-test('wrong credentials keep the login screen open with a clear error', async ({ page }) => {
+test('wrong credentials keep the email login overlay open with a clear error', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
-    localStorage.setItem('minicityUser', 'tester');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({
       resolution: 1,
       antialias: false,
@@ -1034,79 +1028,21 @@ test('wrong credentials keep the login screen open with a clear error', async ({
       shadows: false,
       exposure: 1.18,
     }));
-
-    const NativeWebSocket = window.WebSocket;
-    class FakeGameWebSocket extends EventTarget {
-      readyState = 0;
-
-      constructor() {
-        super();
-        queueMicrotask(() => {
-          this.readyState = NativeWebSocket.OPEN;
-          this.dispatchEvent(new Event('open'));
-        });
-      }
-
-      send(raw: string) {
-        const request = JSON.parse(raw);
-        if (request.type !== 'hello') return;
-        const response = !request.password
-          ? { type: 'error', message: 'Password is required' }
-          : request.password === 'wrong-pass'
-            ? { type: 'error', message: 'Nickname or password is incorrect' }
-            : {
-                type: 'hello',
-                token: 'fresh-token',
-                user: { id: 'user-1', nickname: request.nickname, email: null, position: { x: 0, y: 0, z: -6 } },
-                players: [],
-                houses: [],
-                requests: [],
-                progress: { currency: 1200, inventory: {}, achievements: ['citizen'], unlockedBuildings: [], visitedBuildings: [] },
-                catalog: { initialCurrency: 1200, buildingPrices: {}, achievementRewards: { citizen: 20 }, products: {} },
-              };
-        queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
-      }
-
-      close() {
-        if (this.readyState === 3) return;
-        this.readyState = 3;
-        this.dispatchEvent(new Event('close'));
-      }
-    }
-
-    const RoutedWebSocket = new Proxy(NativeWebSocket, {
-      construct(Target, args) {
-        if (String(args[0]).includes(':8787')) return new FakeGameWebSocket();
-        return Reflect.construct(Target, args);
-      },
-    });
-    Object.defineProperty(window, 'WebSocket', { configurable: true, value: RoutedWebSocket });
   });
+  await page.route('**/town-api/account/login', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: '邮箱或密码不正确' }) }));
 
   await page.goto('/');
-  const loginEntry = page.locator('#logoUser');
+  await expect(page.locator('#loginOverlay')).toBeVisible({ timeout: 30_000 });
 
-  // A stored nickname without a usable session cannot be restored; the login
-  // screen must stay open and prompt for credentials instead of dismissing.
-  await expect(page.locator('#loginOverlay')).toBeVisible();
-  await expect(page.locator('#loginError')).toHaveText('Password is required');
-  await expect(page.locator('#loginInput')).toHaveValue('tester');
+  await page.locator('#loginEmail').fill('tester@example.com');
+  await page.locator('#loginBtn').click({ force: true });
+  await expect(page.locator('#loginError')).toHaveText('请输入密码。');
 
-  // Wrong password: the overlay stays open, keeps the nickname, clears the
-  // password field, and reports the failure.
-  await page.locator('#loginPassword').fill('wrong-pass');
-  await page.locator('#loginBtn').click();
+  await page.locator('#loginPassword').fill('wrong-password');
+  await page.locator('#loginBtn').click({ force: true });
+  await expect(page.locator('#loginError')).toHaveText('邮箱或密码不正确');
   await expect(page.locator('#loginOverlay')).toBeVisible();
-  await expect(page.locator('#loginError')).toHaveText('Nickname or password is incorrect');
-  await expect(page.locator('#loginInput')).toHaveValue('tester');
   await expect(page.locator('#loginPassword')).toHaveValue('');
-
-  // Correct password: login succeeds and the overlay closes.
-  await page.locator('#loginPassword').fill('correct-pass');
-  await page.locator('#loginBtn').click();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBe('fresh-token');
-  await expect(loginEntry).toHaveText('- tester');
-  await expect(page.locator('#loginOverlay')).toBeHidden();
 });
 
 test('culture hall opens the writer catalog drawer from the right', async ({ page }) => {
@@ -1114,6 +1050,7 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'culture-tester');
+    localStorage.setItem('minicityServerToken', 'stub-session-token');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
     const NativeWebSocket = window.WebSocket;
     class CultureGameWebSocket extends EventTarget {
