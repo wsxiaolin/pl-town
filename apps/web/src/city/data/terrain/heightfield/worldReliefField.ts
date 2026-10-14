@@ -42,7 +42,7 @@ interface RiverStation {
 
 const RIVER_STATIONS: readonly RiverStation[] = [
   { t: 0, bedY: -0.45, waterY: -0.1, halfWidth: 1.6 },
-  { t: 0.55, bedY: -0.85, waterY: -0.45, halfWidth: 4.0 },
+  { t: 0.55, bedY: -0.86, waterY: -0.45, halfWidth: 4.0 },
   { t: 1, bedY: -0.285, waterY: 0.075, halfWidth: 6.0 },
 ];
 
@@ -192,7 +192,9 @@ export function riverValleyAt(x: number, z: number): number {
   // 泄漏（60 个网格点），违反「台地内严格 0」红线。此门在缘线以北
   // 0.3 宽 smoothstep 内把南翼贡献精确归 0：缘线上严格 0，0.3 外全值，
   // 连续无跳变（0.1 步长增量 ≤ 0.04，远低于 §9.1 连续性预算）。
-  const plateauGate = 1 - smoothStep(PLATEAU_MAIN.z0 - 0.3, PLATEAU_MAIN.z0, z);
+  // The new river approaches the plateau on a diagonal. A wider fade keeps
+  // the diagonal projection from making a visible terrace at the city edge.
+  const plateauGate = 1 - smoothStep(PLATEAU_MAIN.z0 - 1.0, PLATEAU_MAIN.z0, z);
   // 北缘封口（世界设计，T3 接缝论证）：世界地面（220×220）北缘 z=-110
   // 之外是山体裙板平地（y=0），河谷北翼若越过缘线会在接缝处切出崖壁。
   // 河谷在缘线以南 6u 内渐灭——谷地自然收拢于溪北丘前的缓平原。

@@ -75,6 +75,11 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     // 0xd8d4cc 观感「混凝土测试底」）；ground6 纹理近白，材质色即最终色调，
     // 与草甸绿 0x8fae72 形成「绿草→干草缘」的自然过渡。
     const farMat = createMaterial({ color: isNight ? 0x8d8873 : 0xc7bd9a, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
+    // Keep the single world terrain carrier behind every intentional surface
+    // overlay when the camera is pulled back and the depth precision is low.
+    farMat.polygonOffset = true;
+    farMat.polygonOffsetFactor = 1;
+    farMat.polygonOffsetUnits = 1;
     // 可信地形 D7：全域非均匀格点地形网格（顶点 y = terrainHeight，10,164
     // tris / 单 draw call）取代 y=0 平面——台地内仍恒 base 层，城区层差
     // （district 0.018 等 ≥ 0.014）原样保留；城外草甸/河谷/海床/步道槽

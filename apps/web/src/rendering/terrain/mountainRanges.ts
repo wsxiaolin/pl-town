@@ -234,8 +234,8 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
   // 网格密度按体量分档：主脊更密（棱面更细腻），麓丘/侧丘更省（总面数可控）。
   const densityFor = (radius: number, height: number): { rings: number; segments: number } => ({
     // v5 密度分级翻倍：主脊 22×40（折面 ≈ 4×），麓丘 14×24，侧丘 10×18。
-    rings: height >= 60 ? 22 : height >= 30 ? 14 : height >= 15 ? 10 : 8,
-    segments: radius >= 45 ? 40 : radius >= 22 ? 24 : radius >= 12 ? 18 : 14,
+    rings: height >= 60 ? 28 : height >= 30 ? 18 : height >= 15 ? 12 : 9,
+    segments: radius >= 45 ? 48 : radius >= 22 ? 30 : radius >= 12 ? 20 : 16,
   });
 
   function buildMassifShape(height: number, rng: () => number, cliff: boolean): MassifShape {
@@ -244,7 +244,10 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
       offsetZ: 0,
       radius: 1,
       heightFraction: 1,
-      k: cliff ? 2.4 + rng() * 0.5 : 2.2 + rng() * 0.6,
+      // A lower radial exponent creates the long alpine shoulders and a
+      // sharper summit silhouette seen from the city, while the extra lobes
+      // preserve the broken ridge line between neighboring peaks.
+      k: cliff ? 2.1 + rng() * 0.35 : 1.65 + rng() * 0.45,
       elongAxis: rng() * Math.PI * 2,
       elongation: cliff ? 1.3 + rng() * 0.2 : 1.25 + rng() * 0.35,
       leanAngle: rng() * Math.PI * 2,

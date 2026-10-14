@@ -180,7 +180,11 @@ export function createPondWaterSurface(
     side: THREE.DoubleSide,
   });
   const water = new THREE.Mesh(geometry, material);
-  water.renderOrder = 3;
+  // Transparent water must never claim the depth buffer. The river bed and the
+  // sea can share a shoreline, so depth writes make their result camera-order
+  // dependent at grazing angles.
+  material.depthWrite = false;
+  water.renderOrder = 4;
   water.castShadow = false;
   water.userData.dynamicMaterial = material;
 
