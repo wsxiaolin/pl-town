@@ -1,118 +1,90 @@
-// 世界地面（farGround）全域地形网格——可信地形改造 R1（方案 D7 / §8）。
-//
-// 取代旧 PlaneGeometry(220,220) y=0 平面：非均匀格点张量产网格，全部
-// 顶点 y = SURFACE_Y.base + terrainHeight(x,z)，1 个 mesh 单 draw call
-// 承载全部地面高度（staticMeshBatcher 对单实例几何不合批）。
-//
-// 密度分划（方案 §8 预算：台地内 4u、裙坡及场域 2u、远缘 3u）——
-// 段边界精确对齐台地/场域界线（x: -75 台地西缘 / 42 步道槽东界 / 78
-// 台地东缘 / 88 走廊端；z: -104 河谷北缘封口带 / -86 河谷域界 / 78
-// 台地南缘），段内均匀。张量积结构（x/z 各自独立分划）→ 全域
-// watertight，无 T-junction；台地内 4u 是纯平坦区（terrainHeight ≡ 0，
-// 被 district 铺装覆盖），密度损失零视觉。
-//
-// 预算实测：x 77 段 × z 66 段 = 10,164 三角（≤16k）/ 5,226 顶点
-// （方案估算带 4~6k 内）。
-//
-// 边界衔接与共面安全（GOAL z-fighting 红线）：
-// - 北 z=-110 / 东 x=110 / 南 z=110：域缘场值渐灭归 0（河谷北缘封口
-//   RIVER_NORTH_CLOSE_Z、草甸外缘 profile 落回），与 mountainRanges
-//   APRON_LOBES（y=0，缘线外相接不重叠）平顺衔接；
-// - 西缘海域：海床下切低于外海底面（-0.4）的部分被不透明海面
-//   （0.06，覆盖至岸线 -43.2±wobble）遮盖——与现状岛基 -0.6 穿透外
-//   海底的同款既有语义，无新增可见面；
-// - 台地内顶点 y=0 与 district(0.018)/northDistrict(0.026)/plaza
-//   (0.036) 等铺装层差 ≥ 0.014（3.5× 红线 0.004），层差体系原样保留。
 import * as THREE from 'three';
 import { SURFACE_Y } from '../layers';
 import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
+import { LANPING_RANGE } from '../../city/data/terrain/range-lanping';
+import { fbm2, smoothStep } from '../../city/data/terrain/heightfield/noiseCore';
+import { nearestRiverSample } from '../../city/data/terrain/heightfield/riverField';
+import { createAlpineRangeField } from './alpineRangeGeometry';
 
-/** 世界地面边长（与旧 farGround PlaneGeometry(220,220) 域一致）。 */
-const WORLD_GROUND_SIZE = 220;
-const WORLD_GROUND_HALF = WORLD_GROUND_SIZE / 2;
+export const WORLD_GROUND_GRASS_COLOR = 0x74ae48;
 
-/** x 向分划：[from, to, 段内目标格距]。 */
-const X_BANDS: ReadonlyArray<readonly [number, number, number]> = [
-  [-WORLD_GROUND_HALF, -89, 3], // 远缘西：渐深 fBm 海床（海面下不可见）
-  [-89, -75, 2], // 西侧滩涂缓坡 + 岛基保护区（场域）
-  [-75, 0, 4], // 台地西段（平坦）
-  [0, 42, 2], // 出城步道切槽走廊（融合坡横向精度）
-  [42, 78, 4], // 台地东段（平坦）
-  [78, 88, 4], // 观星走廊（台地延伸，平坦）
-  [88, WORLD_GROUND_HALF, 2], // 东缘：南草甸东翼 + 东北瓣东段（场域）
-];
-
-/** z 向分划：[from, to, 段内目标格距]。 */
-const Z_BANDS: ReadonlyArray<readonly [number, number, number]> = [
-  [-WORLD_GROUND_HALF, -104, 3], // 北缘渐灭带（远缘）
-  [-104, -86, 2], // 河谷主体 + 东北草甸瓣（场域）
-  [-86, 78, 4], // 台地主体（平坦）
-  [78, 96, 2], // 南裙坡 + 步道出口 + 草甸主段（场域）
-  [96, WORLD_GROUND_HALF, 3], // 草甸外缘落回带（远缘）
-];
-
-function axisLines(bands: ReadonlyArray<readonly [number, number, number]>): number[] {
-  const lines: number[] = [bands[0]![0]!];
-  for (const [from, to, cell] of bands) {
-    const span = to - from;
-    const segments = Math.max(1, Math.round(span / cell));
-    for (let i = 1; i <= segments; i += 1) lines.push(from + (span * i) / segments);
-  }
-  return lines;
-}
-
-/**
- * 非均匀格点全域地形网格（indexed；法线由网格计算 computeVertexNormals，
- * 平滑着色与草甸折面观感衔接靠 ground6 噪声纹理兜底）。
- * 顶点数 5,226 / 三角面 10,164（方案 §8 预算 ≤16k 内）。
- */
 export function createWorldGroundGeometry(): THREE.BufferGeometry {
-  const xs = axisLines(X_BANDS);
-  const zs = axisLines(Z_BANDS);
-  const nx = xs.length;
-  const nz = zs.length;
-
-  const positions = new Float32Array(nx * nz * 3);
-  const uvs = new Float32Array(nx * nz * 2);
-  for (let j = 0; j < nz; j += 1) {
+  const bounds = createAlpineRangeField(LANPING_RANGE).bounds;
+  // Include both mountain LOD boundary samples, including the short final cell.
+  const axis = (min: number, max: number, start: number, end: number): number[] => {
+    const lines = new Set<number>([start - 1, start, end, end + 1]);
+    for (let value = min; value <= max; value += 2) lines.add(value);
+    for (let value = start; value < end; value += 1.5) lines.add(value);
+    return [...lines].sort((a, b) => a - b);
+  };
+  const eastEdge = Math.max(270, bounds.x1 + 2);
+  const xs = axis(-150, eastEdge, bounds.x0, bounds.x1);
+  const zs = axis(-300, 180, bounds.z0, bounds.z1);
+  const edgeDistance = (x: number, z: number): number => Math.min(
+    x + 150 - (0.4 + 12 * smoothStep(bounds.z1, bounds.z1 + 60, z)) * (1 + Math.sin(z / 31)),
+    eastEdge - x - (0.2 + 20 * smoothStep(bounds.z1, bounds.z1 + 60, z)) * (1 + Math.sin(z / 43)),
+    z + 300 - (1 + Math.sin(x / 39)),
+    180 - z - 18 * (1 + Math.sin(x / 47)),
+  );
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const vertices = new Map<number, number>();
+  const grass = new THREE.Color(WORLD_GROUND_GRASS_COLOR);
+  const sand = new THREE.Color(0xc7b184);
+  const stone = new THREE.Color(0xaaa28c);
+  const haze = new THREE.Color(0xd4e1e6);
+  const tint = new THREE.Color();
+  const vertex = (i: number, j: number): number => {
+    const key = j * xs.length + i;
+    const cached = vertices.get(key);
+    if (cached !== undefined) return cached;
+    const x = xs[i]!;
     const z = zs[j]!;
-    for (let i = 0; i < nx; i += 1) {
-      const x = xs[i]!;
-      const vertex = j * nx + i;
-      positions[vertex * 3] = x;
-      // 唯一权威采样器落位（GOAL 硬性要求）：台地内恒 base 层 0。
-      positions[vertex * 3 + 1] = SURFACE_Y.base + terrainHeight(x, z);
-      positions[vertex * 3 + 2] = z;
-      // UV 对齐旧 PlaneGeometry rotateX(-π/2) 的展开（v = (HALF−z)/SIZE），
-      // rx/ry=24 的纹理密度与旧地面逐像素一致。
-      uvs[vertex * 2] = (x + WORLD_GROUND_HALF) / WORLD_GROUND_SIZE;
-      uvs[vertex * 2 + 1] = (WORLD_GROUND_HALF - z) / WORLD_GROUND_SIZE;
+    const seam = x >= bounds.x0 && x <= bounds.x1 && z >= bounds.z0 && z <= bounds.z1;
+    const distance = Math.max(bounds.x0 - x, x - bounds.x1, bounds.z0 - z, z - bounds.z1, 0);
+    // Mountain perimeter is exactly y=0, below the western sea surface.
+    // Blend only the adjacent outer strip to keep the shared edge watertight.
+    const height = seam ? 0 : terrainHeight(x, z) * smoothStep(0, 4, distance);
+    const y = height - 3 * (1 - smoothStep(0, 14, edgeDistance(x, z))) * smoothStep(0, 4, distance);
+    positions.push(x, SURFACE_Y.base + y, z);
+    uvs.push((x + 110) / 220, (110 - z) / 220);
+    const river = nearestRiverSample(x, z);
+    const bank = river ? 1 - smoothStep(river.halfWidth + 2, river.halfWidth + 9, river.d) : 0;
+    tint.copy(grass).lerp(sand, bank * smoothStep(0, 6, distance));
+    if (height < -0.15 && x < -43.2) tint.lerp(stone, 0.8);
+    // Match alpineRangeGeometry's flat perimeter tint in linear color space.
+    const variation = fbm2(x / 17, z / 17, 0xab23, 65536, 3);
+    tint.multiplyScalar(0.98 + variation * 0.06);
+    tint.lerp(haze, (1 - smoothStep(-290, -160, z)) * 0.32);
+    colors.push(tint.r / grass.r, tint.g / grass.g, tint.b / grass.b);
+    const index = positions.length / 3 - 1;
+    vertices.set(key, index);
+    return index;
+  };
+  for (let j = 0; j + 1 < zs.length; j++) {
+    for (let i = 0; i + 1 < xs.length; i++) {
+      const x0 = xs[i]!;
+      const x1 = xs[i + 1]!;
+      const z0 = zs[j]!;
+      const z1 = zs[j + 1]!;
+      if (x0 >= bounds.x0 && x1 <= bounds.x1 && z0 >= bounds.z0 && z1 <= bounds.z1) continue;
+      if (Math.min(edgeDistance(x0, z0), edgeDistance(x1, z0), edgeDistance(x0, z1), edgeDistance(x1, z1)) < 0) continue;
+      const a = vertex(i, j);
+      const b = vertex(i + 1, j);
+      const c = vertex(i, j + 1);
+      const d = vertex(i + 1, j + 1);
+      indices.push(a, c, d, a, d, b);
     }
   }
-
-  const quadCount = (nx - 1) * (nz - 1);
-  const indices = nx * nz > 0xffff ? new Uint32Array(quadCount * 6) : new Uint16Array(quadCount * 6);
-  let k = 0;
-  for (let j = 0; j + 1 < nz; j += 1) {
-    for (let i = 0; i + 1 < nx; i += 1) {
-      const a = j * nx + i;
-      const b = a + 1;
-      const c = a + nx;
-      const d = c + 1;
-      // 绕向保证法线朝 +Y（俯视可见）。
-      indices[k++] = a;
-      indices[k++] = c;
-      indices[k++] = d;
-      indices[k++] = a;
-      indices[k++] = d;
-      indices[k++] = b;
-    }
-  }
-
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   return geometry;
 }

@@ -16,6 +16,7 @@ import {
 import { PLATEAU_MAIN, PLATEAU_CORRIDOR, plateauFlat } from '../../src/city/data/terrain/heightfield/plateauField';
 import { fbm2, mulberry32 } from '../../src/city/data/terrain/heightfield/noiseCore';
 import { riverWaterYAt } from '../../src/city/data/terrain/heightfield/worldReliefField';
+import { RIVER_SAMPLES, riverValleyAt, RIVER_DEPTH } from '../../src/city/data/terrain/heightfield/riverField';
 
 // 台地内旧导航快照盒（与 worldTerrainAudit.test.ts 同源；T5 扩展南步道
 // 后本断言仍锚定「旧快照盒」——台地承诺只对既有建成区负责）。
@@ -160,8 +161,8 @@ test('关键位置高度快照：城心/台地缘/裙坡中点/草甸核心/河�
     { label: '台地南缘（裙坡起点）', x: 0, z: 78, min: 0, max: 0 },
     { label: '台地南裙坡中点', x: 0, z: 85, min: 0.05, max: 3.4 },
     { label: '南草甸核心', x: 34, z: 100, min: 0.4, max: 3.4 },
-    { label: '晨溪中游河床', x: -6, z: -104, min: -0.95, max: -0.75 },
-    { label: '晨溪源头河床', x: 72, z: -97, min: -0.55, max: -0.35 },
+    { label: '晨溪中游河床', x: 10, z: -108, min: -0.251, max: -0.249 },
+    { label: '晨溪源头河床', x: 64, z: -101, min: -0.001, max: 0.001 },
     { label: '西海渐深段中点', x: -95, z: -16, min: -1.85, max: -1.45 },
     { label: '东郊平原（背景回退）', x: 100, z: 20, min: -0.02, max: 0.02 },
     { label: '观星走廊东端', x: 88, z: 0, min: 0, max: 0 },
@@ -337,3 +338,34 @@ test('草甸隆起回归：南瓣峰值 > 1.2、东北瓣峰值 > 0.5', () => {
 
 // CITY_LIMIT 引用（避免未使用告警；同时锁定城区边界常量参与采点）。
 void CITY_LIMIT;
+
+test('晨溪密采样共享剖面：水位单调、床深 0.5、两侧水线贴合地表', () => {
+  let previous = Infinity;
+  for (const sample of RIVER_SAMPLES) {
+    assert.ok(sample.waterY <= previous, `water rises at ${sample.s}`);
+    previous = sample.waterY;
+    assert.ok(Math.abs(terrainHeight(sample.x, sample.z) - (sample.waterY - RIVER_DEPTH)) < 1e-8);
+    assert.equal(riverWaterYAt(sample.x, sample.z), sample.waterY);
+    for (const side of [-1, 1]) {
+      const x = sample.x + side * sample.nx * sample.halfWidth;
+      const z = sample.z + side * sample.nz * sample.halfWidth;
+      assert.ok(terrainHeight(x, z) < sample.waterY - 0.3, `dry channel edge ${x},${z}`);
+      const bx = sample.x + side * sample.nx * (sample.halfWidth + 2);
+      const bz = sample.z + side * sample.nz * (sample.halfWidth + 2);
+      if (sample.x > -40) assert.ok(terrainHeight(bx, bz) > sample.waterY + 0.05, `submerged bank ${bx},${bz}`);
+    }
+  }
+  assert.equal(RIVER_SAMPLES[0]!.waterY, 0.5);
+  assert.ok(RIVER_SAMPLES.at(-1)!.waterY <= 0.056);
+});
+
+test('晨溪端点延长线和北界采样有限且连续，北界保留河床深度', () => {
+  for (const sample of [RIVER_SAMPLES[0]!, RIVER_SAMPLES.at(-1)!]) {
+    for (let dx = -10; dx <= 10; dx += 0.1) {
+      assert.ok(Number.isFinite(terrainHeight(sample.x + dx, sample.z)));
+      assert.ok(Number.isFinite(riverValleyAt(sample.x + dx, sample.z)));
+    }
+  }
+  assert.ok(terrainHeight(10, -110) < -0.1);
+  assert.ok(Math.abs(terrainHeight(10, -110.01) - terrainHeight(10, -109.99)) < 0.02);
+});

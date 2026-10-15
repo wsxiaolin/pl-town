@@ -420,22 +420,28 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   // 网格退役，装饰仍挂 cityside-meadow-terrain 组）
   const terrainMeshes = await page.evaluate(() => {
     const scene = (window as any)._mini?.scene;
-    if (!scene) return { massif: 0, river: 0, farGround: 0, meadowDecor: 0 };
-    const counts = { massif: 0, river: 0, farGround: 0, meadowDecor: 0 };
-    scene.traverse((node: { isMesh?: boolean; name?: string; children?: unknown[] }) => {
+    const counts = { ranges: 0, lodLevels: [] as number[], alpineGrids: 0, legacyMassifs: 0, river: 0, farGround: 0, meadowDecor: 0 };
+    scene?.traverse((node: { isMesh?: boolean; isLOD?: boolean; levels?: { distance: number }[]; name?: string; children?: unknown[] }) => {
       const name = node.name ?? '';
+      if (name === 'lanping-continuous-alpine-range' && node.isLOD) {
+        counts.ranges += 1;
+        counts.lodLevels = node.levels!.map(level => level.distance);
+      }
       if (name === 'cityside-meadow-terrain') counts.meadowDecor += node.children?.length ?? 0;
       if (!node.isMesh) return;
-      if (name.includes(':massif')) counts.massif += 1;
-      // 精确匹配两张水面：estuary 前缀会把 v5 的湾缘砾石
-      // (river-chenxi-estuary-stone-N) 也吞进计数。
+      if (name.includes(':massif')) counts.legacyMassifs += 1;
+      if (name.startsWith('lanping-alpine-grid:')) counts.alpineGrids += 1;
+      // Count water meshes exactly, including any accidentally restored legacy estuary.
       if (name === 'river-chenxi-water' || name === 'river-chenxi-estuary') counts.river += 1;
       if (name === 'world-far-ground') counts.farGround += 1;
     });
     return counts;
   });
-  expect(terrainMeshes.massif).toBeGreaterThanOrEqual(18); // v9 单面山：北主脊 7 + 溪谷侧丘 5 + 北麓 6
-  expect(terrainMeshes.river).toBe(2); // 晨溪河面 + 河口湾面
+  expect(terrainMeshes.ranges).toBe(1);
+  expect(terrainMeshes.lodLevels).toEqual([0, 480]);
+  expect(terrainMeshes.alpineGrids).toBe(2);
+  expect(terrainMeshes.legacyMassifs).toBe(0);
+  expect(terrainMeshes.river).toBe(1); // 连续河道包含河口
   expect(terrainMeshes.farGround).toBe(1); // 全域地形网格（草甸/河谷/海床起伏承载面）
   expect(terrainMeshes.meadowDecor).toBeGreaterThan(0); // 城缘草甸装饰仍在场
   const phoneToggle = page.locator('#onlinePanelToggle');

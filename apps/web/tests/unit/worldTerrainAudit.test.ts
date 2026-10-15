@@ -9,6 +9,7 @@ import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA } from '../../sr
 import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
 import { TRAIL_NAV_NODES, SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES, TRAIL_SLOT_HALF } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
+import { RIVER_SAMPLES, riverWaterYAt, riverWaterRows } from '../../src/city/data/terrain/heightfield/riverField';
 
 // 世界地形配置的数值审计（v5，2026-10-04）：把 range-lanping.ts /
 // sea-minglan.ts 头注释里逐条核对的 keep-out 约束固化成回归测试——
@@ -168,6 +169,31 @@ test('晨溪中心线全程在北城 keep-out 与导航区之外（z ≤ -89.2�
   assert.ok(river?.path?.length, 'river-chenxi 配置缺 path');
   for (const [x, z] of river!.path!) {
     assert.ok(z <= -89.2, `河线点 (${x}, ${z}) 越过导航边距线 z = -89.2`);
+  }
+});
+
+test('晨溪连续水面共享地形采样、海内沉没、北步道保持干燥净空', () => {
+  const rows = riverWaterRows();
+  assert.equal(rows.length, RIVER_SAMPLES.length + 10);
+  assert.equal(rows[0]!.extent, 0);
+  for (const sample of rows) {
+    for (const side of [-1, 0, 1]) {
+      const x = sample.x + sample.nx * sample.extent * side;
+      const z = sample.z + sample.nz * sample.extent * side;
+      assert.ok(Number.isFinite(x) && Number.isFinite(z));
+      assert.ok(z <= -89.2);
+      if (x <= -45) assert.ok(sample.waterY <= 0.056);
+    }
+  }
+  for (let i = 0; i + 1 < NORTH_TRAIL_NODES.length; i += 1) {
+    const a = NORTH_TRAIL_NODES[i]!;
+    const b = NORTH_TRAIL_NODES[i + 1]!;
+    for (let k = 0; k <= 40; k += 1) {
+      const x = a.x + (b.x - a.x) * k / 40;
+      const z = a.z + (b.z - a.z) * k / 40;
+      assert.equal(riverWaterYAt(x, z), null);
+      assert.ok(Number.isFinite(terrainHeight(x, z)));
+    }
   }
 });
 
