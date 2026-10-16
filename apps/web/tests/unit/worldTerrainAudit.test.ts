@@ -61,8 +61,9 @@ const NAVIGABLE_AREA: Box = {
  * 判定的辖区，不属于「城区可走区地面平」的审计目标）。 */
 const CITY_NAVIGABLE_AREA: Box = { x0: -50, x1: 76, z0: -88.2, z1: 50 };
 test('NAVIGABLE_AREA 与 roadNavigation 运行时边界快照一致', () => {
-  // v9 北线步道（N4 z=-113, x=74）：可步行区北扩入晨溪谷地（sin「山可
-  // 探索」）——运行时由山体 navigationBlocking 逐点阻挡，_bounds 仅外框。
+  // v9 北线步道（N4 z=-113, x=74）：可步行外框北扩入晨溪谷地（sin「山可探索」）。
+  // 外框只是绕行边界，山体墙由 roadNavigation.mountainSurfaceBlocked 逐点阻挡
+  // （与渲染山体网格共享 LANPING_ALPINE_FIELD 高度场，见 roadNavigation.test.ts）。
   const snapshot = { x0: -50, x1: 82, z0: -121, z1: 104 };
   for (const key of ['x0', 'x1', 'z0', 'z1'] as const) {
     assert.ok(
@@ -131,7 +132,8 @@ test('大型山体（h ≥ 10）不进导航可步行区（观星崖等小地形
     // ——z≥125 是松涛林针叶集群，麓丘链配置契约为 z − r ≥ 100（f2 = 104）。
     // 相接无害的三重依据：①可达域为闭盒 z ≤ 104，山体盒内域 z > 104 不可
     // 达；②massif 在包围盒缘线处高度 ≈ 0（底环贴地渐灭），接触线上无可见
-    // 山体；③麓丘 navigationBlocking，寻路障碍双保险。故本 keep-out 语义
+    // 山体；③麓丘 navigationBlocking 已由 roadNavigation.mountainSurfaceBlocked
+    // 落实（山面高出可走地面即挡，见 roadNavigation.test.ts）。故本 keep-out 语义
     // 明确为「正内部相交」（boxesInteriorOverlap），边界接触不算进入。
     // v9（2026-10-11）：北线步道把可步行区外框扩入晨溪谷地（z0=-121），
     // 溪谷侧丘/北麓包围盒与「外框」相切或部分重叠属有意布局（sin「山可

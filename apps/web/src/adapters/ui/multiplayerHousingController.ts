@@ -775,7 +775,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
   function sendLocalPosition(position: NetUser["position"], now: number) {
     if (!multiplayer || now - lastNetworkPosition < 80) return;
     // Match server validPosition, including both terrain trails and their margins.
-    if (Math.abs(position.x) > 80 || Math.abs(position.y) > 10 || position.z < -121 || position.z > 104) return;
+    if (Math.abs(position.x) > 82 || Math.abs(position.y) > 10 || position.z < -121 || position.z > 104) return;
     multiplayer.position(position);
     lastNetworkPosition = now;
   }

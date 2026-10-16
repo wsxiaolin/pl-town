@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { LANPING_RANGE } from '../../city/data/terrain/range-lanping';
 import { hashString, mulberry32 } from '../../city/data/terrain/heightfield/noiseCore';
-import { buildAlpineRangeGeometry, createAlpineRangeField } from './alpineRangeGeometry';
+import { buildAlpineRangeGeometry, LANPING_ALPINE_FIELD } from './alpineRangeGeometry';
 
 export type MountainTerrainOptions = { scene: THREE.Scene };
 export type MountainTerrainHandle = { object: THREE.Group; dispose(): void };
@@ -21,7 +21,7 @@ export function createMountainTerrain(options: MountainTerrainOptions): Mountain
     materials.add(result);
     return result;
   };
-  const field = createAlpineRangeField(LANPING_RANGE);
+  const field = LANPING_ALPINE_FIELD;
   const surface = material(0xffffff);
   surface.vertexColors = true;
   surface.customProgramCacheKey = () => 'alpine-eroded-rock-v2';

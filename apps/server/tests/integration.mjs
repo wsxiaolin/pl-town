@@ -656,6 +656,9 @@ try {
     send(bob, { type: 'position', position: { x: 74, y: 1.5, z } });
     await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.z === z && message.position.y === 1.5);
   }
+  // North-trail east margin (N4 x=74 + 8 = 82) must stay valid too.
+  send(bob, { type: 'position', position: { x: 82, y: 1.2, z: -110 } });
+  await waitFor(alice, 'player.moved', (message) => message.playerId === bob.hello.user.id && message.position.x === 82);
 
   send(alice, { type: 'chat', text: 'a'.repeat(501) });
   await waitFor(alice, 'error', (message) => message.message === 'Invalid chat message');

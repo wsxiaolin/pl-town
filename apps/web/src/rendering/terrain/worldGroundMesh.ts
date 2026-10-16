@@ -1,15 +1,14 @@
 import * as THREE from 'three';
 import { SURFACE_Y } from '../layers';
 import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
-import { LANPING_RANGE } from '../../city/data/terrain/range-lanping';
 import { fbm2, smoothStep } from '../../city/data/terrain/heightfield/noiseCore';
 import { nearestRiverSample } from '../../city/data/terrain/heightfield/riverField';
-import { createAlpineRangeField } from './alpineRangeGeometry';
+import { LANPING_ALPINE_FIELD } from './alpineRangeGeometry';
 
 export const WORLD_GROUND_GRASS_COLOR = 0x74ae48;
 
 export function createWorldGroundGeometry(): THREE.BufferGeometry {
-  const bounds = createAlpineRangeField(LANPING_RANGE).bounds;
+  const bounds = LANPING_ALPINE_FIELD.bounds;
   // Include both mountain LOD boundary samples, including the short final cell.
   const axis = (min: number, max: number, start: number, end: number): number[] => {
     const lines = new Set<number>([start - 1, start, end, end + 1]);

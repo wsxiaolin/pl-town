@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { terrainHeight, slopeAlong, WALKABLE_SLOPE_MAX } from '../data/terrain/heightfield/terrainHeight';
 import { SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES } from '../data/terrain/heightfield/worldReliefField';
+import { LANPING_ALPINE_FIELD } from '../data/terrain/heightfield/alpineField';
 
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
@@ -48,6 +49,23 @@ export function buildMeadowTrailGraph(): { roadNodes: [number, number][]; roadSe
   segments.push([33, -80, north[0]![0], north[0]![1]]);
   chain(north);
   return { roadNodes: nodes, roadSegments: segments };
+}
+
+/**
+ * 山体面阻挡（review #243 🔴）：可步行外框随北线步道（N4 z=-113）扩进岚屏岭
+ * 高度场，而 terrainHeight 不收编山体（方案 §2.4，山体是叠在地形上的凸出体块）。
+ * 山体包围盒内不再生成世界地面（worldGroundMesh 跳过共面区），唯一可见地面是
+ * 独立的岚屏岭连续山体网格；玩家落位 y 却由 terrainHeight 赋值，走进山脚会被
+ * 埋进山体内部。这里用与渲染网格同一份连续高度场（LANPING_ALPINE_FIELD）逐点
+ * 判定：山面高出可走地面超过一个步高即视为山体墙，谷地走廊（山面≈0）仍可通行。
+ * 这是各处 navigationBlocking 标记落地的实际判定（此前该字段无消费者）。
+ */
+export const MOUNTAIN_WALK_RISE_MAX = 0.35;
+
+/** 该点是否位于「山面高出可走地面」的山体墙内（heightAt 场外恒 0，自然为假）。 */
+export function mountainSurfaceBlocked(x: number, z: number): boolean {
+  if (z > LANPING_ALPINE_FIELD.bounds.z1) return false;
+  return LANPING_ALPINE_FIELD.heightAt(x, z) - terrainHeight(x, z) > MOUNTAIN_WALK_RISE_MAX;
 }
 
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
@@ -361,6 +379,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
     if(WEST_BEACH && x<WEST_BEACH.deepWaterX && z>=WEST_BEACH.minZ && z<=WEST_BEACH.maxZ) return true;
     if(z<DEEP_TERRAIN_Z_GATE && terrainHeight(x,z)<DEEP_TERRAIN_MIN_Y) return true;
+    if(mountainSurfaceBlocked(x,z)) return true;
     return pointInAnyBuilding(x,z);
   }
 
