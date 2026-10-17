@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-async function enterCity(page: import('@playwright/test').Page) {
+async function enterCity(page: import('@playwright/test').Page, bootTimeout = 30_000) {
   await page.addInitScript(() => {
     // Keep the walk-mode tests deterministic without a live multiplayer socket.
     class OfflineWebSocket extends EventTarget {
@@ -33,7 +33,7 @@ async function enterCity(page: import('@playwright/test').Page) {
   await page.waitForFunction(() => Boolean((window as any)._mini?.player));
   // Software-GL boots spend a long while in shader precompile before the
   // reveal — allow far more than the default 5s here.
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: bootTimeout });
   // Let the boot-screen fade settle before interacting (see helpers.waitForCityBooted).
   await page.waitForTimeout(1_000);
 }
@@ -133,6 +133,58 @@ test('leaving first person restores the overhead follow camera on the player', a
   // CAMERA_OFFSET (24, 24) in XZ, i.e. ~33.94 units away.
   expect(restored.cameraOnPlayer).toBeGreaterThan(30);
   expect(restored.cameraOnPlayer).toBeLessThan(36);
+});
+
+test('first person declutters rooftop labels: near ones win, no screen pile-up', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enterCity(page, 90_000);
+
+  const sampleLabels = () => page.evaluate(() => {
+    const labels = Array.from(document.querySelectorAll<HTMLElement>('.b-label-item'));
+    const positioned: Array<{ x: number; y: number }> = [];
+    const stray: Array<string> = [];
+    for (const el of labels) {
+      if (el.style.visibility === 'hidden' || el.hidden) continue;
+      const match = /translate3d\(([-\d.]+)px,\s*([-\d.]+)px/.exec(el.style.transform);
+      if (match) positioned.push({ x: Number(match[1]), y: Number(match[2]) });
+      else stray.push(el.dataset.buildingId ?? el.textContent?.trim() ?? '?');
+    }
+    return { positioned, stray };
+  });
+
+  // Walk into the street so nearby buildings surround the camera, then sample.
+  await page.evaluate(() => (window as any)._mini.firstPerson.enter());
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(2_500);
+  await page.keyboard.up('KeyW');
+  await page.waitForTimeout(400);
+
+  const fpLabels = await sampleLabels();
+  // Any "visible" label without a screen position would render stacked in the
+  // top-left corner — the exact pile-up this feature removes.
+  expect(fpLabels.stray, `labels without screen placement: ${fpLabels.stray.join(', ')}`).toEqual([]);
+  // The FP street view keeps some labels around but never a whole-city pile:
+  // a hard cap plus the pairwise separation invariant (a label box is roughly
+  // 84x52 px, so centres closer than that on both axes read as stacked).
+  expect(fpLabels.positioned.length).toBeGreaterThan(0);
+  expect(fpLabels.positioned.length).toBeLessThanOrEqual(20);
+  for (let i = 0; i < fpLabels.positioned.length; i++) {
+    for (let j = i + 1; j < fpLabels.positioned.length; j++) {
+      const a = fpLabels.positioned[i];
+      const b = fpLabels.positioned[j];
+      const stacked = Math.abs(a.x - b.x) < 84 && Math.abs(a.y - b.y) < 52;
+      expect(stacked, `labels ${i} and ${j} stack on screen: ${JSON.stringify([a, b])}`).toBe(false);
+    }
+  }
+
+  // Leaving first person lifts the declutter: the overhead projection shows
+  // the full set again (more labels than the curated street view).
+  await page.evaluate(() => (window as any)._mini.firstPerson.exit());
+  await page.waitForTimeout(600);
+  const overheadLabels = await sampleLabels();
+  expect(overheadLabels.stray).toEqual([]);
+  expect(overheadLabels.positioned.length).toBeGreaterThan(fpLabels.positioned.length);
 });
 
 test('first person keeps the normal world style (no toon restyle, no extra fog)', async ({ page }) => {
