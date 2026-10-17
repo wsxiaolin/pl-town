@@ -415,26 +415,36 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   // budget every other boot-waiting suite uses (boot-gate, onboarding).
   await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
   // 世界地形端到端守护（review #218：新增大幅用户可见地形需有浏览器侧
-  // 断言）：岚屏岭山体、晨溪河（水面/河口湾）与城缘草甸网格必须挂在
-  // 场景里。低配软件 GL 下不做像素断言，只验"地形被构建并进入场景"。
+  // 断言）：岚屏岭山体、晨溪河（水面/河口湾）与承载城缘草甸起伏的全域
+  // 地形网格必须挂在场景里。低配软件 GL 下不做像素断言，只验"地形被
+  // 构建并进入场景"。（v8 可信地形：草甸起伏收编 farGround，独立草甸
+  // 网格退役，装饰仍挂 cityside-meadow-terrain 组）
   const terrainMeshes = await page.evaluate(() => {
     const scene = (window as any)._mini?.scene;
-    if (!scene) return { massif: 0, river: 0, meadow: 0 };
-    const counts = { massif: 0, river: 0, meadow: 0 };
-    scene.traverse((node: { isMesh?: boolean; name?: string }) => {
-      if (!node.isMesh) return;
+    const counts = { ranges: 0, lodLevels: [] as number[], alpineGrids: 0, legacyMassifs: 0, river: 0, farGround: 0, meadowDecor: 0 };
+    scene?.traverse((node: { isMesh?: boolean; isLOD?: boolean; levels?: { distance: number }[]; name?: string; children?: unknown[] }) => {
       const name = node.name ?? '';
-      if (name.includes(':massif')) counts.massif += 1;
-      // 精确匹配两张水面：estuary 前缀会把 v5 的湾缘砾石
-      // (river-chenxi-estuary-stone-N) 也吞进计数。
+      if (name === 'lanping-continuous-alpine-range' && node.isLOD) {
+        counts.ranges += 1;
+        counts.lodLevels = node.levels!.map(level => level.distance);
+      }
+      if (name === 'cityside-meadow-terrain') counts.meadowDecor += node.children?.length ?? 0;
+      if (!node.isMesh) return;
+      if (name.includes(':massif')) counts.legacyMassifs += 1;
+      if (name.startsWith('lanping-alpine-grid:')) counts.alpineGrids += 1;
+      // Count water meshes exactly, including any accidentally restored legacy estuary.
       if (name === 'river-chenxi-water' || name === 'river-chenxi-estuary') counts.river += 1;
-      if (name.endsWith(':meadow')) counts.meadow += 1;
+      if (name === 'world-far-ground') counts.farGround += 1;
     });
     return counts;
   });
-  expect(terrainMeshes.massif).toBeGreaterThanOrEqual(40); // 41 条岚屏岭主脊/麓丘/侧丘
-  expect(terrainMeshes.river).toBe(2); // 晨溪河面 + 河口湾面
-  expect(terrainMeshes.meadow).toBe(2); // 城缘草甸南瓣 + 东北瓣
+  expect(terrainMeshes.ranges).toBe(1);
+  expect(terrainMeshes.lodLevels).toEqual([0, 480]);
+  expect(terrainMeshes.alpineGrids).toBe(2);
+  expect(terrainMeshes.legacyMassifs).toBe(0);
+  expect(terrainMeshes.river).toBe(1); // 连续河道包含河口
+  expect(terrainMeshes.farGround).toBe(1); // 全域地形网格（草甸/河谷/海床起伏承载面）
+  expect(terrainMeshes.meadowDecor).toBeGreaterThan(0); // 城缘草甸装饰仍在场
   const phoneToggle = page.locator('#onlinePanelToggle');
   await expect(phoneToggle).toHaveClass(/connected/, { timeout: 30_000 });
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');

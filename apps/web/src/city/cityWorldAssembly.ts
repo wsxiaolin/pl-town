@@ -23,6 +23,7 @@ import { CITY_LIMIT, NORTH_DISTRICT_AREA, PALETTE, ROAD_COORDS } from './data/ci
 import { addCityFountain } from './citySceneBootstrap';
 import type { CityGraphics } from './cityGraphics';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
+import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 
 type RoadNavigation = {
   registerObstacleGroup: (group: THREE.Object3D) => void;
@@ -152,11 +153,10 @@ export function assembleCityWorld(options: {
     riverChenxi.setDaylight(value ?? 1, instant);
   };
   // 导航：不把地形注册为障碍组。registerObstacleGroup 对整组只生成一个
-  // setFromObject AABB——山脉组横跨 x≈[-97,115]、z≈[-114,110]，会把环线
-  // （半径 38）与全城道路边全部判 blocked，玩家 movement 也被锁死；
-  // 而寻路基于道路图、movement 又钳制在 WORLD_BOUNDS（≈x[-50,76]/z±50），
-  // 远景地形（河 z≤-50.2、外海 x<-40）本就不在导航范围内。北麓少量山脚
-  // 印影伸入 z∈[-44,-50] 边缘带属可接受的视觉穿插，误注册的代价远大于此。
+  // setFromObject AABB——山脉组横跨 x≈[-148,276]、z≈[-294,-110]，会把环线
+  // （半径 38）与全城道路边全部判 blocked，玩家 movement 也被锁死；而寻路基于
+  // 道路图、山体墙由 roadNavigation.mountainSurfaceBlocked 逐点判定（与渲染
+  // 山体网格共享 LANPING_ALPINE_FIELD 高度场，见 roadNavigation.test.ts）。
   addCityFountain({ scene, palette: PALETTE, part: graphics.mesh.part });
   const buildingSceneController = createBuildingSceneController({
     scene,
@@ -177,8 +177,9 @@ export function assembleCityWorld(options: {
   options.roadNavigation.cacheBuildingBoxes();
   worldDecorations.addDecorations();
   // 星语北城公园内容（树阵与长椅走世界装饰批次，与主城基础设施同级）。
-  worldDecorations.addTrees(NORTH_DISTRICT_AREA.parkTrees.map(([x, z]) => [x, 0, z] as const));
-  NORTH_DISTRICT_AREA.parkBenches.forEach(([x, z, rotY]) => worldDecorations.addBench(x, 0, z, rotY));
+  // 北城树阵/长椅 y 走唯一采样器（方案 §6.2；北城在台地内 → 数值恒 0）。
+  worldDecorations.addTrees(NORTH_DISTRICT_AREA.parkTrees.map(([x, z]) => [x, terrainHeight(x, z), z] as const));
+  NORTH_DISTRICT_AREA.parkBenches.forEach(([x, z, rotY]) => worldDecorations.addBench(x, terrainHeight(x, z), z, rotY));
   npcSystem.addCharacters();
   const sceneInterestPoints = createSceneInterestPoints({
     scene,

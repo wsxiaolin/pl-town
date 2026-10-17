@@ -6,6 +6,7 @@ import { CITY_GROUND_PLAN } from '../city/data/terrain/_cityGround';
 import { batchStaticMeshes } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 import { createGroundReliefGeometry, createPlazaPavingGeometry } from './cityGroundModel';
+import { createWorldGroundGeometry, WORLD_GROUND_GRASS_COLOR } from './terrain/worldGroundMesh';
 
 type MaterialOptions = MaterialParameters;
 
@@ -47,14 +48,15 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
   const layerMaterials = new Map<string, THREE.MeshStandardMaterial>();
   const trackedPathMaterials = new Set(pathMaterials);
 
-  // Surface overlays are painter-ordered. They still test against buildings,
-  // but do not compete with one another in the depth buffer.
+  // Opaque surfaces must occlude later building plots and terrain by depth.
+  // renderOrder alone cannot preserve physical layer heights across batches.
   const createLayerMaterial = (parameters: MaterialOptions): THREE.MeshStandardMaterial => {
     const key = JSON.stringify(parameters);
     const cached = layerMaterials.get(key);
     if (cached) return cached;
     const material = createMaterial(parameters);
-    material.depthWrite = false;
+    material.depthWrite = true;
+    material.userData.citySurface = true;
     layerMaterials.set(key, material);
     return material;
   };
@@ -70,10 +72,18 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
   batchStaticMeshes(scene, scene.children.filter((child) => !existingSceneChildren.has(child)));
 
   function addGround(): void {
-    const farMat = createMaterial({ color: isNight ? 0x9a988e : 0xd8d4cc, roughness: 1, metalness: 0, tex: 'ground6', rx: 24, ry: 24 });
-    const farGround = createMesh(new THREE.PlaneGeometry(220, 220), farMat);
-    farGround.rotation.x = -Math.PI / 2;
-    farGround.position.y = SURFACE_Y.base;
+    // Vertex tint carries river sand and matches the untextured alpine perimeter.
+    const farMat = createMaterial({ color: isNight ? 0x527d38 : WORLD_GROUND_GRASS_COLOR, roughness: 1, metalness: 0, vertexColors: true });
+    // Keep the single world terrain carrier behind every intentional surface
+    // overlay when the camera is pulled back and the depth precision is low.
+    farMat.polygonOffset = true;
+    farMat.polygonOffsetFactor = 1;
+    farMat.polygonOffsetUnits = 1;
+    // The world mesh owns only cells outside the alpine rectangle.
+    const farGround = createMesh(createWorldGroundGeometry(), farMat);
+    // 命名供 e2e 守护（smoke.spec 地形清点）与诊断脚本定位：全域地形
+    // 网格是 v8 架构里草甸/河谷/海床起伏的唯一承载面。
+    farGround.name = 'world-far-ground';
     farGround.receiveShadow = true;
     farGround.renderOrder = RENDER_ORDER.base;
     scene.add(farGround);
@@ -87,12 +97,14 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       vertexColors: true,
     });
     const district = createMesh(createGroundReliefGeometry(CITY_GROUND_PLAN.relief, SURFACE_Y.district), districtMat);
+    district.name = 'city-district-ground';
     district.receiveShadow = true;
     district.renderOrder = RENDER_ORDER.district;
     scene.add(district);
 
     const plazaMat = createLayerMaterial({ color: isNight ? 0xb0afa8 : 0xe8e7e4, roughness: 0.9, tex: 'ground5', rx: 10, ry: 10 });
     const plaza = createMesh(new THREE.PlaneGeometry(40, 40), plazaMat);
+    plaza.name = 'city-central-plaza';
     plaza.rotation.x = -Math.PI / 2;
     plaza.position.y = SURFACE_Y.plaza;
     plaza.receiveShadow = true;
@@ -103,6 +115,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     const grassPositions: Array<[number, number]> = [[24, 24], [24, -24], [-24, 24], [-24, -24]];
     for (const [x, z] of grassPositions) {
       const grass = createMesh(new THREE.PlaneGeometry(24, 24), grassMat);
+      grass.name = `city-lawn:${x}:${z}`;
       grass.rotation.x = -Math.PI / 2;
       grass.position.set(x, SURFACE_Y.landscape, z);
       grass.receiveShadow = true;
@@ -133,7 +146,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     scene.add(echoGround);
 
     groundMaterials.push(
-      { mat: farMat, day: 0xd8d4cc, night: 0x9a988e },
+      { mat: farMat, day: WORLD_GROUND_GRASS_COLOR, night: 0x527d38 },
       { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
       { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
       { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
@@ -151,6 +164,10 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
         tex: texture,
         rx: Math.max(1, width / 3),
         ry: Math.max(1, depth / 3),
+        // Asphalt wins the coplanar top faces at avenue/lane intersections.
+        polygonOffset: true,
+        polygonOffsetFactor: main ? -2 : -1,
+        polygonOffsetUnits: main ? -2 : -1,
       });
       trackPathMaterial(material);
       const road = createMesh(new THREE.BoxGeometry(width, 0.04, depth), material);

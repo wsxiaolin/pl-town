@@ -1,18 +1,13 @@
-// 城缘草甸（cityside meadow）渲染器 —— 城市地面建模（v7，2026-10-06）。
+// 城缘草甸（cityside meadow）装饰散布 —— 城市地面建模（v8，2026-10-11）。
 //
 // 配置：city/data/terrain/ground-cityside.ts（CITYSIDE_MEADOW，纯数据）。
-// district 方正铺装面（±75）与世界裙板（y=0 平地）之间的两片低多边形
-// 起伏草甸：南瓣面向主城开阔展开（起伏 ≤2.9），东北瓣沿晨溪河谷东段
-// 起伏（≤1.7）。材质与岚屏岭山体/麓原同源（terrainMaterial 三平面混合，
-// aBand 压在草甸带以下），山脚麓原 → 城缘草甸 → 城区绿地完全连续。
-//
-// 高度场（每片草甸 = 一张矩形网格）：
-//   y = -0.08 + relief × h01 × profile × masks
-// - h01：双频 fBm 大缓坡（确定性，无 Math.random）；
-// - profile：城市侧边缘隆起、外缘落回埋地的"隆起带"曲线（逐条配置的
-//   空间形态，见 swellProfile）；
-// - masks：可步行区/河谷/河口湾/海域/麓原五重软塌陷——起伏在任何
-//   keep-out 区域强制归零（网格脚印虽过界，表面埋在 y<0 之下不可见）。
+// v7 的两片低多边形起伏草甸网格（南瓣起伏 ≤2.9 / 东北瓣 ≤1.7，三平面
+// 混合材质）在可信地形改造 R1（方案 §10）退役：高度场已收编
+// terrainHeight（heightfield/meadowField.ts），草甸的真实起伏由 farGround
+// 全域地形网格（worldGroundMesh.ts）统一承载；本文件只保留装饰层——
+// 草簇/花丛/灌木散布（城外草甸贴 sampleCitysideMeadowY，城内绿地矩形
+// 贴层高），并按步道切槽（trailCutAt）剔除槽影响区的装饰，防其在切低
+// 的床表上方悬空。
 //
 // 装饰（草簇/花丛/灌木）：合并为顶点色单材质几何，与松树同一合批协议
 // （cityWorldAssembly 挂接后调 batchStaticMeshes 实例化）。城市内落点
@@ -22,31 +17,21 @@
 // 实现约定（对齐 mountainRanges.ts / westBeach.ts）：
 // - 工厂不往 scene 添加任何对象；dispose() 释放本模块全部 geometry 与
 //   material；纹理归 ResourcePool，不在此释放。
-// - 贴地网格 y 基线 -0.08（埋入地表之下），与 SURFACE_Y 各层不存在
-//   共面重叠；与 district(0.018)/base(0) 仅几何相交（窄带穿越），无
-//   远镜头 z-fighting（AGENTS.md 红线见 layers.ts 头注释）。
+// - 装饰贴场值（+0.015 沉入防浮空）；farGround 网格同源采样同一解析
+//   场，非槽区装饰与地面零错位（方案 §2.5 同源采样论证）。
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CITYSIDE_MEADOW } from '../../city/data/terrain/ground-cityside';
 import { BUILDING_DEFS } from '../../city/data/buildings';
 import { inferPlot } from '../../city/data/buildings/_shapeDefaults';
 import { NORTH_DISTRICT_AREA } from '../../city/data/cityConfig';
-import { getActiveProceduralTextureLibrary } from '../proceduralTextureLibrary';
-import { RENDER_ORDER, SURFACE_Y } from '../layers';
+import { SURFACE_Y } from '../layers';
 import { hashString, mulberry32 } from './massifGeometry';
-import {
-  bakeFacetTintAndBand,
-  createPlainFacetMaterial,
-  createTerrainFacetMaterial,
-  terrainChainTint,
-  type TerrainShaderUniforms,
-} from './terrainMaterial';
-// 高度场在 meadowField.ts（纯计算，无 Three.js 网格）：worldTerrainAudit
-// 的数值审计与渲染几何共用同一份 sampleCitysideMeadowY。
-import {
-  MEADOW_GLOBAL_SEED,
-  sampleCitysideMeadowY,
-} from './meadowField';
+// 高度场在 heightfield/（纯计算，无 Three.js 网格）：worldTerrainAudit
+// 的数值审计与装饰散布共用同一份 sampleCitysideMeadowY；trailCutAt 用于
+// 装饰避让步道切槽（床表低于自然场，槽内装饰会悬空）。
+import { MEADOW_GLOBAL_SEED, sampleCitysideMeadowY } from '../../city/data/terrain/heightfield/meadowField';
+import { trailCutAt } from '../../city/data/terrain/heightfield/worldReliefField';
 
 export { sampleCitysideMeadowY } from './meadowField';
 
@@ -81,11 +66,12 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
   const object = new THREE.Group();
   object.name = 'cityside-meadow-terrain';
 
-  const textureLibrary = getActiveProceduralTextureLibrary();
-  const grassMap = textureLibrary?.repeat('grass', 1, 1) ?? null;
-  const stoneMap = textureLibrary?.repeat('stone', 1, 1) ?? null;
-  const snowMap = textureLibrary?.repeat('snow_ground', 1, 1) ?? null;
-  const hasTerrainTextures = Boolean(grassMap && stoneMap && snowMap);
+  // v8（可信地形 R1，方案 §10）：草甸起伏高度网格退役——高度已收编
+  // terrainHeight，由 farGround 全域地形网格（createWorldGroundGeometry，
+  // rendering/terrain/worldGroundMesh.ts）承载（-1 draw call）；「y ≤ 0 区
+  // 下沉 0.08 埋地」的防共面兼容层随网格一并移除（farGround 即地面，
+  // 不再存在双面共面结构）。本文件仅保留草甸装饰（草簇/花丛/灌木）与
+  // 城内绿地装饰的散布。
 
   const geometries = new Set<THREE.BufferGeometry>();
   const ownedMaterials = new Set<THREE.Material>();
@@ -93,58 +79,6 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
     geometries.add(geometry);
     return geometry;
   };
-
-  const uniforms: TerrainShaderUniforms = {
-    uGrassMap: { value: grassMap },
-    uRockMap: { value: stoneMap },
-    uSnowMap: { value: snowMap },
-    uTexScale: { value: 3.2 },
-    uAllRock: { value: 0 },
-  };
-  // 与山体共用同一 cacheKey 的三平面材质（three 复用同一着色程序）。
-  const facetMaterial = hasTerrainTextures
-    ? createTerrainFacetMaterial(uniforms)
-    : createPlainFacetMaterial();
-  ownedMaterials.add(facetMaterial);
-  const tintStrength = hasTerrainTextures ? 0.3 : 0.85;
-
-  // ── 草甸起伏网格 ──────────────────────────────────────────────────
-  for (const feature of CITYSIDE_MEADOW) {
-    const w = feature.width ?? 20;
-    const d = feature.depth ?? 20;
-    const cell = 2; // ≈2 世界单位一格：大缓坡折面 + 可控顶点数
-    const segW = Math.max(2, Math.round(w / cell));
-    const segD = Math.max(2, Math.round(d / cell));
-    const plane = new THREE.PlaneGeometry(w, d, segW, segD);
-    plane.rotateX(-Math.PI / 2);
-    plane.translate(feature.x ?? 0, 0, feature.z ?? 0);
-    const position = plane.getAttribute('position') as THREE.BufferAttribute;
-    for (let index = 0; index < position.count; index += 1) {
-      const y = sampleCitysideMeadowY(feature, position.getX(index), position.getZ(index));
-      position.setY(index, y);
-    }
-    position.needsUpdate = true;
-    // non-indexed → 逐面法线与逐面顶点色（与山体同一烘焙管线）。
-    const geometry = track(plane.toNonIndexed());
-    plane.dispose();
-    geometry.computeVertexNormals();
-    const relief = feature.renderHint?.reliefHeight ?? 2.2;
-    // aBand.x = 面心高度占比 ÷ (relief×3)：恒低于草甸/岩壁分界（0.34），
-    // 草甸永远走草甸纹理带。
-    bakeFacetTintAndBand(
-      geometry,
-      // 草甸紧邻城区（与远景山链不同）：顶点色调拉到 0.75，草甸读作
-      // 鲜绿草地而不是远处山体的雾化灰绿；纹理仍提供细节与色斑。
-      { height: relief * 3, snowLine: null, tint: terrainChainTint(feature.renderHint?.color ?? 0x8fae72, 0.75) },
-      (hashString(`${feature.id}:bake`) ^ MEADOW_GLOBAL_SEED) >>> 0,
-    );
-    const mesh = new THREE.Mesh(geometry, facetMaterial);
-    mesh.name = `${feature.id}:meadow`;
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
-    mesh.renderOrder = RENDER_ORDER.base; // 埋地跨界网格，随地表基面排序
-    object.add(mesh);
-  }
 
   // ── 装饰（草簇/花丛/灌木）：顶点色单材质，可实例化合批 ────────────
   const propMaterial = new THREE.MeshStandardMaterial({
@@ -321,6 +255,9 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
       const z = (feature.z ?? 0) - d / 2 + 2 + rng() * (d - 4);
       const y = sampleCitysideMeadowY(feature, x, z);
       if (y < 0.05) continue; // 埋地/边缘过渡带不放装饰
+      // 步道切槽避让（trailCutAt > 0 = 槽床 + 融合坡影响区）：床表被切低
+      // 于自然场，贴自然场的装饰在该区会悬空，直接剔除。
+      if (trailCutAt(x, z) > 0) continue;
       addProp(pickPropVariant(rng), x, y, z, rng, `${feature.id}-prop-${propIndex}`);
       propIndex += 1;
       placed += 1;

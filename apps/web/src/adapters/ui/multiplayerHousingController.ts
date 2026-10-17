@@ -244,7 +244,9 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
             cursor.position.set(0, 0, -6);
             multiplayer?.position({ x: 0, y: 0, z: -6, rotation: 0 });
           } else {
-            cursor.position.set(user.position.x, 0, user.position.z);
+            // y 透传（R3 漏网②）：移动流的位置快照已带地形 y，重连恢复
+            // 光标不再压回 0 沉地；台地内数值不变。
+            cursor.position.set(user.position.x, user.position.y, user.position.z);
             cursor.rotation.y = user.position.rotation ?? 0;
           }
         }
@@ -747,6 +749,8 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
 
   function sendLocalPosition(position: NetUser["position"], now: number) {
     if (!multiplayer || now - lastNetworkPosition < 80) return;
+    // Match server validPosition, including both terrain trails and their margins.
+    if (Math.abs(position.x) > 82 || Math.abs(position.y) > 10 || position.z < -121 || position.z > 104) return;
     multiplayer.position(position);
     lastNetworkPosition = now;
   }

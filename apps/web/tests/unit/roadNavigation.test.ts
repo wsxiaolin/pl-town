@@ -4,7 +4,10 @@ import * as THREE from 'three';
 import { clipPlotToMainRoad, footprintOverlapsMainRoad } from '../../src/city/data/cityConfig';
 import { BUILDING_PLOT_MAP } from '../../src/city/data/buildingPlots';
 import { BUILDING_DEFS } from '../../src/city/data/buildings';
-import { createRoadNavigationSystem } from '../../src/city/navigation/roadNavigation';
+import { createRoadNavigationSystem, buildMeadowTrailGraph, mountainSurfaceBlocked, MOUNTAIN_WALK_RISE_MAX } from '../../src/city/navigation/roadNavigation';
+import { NORTH_TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
+import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
+import { LANPING_ALPINE_FIELD } from '../../src/city/data/terrain/heightfield/alpineField';
 
 function navigationWithBuilding() {
   const group = new THREE.Group();
@@ -107,4 +110,33 @@ test('manual movement result may alias the source vector', () => {
   const result = navigation.resolveMovement(position, new THREE.Vector3(5.5, 0, -9.5), position);
   assert.equal(result, position);
   assert.deepEqual(position.toArray(), [5.5, 0, -9.5]);
+});
+
+test('mountain walls block the walkable band while the north valley trail stays open', () => {
+  // 溪北丘一（44,-126）腹地：山面远高于可走地面 → 判为山体墙。
+  const foothillX = 44;
+  const foothillZ = -121;
+  const rise = LANPING_ALPINE_FIELD.heightAt(foothillX, foothillZ) - terrainHeight(foothillX, foothillZ);
+  assert.ok(rise > MOUNTAIN_WALK_RISE_MAX, `山脚 (${foothillX},${foothillZ}) 山面仅高出 ${rise.toFixed(2)}`);
+  assert.equal(mountainSurfaceBlocked(foothillX, foothillZ), true);
+  // 北线步道节点（谷地走廊，山面≈0）不被误挡。
+  for (const node of NORTH_TRAIL_NODES) {
+    assert.equal(mountainSurfaceBlocked(node.x, node.z), false, `步道节点 (${node.x},${node.z}) 被山体墙误挡`);
+  }
+  // 移动解算：从 N4 观景平台向西走不进溪北丘腹地（z 被挡，停在 N4 纬度）。
+  const navigation = createRoadNavigationSystem({
+    roadCoords: [-6, 0, 6, 12],
+    echoObservatoryArea: { roadNodes: [], roadSegments: [] },
+    meadowTrail: buildMeadowTrailGraph(),
+    westBeach: { deepWaterX: -44.5, safeReturnX: -42.2, minZ: -34, maxZ: 54 },
+    cityLimit: 42,
+    getBuildings: () => [],
+  });
+  const n4 = NORTH_TRAIL_NODES[NORTH_TRAIL_NODES.length - 1]!;
+  const moved = navigation.resolveMovement(
+    new THREE.Vector3(n4.x, terrainHeight(n4.x, n4.z), n4.z),
+    new THREE.Vector3(foothillX, 0, foothillZ),
+  );
+  assert.notEqual(moved.z, foothillZ, '移动解算不得把玩家送进溪北丘腹地');
+  assert.equal(moved.z, n4.z, '被挡的 z 应停在原纬度（沿 x 滑行）');
 });

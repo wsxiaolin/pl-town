@@ -120,12 +120,11 @@ function broadcastWorldCatalog() {
 const validPosition = (position: unknown): position is Position => {
   if (!position || typeof position !== 'object') return false;
   const value = position as Record<string, unknown>;
-  // North district ground spans z=-44..-86.5 (cityConfig NORTH_DISTRICT_AREA
-  // .ground) with walkable lots to ≈-84; 96 leaves margin without reopening
-  // the "far-north walks rejected as Invalid position" regression. x stays 80:
-  // both districts live within ±42.
+  // Include the north/south terrain trails and their walkable margins.
+  // x cap mirrors roadNavigation WORLD_BOUNDS east extent (north trail N4 x=74 + 8
+  // margin = 82); z spans the south platform (104) to the north one (-121).
   return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z)
-    && Math.abs(Number(value.x)) <= 80 && Math.abs(Number(value.y)) <= 10 && Math.abs(Number(value.z)) <= 96
+    && Math.abs(Number(value.x)) <= 82 && Math.abs(Number(value.y)) <= 10 && Number(value.z) >= -121 && Number(value.z) <= 104
     && (value.rotation === undefined || (Number.isFinite(value.rotation) && Math.abs(Number(value.rotation)) <= Math.PI * 4));
 };
 const validId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 100;

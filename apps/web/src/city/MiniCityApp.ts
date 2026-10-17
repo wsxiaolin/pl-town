@@ -15,7 +15,8 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
-import { createRoadNavigationSystem } from './navigation/roadNavigation';
+import { createRoadNavigationSystem, buildMeadowTrailGraph } from './navigation/roadNavigation';
+import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { createSceneInterestPointController } from './sceneInterestPointController';
@@ -268,10 +269,7 @@ const interactionTracker = createInteractionTracker({
   getCursorChar: () => cursorChar,
 });
 
-const sceneAnimations = createSceneAnimations({
-  getBuildings: () => buildings,
-  reduced: REDUCED,
-});
+const sceneAnimations = createSceneAnimations({ getBuildings: () => buildings, reduced: REDUCED });
 
 const frameLoop = createFrameLoop({
   onFirstRender: () => entranceGate.flush(),
@@ -309,6 +307,7 @@ const roadNavigation = createRoadNavigationSystem({
   roadCoords: ROAD_COORDS,
   echoObservatoryArea: ECHO_OBSERVATORY_AREA,
   northDistrictArea: NORTH_DISTRICT_AREA,
+  meadowTrail: buildMeadowTrailGraph(),
   westBeach: WEST_BEACH,
   cityLimit: CITY_LIMIT,
   getBuildings: () => buildings,
@@ -614,7 +613,7 @@ function init() {
       updateCameraProjection: (zoom) => view.updateProjection(zoom),
       isMobile: MOBILE,
       getScene: () => scene,
-      sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: 0, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
+      sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
     },
     getQuestContext: () => ({ ...readQuestProgressView(multiplayerHousing), gameDay: townGameDay() }),
     awardAchievement: awardDirectAchievement,
@@ -662,7 +661,7 @@ function init() {
     getIsoMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
     resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
     walkSpeed: CONFIG.playerSpeed,
-    sendPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
+    sendPosition: (x, y, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y, z, rotation }, performance.now()),
     onEnter: () => {
       view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget();
     },
@@ -786,7 +785,7 @@ function init() {
     invalidateMap: () => mapController?.invalidateShot('scene'),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     focusCamera: (x, z) => cameraController?.focus(x, z),
-    sendLocalPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: 0, z, rotation }, performance.now()),
+    sendLocalPosition: (x, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y: cursorChar?.position.y ?? 0, z, rotation }, performance.now()),
     getCursor: () => cursorChar,
     setWellPhaseVisual: (phase) => sceneInterestPoints?.setWellPhase(phase),
     setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
@@ -920,7 +919,7 @@ function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: Abo
 function devTeleport(x: number, z: number): boolean {
   if (!cursorChar) return false;
   view.clearPlayerPath();
-  cursorChar.position.set(x, 0, z);
+  cursorChar.position.set(x, terrainHeight(x, z), z);
   view.setTarget(x, z, true);
   return true;
 }

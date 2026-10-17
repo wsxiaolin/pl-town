@@ -22,6 +22,10 @@ test('city ground relief is low-poly and stable for a fixed seed', () => {
   assert.ok(Math.min(...heights) >= SURFACE_Y.district - CITY_GROUND_PLAN.relief.amplitude);
   assert.ok(Math.max(...heights) <= SURFACE_Y.district + CITY_GROUND_PLAN.relief.amplitude);
   assert.ok(new Set(heights).size > 20, 'relief should not collapse to a flat plane');
+  assert.ok(Math.min(...heights) - SURFACE_Y.base >= 0.004, 'relief must clear the world carrier');
+  for (const overlay of [SURFACE_Y.northDistrict, SURFACE_Y.landscape, SURFACE_Y.plaza, SURFACE_Y.road - 0.02]) {
+    assert.ok(overlay - Math.max(...heights) >= 0.004, 'relief must stay below flat overlays, including road bottoms');
+  }
 
   first.dispose();
   second.dispose();

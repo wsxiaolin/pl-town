@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
+import { terrainHeight } from '../data/terrain/heightfield/terrainHeight';
 
 export type CameraControllerOptions = {
   getCamera: () => THREE.OrthographicCamera | null;
@@ -29,6 +30,10 @@ export function createCameraController(options: CameraControllerOptions) {
   function apply(target: THREE.Vector3): void {
     const camera = options.getCamera();
     if (!camera) return;
+    // 相机目标 y 跟随地形（方案 §6.2/§6.4）：演出序列的补间只动 x/z，
+    // 每帧在此统一取地面高——城内恒 0 无感，城外镜头随地形；正交相机
+    // offset.y 足够高（远高于地形最大 3.4），不穿地。
+    target.y = terrainHeight(target.x, target.z);
     if (options.isInteriorActive()) {
       camera.position.set(
         options.defaultInteriorCenter[0] + interiorAnchor.x,
@@ -46,6 +51,9 @@ export function createCameraController(options: CameraControllerOptions) {
     const camera = options.getCamera();
     if (!camera) return;
     const target = options.getTarget();
+    // 相机目标 y 跟随地形（方案 §6.2）：setTarget（含 gsap 补间 onUpdate）
+    // 与 focus 的公共跟随路径统一在此取地面高——台地内恒 0 零回归。
+    target.y = terrainHeight(target.x, target.z);
     if (options.isInteriorActive()) {
       const center = options.getInteriorCenter?.() ?? options.defaultInteriorCenter;
       const offset = options.getInteriorCameraOffset?.();
