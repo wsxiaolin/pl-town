@@ -18,7 +18,8 @@ test('rebuilt school campuses render as multi-volume groups at their anchors', a
       let meshes = 0;
       const box = new mini.THREE.Box3();
       mini.scene.traverse((object: any) => {
-        if (object.isMesh && object.userData.buildingId === id) {
+        // 地块是 4.5×4.5 的 PlaneGeometry，量建筑体量时排除它。
+        if (object.isMesh && object.userData.buildingId === id && object.geometry?.type !== 'PlaneGeometry') {
           meshes += 1;
           box.expandByObject(object);
         }
