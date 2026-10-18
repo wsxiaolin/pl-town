@@ -1,4 +1,4 @@
-import { applyNoiseLattice } from './textureNoise';
+import { applyNoiseLattice, mulberry32 } from './textureNoise';
 
 type Canvas2D = CanvasRenderingContext2D;
 type RGB = [number, number, number];
@@ -14,30 +14,32 @@ export function registerResidentTexturePainters(paint: Paint): void {
   // --- Residence pale brick: cool grey masonry for the 青灰砖楼 family ---
   paint('residence_brick_pale', 256, (ctx, s) => {
     ctx.fillStyle = '#B7BBC0'; ctx.fillRect(0, 0, s, s);
+    const rand = mulberry32(0x1a2b3c4d);
     const bw = 34, bh = 16;
     for (let y = 0; y < s; y += bh) {
       const off = ((y / bh) % 2) * (bw / 2);
       for (let x = -bw; x < s + bw; x += bw) {
-        const bx = x + off, sh = 0.94 + Math.random() * 0.12;
+        const bx = x + off, sh = 0.94 + rand() * 0.12;
         ctx.fillStyle = shade([198, 202, 207], sh);
         ctx.fillRect(bx + 1, y + 1, bw - 3, bh - 3);
         ctx.fillStyle = 'rgba(90,96,104,0.16)';
         ctx.fillRect(bx, y + bh - 2, bw, 2);
       }
     }
-    applyNoiseLattice(ctx, s, 0.02);
+    applyNoiseLattice(ctx, s, 0.02, 0x11);
   });
 
   // --- Residence grey stone: light ashlar blocks for the 象牙石居 family ---
   paint('residence_stone_gray', 256, (ctx, s) => {
     ctx.fillStyle = '#DBD6CA'; ctx.fillRect(0, 0, s, s);
+    const rand = mulberry32(0x2b3c4d5e);
     const rows = 8, rh = s / rows;
     for (let r = 0; r < rows; r += 1) {
       const cols = r % 2 === 0 ? 3 : 4;
       const cw = s / cols;
       const off = r % 2 === 0 ? 0 : -cw / 2;
       for (let c = -1; c <= cols; c += 1) {
-        const x = c * cw + off, sh = 0.95 + Math.random() * 0.1;
+        const x = c * cw + off, sh = 0.95 + rand() * 0.1;
         ctx.fillStyle = shade([219, 214, 202], sh);
         ctx.fillRect(x + 1, r * rh + 1, cw - 2, rh - 2);
         ctx.fillStyle = 'rgba(150,140,124,0.22)';
@@ -45,17 +47,18 @@ export function registerResidentTexturePainters(paint: Paint): void {
         ctx.fillRect(x, r * rh, 1.5, rh);
       }
     }
-    applyNoiseLattice(ctx, s, 0.018);
+    applyNoiseLattice(ctx, s, 0.018, 0x12);
   });
 
   // --- Residence charcoal roof: dark slate shingles for the 青灰砖楼 family ---
   paint('roof_charcoal', 256, (ctx, s) => {
     ctx.fillStyle = '#3A3F45'; ctx.fillRect(0, 0, s, s);
+    const rand = mulberry32(0x3c4d5e6f);
     const tile = 24;
     for (let y = 0; y < s; y += tile) {
       const off = ((y / tile) % 2) * (tile / 2);
       for (let x = -tile; x < s + tile; x += tile) {
-        const bx = x + off, sh = 0.82 + Math.random() * 0.26;
+        const bx = x + off, sh = 0.82 + rand() * 0.26;
         ctx.fillStyle = shade([58, 63, 69], sh);
         ctx.fillRect(bx + 1, y + 1, tile - 3, tile - 3);
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -63,12 +66,12 @@ export function registerResidentTexturePainters(paint: Paint): void {
         ctx.fillRect(bx, y + tile - 3, tile, 3);
       }
     }
-    applyNoiseLattice(ctx, s, 0.022);
+    applyNoiseLattice(ctx, s, 0.022, 0x13);
   });
 
   // --- Window reflection: a printed sky/neighbour reflection so panes read as
   //     glass with something behind them instead of a flat coloured rectangle. ---
-  paint('window_reflection', 128, (ctx, s) => {
+  paint('window_reflection', 256, (ctx, s) => {
     const sky = ctx.createLinearGradient(0, 0, 0, s);
     sky.addColorStop(0, '#d6e7f2');
     sky.addColorStop(0.52, '#9dbacf');
@@ -96,15 +99,16 @@ export function registerResidentTexturePainters(paint: Paint): void {
     ctx.lineTo(s * 0.66, s * 0.94);
     ctx.stroke();
     ctx.restore();
-    applyNoiseLattice(ctx, s, 0.018);
+    applyNoiseLattice(ctx, s, 0.018, 0x14);
   });
 
   // --- Residence copper roof: weathered green standing-seam panels ---
   paint('roof_copper', 256, (ctx, s) => {
     ctx.fillStyle = '#59806F'; ctx.fillRect(0, 0, s, s);
+    const rand = mulberry32(0x4d5e6f70);
     const seam = 32;
     for (let x = 0; x < s; x += seam) {
-      const sh = 0.9 + Math.random() * 0.16;
+      const sh = 0.9 + rand() * 0.16;
       ctx.fillStyle = shade([89, 128, 111], sh);
       ctx.fillRect(x, 0, seam - 3, s);
       ctx.fillStyle = 'rgba(20,45,36,0.35)';
@@ -114,8 +118,8 @@ export function registerResidentTexturePainters(paint: Paint): void {
     }
     for (let i = 0; i < 40; i += 1) {
       ctx.fillStyle = 'rgba(120,180,150,0.18)';
-      ctx.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 3 + Math.random() * 10);
+      ctx.fillRect(rand() * s, rand() * s, 1 + rand() * 2, 3 + rand() * 10);
     }
-    applyNoiseLattice(ctx, s, 0.02);
+    applyNoiseLattice(ctx, s, 0.02, 0x15);
   });
 }

@@ -332,7 +332,19 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     rx: 1,
     ry: 1,
   };
-  const glassFor = (lit?: boolean, tint?: number): MaterialParameters => (lit ? litGlass : tint !== undefined ? { ...reflectionGlass, color: tint } : reflectionGlass);
+  // Tinted panes are cached by colour so repeated windows reuse one material
+  // instead of allocating (and defeating the batcher with) fresh parameters.
+  const tintedGlass = new Map<number, MaterialParameters>();
+  const glassFor = (lit?: boolean, tint?: number): MaterialParameters => {
+    if (lit) return litGlass;
+    if (tint === undefined) return reflectionGlass;
+    let material = tintedGlass.get(tint);
+    if (!material) {
+      material = { ...reflectionGlass, color: tint };
+      tintedGlass.set(tint, material);
+    }
+    return material;
+  };
 
   function darken(color: number, amount: number): number {
     const r = Math.round(((color >> 16) & 0xff) * (1 - amount));

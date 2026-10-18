@@ -82,11 +82,11 @@ function eaveDrainage(
 ): void {
   const { width, depth, top, height, axis, family } = opts;
   const overhang = 0.12;
-  const metal = 0x5a6168;
+  const gutterColor = family.roof;
   if (axis === 'z') {
     const run = depth + overhang * 2;
     [-1, 1].forEach((side) => {
-      kit.gutterLine(group, { x: side * (width / 2 + overhang), z: 0, y: top - 0.015, length: run, axis: 'z', color: metal });
+      kit.gutterLine(group, { x: side * (width / 2 + overhang), z: 0, y: top - 0.015, length: run, axis: 'z', color: gutterColor });
     });
     [-1, 1].forEach((side) => {
       kit.downspouts(group, [
@@ -96,7 +96,7 @@ function eaveDrainage(
   } else {
     const run = width + overhang * 2;
     [-1, 1].forEach((side) => {
-      kit.gutterLine(group, { x: 0, z: side * (depth / 2 + overhang), y: top - 0.015, length: run, axis: 'x', color: metal });
+      kit.gutterLine(group, { x: 0, z: side * (depth / 2 + overhang), y: top - 0.015, length: run, axis: 'x', color: gutterColor });
     });
     [-1, 1].forEach((side) => {
       kit.downspouts(group, [
@@ -380,7 +380,7 @@ const buildCourtyard: ArchetypeBuilder = ({ group, width, depth, family, kit, va
   });
   // Eave gutters on the two long walls plus downspouts at the front corners.
   [-1, 1].forEach((side) => {
-    kit.gutterLine(group, { x: 0, z: bodyZ + side * (houseDepth / 2 + 0.12), y: top - 0.015, length: houseWidth + 0.24, axis: 'x', color: 0x5a6168 });
+    kit.gutterLine(group, { x: 0, z: bodyZ + side * (houseDepth / 2 + 0.12), y: top - 0.015, length: houseWidth + 0.24, axis: 'x', color: family.roof });
   });
   kit.downspouts(group, [
     { x: -houseWidth / 2 + 0.03, z: frontZ - 0.03, y: BASE + 0.02, height: height - 0.04, color: family.accent },
@@ -461,10 +461,10 @@ const buildVilla: ArchetypeBuilder = ({ group, width, depth, family, kit, varian
     kit.ico(group, 0.1, 0, { color: 0x4f8447, roughness: 0.94, tex: 'grass', rx: 1, ry: 1 }, [px, BASE + 0.2, depth / 2 + 0.28], [1, 1.12, 1], false);
   });
   // Hip-roof drainage on all four eaves.
-  kit.gutterLine(group, { x: 0, z: (depth + 0.1) / 2, y: top - 0.015, length: width + 0.24, axis: 'x' });
-  kit.gutterLine(group, { x: 0, z: -(depth + 0.1) / 2, y: top - 0.015, length: width + 0.24, axis: 'x' });
-  kit.gutterLine(group, { x: (width + 0.24) / 2, z: 0, y: top - 0.015, length: depth + 0.1, axis: 'z' });
-  kit.gutterLine(group, { x: -(width + 0.24) / 2, z: 0, y: top - 0.015, length: depth + 0.1, axis: 'z' });
+  kit.gutterLine(group, { x: 0, z: (depth + 0.1) / 2, y: top - 0.015, length: width + 0.24, axis: 'x', color: family.roof });
+  kit.gutterLine(group, { x: 0, z: -(depth + 0.1) / 2, y: top - 0.015, length: width + 0.24, axis: 'x', color: family.roof });
+  kit.gutterLine(group, { x: (width + 0.24) / 2, z: 0, y: top - 0.015, length: depth + 0.1, axis: 'z', color: family.roof });
+  kit.gutterLine(group, { x: -(width + 0.24) / 2, z: 0, y: top - 0.015, length: depth + 0.1, axis: 'z', color: family.roof });
   if (variant === 3) {
     // Little lantern cupola on the ridge as a landmark variant.
     kit.box(group, 0.24, 0.18, 0.24, { color: family.wall, roughness: 0.6, tex: family.upperTex, rx: 1, ry: 1 }, [0, top + 0.58, 0]);
