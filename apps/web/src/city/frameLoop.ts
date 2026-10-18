@@ -20,6 +20,9 @@ export type FrameLoopOptions = {
     isActive(): boolean;
     render(renderer: THREE.WebGLRenderer): void;
   } | null;
+  /** 其他不透明全屏演出（如猫之死 CG）：挂载期间跳过城市渲染，避免软渲下
+   * 城市帧与 2D 演出互相抢占主线程，拖慢演出自身的计时器。 */
+  isFullscreenCinematicVisible?: () => boolean;
   getBuildings: () => BuildingEntity[];
   getResidences: () => ResidenceEntity[];
   getLabelWorldPosition: () => THREE.Vector3;
@@ -125,6 +128,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
       genshin.render(renderer);
       return;
     }
+    if (options.isFullscreenCinematicVisible?.()) return;
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);

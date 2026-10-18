@@ -222,7 +222,7 @@ test('generated resident houses block manual movement', async ({ page }) => {
   expect(collision!.crossed).toBe(false);
 });
 
-test('city renders twelve residence models and the modeled west beach', async ({ page }) => {
+test('city renders the expanded residence catalog and the modeled west beach', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await enterCity(page);
   const sceneContent = await page.evaluate(() => {
@@ -252,9 +252,8 @@ test('city renders twelve residence models and the modeled west beach', async ({
       surfTime: mini.scene.getObjectByName('shore-surf')?.material?.uniforms?.time?.value ?? -1,
     };
   });
-  expect(sceneContent.styles.every((style) => style >= 0 && style <= 11)).toBe(true);
-  expect(sceneContent.styles.length).toBeGreaterThanOrEqual(10);
-  expect(sceneContent.styles).toEqual(expect.arrayContaining([10, 11]));
+  expect(sceneContent.styles.every((style) => style >= 0 && style < 64)).toBe(true);
+  expect(sceneContent.styles.length).toBeGreaterThanOrEqual(24);
   expect(sceneContent.textures).toEqual(expect.arrayContaining(['residence_plaster', 'residence_wood', 'residence_tile']));
   expect(sceneContent.beach && sceneContent.seaGod && sceneContent.ships).toBe(true);
   expect(sceneContent.waterSize[0]).toBeGreaterThan(55);

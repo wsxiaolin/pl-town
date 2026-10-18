@@ -7,7 +7,15 @@ import { createCatCafeIceWallInteraction } from '../../src/city/iceKing/catCafeI
 import { CAT_CAFE_ICE_WALL, ICE_KING_ITEMS } from '../../src/gameplay/content/stories/iceKing/iceKingContent';
 import { NPC_PROFILES } from '../../src/city/data/npcs';
 import { ACHIEVEMENTS } from '../../src/city/progression/achievements';
-import { residenceStyleFor, residenceStyleSeedForLot } from '../../src/rendering/residenceStyles';
+import {
+  RESIDENCE_ARCHETYPE_COUNT,
+  RESIDENCE_FAMILY_COUNT,
+  RESIDENCE_STYLE_COUNT,
+  residenceArchetypeFor,
+  residenceFamilyFor,
+  residenceStyleFor,
+  residenceStyleSeedForLot,
+} from '../../src/rendering/residenceStyles';
 import { BUILDING_CONTENT, BUILDING_DEFS } from '../../src/city/data/buildings';
 import { isFilmCityClearing } from '../../src/city/data/cityConfig';
 import { FILM_CITY_EXPERIENCE_PRICE, FILM_CITY_SHOTS } from '../../src/city/filmCity/filmCityExperienceController';
@@ -161,14 +169,27 @@ test('亦航 keeps the requested schedule, park spawn, and dialogue branches', (
   assert.match(yihang.dialog[2].text, /棍母/);
 });
 
-test('residence styles cover twelve models while neighboring lots share a family', () => {
+test('residence catalog covers every family and archetype while neighboring lots share a family', () => {
   const styles = new Set<number>();
+  const families = new Set<number>();
+  const archetypes = new Set<number>();
   for (let x = -39; x <= 39; x += 3) {
-    for (let z = -39; z <= 39; z += 3) styles.add(residenceStyleFor(x, z, residenceStyleSeedForLot(x, z)));
+    for (let z = -39; z <= 39; z += 3) {
+      const seed = residenceStyleSeedForLot(x, z);
+      styles.add(residenceStyleFor(x, z, seed));
+      families.add(residenceFamilyFor(x, z));
+      archetypes.add(residenceArchetypeFor(x, z, seed));
+    }
   }
-  assert.deepEqual([...styles].sort((a, b) => a - b), [0,1,2,3,4,5,6,7,8,9,10,11]);
-  const family = Math.floor(residenceStyleFor(-30, -30, 0) / 2);
-  assert.equal(Math.floor(residenceStyleFor(-27, -27, 8) / 2), family);
+  assert.equal(RESIDENCE_FAMILY_COUNT, 8);
+  assert.equal(RESIDENCE_ARCHETYPE_COUNT, 8);
+  assert.equal(RESIDENCE_STYLE_COUNT, 64);
+  assert.equal(styles.size, RESIDENCE_STYLE_COUNT);
+  assert.deepEqual([...families].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual([...archetypes].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
+  for (const style of styles) assert.ok(style >= 0 && style < RESIDENCE_STYLE_COUNT);
+  const family = residenceFamilyFor(-30, -30);
+  assert.equal(residenceFamilyFor(-27, -27), family);
 });
 
 test('建筑更新保留音乐厅歌词和两家商店名称', () => {

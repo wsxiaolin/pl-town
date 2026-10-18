@@ -4,6 +4,7 @@ import { drawIceKingCrownFacade } from './iceKing/crownFacadeTexture';
 import type { ResourcePool } from '../core/ResourcePool';
 import { applyNoiseLattice } from './textureNoise';
 import { registerFacadePainters } from './proceduralFacadePainters';
+import { registerResidentTexturePainters } from './residentTexturePainters';
 import groundCityColor from '../assets/textures/ground_city_color.webp';
 import groundDistrictColor from '../assets/textures/ground_district_color.webp';
 import groundGrassColor from '../assets/textures/ground_grass_color.webp';
@@ -886,6 +887,9 @@ export function createProceduralTextureLibrary(
       }
       applyNoiseLattice(ctx, s, 0.025);
     });
+
+    // ══ 居民楼扩展贴图：见 residentTexturePainters.ts ══
+    registerResidentTexturePainters(_paint);
   
     // ══ 建筑立面贴图（完整立面，非重复）：见 proceduralFacadePainters.ts ══
     registerFacadePainters(_paint);

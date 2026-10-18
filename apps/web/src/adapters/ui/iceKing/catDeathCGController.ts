@@ -29,6 +29,7 @@ type ActiveSession = {
 };
 
 let activeSession: ActiveSession | null = null;
+let mountedSessions = 0;
 
 export function playCatDeathCG(): CatDeathCGHandle {
   cancelCatDeathBlackout();
@@ -111,7 +112,11 @@ function startCatDeathCG(): CatDeathCGHandle {
       root.classList.remove('is-active');
       root.classList.add(reason === 'completed' ? 'is-returning' : 'is-closing');
       if (activeSession === session) activeSession = null;
-      const finish = () => { root.remove(); resolveFinished(reason); };
+      const finish = () => {
+        mountedSessions = Math.max(0, mountedSessions - 1);
+        root.remove();
+        resolveFinished(reason);
+      };
       if (immediate) finish();
       else window.setTimeout(finish, reason === 'completed' ? CAT_DEATH_MAP_RETURN_MS : 650);
     },
@@ -121,6 +126,7 @@ function startCatDeathCG(): CatDeathCGHandle {
   window.addEventListener('resize', onResize);
   window.addEventListener('keydown', onKeyDown);
   document.body.append(root);
+  mountedSessions += 1;
   resizeStage(stage, root);
   activeSession = session;
 
@@ -142,6 +148,11 @@ export function stopCatDeathCG(): boolean {
 
 export function isCatDeathCGActive(): boolean {
   return activeSession !== null;
+}
+
+/** True until the overlay is actually detached, including the fade-out timer. */
+export function isCatDeathCGVisible(): boolean {
+  return mountedSessions > 0;
 }
 
 function animateSession(session: ActiveSession, now: number): void {
