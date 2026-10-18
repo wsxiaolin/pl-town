@@ -43,12 +43,15 @@ let houses = 0;
 let minMeshes = Number.POSITIVE_INFINITY;
 let maxMeshes = 0;
 const perArchetype = new Map<number, { count: number; sum: number; max: number }>();
+const features = new Set<string>();
+const yardProps = new Set<string>();
+const textures = new Set<string>();
 
 for (let xi = 0; xi < 14; xi += 1) {
   for (let zi = 0; zi < 14; zi += 1) {
     const x = xi * 5 - 33;
     const z = zi * 5 - 33;
-    const seed = Math.abs(Math.round(x * 31 + z));
+    const seed = residenceStyleSeedForLot(x, z);
     const model = createResidenceModel({
       x,
       z,
@@ -65,6 +68,9 @@ for (let xi = 0; xi < 14; xi += 1) {
     houses += 1;
     minMeshes = Math.min(minMeshes, meshes);
     maxMeshes = Math.max(maxMeshes, meshes);
+    for (const feature of model.group.userData.residenceFeatures ?? []) features.add(feature);
+    for (const prop of model.group.userData.residenceYardProps ?? []) yardProps.add(prop);
+    for (const texture of model.group.userData.residenceTextures ?? []) textures.add(texture);
     const archetype = model.styleId % 8;
     const entry = perArchetype.get(archetype) ?? { count: 0, sum: 0, max: 0 };
     entry.count += 1;
@@ -80,6 +86,9 @@ console.log(`meshes/house (raw, before static instancing): min ${minMeshes}, avg
 for (const [archetype, entry] of [...perArchetype.entries()].sort((a, b) => a[0] - b[0])) {
   console.log(`  archetype ${archetype}: avg ${(entry.sum / entry.count).toFixed(1)}, max ${entry.max}`);
 }
+console.log(`features: ${[...features].sort().join(', ')}`);
+console.log(`yard props: ${[...yardProps].sort().join(', ')}`);
+console.log(`textures: ${[...textures].sort().join(', ')}`);
 if (styles.size !== RESIDENCE_STYLE_COUNT) {
   throw new Error(`expected ${RESIDENCE_STYLE_COUNT} styles, saw ${styles.size}`);
 }

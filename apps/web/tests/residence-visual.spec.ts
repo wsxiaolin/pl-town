@@ -109,8 +109,22 @@ test('residence lots render the detailed catalog with facade and yard dressing',
 
   // Courtyard/yard dressing variants must all occur across the catalog.
   expect(snapshot.yardProps).toEqual(
-    expect.arrayContaining(['doghouse', 'bicycle', 'birdbath', 'trellis', 'laundry', 'well', 'vegetable-rows']),
+    expect.arrayContaining([
+      'path',
+      'well',
+      'flower-bed',
+      'potted-plant',
+      'tree',
+      'bicycle',
+      'birdbath',
+      'house-number',
+      'bench',
+      'shrub',
+      'vegetable-rows',
+      'doghouse',
+    ]),
   );
+  expect(snapshot.yardProps.length).toBeGreaterThanOrEqual(12);
 
   // A detailed lot must still own dozens of meshes after instancing keeps the
   // hidden source meshes in the hierarchy.

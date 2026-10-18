@@ -6,7 +6,7 @@ import type { MeshHelpers } from '../meshFactory';
 import { createResidenceKit } from './residenceKit';
 import { residenceFamily } from './residenceFamilies';
 import { RESIDENCE_ARCHETYPES, RESIDENCE_ARCHETYPE_COUNT, RESIDENCE_ARCHETYPE_NAMES } from './residenceArchetypes';
-import { residenceArchetypeFor, residenceFamilyFor, residenceVariantFor } from './residenceStyle';
+import { residenceArchetypeFor, residenceFamilyFor, residenceVariantFor, residenceYardVariantFor } from './residenceStyle';
 
 export type ResidenceStyleOptions = {
   x: number;
@@ -46,6 +46,7 @@ export function createResidenceModel(options: ResidenceStyleOptions): ResidenceM
   const archetypeIndex = residenceArchetypeFor(x, z, variationSeed);
   const styleId = familyIndex * RESIDENCE_ARCHETYPE_COUNT + archetypeIndex;
   const variant = residenceVariantFor(x, z, variationSeed);
+  const yardVariant = residenceYardVariantFor(x, z, variationSeed);
   const baseFamily = residenceFamily(familyIndex);
   const tintFactor = WALL_TINTS[(variant + familyIndex) % WALL_TINTS.length]!;
   const family = tintFactor === 1 ? baseFamily : { ...baseFamily, wall: tintWall(baseFamily.wall, tintFactor) };
@@ -54,7 +55,7 @@ export function createResidenceModel(options: ResidenceStyleOptions): ResidenceM
   const depth = lotType === 1 ? 1.15 : 1.5;
   const kit = createResidenceKit({ part, isNight });
   const builder = RESIDENCE_ARCHETYPES[archetypeIndex] ?? RESIDENCE_ARCHETYPES[0]!;
-  const body = builder({ group, width, depth, family, kit, variant, isNight });
+  const body = builder({ group, width, depth, family, kit, variant, yardVariant, isNight });
 
   const archetypeName = RESIDENCE_ARCHETYPE_NAMES[archetypeIndex] ?? '民居';
   const styleName = `${family.name}·${archetypeName}`;
@@ -78,6 +79,7 @@ export {
   residenceArchetypeFor,
   residenceFamilyFor,
   residenceVariantFor,
+  residenceYardVariantFor,
   residenceStyleFor,
   residenceStyleSeedForLot,
   RESIDENCE_STYLE_COUNT,

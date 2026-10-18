@@ -21,6 +21,8 @@ export type ArchetypeContext = {
   kit: ResidenceKit;
   /** Deterministic 0..n-1 selector for micro-variation within an archetype. */
   variant: number;
+  /** Independent 0..3 selector for courtyard/yard dressing. */
+  yardVariant: number;
   isNight: boolean;
 };
 
@@ -323,7 +325,7 @@ const buildWalkup: ArchetypeBuilder = ({ group, width, depth, family, kit, varia
 };
 
 /** 院落民居：低矮主体后退，前院矮墙 + 院门 + 菜畦，屋顶坡向街面。 */
-const buildCourtyard: ArchetypeBuilder = ({ group, width, depth, family, kit, variant, isNight }) => {
+const buildCourtyard: ArchetypeBuilder = ({ group, width, depth, family, kit, variant, yardVariant, isNight }) => {
   plinth(kit, group, width, depth, family);
   const height = 0.76;
   const houseWidth = width * 0.82;
@@ -388,7 +390,7 @@ const buildCourtyard: ArchetypeBuilder = ({ group, width, depth, family, kit, va
   [-1, 1].forEach((side) => {
     kit.ico(group, 0.05, 0, { color: 0xffd27a, emissive: 0xffb347, emissiveIntensity: isNight ? 0.9 : 0.24, roughness: 0.4 }, [side * gateHalf, BASE + 0.43, depth / 2 - 0.06], [1, 1.2, 1], false);
   });
-  buildYard({ group, kit, width, depth, family, variant, groundY: BASE, frontZ });
+  buildYard({ group, kit, width, depth, family, variant: yardVariant, groundY: BASE, frontZ });
   return body;
 };
 

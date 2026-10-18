@@ -35,6 +35,12 @@ export function residenceStyleFor(x: number, z: number, index: number): number {
   return residenceFamilyFor(x, z) * RESIDENCE_ARCHETYPE_COUNT + residenceArchetypeFor(x, z, index);
 }
 
+/** Independent yard-layout selector so courtyard dressing is not correlated
+ * with the house micro-variant (otherwise some layouts never appear). */
+export function residenceYardVariantFor(x: number, z: number, index: number): number {
+  return seededInt(x, z, index + 54) % 4;
+}
+
 export function residenceStyleSeedForLot(x: number, z: number): number {
   return Math.abs(Math.round(x * 31 + z));
 }
