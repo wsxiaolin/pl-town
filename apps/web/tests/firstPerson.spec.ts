@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+// CPU-only runners boot the city through a software-GL shader precompile that
+// can eat a minute before `is-ready` even fires — the default 60s test timeout
+// is not enough for a boot plus a couple of interactions. 150s covers it with
+// headroom on a loaded runner while staying tight enough to fail fast on
+// genuine regressions.
+test.setTimeout(150_000);
+
 async function enterCity(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     // Keep the walk-mode tests deterministic without a live multiplayer socket.
@@ -25,15 +32,17 @@ async function enterCity(page: import('@playwright/test').Page) {
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: OfflineWebSocket });
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'walk-tester');
-    // A stored session token skips the email/password gate so the city boots.
-    localStorage.setItem('minicityServerToken', 'first-person-token');
     localStorage.setItem('minicityRenderSettings', JSON.stringify({ resolution: 1, antialias: false, anisotropy: 1, shadows: false, exposure: 1.18 }));
   });
-  await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any)._mini?.player));
+  // `?dev` is the repo's built-in visual-verification entry: it skips the
+  // login/onboarding gate (since #245 a fake session token alone no longer
+  // does — the resident-card modal blocks the top bar and steals keyboard
+  // focus) and stays offline, which keeps these tests hermetic.
+  await page.goto('/?dev');
+  await page.waitForFunction(() => Boolean((window as any)._mini?.player), null, { timeout: 60_000 });
   // Software-GL boots spend a long while in shader precompile before the
   // reveal — allow far more than the default 5s here.
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 90_000 });
   // Let the boot-screen fade settle before interacting (see helpers.waitForCityBooted).
   await page.waitForTimeout(1_000);
 }
