@@ -123,37 +123,42 @@ export function buildYard(ctx: YardContext): void {
 
   const midZ = frontZ + span * 0.55;
   const sideX = Math.max(0.26, width * 0.3);
+  // Props near the boundary wall must stop short of its front face
+  // (wall spans edgeZ-0.10..edgeZ-0.02).
+  const wallClearZ = edgeZ - 0.16;
+  const roomy = span >= 0.42;
   const flower = variant % 2 === 0 ? 0xd06a5a : 0xd9b64e;
 
   switch (((variant % 4) + 4) % 4) {
     case 0:
       props.push('flower-bed', 'potted-plant', 'tree', 'birdbath', 'house-number');
       flowerBed(group, kit, -sideX, midZ, 0.4, y, flower);
-      pottedPlant(group, kit, sideX, midZ - 0.05, y, 1);
       tree(group, kit, sideX, frontZ + 0.14, y, 0.72, variant);
-      birdbath(group, kit, -sideX * 0.9, edgeZ - 0.2, y, family.plinth);
+      if (roomy) birdbath(group, kit, sideX, midZ - 0.04, y, family.plinth, 0.72);
       houseNumber(group, kit, -0.2, y + 0.42, frontZ + 0.02, family.accent);
       break;
     case 1:
       props.push('bench', 'shrub', 'flower-bed', 'vegetable-rows', 'doghouse');
       bench(group, kit, -sideX, midZ, y);
       shrub(group, kit, sideX, midZ, y, 1);
-      flowerBed(group, kit, sideX, edgeZ - 0.16, 0.32, y, flower);
-      vegetableRows(group, kit, -sideX, edgeZ - 0.16, 0.34, y);
-      doghouse(group, kit, sideX, frontZ + 0.42, y, family.accent);
+      flowerBed(group, kit, sideX, edgeZ - 0.28, 0.32, y, flower);
+      vegetableRows(group, kit, -sideX, edgeZ - 0.26, 0.34, y);
+      if (roomy) doghouse(group, kit, sideX, frontZ + span * 0.4, y, family.accent);
       break;
     case 2:
       props.push('laundry', 'mailbox', 'water-barrel', 'trellis');
-      laundry(group, kit, 0, edgeZ - 0.12, Math.min(0.9, width * 0.7), y, flower);
-      mailbox(group, kit, sideX, midZ, y, family.accent);
-      waterBarrel(group, kit, -sideX, midZ, y, family);
-      gardenTrellis(group, kit, -sideX, frontZ + 0.42, y, 0.52, family.trim);
+      laundry(group, kit, 0, wallClearZ, Math.min(0.9, width * 0.7), y, flower);
+      mailbox(group, kit, sideX, Math.min(midZ, wallClearZ - 0.12), y, family.accent);
+      if (roomy) waterBarrel(group, kit, -sideX, midZ, y, family);
+      else pottedPlant(group, kit, -sideX, frontZ + 0.14, y, 0.9);
+      gardenTrellis(group, kit, -sideX, frontZ + 0.16, y, 0.52, family.trim);
       break;
     default:
       props.push('well', 'flower-bed', 'potted-plant', 'tree', 'bicycle');
-      well(group, kit, -sideX, midZ, y, family);
-      flowerBed(group, kit, sideX, midZ, 0.34, y, flower);
-      pottedPlant(group, kit, 0, edgeZ - 0.12, y, 0.8);
+      if (roomy) well(group, kit, -sideX, frontZ + span * 0.4, y, family);
+      else shrub(group, kit, -sideX, frontZ + 0.16, y, 1);
+      flowerBed(group, kit, sideX, roomy ? midZ : frontZ + 0.14, 0.34, y, flower);
+      pottedPlant(group, kit, 0, wallClearZ - 0.02, y, 0.8);
       tree(group, kit, sideX, frontZ + 0.14, y, 0.72, variant + 1);
       bicycle(group, kit, -sideX, edgeZ - 0.24, y, family.accent);
       break;

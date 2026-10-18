@@ -144,7 +144,7 @@ const buildCottage: ArchetypeBuilder = ({ group, width, depth, family, kit, vari
     z: depth / 2,
     facing: 'front',
     count: windowCount,
-    spacing: Math.min(0.72, width - 0.4),
+    spacing: Math.min(0.76, width - 0.36),
     w: 0.3,
     h: 0.34,
     frameColor: family.trim,
@@ -156,7 +156,7 @@ const buildCottage: ArchetypeBuilder = ({ group, width, depth, family, kit, vari
     curtain: variant % 4 === 2,
   });
   kit.door(group, {
-    x: variant % 2 === 0 ? 0 : width * 0.28,
+    x: 0,
     y: BASE,
     z: depth / 2,
     facing: 'front',
@@ -170,7 +170,7 @@ const buildCottage: ArchetypeBuilder = ({ group, width, depth, family, kit, vari
   if (variant % 3 !== 2) kit.chimney(group, { x: width * 0.3, z: -depth * 0.22, y: top + 0.18, height: 0.42, color: family.accent });
   eaveDrainage(kit, group, { width, depth, top, height, axis, family });
   if (variant % 2 === 0) skylight(group, kit, width * 0.2, -depth * 0.12, top + 0.2, 0.26, 0.3);
-  houseNumber(group, kit, width * 0.22, BASE + 0.46, depth / 2 + 0.03, family.accent);
+  houseNumber(group, kit, 0, BASE + 0.8, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;
 };
@@ -206,7 +206,7 @@ const buildAttic: ArchetypeBuilder = ({ group, width, depth, family, kit, varian
     z: depth / 2,
     facing: 'front',
     count: 2,
-    spacing: Math.min(0.72, width - 0.42),
+    spacing: Math.min(0.76, width - 0.36),
     w: 0.28,
     h: 0.32,
     frameColor: family.trim,
@@ -217,7 +217,7 @@ const buildAttic: ArchetypeBuilder = ({ group, width, depth, family, kit, varian
     curtain: variant % 4 === 1,
   });
   kit.door(group, {
-    x: variant % 2 === 0 ? width * 0.24 : -width * 0.24,
+    x: 0,
     y: BASE,
     z: depth / 2,
     facing: 'front',
@@ -230,7 +230,7 @@ const buildAttic: ArchetypeBuilder = ({ group, width, depth, family, kit, varian
   kit.chimney(group, { x: -width * 0.28, z: -depth * 0.2, y: top + 0.3, height: 0.44, color: family.accent });
   eaveDrainage(kit, group, { width, depth, top, height, axis: roofAxis, family });
   if (variant === 2) skylight(group, kit, width * 0.2, depth * 0.06, top + 0.26, 0.24, 0.28);
-  houseNumber(group, kit, -width * 0.22, BASE + 0.44, depth / 2 + 0.03, family.accent);
+  houseNumber(group, kit, 0, BASE + 0.72, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;
 };
@@ -242,12 +242,14 @@ const buildTownhouse: ArchetypeBuilder = ({ group, width, depth, family, kit, va
   const body = kit.body(group, width, height, depth, wallMat(family, family.wallTex), BASE + height / 2);
   const top = BASE + height;
   const cols = width > 1.4 ? 2 : 1;
-  const spacing = cols > 1 ? Math.min(0.66, width - 0.46) : 0;
-  kit.windowRow(group, { x: 0, y: BASE + 0.62, z: depth / 2, facing: 'front', count: cols, spacing, w: 0.3, h: 0.4, frameColor: family.trim, mullions: true, lit: isLit(variant, 0), shutters: variant % 2 === 1, shutterColor: family.accent, flowerBox: variant % 2 === 0, curtain: variant % 4 === 0 });
-  kit.windowRow(group, { x: 0, y: BASE + 1.24, z: depth / 2, facing: 'front', count: cols, spacing, w: 0.3, h: 0.4, frameColor: family.trim, mullions: variant % 2 === 0, lit: isLit(variant, 1), shutters: variant % 3 === 0, shutterColor: family.accent, curtain: variant % 4 === 2 });
+  const doorX = cols > 1 ? 0 : -width * 0.26;
+  const rowX = cols > 1 ? 0 : width * 0.26;
+  const spacing = cols > 1 ? Math.min(0.72, width - 0.5) : 0;
+  kit.windowRow(group, { x: rowX, y: BASE + 0.62, z: depth / 2, facing: 'front', count: cols, spacing, w: 0.3, h: 0.4, frameColor: family.trim, mullions: true, lit: isLit(variant, 0), shutters: variant % 2 === 1, shutterColor: family.accent, flowerBox: variant % 2 === 0, curtain: variant % 4 === 0 });
+  kit.windowRow(group, { x: rowX, y: BASE + 1.24, z: depth / 2, facing: 'front', count: cols, spacing, w: 0.3, h: 0.4, frameColor: family.trim, mullions: variant % 2 === 0, lit: isLit(variant, 1), shutters: variant % 3 === 0, shutterColor: family.accent, curtain: variant % 4 === 2 });
   kit.windowRow(group, { x: 0, y: BASE + 1.24, z: -depth / 2, facing: 'back', count: cols, spacing, w: 0.26, h: 0.36, frameColor: family.trim, lit: isLit(variant, 2) });
   if (variant % 2 === 0) {
-    kit.awning(group, { x: 0, y: top - 0.18, z: depth / 2, facing: 'front', width: width * 0.78, depth: 0.34, colorA: family.accent, colorB: family.trim, stripes: 4 });
+    kit.awning(group, { x: doorX, y: top - 0.18, z: depth / 2, facing: 'front', width: width * (cols > 1 ? 0.78 : 0.42), depth: 0.34, colorA: family.accent, colorB: family.trim, stripes: 4 });
   }
   if (variant === 3) {
     kit.balcony(group, { x: 0, y: BASE + 1.0, z: depth / 2, facing: 'front', width: width * 0.66, depth: 0.3, color: family.trim, railColor: family.accent });
@@ -257,7 +259,7 @@ const buildTownhouse: ArchetypeBuilder = ({ group, width, depth, family, kit, va
     });
   }
   kit.door(group, {
-    x: variant % 2 === 0 ? width * 0.24 : 0,
+    x: doorX,
     y: BASE,
     z: depth / 2,
     facing: 'front',
@@ -275,8 +277,8 @@ const buildTownhouse: ArchetypeBuilder = ({ group, width, depth, family, kit, va
     kit.chimney(group, { x: width * 0.28, z: -depth * 0.24, y: top + 0.1, height: 0.4, color: family.accent });
     eaveDrainage(kit, group, { width, depth, top, height, axis: 'z', family });
   }
-  if (variant % 2 === 1) acUnit(group, kit, -width * 0.38, BASE + 1.02, depth / 2 + 0.085);
-  houseNumber(group, kit, width * 0.18, BASE + 0.5, depth / 2 + 0.03, family.accent);
+  if (variant % 2 === 1) acUnit(group, kit, -width / 2 + 0.14, BASE + 1.02, depth / 2 + 0.085);
+  houseNumber(group, kit, 0, cols > 1 ? BASE + 1.4 : BASE + 0.5, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;
 };
@@ -288,10 +290,12 @@ const buildWalkup: ArchetypeBuilder = ({ group, width, depth, family, kit, varia
   const body = kit.body(group, width, height, depth, wallMat(family, family.upperTex), BASE + height / 2);
   const top = BASE + height;
   const cols = width > 1.4 ? 2 : 1;
-  const spacing = cols > 1 ? Math.min(0.62, width - 0.44) : 0;
+  const doorX = cols > 1 ? 0 : -width * 0.26;
+  const rowX = cols > 1 ? 0 : width * 0.26;
+  const spacing = cols > 1 ? Math.min(0.74, width - 0.42) : 0;
   for (let row = 0; row < 3; row += 1) {
     kit.windowRow(group, {
-      x: 0,
+      x: rowX,
       y: BASE + 0.52 + row * 0.66,
       z: depth / 2,
       facing: 'front',
@@ -309,7 +313,7 @@ const buildWalkup: ArchetypeBuilder = ({ group, width, depth, family, kit, varia
     });
   }
   kit.windowRow(group, { x: 0, y: BASE + 1.18, z: -depth / 2, facing: 'back', count: cols, spacing, w: 0.24, h: 0.32, frameColor: family.trim, lit: isLit(variant, 3) });
-  kit.door(group, { x: 0, y: BASE, z: depth / 2, facing: 'front', w: 0.4, h: 0.66, color: family.accent, frameColor: family.trim, canopyColor: family.accent, lit: isNight });
+  kit.door(group, { x: doorX, y: BASE, z: depth / 2, facing: 'front', w: 0.4, h: 0.66, color: family.accent, frameColor: family.trim, canopyColor: family.accent, lit: isNight });
   if (variant % 2 === 0) {
     kit.balcony(group, { x: 0, y: BASE + 1.0, z: depth / 2, facing: 'front', width: width * 0.62, depth: 0.28, color: family.trim, railColor: family.accent });
     [-0.2, 0.2].forEach((px) => {
@@ -326,10 +330,12 @@ const buildWalkup: ArchetypeBuilder = ({ group, width, depth, family, kit, varia
     // Stair bulkhead + two wall-mounted AC units.
     kit.box(group, width * 0.44, 0.34, depth * 0.34, { color: family.upperTex === family.wallTex ? family.wall : family.plinth, roughness: 0.75, tex: family.upperTex, rx: 1, ry: 1 }, [0, top + 0.25, depth * 0.08]);
     kit.box(group, 0.16, 0.24, 0.02, { color: family.accent, roughness: 0.65, tex: 'wood', rx: 1, ry: 1 }, [0, top + 0.16, depth * 0.08 + depth * 0.17 + 0.01], false);
-    acUnit(group, kit, width / 2 - 0.14, BASE + 1.18, depth / 2 + 0.085);
-    acUnit(group, kit, -width / 2 + 0.14, BASE + 1.84, depth / 2 + 0.085);
+    if (cols > 1) {
+      acUnit(group, kit, width / 2 - 0.14, BASE + 1.18, depth / 2 + 0.085);
+      acUnit(group, kit, -width / 2 + 0.14, BASE + 1.84, depth / 2 + 0.085);
+    }
   }
-  houseNumber(group, kit, width * 0.16, BASE + 0.5, depth / 2 + 0.03, family.accent);
+  houseNumber(group, kit, cols > 1 ? width * 0.375 : 0, BASE + 0.52, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;
 };
@@ -350,8 +356,10 @@ const buildCourtyard: ArchetypeBuilder = ({ group, width, depth, family, kit, va
   } else {
     kit.gableRoof(group, { y: top, z: bodyZ, run: houseWidth, span: houseDepth, height: 0.36, color: family.roof, tex: family.roofTex, overhang: 0.12, axis: 'x' });
   }
-  kit.windowRow(group, { x: 0, y: BASE + 0.42, z: frontZ, facing: 'front', count: 2, spacing: Math.min(0.62, houseWidth - 0.34), w: 0.26, h: 0.3, frameColor: family.trim, lit: isLit(variant, 0), shutters: variant % 2 === 0, shutterColor: family.accent, flowerBox: variant % 3 === 2, curtain: variant % 4 === 1 });
-  sideWindow(kit, group, { width: houseWidth, y: BASE + 0.42, z: bodyZ, family, lit: isLit(variant, 2), facing: 'right' });
+  kit.windowRow(group, { x: 0, y: BASE + 0.42, z: frontZ, facing: 'front', count: 2, spacing: Math.min(0.66, houseWidth - 0.3), w: 0.26, h: 0.3, frameColor: family.trim, lit: isLit(variant, 0), shutters: variant % 2 === 0, shutterColor: family.accent, flowerBox: variant % 3 === 2, curtain: variant % 4 === 1 });
+  // The kitchen wing occupies the right wall on odd variants, so only open the
+  // side that is actually exposed.
+  if (variant % 2 === 0) sideWindow(kit, group, { width: houseWidth, y: BASE + 0.42, z: bodyZ, family, lit: isLit(variant, 2), facing: 'right' });
   sideWindow(kit, group, { width: houseWidth, y: BASE + 0.42, z: bodyZ, family, lit: isLit(variant, 1), facing: 'left' });
   if (variant % 2 === 1) {
     // Small kitchen wing against the right side of the courtyard house.
@@ -453,14 +461,17 @@ const buildVilla: ArchetypeBuilder = ({ group, width, depth, family, kit, varian
   const top = BASE + height;
   kit.hipRoof(group, { y: top, width: width + 0.24, depth: depth + 0.1, height: 0.5, color: family.roof, tex: family.roofTex });
   kit.porch(group, { x: 0, z: depth / 2 - 0.06, y: BASE, width: width * 0.62, depth: 0.44, roofColor: family.roof, roofTex: family.roofTex, postColor: family.trim, rise: 0.42 });
-  // Bay window protruding from the front wall.
-  kit.box(group, 0.56, 0.5, 0.18, { color: family.wall, roughness: 0.5, tex: family.upperTex, rx: 1, ry: 1 }, [0, BASE + 0.56, depth / 2 + 0.07]);
-  kit.box(group, 0.44, 0.34, 0.03, { color: 0xcfe0eb, emissive: 0x395062, emissiveIntensity: isNight ? 0.16 : 0.04, roughness: 0.14, metalness: 0.18, tex: 'window_reflection', rx: 1, ry: 1 }, [0, BASE + 0.58, depth / 2 + 0.17], false);
+  // Bay window protruding from the front wall, offset so the porch door in
+  // front of it no longer covers the glass.
+  const bayX = -width * 0.33;
+  const bayW = Math.min(0.5, width * 0.3);
+  kit.box(group, bayW, 0.5, 0.18, { color: family.wall, roughness: 0.5, tex: family.upperTex, rx: 1, ry: 1 }, [bayX, BASE + 0.56, depth / 2 + 0.07]);
+  kit.box(group, bayW - 0.06, 0.34, 0.03, { color: 0xcfe0eb, emissive: 0x395062, emissiveIntensity: isNight ? 0.16 : 0.04, roughness: 0.14, metalness: 0.18, tex: 'window_reflection', rx: 1, ry: 1 }, [bayX, BASE + 0.58, depth / 2 + 0.17], false);
   kit.windowRow(group, { x: 0, y: BASE + 0.56, z: -depth / 2, facing: 'back', count: 2, spacing: Math.min(0.6, width - 0.4), w: 0.26, h: 0.34, frameColor: family.trim, lit: isLit(variant, 0), shutters: variant % 2 === 0, shutterColor: family.accent, flowerBox: variant % 3 === 0 });
   kit.door(group, { x: 0, y: BASE, z: depth / 2 + 0.18, facing: 'front', w: 0.42, h: 0.6, color: family.accent, frameColor: family.trim, step: false, lit: isNight });
   kit.chimney(group, { x: width * 0.3, z: -depth * 0.16, y: top + 0.24, height: 0.44, color: family.accent });
   // Small gable over the bay window.
-  kit.gableRoof(group, { y: BASE + 0.81, z: depth / 2 + 0.1, run: 0.62, span: 0.28, height: 0.12, color: family.roof, tex: family.roofTex, overhang: 0.03, axis: 'x' });
+  kit.gableRoof(group, { x: bayX, y: BASE + 0.81, z: depth / 2 + 0.1, run: bayW + 0.12, span: 0.28, height: 0.12, color: family.roof, tex: family.roofTex, overhang: 0.03, axis: 'x' });
   // Porch balustrades flanking the entrance steps.
   balustrade(group, kit, { x: -width * 0.22, z: depth / 2 + 0.34, y: BASE, width: width * 0.22 });
   balustrade(group, kit, { x: width * 0.22, z: depth / 2 + 0.34, y: BASE, width: width * 0.22 });
@@ -499,8 +510,8 @@ const buildRowhouse: ArchetypeBuilder = ({ group, width, depth, family, kit, var
     kit.window(group, { x: side * unitX, y: BASE + 1.06, z: depth / 2, facing: 'front', w: 0.28, h: 0.4, frameColor: family.trim, mullions: true, lit: isLit(variant, index), shutters: variant % 2 === 0, shutterColor: family.accent, flowerBox: variant % 3 === 2 });
     kit.window(group, { x: side * unitX, y: BASE + 1.56, z: depth / 2, facing: 'front', w: 0.24, h: 0.3, frameColor: family.trim, lit: isLit(variant, index + 2), curtain: variant % 4 === 0 });
   });
-  houseNumber(group, kit, unitX + 0.18, BASE + 0.46, depth / 2 + 0.03, family.accent);
-  houseNumber(group, kit, -unitX + 0.18, BASE + 0.46, depth / 2 + 0.03, family.accent);
+  houseNumber(group, kit, unitX + 0.24, BASE + 0.46, depth / 2 + 0.06, family.accent);
+  houseNumber(group, kit, -unitX - 0.24, BASE + 0.46, depth / 2 + 0.06, family.accent);
   if (variant % 4 === 1) {
     kit.hipRoof(group, { y: top, width, depth, height: 0.42, color: family.roof, tex: family.roofTex });
   } else {

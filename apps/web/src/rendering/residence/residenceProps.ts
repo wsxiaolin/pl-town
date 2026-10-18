@@ -205,12 +205,15 @@ export function birdbath(
   z: number,
   y: number,
   stone: number,
+  scale = 1,
 ): void {
   const mat: MaterialParameters = { color: stone, roughness: 0.82, tex: 'stone', rx: 1, ry: 1 };
-  kit.cyl(group, 0.07, 0.1, 0.06, 10, mat, [x, y + 0.03, z], false);
-  kit.cyl(group, 0.04, 0.045, 0.22, 8, mat, [x, y + 0.15, z], false);
-  kit.cyl(group, 0.17, 0.1, 0.06, 12, mat, [x, y + 0.29, z], false);
-  kit.cyl(group, 0.135, 0.135, 0.015, 12, { color: 0x5b7d86, roughness: 0.16, metalness: 0.2, tex: 'glass', rx: 1, ry: 1 }, [x, y + 0.315, z], false);
+  const g = kit.sub(group, x, y, z, 'front');
+  g.scale.setScalar(scale);
+  kit.cyl(g, 0.07, 0.1, 0.06, 10, mat, [0, 0.03, 0], false);
+  kit.cyl(g, 0.04, 0.045, 0.22, 8, mat, [0, 0.15, 0], false);
+  kit.cyl(g, 0.17, 0.1, 0.06, 12, mat, [0, 0.29, 0], false);
+  kit.cyl(g, 0.135, 0.135, 0.015, 12, { color: 0x5b7d86, roughness: 0.16, metalness: 0.2, tex: 'glass', rx: 1, ry: 1 }, [0, 0.315, 0], false);
 }
 
 /** Lattice garden trellis with climbing vines and blooms. */
