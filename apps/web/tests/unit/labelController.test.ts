@@ -101,6 +101,14 @@ test('first person hides labels beyond the distance cap and overlapping screen n
   const fadeOpacity = Number(fading.values.opacity);
   assert.ok(fadeOpacity > 0 && fadeOpacity < 1, `expected a faded opacity, got ${fading.values.opacity}`);
 
+  // A label that leaves the view while FP is active keeps its inline fade until
+  // something clears it. Pin that stale style here so the exit path below is
+  // actually exercised for a currently-hidden label, not only for visible ones.
+  buildings[3]!.group.position.x = 400;
+  updateCityLabels(options);
+  assert.equal(fading.values.visibility, 'hidden');
+  assert.ok(fading.values.opacity, 'expected the hidden label to retain its fade before exit');
+
   // Leaving first person restores the overhead full-projection behaviour:
   // the distant and side labels come back, the twin overlap is no longer culled.
   updateCityLabels({ ...options, firstPersonActive: false });
@@ -108,7 +116,9 @@ test('first person hides labels beyond the distance cap and overlapping screen n
   assert.equal(twin.values.visibility, '');
   assert.equal(far.values.visibility, '');
   assert.equal(beside.values.visibility, 'hidden');
-  // Inline fade opacity from the FP pass is cleared on the kept labels.
+  assert.equal(fading.values.visibility, 'hidden');
+  // Inline fade opacity from the FP pass is cleared on every touched label,
+  // including ones that are offscreen when the mode switches back.
   assert.ok(!near.values.opacity, `expected no inline opacity, got ${near.values.opacity}`);
   assert.ok(!fading.values.opacity, `expected no inline opacity, got ${fading.values.opacity}`);
 });

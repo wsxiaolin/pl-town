@@ -7,6 +7,11 @@ type LabelScreenState = { x: number; y: number; visible: boolean; opacity: strin
 const labelScreenStates = new WeakMap<HTMLElement, LabelScreenState>();
 const labelViewProjection = new THREE.Matrix4();
 const cameraWorldPosition = new THREE.Vector3();
+// Labels touched by the last update. Bounded by the city's label count, so a
+// strong set is fine; it lets the FP→overhead switch clear transient styles
+// explicitly instead of relying on "not writing keeps the previous value".
+const labelElements = new Set<HTMLElement>();
+let previousFirstPersonActive = false;
 
 // ===== First-person label declutter =====
 // 眼高 1.55m 的透视相机贴着街道平视时，全城屋顶标签被透视压缩到屏幕
@@ -40,6 +45,19 @@ function hideLabel(element: HTMLElement): void {
   else labelScreenStates.set(element, { x: 0, y: 0, visible: false, opacity: '' });
 }
 
+/** Leaving first person restores the overhead projection: clear every inline
+ *  hide/fade style the declutter pass may have left, including labels that are
+ *  currently offscreen and would otherwise keep a stale opacity. The regular
+ *  overhead pass runs immediately after and re-hides offscreen/locked labels. */
+function resetFirstPersonLabelStyles(): void {
+  for (const element of labelElements) {
+    element.style.visibility = '';
+    element.style.opacity = '';
+    labelScreenStates.delete(element);
+  }
+  labelElements.clear();
+}
+
 function showLabel(element: HTMLElement, state: LabelScreenState, x: number, y: number, opacity: number): void {
   if (!state.visible) element.style.visibility = '';
   state.visible = true;
@@ -68,6 +86,8 @@ export function updateCityLabels(options: {
   const viewportHeight = window.innerHeight;
   const camera = options.camera;
   const firstPersonActive = options.firstPersonActive === true;
+  if (previousFirstPersonActive && !firstPersonActive) resetFirstPersonLabelStyles();
+  previousFirstPersonActive = firstPersonActive;
   labelViewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
   camera.getWorldPosition(cameraWorldPosition);
   const candidates: DeclutterCandidate[] = [];
@@ -75,6 +95,7 @@ export function updateCityLabels(options: {
   const applyLabel = (entry: Labelled, labelY: number): void => {
     const element = entry.labelEl;
     if (!element) return;
+    labelElements.add(element);
     const worldPosition = options.worldPosition;
     worldPosition.copy(entry.group.position);
     worldPosition.y = entry.group.position.y + labelY;
