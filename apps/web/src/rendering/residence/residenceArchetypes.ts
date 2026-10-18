@@ -170,7 +170,8 @@ const buildCottage: ArchetypeBuilder = ({ group, width, depth, family, kit, vari
   if (variant % 3 !== 2) kit.chimney(group, { x: width * 0.3, z: -depth * 0.22, y: top + 0.18, height: 0.42, color: family.accent });
   eaveDrainage(kit, group, { width, depth, top, height, axis, family });
   if (variant % 2 === 0) skylight(group, kit, width * 0.2, -depth * 0.12, top + 0.2, 0.26, 0.3);
-  houseNumber(group, kit, 0, BASE + 0.8, depth / 2 + 0.06, family.accent);
+  // Plaque rides the door leaf, clear of the transom and wall bands.
+  houseNumber(group, kit, 0.11, BASE + 0.24, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;
 };
@@ -230,7 +231,8 @@ const buildAttic: ArchetypeBuilder = ({ group, width, depth, family, kit, varian
   kit.chimney(group, { x: -width * 0.28, z: -depth * 0.2, y: top + 0.3, height: 0.44, color: family.accent });
   eaveDrainage(kit, group, { width, depth, top, height, axis: roofAxis, family });
   if (variant === 2) skylight(group, kit, width * 0.2, depth * 0.06, top + 0.26, 0.24, 0.28);
-  houseNumber(group, kit, 0, BASE + 0.72, depth / 2 + 0.06, family.accent);
+  // Plaque rides the door leaf, clear of the transom and wall bands.
+  houseNumber(group, kit, 0.11, BASE + 0.24, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;
 };
