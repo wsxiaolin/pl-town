@@ -114,7 +114,9 @@ export function buildObservationDeck(options: ObservationDeckOptions, definition
   addPart(g, new THREE.CylinderGeometry(0.05, 0.06, 1.5, 8), { color: WOOD_DARK, roughness: 0.9, tex: 'wood' }, [PIER_EAST_END - 0.4, DECK_Y + 0.75, PIER_HALF_WIDTH + 0.3]);
   addPart(g, new THREE.BoxGeometry(0.9, 0.5, 0.06), { color: 0x9a7a52, roughness: 0.8, tex: 'wood' }, [PIER_EAST_END - 0.4, DECK_Y + 1.6, PIER_HALF_WIDTH + 0.3], false).rotation.y = 0.5;
 
-  g.position.set(definition.x, 0, definition.z);
+  // 坐标必须落在返回的 group（outer）上：标签投影、埋深起吊（y=-3 → 0）
+  // 均消费 outer.position；设在内层会让标签钉在城中心 (0,y,0)。
+  outer.position.set(definition.x, 0, definition.z);
   tagMeshes(g, definition.id);
   return { ...definition, group: outer, body: undefined, bodyMat: undefined, labelEl: null, labelY: DECK_Y + 3.3 };
   function tagMeshes(root: THREE.Object3D, id: string): void {

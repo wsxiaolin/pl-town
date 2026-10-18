@@ -68,12 +68,14 @@ export function createFrameLoop(options: FrameLoopOptions) {
   let renderHeld = false;
 
   function updateLabels() {
+    const firstPerson = options.getFirstPersonController?.() ?? null;
     updateCityLabels({
       camera: options.getCamera(),
       buildings: options.getBuildings(),
       residences: options.getResidences(),
       isStoryLocked: options.isStoryLockedBuilding,
       worldPosition: options.getLabelWorldPosition(),
+      firstPersonActive: firstPerson?.isActive() ?? false,
     });
   }
 

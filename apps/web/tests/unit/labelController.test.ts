@@ -43,3 +43,82 @@ test('city labels avoid redundant DOM writes and hide offscreen entries', () => 
   updateCityLabels(options);
   assert.equal(values.visibility, 'hidden');
 });
+
+test('first person hides labels beyond the distance cap and overlapping screen neighbours', () => {
+  (globalThis as any).window = { innerWidth: 1000, innerHeight: 600 };
+  const makeLabel = () => {
+    const values: Record<string, string> = {};
+    const style = new Proxy(values, {
+      set(target, property, value) {
+        target[String(property)] = String(value);
+        return true;
+      },
+    });
+    return { element: { style } as unknown as HTMLElement, values };
+  };
+  // Perspective camera at street eye height looking straight ahead (-Z).
+  const camera = new THREE.PerspectiveCamera(72, 1000 / 600, 0.1, 300);
+  camera.position.set(0, 1.55, 0);
+  camera.rotation.order = 'YXZ';
+  camera.lookAt(0, 1.55, -10);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+
+  const near = makeLabel();   // 10 m ahead → kept
+  const twin = makeLabel();   // same spot as near (screen overlap) → hidden, near wins
+  const far = makeLabel();    // 60 m ahead → beyond cap, hidden
+  const fading = makeLabel(); // 40 m ahead, inside the fade band → dimmed but visible
+  const beside = makeLabel(); // 10 m ahead but far off to the side → offscreen, hidden
+  const makeGroup = (x: number, z: number) => {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+    return group;
+  };
+  const buildings = [
+    { id: 'near', num: 'N', x: 0, z: -10, shape: 'box', icon: 'i', group: makeGroup(0, -10), labelEl: near.element, labelY: 4 },
+    { id: 'twin', num: 'T', x: 0, z: -10, shape: 'box', icon: 'i', group: makeGroup(0, -10), labelEl: twin.element, labelY: 4.2 },
+    { id: 'far', num: 'F', x: 0, z: -60, shape: 'box', icon: 'i', group: makeGroup(0, -60), labelEl: far.element, labelY: 4 },
+    { id: 'fading', num: 'D', x: 0, z: -40, shape: 'box', icon: 'i', group: makeGroup(0, -40), labelEl: fading.element, labelY: 4 },
+    { id: 'beside', num: 'B', x: 400, z: -10, shape: 'box', icon: 'i', group: makeGroup(400, -10), labelEl: beside.element, labelY: 4 },
+  ];
+  const options = {
+    camera,
+    buildings,
+    residences: [],
+    isStoryLocked: () => false,
+    worldPosition: new THREE.Vector3(),
+    firstPersonActive: true,
+  };
+
+  updateCityLabels(options);
+
+  assert.equal(near.values.visibility, '');
+  assert.equal(twin.values.visibility, 'hidden');
+  assert.equal(far.values.visibility, 'hidden');
+  assert.equal(beside.values.visibility, 'hidden');
+  // The 40 m label sits in the 33→45 m fade band: visible but dimmed.
+  assert.equal(fading.values.visibility, '');
+  const fadeOpacity = Number(fading.values.opacity);
+  assert.ok(fadeOpacity > 0 && fadeOpacity < 1, `expected a faded opacity, got ${fading.values.opacity}`);
+
+  // A label that leaves the view while FP is active keeps its inline fade until
+  // something clears it. Pin that stale style here so the exit path below is
+  // actually exercised for a currently-hidden label, not only for visible ones.
+  buildings[3]!.group.position.x = 400;
+  updateCityLabels(options);
+  assert.equal(fading.values.visibility, 'hidden');
+  assert.ok(fading.values.opacity, 'expected the hidden label to retain its fade before exit');
+
+  // Leaving first person restores the overhead full-projection behaviour:
+  // the distant and side labels come back, the twin overlap is no longer culled.
+  updateCityLabels({ ...options, firstPersonActive: false });
+  assert.equal(near.values.visibility, '');
+  assert.equal(twin.values.visibility, '');
+  assert.equal(far.values.visibility, '');
+  assert.equal(beside.values.visibility, 'hidden');
+  assert.equal(fading.values.visibility, 'hidden');
+  // Inline fade opacity from the FP pass is cleared on every touched label,
+  // including ones that are offscreen when the mode switches back.
+  assert.ok(!near.values.opacity, `expected no inline opacity, got ${near.values.opacity}`);
+  assert.ok(!fading.values.opacity, `expected no inline opacity, got ${fading.values.opacity}`);
+});
