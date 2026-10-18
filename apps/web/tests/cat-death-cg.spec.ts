@@ -46,6 +46,9 @@ test('Cat Death CG is available only through the hidden cinematic debug API', as
   expect(viewport.overflow).toBeLessThanOrEqual(1);
 
   expect(await page.evaluate(() => (window as any)._mini.cinematics.stopCatDeath())).toBe(true);
-  await expect(overlay).toHaveCount(0, { timeout: 2_000 });
+  // stopCatDeath schedules a 650 ms removal timer, but software-GL runners can
+  // stall the main thread for seconds per frame; 2 s proved too tight (shard 1
+  // flake on #249). 8 s only widens the assertion window, not the product path.
+  await expect(overlay).toHaveCount(0, { timeout: 8_000 });
   expect(await page.evaluate(() => (window as any)._mini.cinematics.isCatDeathActive())).toBe(false);
 });
