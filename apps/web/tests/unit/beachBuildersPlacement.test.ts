@@ -18,6 +18,8 @@ if (typeof (globalThis as { document?: unknown }).document === 'undefined') {
     createElement: () => ({
       width: 128, height: 64,
       getContext: () => ({ fillRect() {}, strokeRect() {}, fillText() {} }),
+      // 匾额/贴图代码可能在首次创建时导出 data URL；桩补上避免未来 TypeError。
+      toDataURL: () => '',
     }),
   };
 }
