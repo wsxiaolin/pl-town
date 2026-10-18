@@ -137,3 +137,110 @@ export function houseNumber(group: THREE.Group, kit: ResidenceKit, x: number, y:
   kit.box(group, 0.025, 0.045, 0.012, { color, roughness: 0.5, metalness: 0.3 }, [x - 0.022, y, z + 0.014], false);
   kit.box(group, 0.025, 0.045, 0.012, { color, roughness: 0.5, metalness: 0.3 }, [x + 0.022, y, z + 0.014], false);
 }
+
+/** Timber doghouse with a dark arched opening and a food bowl. */
+export function doghouse(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  x: number,
+  z: number,
+  y: number,
+  color: number,
+): void {
+  const wood: MaterialParameters = { color, roughness: 0.86, tex: 'wood', rx: 1, ry: 1 };
+  const dark: MaterialParameters = { color: 0x3a3029, roughness: 0.95 };
+  const g = kit.sub(group, x, y, z, 'front');
+  kit.box(g, 0.34, 0.26, 0.3, wood, [0, 0.13, 0], false);
+  kit.gableRoof(g, { y: 0.26, run: 0.34, span: 0.38, height: 0.13, color: 0x6f4a3a, tex: 'residence_shingle', axis: 'x' });
+  kit.box(g, 0.15, 0.16, 0.012, dark, [0, 0.09, 0.153], false);
+  // Round arch above the rectangular opening.
+  const arch = kit.cyl(g, 0.075, 0.075, 0.014, 10, dark, [0, 0.17, 0.152], false);
+  arch.rotation.x = Math.PI / 2;
+  kit.box(g, 0.12, 0.03, 0.02, { color: 0xf2efe6, roughness: 0.6 }, [0, 0.235, 0.156], false);
+  // Bowl by the door.
+  kit.cyl(group, 0.05, 0.038, 0.035, 10, { color: 0x8f9296, roughness: 0.4, metalness: 0.3 }, [x + 0.2, y + 0.02, z + 0.18], false);
+  kit.cyl(group, 0.036, 0.036, 0.012, 10, { color: 0x7a4a33, roughness: 0.9 }, [x + 0.2, y + 0.032, z + 0.18], false);
+}
+
+/** Step-through bicycle parked against a fence. */
+export function bicycle(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  x: number,
+  z: number,
+  y: number,
+  frameColor: number,
+): void {
+  const g = kit.sub(group, x, y, z, 'front');
+  const frame: MaterialParameters = { color: frameColor, roughness: 0.45, metalness: 0.35, tex: 'metal', rx: 1, ry: 1 };
+  const rubber: MaterialParameters = { color: 0x2c2b29, roughness: 0.9 };
+  const steel: MaterialParameters = { color: 0x9a9c9e, roughness: 0.4, metalness: 0.55, tex: 'metal', rx: 1, ry: 1 };
+  // Wheels lie in the XY plane; the rim + hub read at street distance.
+  [-0.18, 0.18].forEach((wx) => {
+    const tyre = kit.cyl(g, 0.115, 0.115, 0.022, 12, rubber, [wx, 0.115, 0], false);
+    tyre.rotation.x = Math.PI / 2;
+    const rim = kit.cyl(g, 0.086, 0.086, 0.026, 12, steel, [wx, 0.115, 0], false);
+    rim.rotation.x = Math.PI / 2;
+    const hub = kit.cyl(g, 0.018, 0.018, 0.05, 8, steel, [wx, 0.115, 0], false);
+    hub.rotation.x = Math.PI / 2;
+  });
+  kit.box(g, 0.24, 0.02, 0.02, frame, [0, 0.225, 0], false);
+  const down = kit.box(g, 0.3, 0.02, 0.02, frame, [0.015, 0.16, 0], false);
+  down.rotation.z = -0.32;
+  kit.box(g, 0.02, 0.14, 0.02, frame, [0.1, 0.205, 0], false);
+  kit.box(g, 0.02, 0.13, 0.02, frame, [-0.13, 0.2, 0], false);
+  kit.box(g, 0.12, 0.025, 0.06, { color: 0x4a3a2c, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [0.1, 0.285, 0], false);
+  kit.box(g, 0.03, 0.03, 0.18, steel, [-0.135, 0.29, 0], false);
+  kit.box(g, 0.012, 0.16, 0.012, steel, [0.02, 0.13, 0.035], false);
+  kit.box(g, 0.05, 0.018, 0.09, steel, [0.02, 0.045, 0.035], false);
+  // Wicker basket on the handlebar.
+  kit.box(g, 0.12, 0.1, 0.12, { color: 0xa9834f, roughness: 0.85, tex: 'wood', rx: 1, ry: 1 }, [-0.145, 0.29, 0], false);
+}
+
+/** Stone birdbath with a reflective water disc. */
+export function birdbath(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  x: number,
+  z: number,
+  y: number,
+  stone: number,
+): void {
+  const mat: MaterialParameters = { color: stone, roughness: 0.82, tex: 'stone', rx: 1, ry: 1 };
+  kit.cyl(group, 0.07, 0.1, 0.06, 10, mat, [x, y + 0.03, z], false);
+  kit.cyl(group, 0.04, 0.045, 0.22, 8, mat, [x, y + 0.15, z], false);
+  kit.cyl(group, 0.17, 0.1, 0.06, 12, mat, [x, y + 0.29, z], false);
+  kit.cyl(group, 0.135, 0.135, 0.015, 12, { color: 0x5b7d86, roughness: 0.16, metalness: 0.2, tex: 'glass', rx: 1, ry: 1 }, [x, y + 0.315, z], false);
+}
+
+/** Lattice garden trellis with climbing vines and blooms. */
+export function gardenTrellis(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  x: number,
+  z: number,
+  y: number,
+  width: number,
+  color: number,
+): void {
+  const wood: MaterialParameters = { color, roughness: 0.86, tex: 'wood', rx: 1, ry: 1 };
+  const g = kit.sub(group, x, y, z, 'front');
+  const h = 0.52;
+  [-1, 1].forEach((side) => {
+    kit.box(g, 0.035, h, 0.035, wood, [side * (width / 2 - 0.02), h / 2, 0], false);
+  });
+  for (let i = 0; i <= 4; i += 1) {
+    kit.box(g, width, 0.02, 0.02, wood, [0, 0.1 + i * 0.1, 0], false);
+  }
+  for (let i = 0; i < 5; i += 1) {
+    const px = -width / 2 + 0.06 + i * ((width - 0.12) / 4);
+    kit.box(g, 0.02, h - 0.1, 0.02, wood, [px, h / 2, 0.004], false);
+  }
+  // Vine clumps and flowers climbing the lattice.
+  const vine: MaterialParameters = { color: 0x4f7f45, roughness: 0.93, tex: 'grass', rx: 1, ry: 1 };
+  [-0.28, -0.1, 0.12, 0.3].forEach((t, index) => {
+    const vy = 0.16 + (index % 3) * 0.12;
+    kit.box(g, 0.11, 0.09, 0.05, vine, [t * width, vy, 0.02], false);
+    kit.box(g, 0.045, 0.045, 0.045, { color: index % 2 === 0 ? 0xd06a5a : 0xe0b05a, roughness: 0.72 }, [t * width + 0.02, vy + 0.03, 0.04], false);
+  });
+}

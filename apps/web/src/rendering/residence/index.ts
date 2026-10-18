@@ -24,6 +24,20 @@ export type ResidenceModel = {
   styleName: string;
 };
 
+// Subtle paint-batch variation: the same family texture is multiplied by one of
+// these factors, so adjacent lots read as individually painted while the
+// family palette stays recognisable. A handful of rounded factors keeps the
+// material pool (and therefore the static batcher) small.
+const WALL_TINTS = [0.93, 0.97, 1, 1.03, 1.06] as const;
+
+function tintWall(color: number, factor: number): number {
+  const channel = (shift: number) => {
+    const value = Math.round(((color >> shift) & 0xff) * factor);
+    return Math.max(0, Math.min(255, value)) << shift;
+  };
+  return channel(16) | channel(8) | channel(0);
+}
+
 export function createResidenceModel(options: ResidenceStyleOptions): ResidenceModel {
   const { x, z, variationSeed, lotType, isNight, part } = options;
   const group = new THREE.Group();
@@ -31,12 +45,14 @@ export function createResidenceModel(options: ResidenceStyleOptions): ResidenceM
   const familyIndex = residenceFamilyFor(x, z);
   const archetypeIndex = residenceArchetypeFor(x, z, variationSeed);
   const styleId = familyIndex * RESIDENCE_ARCHETYPE_COUNT + archetypeIndex;
-  const family = residenceFamily(familyIndex);
+  const variant = residenceVariantFor(x, z, variationSeed);
+  const baseFamily = residenceFamily(familyIndex);
+  const tintFactor = WALL_TINTS[(variant + familyIndex) % WALL_TINTS.length]!;
+  const family = tintFactor === 1 ? baseFamily : { ...baseFamily, wall: tintWall(baseFamily.wall, tintFactor) };
 
   const width = lotType === 2 ? 1.25 : 1.6;
   const depth = lotType === 1 ? 1.15 : 1.5;
   const kit = createResidenceKit({ part, isNight });
-  const variant = residenceVariantFor(x, z, variationSeed);
   const builder = RESIDENCE_ARCHETYPES[archetypeIndex] ?? RESIDENCE_ARCHETYPES[0]!;
   const body = builder({ group, width, depth, family, kit, variant, isNight });
 

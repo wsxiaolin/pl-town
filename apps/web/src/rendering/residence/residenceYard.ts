@@ -5,7 +5,7 @@
 import type * as THREE from 'three';
 import type { ResidenceKit } from './residenceKit';
 import type { ResidenceFamily } from './residenceFamilies';
-import { houseNumber, tree } from './residenceProps';
+import { bicycle, birdbath, doghouse, gardenTrellis, houseNumber, tree } from './residenceProps';
 
 export type YardContext = {
   group: THREE.Group;
@@ -128,6 +128,7 @@ export function buildYard(ctx: YardContext): void {
       flowerBed(group, kit, -sideX, midZ, 0.4, y, flower);
       pottedPlant(group, kit, sideX, midZ - 0.05, y, 1);
       tree(group, kit, sideX, frontZ + 0.14, y, 0.72, variant);
+      birdbath(group, kit, -sideX * 0.9, edgeZ - 0.2, y, family.plinth);
       houseNumber(group, kit, -0.2, y + 0.42, frontZ + 0.02, family.accent);
       break;
     case 1:
@@ -135,17 +136,20 @@ export function buildYard(ctx: YardContext): void {
       shrub(group, kit, sideX, midZ, y, 1);
       flowerBed(group, kit, sideX, edgeZ - 0.16, 0.32, y, flower);
       vegetableRows(group, kit, -sideX, edgeZ - 0.16, 0.34, y);
+      doghouse(group, kit, sideX, frontZ + 0.42, y, family.accent);
       break;
     case 2:
       laundry(group, kit, 0, edgeZ - 0.12, Math.min(0.9, width * 0.7), y, flower);
       mailbox(group, kit, sideX, midZ, y, family.accent);
       waterBarrel(group, kit, -sideX, midZ, y, family);
+      gardenTrellis(group, kit, -sideX, frontZ + 0.42, y, 0.52, family.trim);
       break;
     default:
       well(group, kit, -sideX, midZ, y, family);
       flowerBed(group, kit, sideX, midZ, 0.34, y, flower);
       pottedPlant(group, kit, 0, edgeZ - 0.12, y, 0.8);
       tree(group, kit, sideX, frontZ + 0.14, y, 0.72, variant + 1);
+      bicycle(group, kit, -sideX, edgeZ - 0.24, y, family.accent);
       break;
   }
 }

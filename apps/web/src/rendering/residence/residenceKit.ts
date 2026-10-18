@@ -334,6 +334,13 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   };
   const glassFor = (lit?: boolean, tint?: number): MaterialParameters => (lit ? litGlass : tint !== undefined ? { ...reflectionGlass, color: tint } : reflectionGlass);
 
+  function darken(color: number, amount: number): number {
+    const r = Math.round(((color >> 16) & 0xff) * (1 - amount));
+    const g = Math.round(((color >> 8) & 0xff) * (1 - amount));
+    const b = Math.round((color & 0xff) * (1 - amount));
+    return (r << 16) | (g << 8) | b;
+  }
+
   function sub(group: THREE.Group, x: number, y: number, z: number, facing: Facing): THREE.Group {
     const inner = new THREE.Group();
     inner.position.set(x, y, z);
@@ -427,6 +434,11 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       [-1, 1].forEach((side) => {
         const sx = side * (w / 2 + ft + sw / 2 + 0.01);
         box(inner, sw, h, 0.035, shutterMat, [sx, 0, 0.02], false);
+        // Routed louver slats give the shutters depth instead of a flat plank.
+        for (let slat = 0; slat < 3; slat += 1) {
+          const sy = -h * 0.28 + slat * h * 0.28;
+          box(inner, sw * 0.82, 0.018, 0.014, { ...shutterMat, color: darken(shutterColor, 0.16) }, [sx, sy, 0.044], false);
+        }
       });
     }
     if (flowerBox) {
@@ -459,6 +471,14 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     box(inner, w + 0.15, 0.06, 0.06, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, h + 0.03, 0.026], false);
     box(inner, 0.022, 0.022, 0.03, { color: 0xd8b25a, roughness: 0.3, metalness: 0.6 }, [w / 2 - 0.07, h * 0.48, 0.052], false);
     if (lit) box(inner, w - 0.14, 0.03, 0.02, { color: 0xd78535, emissive: 0xd78535, emissiveIntensity: 0.6, roughness: 0.5 }, [0, 0.025, 0.05], false);
+    if (h >= 0.6) {
+      // Glazed transom inside the top rail, with two muntins.
+      box(inner, w - 0.1, 0.11, 0.018, glassFor(lit), [0, h - 0.09, 0.054], false);
+      box(inner, 0.018, 0.11, 0.022, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [-w * 0.18, h - 0.09, 0.058], false);
+      box(inner, 0.018, 0.11, 0.022, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [w * 0.18, h - 0.09, 0.058], false);
+    }
+    // Brass kick plate at the base of the leaf.
+    box(inner, w - 0.1, 0.06, 0.012, { color: 0xb08a45, roughness: 0.32, metalness: 0.55 }, [0, 0.055, 0.052], false);
     if (step) box(inner, w + 0.26, 0.06, 0.22, { color: 0xd9d7d2, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, 0.03, 0.11]);
     if (canopyColor !== undefined) {
       const canopy = box(inner, w + 0.32, 0.04, 0.3, { color: canopyColor, roughness: 0.6, tex: 'fabric', rx: 1, ry: 1 }, [0, h + 0.14, 0.14], false);
@@ -577,6 +597,15 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     }
     box(inner, 0.032, 0.2, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [-width / 2, 0.1, depth / 2], false);
     box(inner, 0.032, 0.2, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [width / 2, 0.1, depth / 2], false);
+    if (width >= 0.62) {
+      // Terracotta planter tucked into one end of the balcony.
+      const px = -width / 2 + 0.16;
+      box(inner, 0.16, 0.12, 0.14, { color: 0xb4664a, roughness: 0.82, tex: 'brick', rx: 1, ry: 1 }, [px, 0.12, depth * 0.55], false);
+      box(inner, 0.15, 0.05, 0.13, { color: 0x5f8a4a, roughness: 0.9, tex: 'grass', rx: 1, ry: 1 }, [px, 0.2, depth * 0.55], false);
+      [-0.045, 0.0, 0.045].forEach((dx, index) => {
+        box(inner, 0.04, 0.05, 0.04, { color: index === 1 ? 0xe0b05a : 0xd06a5a, roughness: 0.7 }, [px + dx, 0.245, depth * 0.55], false);
+      });
+    }
   }
 
   function awning(group: THREE.Group, opts: AwningOptions): void {
@@ -602,6 +631,9 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     const { x, z, y, width, depth, roofColor, roofTex = 'rooftile', postColor = 0xe7e2d6, rise = 0.32 } = opts;
     [-width / 2 + 0.1, width / 2 - 0.1].forEach((px) => {
       box(group, 0.09, rise, 0.09, { color: postColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [x + px, y + rise / 2, z + depth / 2 - 0.08]);
+      // Potted shrub at the foot of each porch post.
+      box(group, 0.12, 0.13, 0.12, { color: 0xa9614a, roughness: 0.84, tex: 'brick', rx: 1, ry: 1 }, [x + px, y + 0.065, z + depth / 2 - 0.26], false);
+      box(group, 0.16, 0.12, 0.16, { color: 0x4f7d42, roughness: 0.9, tex: 'grass', rx: 1, ry: 1 }, [x + px, y + 0.19, z + depth / 2 - 0.26], false);
     });
     box(group, width, 0.06, depth, { color: 0xd8d4ca, roughness: 0.78, tex: 'stone', rx: 1, ry: 1 }, [x, y, z + depth / 2], false);
     const roof = box(group, width + 0.12, 0.08, depth + 0.16, { color: roofColor, roughness: 0.72, tex: roofTex, rx: 1, ry: 1 }, [x, y + rise + 0.04, z + depth / 2], false);
