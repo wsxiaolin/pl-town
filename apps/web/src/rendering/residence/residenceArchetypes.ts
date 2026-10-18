@@ -40,6 +40,16 @@ function isLit(variant: number, index: number): boolean {
 
 function plinth(kit: ResidenceKit, group: THREE.Group, width: number, depth: number, family: ResidenceFamily, extra = 0.34): void {
   kit.box(group, width + extra, BASE, depth + extra, { color: family.plinth, roughness: 0.86, tex: 'stone', rx: 1, ry: 1 }, [0, BASE / 2, 0]);
+  // Paired cellar grilles on the plinth face for wider lots.
+  if (width > 1.4) {
+    const faceZ = (depth + extra) / 2;
+    [-1, 1].forEach((side) => {
+      kit.box(group, 0.16, 0.085, 0.014, { color: 0x2c2a27, roughness: 0.9 }, [side * width * 0.3, BASE * 0.47, faceZ + 0.004], false);
+      for (let bar = 0; bar < 3; bar += 1) {
+        kit.box(group, 0.012, 0.085, 0.012, { color: 0x58524a, roughness: 0.7, metalness: 0.25 }, [side * width * 0.3 - 0.045 + bar * 0.045, BASE * 0.47, faceZ + 0.020], false);
+      }
+    });
+  }
 }
 
 /** One window on a gable side wall so the house reads in the round. */

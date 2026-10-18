@@ -506,6 +506,9 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     // Brass kick plate at the base of the leaf.
     box(inner, w - 0.1, 0.06, 0.012, { color: 0xb08a45, roughness: 0.32, metalness: 0.55 }, [0, 0.055, 0.052], false);
     if (step) box(inner, w + 0.26, 0.06, 0.22, { color: 0xd9d7d2, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, 0.03, 0.11]);
+    // Door mat on the step (or the ground when there is no step).
+    const matY = step ? 0.069 : 0.009;
+    box(inner, w * 0.82, 0.012, 0.14, { color: 0x6b5a45, roughness: 0.95, tex: 'fabric', rx: 1, ry: 1 }, [0, matY, 0.17], false);
     if (canopyColor !== undefined) {
       tag(group, 'canopy');
       const canopy = box(inner, w + 0.32, 0.04, 0.3, { color: canopyColor, roughness: 0.6, tex: 'fabric', rx: 1, ry: 1 }, [0, h + 0.14, 0.14], false);
@@ -632,6 +635,16 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     }
     box(inner, 0.032, 0.2, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [-width / 2, 0.1, depth / 2], false);
     box(inner, 0.032, 0.2, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [width / 2, 0.1, depth / 2], false);
+    if (width >= 0.8) {
+      // Fold-away drying rack with two cloths at the far end.
+      const rackX = width * 0.06;
+      [0.09, 0.21].forEach((rx) => {
+        box(inner, 0.02, 0.22, 0.02, { color: 0x8a7a62, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [rackX + rx, 0.11, depth * 0.5], false);
+      });
+      box(inner, 0.28, 0.016, 0.016, { color: 0x8a7a62, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [rackX + 0.15, 0.215, depth * 0.5], false);
+      box(inner, 0.1, 0.13, 0.012, { color: 0xe8e1d2, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 }, [rackX + 0.12, 0.15, depth * 0.5], false);
+      box(inner, 0.08, 0.11, 0.012, { color: 0xc98a72, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 }, [rackX + 0.24, 0.16, depth * 0.5], false);
+    }
     if (width >= 0.62) {
       // Terracotta planter tucked into one end of the balcony.
       const px = -width / 2 + 0.16;
