@@ -10,6 +10,7 @@ import { buildKomorebiWorkshop } from './komorebiClockworks';
 import { buildFireworksShop } from './fireworksShopBuilding';
 import { buildObservationDeck } from './observationDeckBuilding';
 import { buildGenshinInstitute } from './genshinInstitute';
+import { buildSchoolCampus } from './schoolCampusBuilding';
 import { RENDER_ORDER } from './layers';
 import type { MaterialParameters, MeshHelpers } from './meshFactory';
 import type { BuildingDefinition, BuildingEntity } from '../city/buildingEntity';
@@ -634,57 +635,6 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.18+0.55+0.5};
   }
   
-  // 23 SCHOOL — multi-building campus with playground, flagpole
-  function buildSchool(cfg: BuildingDefinition): BuildingEntity {
-    const g = new THREE.Group();
-    // Main building
-    const bw = 3.0, bh = 1.6;
-    part(g, new THREE.BoxGeometry(bw+0.6,0.22,bw+0.6), {color:P.BUILDING_BASE,roughness:0.85,tex:'pavement',rx:2,ry:2}, [0,0.11,0]);
-    const bodyMat = mkBodyMat('schoolbrick', 2, 1);
-    const body = mk(new THREE.BoxGeometry(bw,bh,bw), bodyMat);
-    body.position.y = 0.22+bh/2; body.castShadow = body.receiveShadow = true; g.add(body);
-    const top = 0.22+bh;
-    // Pitched slate roof
-    part(g, new THREE.BoxGeometry(bw+0.2,0.1,bw+0.2), {color:P.SCHOOL_ROOF,roughness:0.5,tex:'rooftile',rx:3,ry:3}, [0,top+0.05,0]);
-    // Roof ridge
-    part(g, new THREE.CylinderGeometry(0.05,0.05,bw+0.2,8), {color:0x4A3A2A,roughness:0.5,tex:'wood',rx:2,ry:1}, [0,top+0.1+0.025,0]).rotation.z = Math.PI/2;
-    // Front gable
-    part(g, new THREE.ConeGeometry(bw/2+0.1,0.6,4), {color:P.SCHOOL_ROOF,roughness:0.5,tex:'rooftile',rx:2,ry:1}, [0,top+0.1+0.3,bw/2-0.05]).rotation.y = Math.PI/4;
-    // Entrance door. Keep all facade details fully in front of the generated
-    // facade plane (bw/2+0.024); overlapping it made the school flicker.
-    const facadeGap = 0.056;
-    part(g, new THREE.BoxGeometry(0.5,0.85,0.04), {color:0x6A4A3A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.425,bw/2+facadeGap], false);
-    part(g, new THREE.BoxGeometry(0.6,0.1,0.1), {color:0x4A3A2A,roughness:0.6,tex:'wood',rx:1,ry:1}, [0,0.22+0.85+0.05,bw/2+0.086], false);
-    // Front windows (rows)
-    for (let i = 0; i < 4; i++) {
-      const x = -1.05 + i*0.7;
-      part(g, new THREE.BoxGeometry(0.42,0.42,0.02), {color:0xA8C8E0,roughness:0.1,metalness:0.2,tex:'glass',rx:1,ry:1}, [x, 0.22+bh*0.55, bw/2+facadeGap], false);
-      ctx2d_windows(g, x, 0.22+bh*0.55, bw/2+facadeGap);
-    }
-    // Flagpole in front
-    part(g, new THREE.CylinderGeometry(0.03,0.03,2.4,8), {color:0xD0CFCC,roughness:0.5,metalness:0.3,tex:'metal',rx:1,ry:2}, [0,0.22+1.2,bw/2+1.0], false);
-    part(g, new THREE.BoxGeometry(0.5,0.32,0.02), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.18,roughness:0.5}, [0.25,0.22+2.3,bw/2+1.0], false);
-    // Playground: sandbox + see-saw + swing set (all raised to avoid z-fighting with ground)
-    // Sandbox
-    part(g, new THREE.CylinderGeometry(0.45,0.45,0.08,12), {color:0xE2C8A0,roughness:0.9,tex:'wood',rx:1,ry:1}, [bw/2+0.9,0.08,-bw/2+0.5], false);
-    part(g, new THREE.CylinderGeometry(0.42,0.42,0.05,12), {color:0xD8C098,roughness:0.95,tex:'wood',rx:1,ry:1}, [bw/2+0.9,0.11,-bw/2+0.5], false);
-    // Swing set
-    part(g, new THREE.BoxGeometry(1.4,0.06,0.06), {color:0x6A6A6E,roughness:0.4,metalness:0.4,tex:'metal',rx:2,ry:1}, [bw/2+0.9,0.22+1.2,-bw/2+1.4], false);
-    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x6A6A6E,roughness:0.4,metalness:0.4,tex:'metal',rx:1,ry:1}, [bw/2+0.9-0.65,0.22+0.6,-bw/2+1.4], false);
-    part(g, new THREE.CylinderGeometry(0.04,0.04,1.2,8), {color:0x6A6A6E,roughness:0.4,metalness:0.4,tex:'metal',rx:1,ry:1}, [bw/2+0.9+0.65,0.22+0.6,-bw/2+1.4], false);
-    part(g, new THREE.BoxGeometry(0.2,0.3,0.04), {color:0xE8A838,roughness:0.6,tex:'wood',rx:1,ry:1}, [bw/2+0.9,0.22+0.45,-bw/2+1.4], false);
-    // See-saw
-    part(g, new THREE.BoxGeometry(1.4,0.06,0.18), {color:0xE85858,roughness:0.6,tex:'wood',rx:2,ry:1}, [bw/2+1.8,0.22+0.25,-bw/2+0.4], false);
-    part(g, new THREE.CylinderGeometry(0.08,0.08,0.25,8), {color:0x6A6A6E,roughness:0.5,metalness:0.4,tex:'metal',rx:1,ry:1}, [bw/2+1.8,0.22+0.125,-bw/2+0.4], false);
-    // Side wing: gym
-    part(g, new THREE.BoxGeometry(1.4,1.0,1.2), {color:P.SCHOOL_BRICK,roughness:0.4,tex:'schoolbrick',rx:1,ry:1}, [-bw/2-0.9,0.22+0.5,-bw/2+0.3]);
-    part(g, new THREE.CylinderGeometry(0.7,0.7,0.18,16), {color:0xC0BFBC,roughness:0.5,tex:'metal',rx:3,ry:1}, [-bw/2-0.9,0.22+1.0+0.09,-bw/2+0.3]);
-    // Blue entrance disc
-    part(g, new THREE.CylinderGeometry(0.14,0.14,0.05,20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.22+0.05,0], false);
-    g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
-    return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:top+0.7};
-  }
-
   // 24 ACADEMY — courtyard library with a gate tower and covered side galleries
   function buildAcademy(cfg: BuildingDefinition): BuildingEntity {
     const g = new THREE.Group();
@@ -713,12 +663,6 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     part(g, new THREE.CylinderGeometry(0.14, 0.14, 0.05, 20), {color:P.BLUE,emissive:P.BLUE,emissiveIntensity:0.28}, [0,0.05,0], false);
     g.position.set(cfg.x,0,cfg.z); tagMeshes(g,cfg.id);
     return {...cfg, group:g, body, bodyMat, labelEl:null, labelY:2.65};
-  }
-  
-  // helper: small window cross bars for school
-  function ctx2d_windows(g: THREE.Group | null, x: number, y: number, z: number) {
-    part(g, new THREE.BoxGeometry(0.45,0.02,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y+0.21, z+0.005], false);
-    part(g, new THREE.BoxGeometry(0.02,0.45,0.025), {color:0x4A4A4E,roughness:0.5,tex:'metal',rx:1,ry:1}, [x, y, z+0.005], false);
   }
   
   // 30 BANANA PALACE — 布拿拉宫
@@ -914,7 +858,8 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     mall: (cfg: BuildingDefinition) => cfg.id === 'mall_south'
       ? buildMartStore({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg)
       : buildMall(cfg),
-    school: buildSchool, academy: buildAcademy,
+    school: (cfg: BuildingDefinition) => buildSchoolCampus({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    academy: buildAcademy,
     crown: (cfg: BuildingDefinition) => buildIceKingCrownBuilding(cfg, { stdMat, mk, part }),
     banana: buildBanana, qipai: buildQipai,
     television_tower: buildTelevisionTower,
