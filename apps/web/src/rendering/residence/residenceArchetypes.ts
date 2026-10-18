@@ -337,6 +337,9 @@ const buildWalkup: ArchetypeBuilder = ({ group, width, depth, family, kit, varia
       acUnit(group, kit, -width / 2 + 0.14, BASE + 1.84, depth / 2 + 0.085);
     }
   }
+  if (variant !== 0) {
+    fireEscape(group, kit, { x: width / 2, z: -depth * 0.1, baseY: BASE, length: depth * 0.56, facing: 'right', floors: 2 });
+  }
   houseNumber(group, kit, cols > 1 ? width * 0.375 : 0, BASE + 0.52, depth / 2 + 0.06, family.accent);
   articulateFacade({ group, kit, width, depth, height, base: BASE, family, variant });
   return body;

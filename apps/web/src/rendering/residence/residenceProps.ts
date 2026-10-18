@@ -255,6 +255,8 @@ export function fireEscape(
   opts: { x: number; z: number; baseY: number; length: number; facing?: 'left' | 'right'; floors?: number },
 ): void {
   const { x, z, baseY, length, facing = 'right', floors = 2 } = opts;
+  const flags = (group.userData.residenceFeatures ??= []) as string[];
+  if (!flags.includes('fire-escape')) flags.push('fire-escape');
   const inner = kit.sub(group, x, baseY, z, facing);
   const steel: MaterialParameters = { color: 0x454b50, roughness: 0.55, metalness: 0.4, tex: 'metal', rx: 1, ry: 1 };
   const deck: MaterialParameters = { color: 0x50565b, roughness: 0.7, metalness: 0.3, tex: 'metal', rx: 1, ry: 1 };

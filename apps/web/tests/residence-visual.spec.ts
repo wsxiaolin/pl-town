@@ -106,6 +106,7 @@ test('residence lots render the detailed catalog with facade and yard dressing',
       'quoins',
       'cornice',
       'wainscot',
+      'fire-escape',
     ]),
   );
 

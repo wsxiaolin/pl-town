@@ -558,9 +558,11 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     const roof = part(group, geometry, { color, roughness: 0.74, tex, rx: 2, ry: 2 }, [x, y - 0.02, z]);
     roof.rotation.y = axis === 'x' ? Math.PI / 2 : 0;
     roof.castShadow = roof.receiveShadow = true;
-    const capLength = axis === 'x' ? span + overhang * 2 : run + overhang * 2;
+    // The ridge runs along the extrusion axis (run), so the cap is always
+    // `run` long; only the axis-x roof needs the cap rotated with it.
+    const capLength = run + overhang * 2;
     const cap = box(group, 0.08, 0.05, capLength, { color: 0x4a3a2c, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [x, y + height - 0.01, z], false);
-    if (axis === 'z') cap.rotation.y = Math.PI / 2;
+    if (axis === 'x') cap.rotation.y = Math.PI / 2;
   }
 
   function hipRoof(group: THREE.Group, opts: HipRoofOptions): void {

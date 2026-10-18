@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
 import type { MeshHelpers } from '../../src/rendering/meshFactory';
+import { createResidenceKit } from '../../src/rendering/residence/residenceKit';
 import {
   createResidenceModel,
   RESIDENCE_STYLE_COUNT,
@@ -63,4 +64,32 @@ test('every residence style builds real geometry without throwing', () => {
   const counts = [...built.values()].map((entry) => entry.meshes);
   const average = counts.reduce((sum, value) => sum + value, 0) / counts.length;
   assert.ok(average > 40, `average residence detail dropped to ${average.toFixed(1)} meshes`);
+});
+
+test('gable ridge cap follows the ridge axis instead of crossing the slopes', () => {
+  const meshes: THREE.Mesh[] = [];
+  const capPart: MeshHelpers['part'] = (group, geometry, _material, position) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    meshes.push(mesh);
+    if (position) mesh.position.set(position[0], position[1], position[2]);
+    if (group) group.add(mesh);
+    return mesh;
+  };
+  const kit = createResidenceKit({ part: capPart, isNight: false });
+  const run = 2;
+  const overhang = 0.14;
+  for (const axis of ['z', 'x'] as const) {
+    meshes.length = 0;
+    const group = new THREE.Group();
+    kit.gableRoof(group, { y: 0, run, span: 1.2, height: 0.4, color: 0x556677, axis });
+    const cap = meshes.find((mesh) => mesh.geometry.type === 'BoxGeometry');
+    assert.ok(cap, `${axis} roof must add a ridge cap`);
+    const box = cap.geometry as THREE.BoxGeometry;
+    assert.ok(
+      Math.abs(box.parameters.depth - (run + overhang * 2)) < 1e-6,
+      `${axis} ridge cap must span the run (${box.parameters.depth})`,
+    );
+    const expected = axis === 'x' ? Math.PI / 2 : 0;
+    assert.ok(Math.abs(cap.rotation.y - expected) < 1e-6, `${axis} ridge cap rotation`);
+  }
 });
