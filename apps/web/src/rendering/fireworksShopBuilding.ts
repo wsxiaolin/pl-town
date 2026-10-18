@@ -109,7 +109,9 @@ export function buildFireworksShop(options: FireworksShopOptions, definition: Bu
   addPart(g, new THREE.CylinderGeometry(0.06, 0.07, 2.2, 8), { color: WOOD, roughness: 0.85, tex: 'wood' }, [-2.4, wallY + 1.1, -2.0]);
   addPart(g, new THREE.CylinderGeometry(0.06, 0.07, 2.2, 8), { color: WOOD, roughness: 0.85, tex: 'wood' }, [2.4, wallY + 1.1, -2.0]);
 
-  g.position.set(definition.x, 0, definition.z);
+  // 坐标必须落在返回的 group（outer）上：标签投影、埋深起吊（y=-3 → 0）
+  // 均消费 outer.position；设在内层会让标签钉在城中心 (0,y,0)。
+  outer.position.set(definition.x, 0, definition.z);
   tagMeshes(g, definition.id);
   return { ...definition, group: outer, body: undefined, bodyMat: undefined, labelEl: null, labelY: roofY + 1.5 };
   function tagMeshes(root: THREE.Object3D, id: string): void {
