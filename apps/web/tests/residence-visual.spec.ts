@@ -48,7 +48,9 @@ test('residence lots render the detailed catalog with facade and yard dressing',
     let minMeshes = Number.POSITIVE_INFINITY;
     let transparentMeshes = 0;
     mini.scene.traverse((object: any) => {
-      if (typeof object.userData?.residenceStyleId !== 'number') return;
+      // worldDecorations tags every mesh with residenceStyleId, so only the
+      // owning Group represents one house.
+      if (!object.isGroup || typeof object.userData?.residenceStyleId !== 'number') return;
       houses += 1;
       styles.add(object.userData.residenceStyleId);
       for (const feature of object.userData.residenceFeatures ?? []) features.add(feature);
