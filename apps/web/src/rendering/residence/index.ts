@@ -58,6 +58,16 @@ export function createResidenceModel(options: ResidenceStyleOptions): ResidenceM
 
   const archetypeName = RESIDENCE_ARCHETYPE_NAMES[archetypeIndex] ?? '民居';
   const styleName = `${family.name}·${archetypeName}`;
+  // Snapshot the procedural texture keys actually used by this lot so the
+  // visual smoke test (and console debugging) can verify the material mix.
+  const textures = new Set<string>();
+  group.traverse((object) => {
+    const material = (object as THREE.Mesh).material;
+    if (Array.isArray(material)) return;
+    const name = (material as THREE.MeshBasicMaterial | undefined)?.map?.name;
+    if (name) textures.add(name);
+  });
+  group.userData.residenceTextures = [...textures];
   group.userData.residenceStyleId = styleId;
   group.userData.residenceStyleName = styleName;
   group.userData.navigationFootprint = { width: width + 0.12, depth: depth + 0.12 };

@@ -341,6 +341,13 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     return (r << 16) | (g << 8) | b;
   }
 
+  // Lightweight provenance tags consumed by the residence visual smoke test and
+  // useful when debugging a single lot from the console.
+  function tag(group: THREE.Group, name: string): void {
+    const flags = (group.userData.residenceFeatures ??= []) as string[];
+    if (!flags.includes(name)) flags.push(name);
+  }
+
   function sub(group: THREE.Group, x: number, y: number, z: number, facing: Facing): THREE.Group {
     const inner = new THREE.Group();
     inner.position.set(x, y, z);
@@ -402,10 +409,13 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       flowerBox = false, flowerColor = 0xd06a5a, header = true, reflectionTint, curtain = false,
     } = opts;
     const inner = sub(group, x, y, z, facing);
+    tag(group, 'windows');
+    if (!lit) tag(group, 'window-reflection');
     const frameMat: MaterialParameters = { color: frameColor, roughness: 0.55, tex: 'wood', rx: 1, ry: 1 };
     // The glass itself carries the printed sky/neighbour reflection.
     box(inner, w, h, 0.02, glassFor(lit, reflectionTint), [0, 0, 0.03], false);
     if (curtain) {
+      tag(group, 'curtain');
       // Printed valance and side drapes, sitting just in front of the pane.
       const curtainMat: MaterialParameters = { color: lit ? 0xd8b98a : 0x9aa6ae, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 };
       box(inner, w * 0.9, h * 0.16, 0.012, curtainMat, [0, h / 2 - h * 0.1, 0.043], false);
@@ -429,6 +439,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       box(inner, w + 0.16, 0.05, 0.065, { color: 0xd9d7d2, roughness: 0.72, tex: 'stone', rx: 1, ry: 1 }, [0, h / 2 + 0.055, 0.04], false);
     }
     if (shutters) {
+      tag(group, 'shutters');
       const shutterMat: MaterialParameters = { color: shutterColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 2 };
       const sw = w * 0.34;
       [-1, 1].forEach((side) => {
@@ -442,6 +453,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       });
     }
     if (flowerBox) {
+      tag(group, 'flower-box');
       box(inner, w * 0.86, 0.09, 0.11, { color: 0x8a5a3c, roughness: 0.82, tex: 'wood', rx: 1, ry: 1 }, [0, -h / 2 - 0.135, 0.085], false);
       const bloomMat: MaterialParameters = { color: flowerColor, roughness: 0.7 };
       [-w * 0.28, -w * 0.1, w * 0.1, w * 0.28].forEach((bx, index) => {
@@ -466,6 +478,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     } = opts;
     const inner = sub(group, x, y, z, facing);
     box(inner, w, h, 0.045, { color, roughness: 0.62, tex: 'wood', rx: 1, ry: 2 }, [0, h / 2, 0.02], false);
+    tag(group, 'doors');
     box(inner, 0.05, h + 0.06, 0.06, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [-w / 2 - 0.025, h / 2, 0.026], false);
     box(inner, 0.05, h + 0.06, 0.06, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [w / 2 + 0.025, h / 2, 0.026], false);
     box(inner, w + 0.15, 0.06, 0.06, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, h + 0.03, 0.026], false);
@@ -473,6 +486,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     if (lit) box(inner, w - 0.14, 0.03, 0.02, { color: 0xd78535, emissive: 0xd78535, emissiveIntensity: 0.6, roughness: 0.5 }, [0, 0.025, 0.05], false);
     if (h >= 0.6) {
       // Glazed transom inside the top rail, with two muntins.
+      tag(group, 'transom');
       box(inner, w - 0.1, 0.11, 0.018, glassFor(lit), [0, h - 0.09, 0.054], false);
       box(inner, 0.018, 0.11, 0.022, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [-w * 0.18, h - 0.09, 0.058], false);
       box(inner, 0.018, 0.11, 0.022, { color: frameColor, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [w * 0.18, h - 0.09, 0.058], false);
@@ -481,6 +495,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     box(inner, w - 0.1, 0.06, 0.012, { color: 0xb08a45, roughness: 0.32, metalness: 0.55 }, [0, 0.055, 0.052], false);
     if (step) box(inner, w + 0.26, 0.06, 0.22, { color: 0xd9d7d2, roughness: 0.75, tex: 'stone', rx: 1, ry: 1 }, [0, 0.03, 0.11]);
     if (canopyColor !== undefined) {
+      tag(group, 'canopy');
       const canopy = box(inner, w + 0.32, 0.04, 0.3, { color: canopyColor, roughness: 0.6, tex: 'fabric', rx: 1, ry: 1 }, [0, h + 0.14, 0.14], false);
       canopy.rotation.x = -0.28;
     }
@@ -495,6 +510,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       awningColor = 0xc45a4a, awningColor2 = 0xf3efe6, signColor = 0x3a4a5c, glassColor = 0x8fb6d0,
     } = opts;
     const inner = sub(group, x, y, z, facing);
+    tag(group, 'storefront');
     box(inner, w, h, 0.05, { color: glassColor, emissive: 0x6f9cc4, emissiveIntensity: isNight ? 0.3 : 0.03, roughness: 0.14, tex: 'glass', rx: 1, ry: 1 }, [0, h / 2, 0.03], false);
     box(inner, w + 0.1, 0.07, 0.08, { color: 0x4a3a2c, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [0, h + 0.035, 0.03], false);
     box(inner, 0.05, h, 0.07, { color: 0x4a3a2c, roughness: 0.6, tex: 'wood', rx: 1, ry: 1 }, [-w / 2 - 0.02, h / 2, 0.03], false);
@@ -513,6 +529,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function gableRoof(group: THREE.Group, opts: GableRoofOptions): void {
+    tag(group, 'gable-roof');
     const { x = 0, z = 0, y, run, span, height, color, tex = 'rooftile', overhang = 0.14, axis = 'z' } = opts;
     const halfSpan = span / 2 + overhang;
     const shape = new THREE.Shape();
@@ -532,6 +549,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function hipRoof(group: THREE.Group, opts: HipRoofOptions): void {
+    tag(group, 'hip-roof');
     const { x = 0, z = 0, y, width, depth, height, color, tex = 'rooftile' } = opts;
     const roof = part(group, new THREE.ConeGeometry(Math.SQRT1_2, height, 4), { color, roughness: 0.72, tex, rx: 2, ry: 1 }, [x, y - 0.02 + height / 2, z]);
     roof.rotation.y = Math.PI / 4;
@@ -540,6 +558,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function flatRoof(group: THREE.Group, opts: FlatRoofOptions): void {
+    tag(group, 'flat-roof');
     const { x = 0, z = 0, y, width, depth, parapetColor, parapetHeight = 0.18 } = opts;
     box(group, width + 0.16, 0.08, depth + 0.16, { color: 0xd4d2cc, roughness: 0.8, tex: 'concrete_worn', rx: 1, ry: 1 }, [x, y + 0.04, z]);
     const rim = 0.07;
@@ -550,6 +569,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function chimney(group: THREE.Group, opts: ChimneyOptions): void {
+    tag(group, 'chimney');
     const { x, z, y, height = 0.5, size = 0.16, color = 0x8a5a48, pots = true } = opts;
     box(group, size, height, size, { color, roughness: 0.82, tex: 'brick', rx: 1, ry: 1 }, [x, y + height / 2, z]);
     box(group, size + 0.07, 0.05, size + 0.07, { color: 0x4a3a32, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 }, [x, y + height + 0.025, z], false);
@@ -566,6 +586,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
 
   // Horizontal eave gutter; callers add downspouts at the wall corners.
   function gutterLine(group: THREE.Group, opts: GutterOptions): void {
+    tag(group, 'gutter');
     const { x = 0, z = 0, y, length, axis = 'x', color = 0x5a6168 } = opts;
     const mat: MaterialParameters = { color, roughness: 0.5, metalness: 0.35, tex: 'metal', rx: 1, ry: 1 };
     if (axis === 'x') {
@@ -576,6 +597,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function railing(group: THREE.Group, opts: RailingOptions): void {
+    tag(group, 'railing');
     const { x, y, z, facing = 'front', width, height = 0.17, posts = 4, color = 0x503728 } = opts;
     const inner = sub(group, x, y, z, facing);
     box(inner, width, 0.035, 0.035, { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [0, height, 0]);
@@ -587,6 +609,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function balcony(group: THREE.Group, opts: BalconyOptions): void {
+    tag(group, 'balcony');
     const { x, y, z, facing = 'front', width, depth = 0.34, color = 0xcfcac0, railColor = 0x503728 } = opts;
     const inner = sub(group, x, y, z, facing);
     box(inner, width, 0.06, depth, { color, roughness: 0.78, tex: 'stone', rx: 1, ry: 1 }, [0, 0, depth / 2]);
@@ -609,6 +632,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function awning(group: THREE.Group, opts: AwningOptions): void {
+    tag(group, 'awning');
     const { x, y, z, facing = 'front', width, depth = 0.32, colorA, colorB = 0xf5f4f1, stripes = 4, tilt = -0.32 } = opts;
     const inner = sub(group, x, y, z, facing);
     const stripeWidth = width / stripes;
@@ -619,6 +643,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function dormer(group: THREE.Group, opts: DormerOptions): void {
+    tag(group, 'dormer');
     const { x, y, z, facing = 'front', width = 0.42, height = 0.34, depth = 0.4, wallColor = 0xf0ebdf, wallTex = 'residence_plaster', roofColor = 0x6a6f76, lit = false } = opts;
     const inner = sub(group, x, y, z, facing);
     box(inner, width, height, depth, { color: wallColor, roughness: 0.7, tex: wallTex, rx: 1, ry: 1 }, [0, height / 2, depth / 2]);
@@ -628,6 +653,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function porch(group: THREE.Group, opts: PorchOptions): void {
+    tag(group, 'porch');
     const { x, z, y, width, depth, roofColor, roofTex = 'rooftile', postColor = 0xe7e2d6, rise = 0.32 } = opts;
     [-width / 2 + 0.1, width / 2 - 0.1].forEach((px) => {
       box(group, 0.09, rise, 0.09, { color: postColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [x + px, y + rise / 2, z + depth / 2 - 0.08]);
@@ -641,6 +667,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function steps(group: THREE.Group, opts: { x: number; y: number; z: number; facing?: Facing; width?: number; count?: number; color?: number }): void {
+    tag(group, 'steps');
     const { x, y, z, facing = 'front', width = 0.8, count = 2, color = 0xd9d7d2 } = opts;
     const inner = sub(group, x, y, z, facing);
     for (let index = 0; index < count; index += 1) {
@@ -651,6 +678,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   // Corner quoin blocks: alternating tall/short stones wrapping each vertical
   // corner. Centred on the corner so half sits inside the wall (no coplanar faces).
   function quoins(group: THREE.Group, opts: QuoinOptions): void {
+    tag(group, 'quoins');
     const { width, depth, y, height, color, tex = 'stone', blocks = 4 } = opts;
     const step = height / blocks;
     const mat: MaterialParameters = { color, roughness: 0.76, tex, rx: 1, ry: 1 };
@@ -668,6 +696,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
 
   // Horizontal band wrapping all four walls (belt course, foundation, cornice).
   function beltCourse(group: THREE.Group, opts: BandOptions): void {
+    tag(group, 'belt-course');
     const { width, depth, y, color, tex = 'stone', height = 0.05, protrude = 0.03 } = opts;
     const mat: MaterialParameters = { color, roughness: 0.74, tex, rx: 1, ry: 1 };
     const inset = 0.008;
@@ -678,11 +707,13 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function cornice(group: THREE.Group, opts: BandOptions): void {
+    tag(group, 'cornice');
     beltCourse(group, { ...opts, height: opts.height ?? 0.07, protrude: opts.protrude ?? 0.065 });
   }
 
   // Lower-storey cladding band (wainscot / plinth cap) proud of the wall.
   function wainscot(group: THREE.Group, opts: WainscotOptions): void {
+    tag(group, 'wainscot');
     const { width, depth, y, height, color, tex = 'wood' } = opts;
     const mat: MaterialParameters = { color, roughness: 0.78, tex, rx: 1, ry: 2 };
     const t = 0.02;
@@ -693,6 +724,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function pilaster(group: THREE.Group, opts: PilasterOptions): void {
+    tag(group, 'pilaster');
     const { x, z, y, height, color, tex = 'stone', width = 0.08, depth = 0.06 } = opts;
     const mat: MaterialParameters = { color, roughness: 0.72, tex, rx: 1, ry: 1 };
     box(group, width, height, depth, mat, [x, y + height / 2, z], false);
@@ -701,6 +733,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
   }
 
   function downspouts(group: THREE.Group, opts: DownspoutOptions[]): void {
+    tag(group, 'downspouts');
     opts.forEach(({ x, z, y, height, color = 0x5a6168 }) => {
       const mat: MaterialParameters = { color, roughness: 0.55, metalness: 0.32, tex: 'metal', rx: 1, ry: 1 };
       box(group, 0.04, height, 0.04, mat, [x, y + height / 2, z], false);

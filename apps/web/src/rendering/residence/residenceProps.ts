@@ -80,7 +80,7 @@ export function acUnit(group: THREE.Group, kit: ResidenceKit, x: number, y: numb
 
 /** Sloped skylight sitting on a roof plane. */
 export function skylight(group: THREE.Group, kit: ResidenceKit, x: number, z: number, y: number, w: number, d: number): void {
-  const mat: MaterialParameters = { color: 0xcfe0eb, emissive: 0x395062, emissiveIntensity: 0.06, roughness: 0.12, metalness: 0.2, tex: 'window_reflection', rx: 1, ry: 1, transparent: true, opacity: 0.88 };
+  const mat: MaterialParameters = { color: 0xcfe0eb, emissive: 0x395062, emissiveIntensity: 0.06, roughness: 0.12, metalness: 0.2, tex: 'window_reflection', rx: 1, ry: 1 };
   kit.box(group, w, 0.05, d, { color: 0x5a6168, roughness: 0.5, metalness: 0.35, tex: 'metal', rx: 1, ry: 1 }, [x, y + 0.02, z], false);
   const pane = kit.box(group, w * 0.82, 0.03, d * 0.78, mat, [x, y + 0.06, z], false);
   pane.rotation.x = -0.18;
@@ -243,4 +243,60 @@ export function gardenTrellis(
     kit.box(g, 0.11, 0.09, 0.05, vine, [t * width, vy, 0.02], false);
     kit.box(g, 0.045, 0.045, 0.045, { color: index % 2 === 0 ? 0xd06a5a : 0xe0b05a, roughness: 0.72 }, [t * width + 0.02, vy + 0.03, 0.04], false);
   });
+}
+
+/** Steel fire escape on a side wall: two landings, stair stringer and a drop ladder. */
+export function fireEscape(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  opts: { x: number; z: number; baseY: number; length: number; facing?: 'left' | 'right'; floors?: number },
+): void {
+  const { x, z, baseY, length, facing = 'right', floors = 2 } = opts;
+  const inner = kit.sub(group, x, baseY, z, facing);
+  const steel: MaterialParameters = { color: 0x454b50, roughness: 0.55, metalness: 0.4, tex: 'metal', rx: 1, ry: 1 };
+  const deck: MaterialParameters = { color: 0x50565b, roughness: 0.7, metalness: 0.3, tex: 'metal', rx: 1, ry: 1 };
+  const rail = 0.22;
+  const out = 0.24;
+  const levels = Array.from({ length: floors }, (_, index) => 0.78 + index * 0.64);
+  levels.forEach((level, floor) => {
+    kit.box(inner, length, 0.035, out, deck, [0, level, out / 2], false);
+    // Front rail and two side rails.
+    kit.box(inner, length, 0.024, 0.024, steel, [0, level + rail, out], false);
+    [-1, 1].forEach((side) => {
+      kit.box(inner, 0.024, rail, 0.024, steel, [side * (length / 2 - 0.02), level + rail / 2, out], false);
+      kit.box(inner, 0.024, 0.024, out, steel, [side * (length / 2 - 0.02), level + rail, out / 2], false);
+    });
+    for (let post = 0; post <= 4; post += 1) {
+      const px = -length / 2 + (length * post) / 4;
+      kit.box(inner, 0.016, rail, 0.016, steel, [px, level + rail / 2, out], false);
+    }
+    // Angled wall braces under the landing.
+    [-1, 1].forEach((side) => {
+      const brace = kit.box(inner, 0.3, 0.018, 0.018, steel, [side * (length / 2 - 0.12), level - 0.14, out * 0.5], false);
+      brace.rotation.z = side * 0.6;
+    });
+    // Stringer up to the next landing.
+    if (floor < floors - 1) {
+      const rise = levels[floor + 1]! - level;
+      const run = 0.34;
+      const angle = Math.atan2(rise, run);
+      const stringer = kit.box(inner, Math.hypot(rise, run), 0.028, 0.02, steel, [0.02, level + rise / 2, out * 0.7], false);
+      stringer.rotation.z = -angle;
+      for (let step = 1; step < 5; step += 1) {
+        const t = step / 5;
+        kit.box(inner, 0.09, 0.018, out * 0.7, deck, [0.02 - run / 2 + run * t, level + rise * t, out * 0.65], false);
+      }
+      const hand = kit.box(inner, Math.hypot(rise, run), 0.02, 0.02, steel, [0.02, level + rise / 2 + rail, out * 0.7], false);
+      hand.rotation.z = -angle;
+    }
+  });
+  // Drop ladder from the lowest landing.
+  const ladderX = length / 2 - 0.08;
+  const dropTop = levels[0]! - 0.02;
+  [-1, 1].forEach((side) => {
+    kit.box(inner, 0.018, dropTop, 0.018, steel, [ladderX, dropTop / 2, out * 0.45 + side * 0.03], false);
+  });
+  for (let rung = 0; rung < 5; rung += 1) {
+    kit.box(inner, 0.014, 0.014, 0.06, steel, [ladderX, 0.12 + rung * 0.14, out * 0.45], false);
+  }
 }

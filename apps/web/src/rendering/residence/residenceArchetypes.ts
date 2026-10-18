@@ -11,7 +11,7 @@ import type { ResidenceKit } from './residenceKit';
 import type { ResidenceFamily } from './residenceFamilies';
 import { articulateFacade } from './residenceFacade';
 import { buildYard } from './residenceYard';
-import { acUnit, antenna, balustrade, houseNumber, skylight, waterTank } from './residenceProps';
+import { acUnit, antenna, balustrade, fireEscape, houseNumber, skylight, waterTank } from './residenceProps';
 
 export type ArchetypeContext = {
   group: THREE.Group;
@@ -340,6 +340,7 @@ const buildCourtyard: ArchetypeBuilder = ({ group, width, depth, family, kit, va
   }
   kit.windowRow(group, { x: 0, y: BASE + 0.42, z: frontZ, facing: 'front', count: 2, spacing: Math.min(0.62, houseWidth - 0.34), w: 0.26, h: 0.3, frameColor: family.trim, lit: isLit(variant, 0), shutters: variant % 2 === 0, shutterColor: family.accent, flowerBox: variant % 3 === 2, curtain: variant % 4 === 1 });
   sideWindow(kit, group, { width: houseWidth, y: BASE + 0.42, z: bodyZ, family, lit: isLit(variant, 2), facing: 'right' });
+  sideWindow(kit, group, { width: houseWidth, y: BASE + 0.42, z: bodyZ, family, lit: isLit(variant, 1), facing: 'left' });
   if (variant % 2 === 1) {
     // Small kitchen wing against the right side of the courtyard house.
     const wingW = 0.22;

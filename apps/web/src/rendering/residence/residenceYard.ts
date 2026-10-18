@@ -102,6 +102,8 @@ export function buildYard(ctx: YardContext): void {
   if (span < 0.2) return;
 
   const y = groundY;
+  const props: string[] = ['path'];
+  group.userData.residenceYardProps = props;
   // Paved entry path from the door to the street edge.
   const pathWidth = 0.3;
   const tiles = 3;
@@ -125,6 +127,7 @@ export function buildYard(ctx: YardContext): void {
 
   switch (((variant % 4) + 4) % 4) {
     case 0:
+      props.push('flower-bed', 'potted-plant', 'tree', 'birdbath', 'house-number');
       flowerBed(group, kit, -sideX, midZ, 0.4, y, flower);
       pottedPlant(group, kit, sideX, midZ - 0.05, y, 1);
       tree(group, kit, sideX, frontZ + 0.14, y, 0.72, variant);
@@ -132,6 +135,7 @@ export function buildYard(ctx: YardContext): void {
       houseNumber(group, kit, -0.2, y + 0.42, frontZ + 0.02, family.accent);
       break;
     case 1:
+      props.push('bench', 'shrub', 'flower-bed', 'vegetable-rows', 'doghouse');
       bench(group, kit, -sideX, midZ, y);
       shrub(group, kit, sideX, midZ, y, 1);
       flowerBed(group, kit, sideX, edgeZ - 0.16, 0.32, y, flower);
@@ -139,12 +143,14 @@ export function buildYard(ctx: YardContext): void {
       doghouse(group, kit, sideX, frontZ + 0.42, y, family.accent);
       break;
     case 2:
+      props.push('laundry', 'mailbox', 'water-barrel', 'trellis');
       laundry(group, kit, 0, edgeZ - 0.12, Math.min(0.9, width * 0.7), y, flower);
       mailbox(group, kit, sideX, midZ, y, family.accent);
       waterBarrel(group, kit, -sideX, midZ, y, family);
       gardenTrellis(group, kit, -sideX, frontZ + 0.42, y, 0.52, family.trim);
       break;
     default:
+      props.push('well', 'flower-bed', 'potted-plant', 'tree', 'bicycle');
       well(group, kit, -sideX, midZ, y, family);
       flowerBed(group, kit, sideX, midZ, 0.34, y, flower);
       pottedPlant(group, kit, 0, edgeZ - 0.12, y, 0.8);

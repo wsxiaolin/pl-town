@@ -117,29 +117,33 @@ export function articulateFacade(ctx: FacadeContext): void {
   }
 
   // Side-wall openings so the house reads in the round, not just from the front.
+  // Both gable walls get a window (and a second one on taller houses).
   const sideZ = -depth * 0.08;
-  kit.window(group, {
-    x: width / 2,
-    y: base + height * 0.55,
-    z: sideZ,
-    facing: 'right',
-    w: 0.24,
-    h: 0.3,
-    frameColor: family.trim,
-    lit: variant % 3 === 0,
-    header: true,
-  });
-  if (height > 1.4) {
+  (['right', 'left'] as const).forEach((facing) => {
+    const sx = (facing === 'right' ? 1 : -1) * (width / 2);
     kit.window(group, {
-      x: width / 2,
-      y: base + height * 0.82,
+      x: sx,
+      y: base + height * 0.55,
       z: sideZ,
-      facing: 'right',
-      w: 0.22,
-      h: 0.28,
+      facing,
+      w: 0.24,
+      h: 0.3,
       frameColor: family.trim,
-      lit: variant % 3 === 1,
+      lit: variant % 3 === 0,
       header: true,
     });
-  }
+    if (height > 1.4) {
+      kit.window(group, {
+        x: sx,
+        y: base + height * 0.82,
+        z: sideZ,
+        facing,
+        w: 0.22,
+        h: 0.28,
+        frameColor: family.trim,
+        lit: variant % 3 === 1,
+        header: true,
+      });
+    }
+  });
 }
