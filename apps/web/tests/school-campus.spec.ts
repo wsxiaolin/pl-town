@@ -10,6 +10,16 @@ test('rebuilt school campuses render as multi-volume groups at their anchors', a
   stubWorldCatalogWebSocket(page);
   await seedCityStorage(page);
   await waitForCityBooted(page);
+  // 入场动画把建筑从 y=-3 错峰抬起（最后一栋约 5.2s 才落位）；等两座学校
+  // 的 group 真正归零后再量体量，否则会量到地下施工态。
+  await expect.poll(() => page.evaluate(() => {
+    const mini = (window as any)._mini;
+    return ['school_north', 'school_east'].every((id) => {
+      const group = mini.scene.children.find((child: any) =>
+        child.children?.some((mesh: any) => mesh.userData?.buildingId === id));
+      return Boolean(group && group.position.y > -0.01);
+    });
+  }), { timeout: 20_000 }).toBe(true);
 
   const stats = await page.evaluate(() => {
     const mini = (window as any)._mini;
