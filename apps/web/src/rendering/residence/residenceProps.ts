@@ -1,0 +1,139 @@
+// Higher-detail props shared by the residence archetypes: trees, picket fences,
+// rooftop water tanks / AC units / skylights, porch columns and balustrades.
+// These are deliberately small helper functions so each archetype can dress a
+// lot without growing into a monolith.
+import type * as THREE from 'three';
+import type { MaterialParameters } from '../meshFactory';
+import type { ResidenceKit } from './residenceKit';
+
+const GREEN_DARK = 0x3f6f3c;
+const GREEN_MID = 0x4f8447;
+const GREEN_LIGHT = 0x629a55;
+
+function foliageMat(color: number): MaterialParameters {
+  return { color, roughness: 0.94, tex: 'grass', rx: 1, ry: 1 };
+}
+
+/** Broadleaf tree: tapered trunk and three offset canopy blobs. */
+export function tree(group: THREE.Group, kit: ResidenceKit, x: number, z: number, y: number, scale: number, variant: number): void {
+  kit.cyl(group, 0.05 * scale, 0.075 * scale, 0.44 * scale, 7, { color: 0x6b4f38, roughness: 0.9, tex: 'wood', rx: 1, ry: 1 }, [x, y + 0.22 * scale, z]);
+  const spread = 0.05 * scale;
+  if (variant % 3 === 0) {
+    // Conifer: stacked blobs narrowing upward.
+    kit.ico(group, 0.26 * scale, 0, foliageMat(GREEN_DARK), [x, y + 0.55 * scale, z], [1, 0.9, 1]);
+    kit.ico(group, 0.2 * scale, 0, foliageMat(GREEN_MID), [x, y + 0.76 * scale, z], [1, 1, 1]);
+    kit.ico(group, 0.13 * scale, 0, foliageMat(GREEN_LIGHT), [x, y + 0.94 * scale, z], [1, 1.1, 1]);
+  } else {
+    kit.ico(group, 0.28 * scale, 0, foliageMat(GREEN_MID), [x, y + 0.62 * scale, z], [1.1, 0.92, 1.05]);
+    kit.ico(group, 0.2 * scale, 0, foliageMat(GREEN_DARK), [x - spread, y + 0.5 * scale, z + spread], [1, 0.9, 1]);
+    kit.ico(group, 0.17 * scale, 0, foliageMat(GREEN_LIGHT), [x + spread, y + 0.72 * scale, z - spread], [1, 0.95, 1]);
+  }
+}
+
+/** Low picket fence running along x at a fixed z. */
+export function picketFence(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  opts: { x: number; z: number; width: number; y: number; color?: number; pickets?: number },
+): void {
+  const { x, z, width, y, color = 0xe8e4d8, pickets = 6 } = opts;
+  const post: MaterialParameters = { color, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 };
+  kit.box(group, width, 0.03, 0.03, post, [x, y + 0.18, z], false);
+  kit.box(group, width, 0.03, 0.03, post, [x, y + 0.31, z], false);
+  const step = width / (pickets - 1);
+  for (let index = 0; index < pickets; index += 1) {
+    const px = x - width / 2 + index * step;
+    kit.box(group, 0.035, 0.36, 0.028, post, [px, y + 0.18, z], false);
+    const tip = kit.box(group, 0.05, 0.05, 0.03, post, [px, y + 0.375, z], false);
+    tip.rotation.z = Math.PI / 4;
+  }
+  [-1, 1].forEach((side) => {
+    kit.box(group, 0.07, 0.46, 0.07, post, [x + side * width / 2, y + 0.23, z], false);
+  });
+}
+
+/** Rooftop water tank on a steel frame, with a small access ladder. */
+export function waterTank(group: THREE.Group, kit: ResidenceKit, x: number, z: number, y: number, color: number): void {
+  const steel: MaterialParameters = { color: 0x6f6a62, roughness: 0.55, metalness: 0.3, tex: 'metal', rx: 1, ry: 1 };
+  [-1, 1].forEach((sx) => {
+    [-1, 1].forEach((sz) => {
+      kit.box(group, 0.035, 0.22, 0.035, steel, [x + sx * 0.14, y + 0.11, z + sz * 0.14], false);
+    });
+  });
+  kit.box(group, 0.38, 0.03, 0.38, steel, [x, y + 0.23, z], false);
+  kit.cyl(group, 0.19, 0.19, 0.44, 12, { color, roughness: 0.66, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [x, y + 0.46, z]);
+  kit.cyl(group, 0.015, 0.19, 0.12, 12, { color, roughness: 0.66, metalness: 0.15, tex: 'metal', rx: 1, ry: 1 }, [x, y + 0.74, z], false);
+  // Ladder up the tank side.
+  [-1, 1].forEach((sx) => {
+    kit.box(group, 0.018, 0.42, 0.018, steel, [x + 0.21, y + 0.42, z + sx * 0.05], false);
+  });
+  for (let r = 0; r < 4; r += 1) {
+    kit.box(group, 0.018, 0.016, 0.1, steel, [x + 0.21, y + 0.26 + r * 0.1, z], false);
+  }
+}
+
+/** Wall-mounted air-conditioning unit with a fan grille. */
+export function acUnit(group: THREE.Group, kit: ResidenceKit, x: number, y: number, z: number): void {
+  kit.box(group, 0.28, 0.18, 0.16, { color: 0xd7d5cf, roughness: 0.7, tex: 'metal', rx: 1, ry: 1 }, [x, y, z], false);
+  kit.cyl(group, 0.055, 0.055, 0.02, 10, { color: 0x8f9296, roughness: 0.5, metalness: 0.3 }, [x, y, z + 0.085], false).rotation.x = Math.PI / 2;
+}
+
+/** Sloped skylight sitting on a roof plane. */
+export function skylight(group: THREE.Group, kit: ResidenceKit, x: number, z: number, y: number, w: number, d: number): void {
+  const mat: MaterialParameters = { color: 0xcfe0eb, emissive: 0x395062, emissiveIntensity: 0.06, roughness: 0.12, metalness: 0.2, tex: 'window_reflection', rx: 1, ry: 1, transparent: true, opacity: 0.88 };
+  kit.box(group, w, 0.05, d, { color: 0x5a6168, roughness: 0.5, metalness: 0.35, tex: 'metal', rx: 1, ry: 1 }, [x, y + 0.02, z], false);
+  const pane = kit.box(group, w * 0.82, 0.03, d * 0.78, mat, [x, y + 0.06, z], false);
+  pane.rotation.x = -0.18;
+  kit.box(group, w, 0.03, 0.03, { color: 0x5a6168, roughness: 0.5, metalness: 0.35 }, [x, y + 0.085, z - d / 2], false);
+}
+
+/** Simple TV aerial: mast plus two crossbars. */
+export function antenna(group: THREE.Group, kit: ResidenceKit, x: number, z: number, y: number, height: number): void {
+  const mat: MaterialParameters = { color: 0x9a9c9e, roughness: 0.5, metalness: 0.5, tex: 'metal', rx: 1, ry: 1 };
+  kit.cyl(group, 0.012, 0.016, height, 6, mat, [x, y + height / 2, z], false);
+  [0.55, 0.75, 0.9].forEach((t, index) => {
+    const w = 0.34 - index * 0.08;
+    kit.box(group, w, 0.012, 0.012, mat, [x, y + height * t, z], false);
+  });
+}
+
+/** Turned balustrade for porches and balconies. */
+export function balustrade(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  opts: { x: number; z: number; y: number; width: number; color?: number; facing?: 'front' | 'left' | 'right' | 'back' },
+): void {
+  const { x, z, y, width, color = 0xe7e2d6, facing = 'front' } = opts;
+  const inner = kit.sub(group, x, y, z, facing);
+  const mat: MaterialParameters = { color, roughness: 0.72, tex: 'stone', rx: 1, ry: 1 };
+  kit.box(inner, width, 0.05, 0.08, mat, [0, 0.34, 0], false);
+  kit.box(inner, width, 0.045, 0.07, mat, [0, 0.05, 0], false);
+  const count = Math.max(4, Math.round(width / 0.12));
+  for (let index = 0; index <= count; index += 1) {
+    const px = -width / 2 + (width * index) / count;
+    kit.cyl(inner, 0.022, 0.026, 0.28, 6, mat, [px, 0.19, 0], false);
+  }
+  [-1, 1].forEach((side) => {
+    kit.box(inner, 0.09, 0.42, 0.13, mat, [side * width / 2, 0.21, 0], false);
+  });
+}
+
+/** Porch column with base and capital. */
+export function porchColumn(
+  group: THREE.Group,
+  kit: ResidenceKit,
+  opts: { x: number; z: number; y: number; height: number; color?: number },
+): void {
+  const { x, z, y, height, color = 0xe7e2d6 } = opts;
+  const mat: MaterialParameters = { color, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 };
+  kit.cyl(group, 0.045, 0.055, height, 8, mat, [x, y + height / 2, z]);
+  kit.box(group, 0.13, 0.045, 0.13, mat, [x, y + height - 0.02, z], false);
+  kit.box(group, 0.13, 0.045, 0.13, mat, [x, y + 0.02, z], false);
+}
+
+/** Small house-number plaque beside a door. */
+export function houseNumber(group: THREE.Group, kit: ResidenceKit, x: number, y: number, z: number, color: number): void {
+  kit.box(group, 0.11, 0.08, 0.02, { color: 0xf2efe6, roughness: 0.6 }, [x, y, z], false);
+  kit.box(group, 0.025, 0.045, 0.012, { color, roughness: 0.5, metalness: 0.3 }, [x - 0.022, y, z + 0.014], false);
+  kit.box(group, 0.025, 0.045, 0.012, { color, roughness: 0.5, metalness: 0.3 }, [x + 0.022, y, z + 0.014], false);
+}
