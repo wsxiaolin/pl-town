@@ -53,7 +53,8 @@ export function buildSchoolCampus(options: SchoolCampusOptions, definition: Buil
   const { addPart, makeMaterial, makeMesh } = options;
   const group = new THREE.Group();
 
-  const BASE = 0.14;
+  // 基座顶面 0.14；建筑/铺装/绿篱统一起到 0.146，避免与基座顶面共面。
+  const BASE = 0.146;
   const MAIN_W = 6.6;
   const MAIN_H = 1.8;
   const MAIN_D = 1.4;
