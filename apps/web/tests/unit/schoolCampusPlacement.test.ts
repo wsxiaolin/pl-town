@@ -64,6 +64,20 @@ for (const id of ['school_north', 'school_east'] as const) {
     entity.group.traverse((object) => { if ((object as THREE.Mesh).isMesh) meshes += 1; });
     assert.ok(meshes >= 80, `multi-volume campus expected >= 80 meshes, got ${meshes}`);
 
+    // 四面钟盘：侧盘轴线必须转到 ±X，否则会被钟楼盒体吞掉。
+    const clockAxes: THREE.Vector3[] = [];
+    entity.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || mesh.geometry.type !== 'CylinderGeometry') return;
+      const parameters = (mesh.geometry as THREE.CylinderGeometry).parameters;
+      if (parameters.radiusTop === 0.2 && parameters.radiusBottom === 0.2 && parameters.height === 0.04) {
+        clockAxes.push(new THREE.Vector3(0, 1, 0).applyQuaternion(mesh.quaternion));
+      }
+    });
+    assert.equal(clockAxes.length, 4, '钟楼应有四面钟盘');
+    assert.ok(clockAxes.some((axis) => Math.abs(axis.x) > 0.99), '侧盘轴线应朝向 ±X');
+    assert.ok(clockAxes.some((axis) => Math.abs(axis.z) > 0.99), '正背盘轴线应朝向 ±Z');
+
     // 从正上方打在钟楼东侧的坡屋面上：绕序正确时先命中山坡，绕序反了
     // 会直接穿过屋顶命中 2.48 高的檐口平板。
     const raycaster = new THREE.Raycaster(

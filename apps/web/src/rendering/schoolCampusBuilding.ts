@@ -106,8 +106,9 @@ export function buildSchoolCampus(options: SchoolCampusOptions, definition: Buil
   ];
   clockFaces.forEach(([x, y, z, rotation]) => {
     const face = addPart(group, new THREE.CylinderGeometry(0.2, 0.2, 0.04, 18), clockFace, [x, y, z], false);
-    face.rotation.x = Math.PI / 2;
-    face.rotation.y = rotation;
+    // 圆盘轴线是局部 +Y：前后盘绕 X 转到 ±Z，侧盘绕 Z 转到 ±X。
+    if (rotation === 0 || rotation === Math.PI) face.rotation.x = Math.PI / 2;
+    else face.rotation.z = rotation;
   });
   addPart(group, new THREE.BoxGeometry(0.025, 0.14, 0.02), { color: 0x2a2a2a, roughness: 0.4 }, [0, clockY + 0.05, MAIN_Z + 0.475], false);
   addPart(group, new THREE.BoxGeometry(0.12, 0.025, 0.02), { color: 0x2a2a2a, roughness: 0.4 }, [0.05, clockY, MAIN_Z + 0.475], false);
