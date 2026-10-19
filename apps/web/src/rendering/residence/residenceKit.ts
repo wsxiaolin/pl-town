@@ -469,7 +469,7 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       box(inner, w * 0.86, 0.09, 0.11, { color: 0x8a5a3c, roughness: 0.82, tex: 'wood', rx: 1, ry: 1 }, [0, -h / 2 - 0.135, 0.085], false);
       const bloomMat: MaterialParameters = { color: flowerColor, roughness: 0.7 };
       [-w * 0.28, -w * 0.1, w * 0.1, w * 0.28].forEach((bx, index) => {
-        box(inner, 0.055, 0.06, 0.05, bloomMat, [bx, -h / 2 - 0.075, 0.09 + (index % 2) * 0.012], false);
+        box(inner, 0.055, 0.06, 0.04, bloomMat, [bx, -h / 2 - 0.075, 0.135 + (index % 2) * 0.012], false);
       });
       box(inner, w * 0.78, 0.04, 0.04, { color: 0x5f8a4a, roughness: 0.9, tex: 'grass', rx: 1, ry: 1 }, [0, -h / 2 - 0.09, 0.1], false);
     }
@@ -635,17 +635,21 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
       const offset = -width / 2 + (width * index) / 4;
       box(inner, 0.026, 0.2, 0.026, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [offset, 0.1, depth]);
     }
-    box(inner, 0.032, 0.2, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [-width / 2, 0.1, depth / 2], false);
-    box(inner, 0.032, 0.2, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [width / 2, 0.1, depth / 2], false);
+    // Side rails stop slightly short of the post top (and start above the
+    // slab) so their end faces never share a plane with the corner posts.
+    box(inner, 0.032, 0.17, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [-width / 2, 0.11, depth / 2], false);
+    box(inner, 0.032, 0.17, depth, { color: railColor, roughness: 0.7, tex: 'wood', rx: 1, ry: 1 }, [width / 2, 0.11, depth / 2], false);
     if (width >= 0.8) {
       // Fold-away drying rack with two cloths at the far end.
       const rackX = width * 0.06;
+      // Thin cloths stay >=5mm inside the post and rail planes, so the rack
+      // never depth-fights at range.
       [0.09, 0.21].forEach((rx) => {
         box(inner, 0.02, 0.22, 0.02, { color: 0x8a7a62, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [rackX + rx, 0.11, depth * 0.5], false);
       });
       box(inner, 0.28, 0.016, 0.016, { color: 0x8a7a62, roughness: 0.8, tex: 'wood', rx: 1, ry: 1 }, [rackX + 0.15, 0.215, depth * 0.5], false);
-      box(inner, 0.1, 0.13, 0.012, { color: 0xe8e1d2, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 }, [rackX + 0.12, 0.15, depth * 0.5], false);
-      box(inner, 0.08, 0.11, 0.012, { color: 0xc98a72, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 }, [rackX + 0.24, 0.16, depth * 0.5], false);
+      box(inner, 0.1, 0.13, 0.006, { color: 0xe8e1d2, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 }, [rackX + 0.12, 0.15, depth * 0.5], false);
+      box(inner, 0.08, 0.11, 0.006, { color: 0xc98a72, roughness: 0.92, tex: 'fabric', rx: 1, ry: 1 }, [rackX + 0.24, 0.16, depth * 0.5], false);
     }
     if (width >= 0.62) {
       // Terracotta planter tucked into one end of the balcony.
@@ -729,8 +733,10 @@ export function createResidenceKit({ part, isNight }: ResidenceKitOptions): Resi
     const inset = 0.008;
     box(group, width + protrude * 2, height, protrude, mat, [0, y, depth / 2 + protrude / 2 - inset], false);
     box(group, width + protrude * 2, height, protrude, mat, [0, y, -depth / 2 - protrude / 2 + inset], false);
-    box(group, protrude, height, depth, mat, [width / 2 + protrude / 2 - inset, y, 0], false);
-    box(group, protrude, height, depth, mat, [-width / 2 - protrude / 2 + inset, y, 0], false);
+    // Side runs stop just short of the front/back wall planes; otherwise their
+    // end caps land coplanar with the wall and flicker along the corners.
+    box(group, protrude, height, depth - inset * 2, mat, [width / 2 + protrude / 2 - inset, y, 0], false);
+    box(group, protrude, height, depth - inset * 2, mat, [-width / 2 - protrude / 2 + inset, y, 0], false);
   }
 
   function cornice(group: THREE.Group, opts: BandOptions): void {
