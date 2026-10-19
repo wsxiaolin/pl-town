@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { ResourcePool } from '../core/ResourcePool';
 import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
+import { YEAR_TOWN_ANCHORS, YEAR_TOWN_MARKERS, yearTownPanBounds } from './data/year-towns/towns';
+import { YEAR_TOWN_BUILDING_CONTENT } from './data/year-towns/yearTownBuildings';
+import { CATALOG_ACTION_PREFIX, YEAR_TOWN_CATALOG_CONTENT, createYearTownCatalogController, yearTownWorkBuildingId } from '../adapters/ui/yearTownCatalogController';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
 import { NPC_PROFILES } from './data/npcs';
@@ -16,10 +19,13 @@ import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
 import { createRoadNavigationSystem, buildMeadowTrailGraph } from './navigation/roadNavigation';
+import { buildTransitRoadGraph } from './data/year-towns/transit';
 import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { createSceneInterestPointController } from './sceneInterestPointController';
+import { createTransitRideController } from './transitRideController';
+import type { TransitStationId } from '../gameplay/world/sceneInteractions';
 import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
@@ -271,6 +277,9 @@ const interactionTracker = createInteractionTracker({
 
 const sceneAnimations = createSceneAnimations({ getBuildings: () => buildings, reduced: REDUCED });
 
+// T4b-c4 乘车接线：站牌实体已随 c2 装配进 sceneInterestPoints（勿重复装配），此处只挂控制器钩子。
+const transitRide = createTransitRideController({ getCursorChar: () => cursorChar, getDialogs: () => cityDialogs, clearPlayerPath: () => view.clearPlayerPath(), showToast: showUnlockToast });
+
 const frameLoop = createFrameLoop({
   onFirstRender: () => entranceGate.flush(),
   getRenderer: () => renderer,
@@ -295,6 +304,7 @@ const frameLoop = createFrameLoop({
   getCityDialogs: () => cityDialogs,
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
+  updateTransitRide: (delta) => transitRide.update(delta),
   updateWeather: (delta) => weatherEffect?.update(delta),
   updateFireworks: (delta, elapsed) => fireworksPlaykit?.update(delta, elapsed),
   getLastFrameTime: () => lastFrameTime,
@@ -310,6 +320,11 @@ const roadNavigation = createRoadNavigationSystem({
   meadowTrail: buildMeadowTrailGraph(),
   westBeach: WEST_BEACH,
   cityLimit: CITY_LIMIT,
+  // T3a 年份群岛：8 镇锚点外扩 WORLD_BOUNDS，玩家在岛上不被钳回主城。
+  yearTownAnchors: YEAR_TOWN_ANCHORS,
+  // T4a2 跨海交通：星门大桥 B 链（S4 挂接）+ 起源村枢纽街，走线唯一
+  // 事实源 transit.ts（buildTransitRoadGraph 直出节点/边表）。
+  transit: buildTransitRoadGraph(),
   getBuildings: () => buildings,
 });
 
@@ -498,10 +513,11 @@ function init() {
       exit: firstPersonController.exit, toggle: firstPersonController.toggle,
       getActiveCamera: firstPersonController.getActiveCamera,
     },
-    getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false },
+    getMapShotsReady: () => mapController?.shotsReady() ?? { main: false, north: false, archipelago: false },
     getMapShotsPreloadSettled: () => mapController?.shotsPreloadSettled() ?? true,
     teleport: devTeleport,
     focus: devFocus,
+    transit: transitRide,
     fireworks: fireworksDebug,
   });
   addCityLighting(scene, MOBILE, isNight);
@@ -558,6 +574,8 @@ function init() {
   academyController = hud.academy;
   mutualAidController = hud.mutualAid;
   librarySearchController = hud.librarySearch;
+  // T6R-b3：档案馆/总目塔集中检索目录（GOAL#5）：locate 复用 mapController 既有传送（作品建筑优先，无建筑落所在镇），panel 复用 b2 抽屉 openWork。
+  const yearTownCatalog = createYearTownCatalogController({ document, signal: lifecycle.signal, panel: hud.yearTownPanel, locate: (work) => { const buildingId = yearTownWorkBuildingId(work.id); return buildingId ? (mapController?.teleportToBuilding(buildingId) ?? false) : (mapController?.teleportToTown(`island-${work.year}`) ?? false); } });
   multiplayerHousing = createMultiplayerHousingController({
     scene, signal: lifecycle.signal, residences, getCursorChar: () => cursorChar,
     makeCharacter: (head, body) => npcSystem.makeCharacter(head, body), showLoginEntry: () => loginController?.showLoginEntry(), showLoginOverlay: () => loginController?.showLogin(), showUnlockToast, movePlayerTo: (target) => playerController?.moveTo(target), pointInAnyBuilding: roadNavigation.pointInAnyBuilding,
@@ -636,17 +654,21 @@ function init() {
     clearPlayerPath: () => view.clearPlayerPath(),
     renderMapHouseTags: () => multiplayerHousing.renderMapHouseTags(),
     openResidence: () => undefined,
+    // T3a 海图页：8 镇标记（label/tagline/主题色/落位直出 towns 常量）。
+    getTownMarkers: () => YEAR_TOWN_MARKERS,
   });
   mapController.setup(lifecycle.signal);
   movementInputController = createMovementInputController({
     document, window, signal: lifecycle.signal,
-    onManualStart: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); },
+    onManualStart: () => { view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget(); transitRide.cancel(); },
     isUiModalOpen: isCityGovernancePanelOpen,
   });
   cameraPanController = createCameraPanController({
     canvas: document.getElementById('c') as HTMLElement, document, window, signal: lifecycle.signal,
     getCamera: () => camera, getCameraTarget: () => view.cameraTarget,
     getPlayerPosition: () => cursorChar?.position ?? null, cityLimit: CITY_LIMIT,
+    // T3a 年份群岛：平移域=主城 ±CITY_LIMIT 与 8 镇滩域的并集（相机可拖到远岛）。
+    panBounds: yearTownPanBounds(CITY_LIMIT),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant), stopCameraMotion: () => cameraController?.stop(),
     isBlocked: () => view.isCinematic() || Boolean(mapController?.isOpen())
       || Boolean(cityDialogs?.isOpen()) || isCityGovernancePanelOpen() || Boolean(stories?.echo.isInteriorView()),
@@ -718,7 +740,7 @@ function init() {
   });
   cityDialogs = createCityDialogController({
     document,
-    buildingContent: BUILDING_CONTENT,
+    buildingContent: { ...BUILDING_CONTENT, ...YEAR_TOWN_BUILDING_CONTENT, ...YEAR_TOWN_CATALOG_CONTENT }, // T6R-b1 铭牌合流 + b3 档案馆/总目塔目录入口（无内容键落兜底）
     isConstructionPending,
     getQuestAction: (npcId) => questRuntime.getNpcAction(npcId, readQuestProgressView(multiplayerHousing)),
     performQuestAction: (action, at) => questRuntime.performNpcAction(action, at),
@@ -727,12 +749,9 @@ function init() {
       if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if (action.startsWith('open-url:')) window.location.href = action.slice(9);
       if (action === 'certify') certifyController?.show();
-      if (action.startsWith('achievement:')) {
-        const id = action.slice('achievement:'.length);
-        const achievement = ACHIEVEMENTS.find((entry) => entry.id === id);
-        if (achievement) awardDirectAchievement(achievement.id, achievement.name);
-      }
-      buildingFeatureRegistry.handleDialogueAction(action, 'city-dialog');
+      if (action.startsWith('achievement:')) { const achievement = ACHIEVEMENTS.find((entry) => entry.id === action.slice(12)); if (achievement) awardDirectAchievement(achievement.id, achievement.name); } // 紧凑化：为 b3 路由让行（源码行数门 ≤1000）
+      if (action.startsWith(CATALOG_ACTION_PREFIX)) yearTownCatalog.open(action.slice(CATALOG_ACTION_PREFIX.length)); // T6R-b3：档案馆/总目塔选项 → 集中检索目录
+      else if (action.startsWith('read-body:')) hud.yearTownPanel.open(action.slice('read-body:'.length)); else buildingFeatureRegistry.handleDialogueAction(action, 'city-dialog'); // T6R-b2：铭牌「阅读正文」→ 年份镇作品详情抽屉
     },
     pauseNpcs: () => npcSystem.pauseNpcs(),
     resumeNpcs: () => npcSystem.resumeNpcs(),
@@ -815,6 +834,7 @@ function init() {
     },
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
+    interactWithTransit: (id) => transitRide.interact(id as TransitStationId),
     interactWithStory: (id) => cityDialogs ? stories.echo.interactInterestPoint(id, cityDialogs) : false,
     interactWithFeature: (id) => iceKingFeature?.iceWall.interact(id) ?? false,
     setWellPhase: (phase) => iceHooks.setWellPhase(phase),
@@ -903,19 +923,14 @@ function disposeSession() {
   stories?.dispose();
 }
 
-/**
- * Compiles the scene's GPU programs and renders warm-up frames BEFORE the
- * first visible frame. The heavy lifting lives in
- * `rendering/firstFrameWarmup.ts` — this adapter only binds the live
- * renderer/scene/camera handles (module lets assigned by init()), keeping
- * MiniCityApp a composition root per AGENTS.md.
- */
+/** Pre-compiles GPU programs and renders warm-up frames before the first
+ *  visible frame; heavy lifting in rendering/firstFrameWarmup.ts, here only
+ *  live handles are bound (composition root, AGENTS.md). */
 function prepareFirstFrame(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
   return warmupFirstFrame({ renderer, scene, camera, frameLoop }, onProgress, signal);
 }
 
-/** Dev portal: snap the player to a world spot; the follow camera lands there
- *  on the next frame. Path state is cleared so no stale walk resumes. */
+/** Dev portal: snap the player to a world spot (path cleared, camera lands next frame); devFocus adds zoom (bigger = wider view). */
 function devTeleport(x: number, z: number): boolean {
   if (!cursorChar) return false;
   view.clearPlayerPath();
@@ -923,7 +938,6 @@ function devTeleport(x: number, z: number): boolean {
   view.setTarget(x, z, true);
   return true;
 }
-/** Dev portal: teleport + optional orthographic zoom (bigger = wider view). */
 function devFocus(x: number, z: number, zoom?: number): boolean {
   if (zoom !== undefined) view.applyZoom(zoom);
   return devTeleport(x, z);
