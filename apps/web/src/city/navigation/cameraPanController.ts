@@ -16,6 +16,8 @@ export type CameraPanControllerOptions = {
   getCameraTarget: () => THREE.Vector3;
   getPlayerPosition: () => THREE.Vector3 | null;
   cityLimit: number;
+  /** 相机平移边界（T3a 年份群岛）。不传时默认 ±cityLimit，行为与历史版本完全一致。 */
+  panBounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
   stopCameraMotion: () => void;
   isBlocked: () => boolean;
@@ -38,6 +40,14 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
   let detached = false;
   let returning = false;
   let suppressClickUntil = 0;
+  // 拖拽钳制域：默认回退 ±cityLimit（不传 panBounds 的既有调用零变化）；
+  // 年份群岛传主城与 8 镇滩域的并集（towns.ts yearTownPanBounds），相机可平移到远岛。
+  const panBounds = options.panBounds ?? {
+    minX: -options.cityLimit,
+    maxX: options.cityLimit,
+    minZ: -options.cityLimit,
+    maxZ: options.cityLimit,
+  };
 
   function clearLongPressTimer(): void {
     if (longPressTimer) options.window.clearTimeout(longPressTimer);
@@ -146,8 +156,8 @@ export function createCameraPanController(options: CameraPanControllerOptions) {
     event.preventDefault();
     if (groundPoint(previousX, previousY, previousGround) && groundPoint(event.clientX, event.clientY, currentGround)) {
       const target = options.getCameraTarget();
-      const nextX = THREE.MathUtils.clamp(target.x + previousGround.x - currentGround.x, -options.cityLimit, options.cityLimit);
-      const nextZ = THREE.MathUtils.clamp(target.z + previousGround.z - currentGround.z, -options.cityLimit, options.cityLimit);
+      const nextX = THREE.MathUtils.clamp(target.x + previousGround.x - currentGround.x, panBounds.minX, panBounds.maxX);
+      const nextZ = THREE.MathUtils.clamp(target.z + previousGround.z - currentGround.z, panBounds.minZ, panBounds.maxZ);
       options.setCameraTarget(nextX, nextZ, true);
     }
     previousX = event.clientX;

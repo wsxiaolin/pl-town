@@ -46,6 +46,9 @@ export type FrameLoopOptions = {
     interactNpc: () => boolean;
   } | null;
   updateWeather?: (delta: number) => void;
+  /** 年份群岛乘车推进（T4b-c3，updateWeather 同款挂法）：沿 buildTransitRoute
+   * 弧长推 cursor，在 updateMovement 之后、相机跟随之前调用（c4 接线注入）。 */
+  updateTransitRide?: (delta: number) => void;
   /** 烟花粒子引擎（升空/爆裂物理与拖尾）。 */
   updateFireworks?: (delta: number, elapsedSeconds: number) => void;
   /** 主题装饰（灯笼昼夜发光过渡等）。 */
@@ -88,6 +91,7 @@ export function createFrameLoop(options: FrameLoopOptions) {
     }
     const playerController = options.getPlayerController();
     playerController?.updateMovement(delta);
+    options.updateTransitRide?.(delta);
     options.updateWeather?.(delta);
     options.updateFireworks?.(delta, now / 1000);
     options.updateFestival?.(now / 1000);

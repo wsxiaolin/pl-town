@@ -9,6 +9,9 @@ import { isCatDeathCGActive, playCatDeathCG, stopCatDeathCG } from '../adapters/
 import { terrainHeight, slopeAlong } from './data/terrain/heightfield/terrainHeight';
 import { plateauFlat } from './data/terrain/heightfield/plateauField';
 import { riverWaterYAt } from './data/terrain/heightfield/worldReliefField';
+import { TRANSIT_STATIONS } from './data/year-towns/transit';
+import type { TransitRideController } from './transitRideController';
+import type { TransitStationId } from '../gameplay/world/sceneInteractions';
 import type { OnboardingTutorialController } from '../adapters/ui/onboardingTutorialController';
 
 type NpcEntity = Npc;
@@ -108,9 +111,10 @@ function createMiniCityApi(options: DebugApiOptions) {
     get firstPerson() {
       return options.getFirstPerson?.() ?? null;
     },
-    /** Which map atlas pages (主城 main / 星语北城 north) already have a
-     *  captured snapshot — lets tests observe the boot-time preload without
-     *  opening the map (opening would capture lazily and mask the check). */
+    /** Which map atlas pages (主城 main / 星语北城 north / 群岛海图
+     *  archipelago) already have a captured snapshot — lets tests observe
+     *  the boot-time preload without opening the map (opening would capture
+     *  lazily and mask the check). */
     mapShotsReady: () => options.getMapShotsReady(),
     /** True once the boot map-atlas preload attempt has run to completion
      *  (success or failure), so tests can wait for the attempt to settle
@@ -135,6 +139,18 @@ function createMiniCityApi(options: DebugApiOptions) {
           slopeAlong(x, z, 0, 1), slopeAlong(x, z, 0, -1),
         ),
       }),
+    },
+    /** 年份群岛乘车（T4b-c4 调试口，供 c6 冒烟驱动）：stations 直出 10 站
+     *  站表（id/name/line/townId/works/baseY/platform 坐标）；interact(id)
+     *  等价点站牌（开目的地面板）；start(from, to) 免面板直接发车；state()
+     *  读实时行程（phase/s/speed/落点）；history() 读最近到站记录（c6 断言
+     *  arrival.y 与目标站 baseY 吻合 <0.01）。 */
+    transit: {
+      stations: () => TRANSIT_STATIONS,
+      interact: (id: string) => options.transit.interact(id as TransitStationId),
+      start: (fromId: string, toId: string) => options.transit.startRide(fromId, toId),
+      state: () => options.transit.state(),
+      history: () => options.transit.history(),
     },
     fireworks: {
       openDesigner: () => options.fireworks.openDesigner(),
@@ -185,10 +201,12 @@ export type DebugApiOptions = {
     toggle: () => void;
     getActiveCamera: () => unknown;
   } | null;
-  getMapShotsReady: () => { main: boolean; north: boolean };
+  getMapShotsReady: () => { main: boolean; north: boolean; archipelago: boolean };
   getMapShotsPreloadSettled: () => boolean;
   teleport: (x: number, z: number) => boolean;
   focus: (x: number, z: number, zoom?: number) => boolean;
+  /** 年份群岛乘车控制器（T4b-c4：MiniCityApp 接线注入，_mini.transit 消费）。 */
+  transit: TransitRideController;
   fireworks: {
     openDesigner: () => void;
     startShow: () => void;

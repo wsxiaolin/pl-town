@@ -5,9 +5,13 @@ import { CHENXI_RIVER, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../src/city/data
 import { MINGLAN_ISLES } from '../../src/city/data/terrain/sea-minglan';
 import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
-import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA } from '../../src/city/data/cityConfig';
+import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, shorelineX } from '../../src/city/data/cityConfig';
+import { YEAR_TOWNS } from '../../src/city/data/year-towns/towns';
+import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
+import { ISLAND_SKIRT_W } from '../../src/city/data/terrain/heightfield/islandField';
+import { PLATEAU_MAIN } from '../../src/city/data/terrain/heightfield/plateauField';
 import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
-import { TRAIL_NAV_NODES, SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES, TRAIL_SLOT_HALF } from '../../src/city/data/terrain/heightfield/worldReliefField';
+import { TRAIL_NAV_NODES, SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES, TRAIL_SLOT_HALF, worldReliefAt } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 import { RIVER_SAMPLES, riverWaterYAt, riverWaterRows } from '../../src/city/data/terrain/heightfield/riverField';
 
@@ -311,5 +315,131 @@ test('WORLD_TERRAIN 聚合包含城缘草甸（新地形必须进世界清单）
   const ids = new Set(WORLD_TERRAIN.map((feature) => feature.id));
   for (const feature of CITYSIDE_MEADOW) {
     assert.ok(ids.has(feature.id), `${feature.id} 未聚合进 WORLD_TERRAIN`);
+  }
+});
+
+// ── 年份群岛（T3 'islands' 组，设计 §6.3 审计）─────────────────────────────
+// 8 座年份镇（2019 起源村 → 2026 星港）已并入 WORLD_TERRAIN / worldReliefAt
+// （岛短路）/ 南海水面守卫（isArchipelagoWaterAt）。本组锁三件事：①恒海
+// 判据（岛足印与陆地/自然场永不冲突，台面恒高语义同主城台地）②keep-out
+// （岛与岛、岛与主城台地互不侵入）③南海水面与西海条带零重叠。
+
+test('年份群岛恒海判据：8 镇足印（含水下裙）全落恒海区，水面守卫覆盖全部岛缘', () => {
+  // 恒海区 = farGround 陆缘公式的恒假区（设计 §2）：南缘 z ≤ 180−18·(1+sin
+  // (x/47)) ≤ 180 ⇒ z > 180 恒海；西缘 x ≥ −150+(0.4+12·ss)·(1+sin(z/31)) ≥
+  // −149.6 ⇒ x < −150 恒海。足印口径 = 滩环外缘再外伸水下裙（isInsideIsland
+  // 的「岛缘」口径）。足印整圆落入恒海区 ⇒ 岛体/滩坡/裙与 farGround 陆网格、
+  // 草甸/河谷/海床各自然场零重叠，worldReliefAt 的岛短路永不落在陆地上。
+  for (const town of YEAR_TOWNS) {
+    const outerR = town.beachR + ISLAND_SKIRT_W;
+    assert.ok(
+      town.z - outerR > 180 || town.x + outerR < -150,
+      `${town.label} 足印（含裙 r=${outerR}）未全落恒海区（z_min=${(town.z - outerR).toFixed(1)}, x_max=${(town.x + outerR).toFixed(1)}）`,
+    );
+    // 水侧同口径复核（「先岛后水」的水侧须罩住全部岛）：岛心与足印四向
+    // 缘点都在南海水面守卫域内。
+    const probes: Array<[number, number]> = [
+      [town.x, town.z],
+      [town.x - outerR, town.z], [town.x + outerR, town.z],
+      [town.x, town.z - outerR], [town.x, town.z + outerR],
+    ];
+    for (const [x, z] of probes) {
+      assert.ok(
+        isArchipelagoWaterAt(x, z),
+        `${town.label} 岛缘点 (${x.toFixed(1)}, ${z.toFixed(1)}) 不在南海水面守卫域内`,
+      );
+    }
+  }
+});
+
+test('年份群岛台面恒高：worldReliefAt 在 8 镇台面内恒等于该镇 topY（语义同主城台地）', () => {
+  // 主城台地契约（见 terrainElevation.test：台面内严格 === 0、零起伏）对
+  // 年份镇同构：台面内严格 === topY——T5 的镇区布局、T4 的桥/站台落点、
+  // 玩家 cursor.y 与相机目标全部直接采样，不允许任何自然场分量（草甸/
+  // 河谷/海床切割）漏进岛台。逐镇整圆采样（步 1）+ 岛心处全链 terrainHeight
+  // 复核（PLATEAU_BASE_Y 耦合）。
+  for (const town of YEAR_TOWNS) {
+    for (let x = Math.ceil(town.x - town.plateauR); x <= Math.floor(town.x + town.plateauR); x += 1) {
+      for (let z = Math.ceil(town.z - town.plateauR); z <= Math.floor(town.z + town.plateauR); z += 1) {
+        if (Math.hypot(x - town.x, z - town.z) > town.plateauR) continue;
+        assert.strictEqual(
+          worldReliefAt(x, z),
+          town.topY,
+          `${town.label} 台面内 (${x}, ${z}) worldReliefAt 应恒为 topY=${town.topY}（语义同主城台地）`,
+        );
+      }
+    }
+    assert.strictEqual(
+      terrainHeight(town.x, town.z),
+      town.topY,
+      `${town.label} 岛心 terrainHeight 应为 ${town.topY}`,
+    );
+  }
+});
+
+test('年份群岛 keep-out：8 岛滩足印互不侵入（水道 ≥ 13u），不进主城台地', () => {
+  // 设计 §3：邻岛中心距 ≥ 57.7、滩环和 ≤ 44 ⇒ 岛间水道 ≥ 13u（T4 环线
+  // 桥跨与航道余量）；水下裙（±ISLAND_SKIRT_W=3）不互穿。主城侧：足印
+  // 盒与 PLATEAU_MAIN 脱开、镇心距主城中心 ≥ 150（设计 §3 硬约束）。
+  for (let i = 0; i < YEAR_TOWNS.length; i += 1) {
+    for (let j = i + 1; j < YEAR_TOWNS.length; j += 1) {
+      const a = YEAR_TOWNS[i]!;
+      const b = YEAR_TOWNS[j]!;
+      const centerDist = Math.hypot(a.x - b.x, a.z - b.z);
+      assert.ok(
+        centerDist - a.beachR - b.beachR >= 13,
+        `${a.label}↔${b.label} 岛间水道 ${(centerDist - a.beachR - b.beachR).toFixed(1)} < 13`,
+      );
+      assert.ok(
+        centerDist > a.beachR + b.beachR + 2 * ISLAND_SKIRT_W,
+        `${a.label}↔${b.label} 水下裙互穿（中心距 ${centerDist.toFixed(1)}）`,
+      );
+    }
+  }
+  for (const town of YEAR_TOWNS) {
+    const outerR = town.beachR + ISLAND_SKIRT_W;
+    const disjoint =
+      town.x + outerR < PLATEAU_MAIN.x0 || town.x - outerR > PLATEAU_MAIN.x1 ||
+      town.z + outerR < PLATEAU_MAIN.z0 || town.z - outerR > PLATEAU_MAIN.z1;
+    assert.ok(disjoint, `${town.label} 足印盒侵入主城台地`);
+    const centerDist = Math.hypot(town.x, town.z);
+    assert.ok(centerDist >= 150, `${town.label} 镇心距主城中心 ${centerDist.toFixed(1)} < 150`);
+  }
+});
+
+test('南海水面守卫与西海条带零重叠（waterGuard 域口径）', () => {
+  // 西海条带（westBeach.ts 现值）：x∈[sX(z)−96, sX(z)]、z∈[−112,112]，是
+  // 唯一 Water 几何的一部分（近岸游玩带由既有 westBeach 守卫管辖）。南海
+  // 水面（isArchipelagoWaterAt）与之零重叠（设计 §6.1 / sea-archipelago 头
+  // 注释契约「z ≤ 112 段与西海条带西缘 sX(z)−96 取小对接，不重叠」）：
+  // - 南带 z 向脱开：带内最小 z = 南陆缘−TUCK ≥ 144−12 = 132 > 条带 z 上界 112；
+  // - 西臂 x 向让位：z ≤ 112 段东缘 = min(w_edge+2, sX(z)−96) ≤ 条带西缘
+  //   （渲染几何 archipelagoWater.ts 同口径对缝至 sX(z)−96，图/守卫两侧
+  //   都不把条带内部划进南海管辖——T4 步行守卫不与 westBeach 重复管辖）。
+  // 采样条带全域内部（z 步 2、每行 5 点、缘线内缩 0.25 避开零面积搭界），
+  // 断言守卫恒 false。
+  let bandFloor = Infinity;
+  for (let x = SOUTH_SEA.bandXMin; x <= SOUTH_SEA.bandXMax; x += 1) {
+    bandFloor = Math.min(bandFloor, southLandEdgeZ(x) - SOUTH_SEA_COAST_TUCK);
+  }
+  assert.ok(bandFloor > 112, `南带最小 z ${bandFloor.toFixed(1)} 未脱开西海条带 z 上界 112`);
+  for (let z = -112; z <= 112; z += 2) {
+    const west = shorelineX(z) - 96;
+    const east = shorelineX(z);
+    for (let k = 0; k <= 4; k += 1) {
+      const x = west + 0.25 + (east - west - 0.5) * (k / 4);
+      assert.ok(
+        !isArchipelagoWaterAt(x, z),
+        `南海水面守卫侵入西海条带内部 (x=${x.toFixed(1)}, z=${z})`,
+      );
+    }
+  }
+});
+
+test('WORLD_TERRAIN 聚合包含年份群岛 8 岛（新地形必须进世界清单）', () => {
+  const ids = new Set(WORLD_TERRAIN.map((feature) => feature.id));
+  for (const feature of YEAR_ISLANDS) {
+    assert.ok(ids.has(feature.id), `${feature.id} 未聚合进 WORLD_TERRAIN`);
+    assert.equal(feature.kind, 'island', `${feature.id} kind 应为 island`);
   }
 });

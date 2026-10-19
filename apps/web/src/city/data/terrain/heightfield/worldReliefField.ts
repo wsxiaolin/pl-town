@@ -4,8 +4,10 @@
 import { riverValleyAt } from './riverField';
 export { riverValleyAt, riverWaterYAt } from './riverField';
 import { MINGLAN_ISLES } from '../sea-minglan';
+import { islandSurfaceYAt } from './islandField';
 import { meadowReliefAt } from './meadowField';
 import { plateauFlat, distanceOutsidePlateau } from './plateauField';
+import { bridgeDeckBlendAt, stationPadBlendAt } from './transitField';
 import { fbm2, smoothStep } from './noiseCore';
 
 /**
@@ -283,6 +285,20 @@ export const TRAIL_NAV_NODES = [...SOUTH_TRAIL_NODES, ...NORTH_TRAIL_NODES];
  * 台地内自然项与床表同时为 0 → 严格平坦（含 S1 槽段，单测覆盖）。
  */
 export function worldReliefAt(x: number, z: number): number {
+  // 年份群岛岛台（T3，设计 §6.2）：足印内恒为岛面高（台面/滩坡/水下裙，
+  // 语义同主城台地——寻路、玩家落点、相机目标直接采样）。8 岛全在恒海区
+  // （z_min>180 或 x_max<−150），与下面的自然场/走廊零重叠，直接短路。
+  const islandY = islandSurfaceYAt(x, z);
+  if (islandY !== null) {
+    // T4 交通件上盖（设计 §5.1/§5.2）：星门大桥末段横穿起源村北滩（走廊内
+    // 床高=桥面纵断面、落台 y=1.0 与台面无缝衔接）；各镇月台/栈桥以台面高
+    // 盖在滩环上（桩基平台，走廊场语义同桥面）。月台优先于桥走廊（T4b 换序：
+    // 月台是乘车落点的精确基准面，优先级与 transitGroundY 同口径）。
+    const padY = stationPadBlendAt(x, z, islandY);
+    if (padY !== null) return padY;
+    const deckY = bridgeDeckBlendAt(x, z, islandY);
+    return deckY === null ? islandY : deckY;
+  }
   const natural = naturalWorldReliefAt(x, z);
   const plateauGate = smoothStep(0, TRAIL_PLATEAU_FADE_W, distanceOutsidePlateau(x, z));
   // 双走廊求最大切槽权重者胜（两走廊包围盒相距 >100u，恒不重叠）。
