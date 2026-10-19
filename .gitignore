@@ -24,3 +24,7 @@ review_report.md
 review_report_clean.md
 final_comment.md
 conclusion.md
+
+# 年份镇 T5 生成物（scripts/generate_town_buildings.mjs 产出；GOAL 红线：生成物不入 git，交付目录中以离线数据形式随包附带）
+# 2026-10-19 用户决定随 PR 离线附带：gen-* 40 模块随 PR 入库（方案 A），保证 clone 后 typecheck/build/dev 全绿
+# apps/web/src/city/data/year-towns/gen-*
