@@ -60,6 +60,7 @@ import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
 import { createGenshinInstituteController, scheduleGenshinIdlePrefetch } from './genshin/genshinInstituteController';
+import { isCatDeathCGVisible } from '../adapters/ui/iceKing/catDeathCGController';
 import { createIceKingFeatureExperience } from './iceKing/createIceKingFeatureExperience';
 import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
 import { createBuildingFeatureRegistry } from './buildingFeatures/buildingFeatureRegistry';
@@ -300,6 +301,7 @@ const frameLoop = createFrameLoop({
   getNavigationTargetMarker: () => navigationTargetMarker,
   getBurnOverlay: () => burnCityEffect,
   getGenshinLaunchOverlay: () => genshinInstitute.getOverlay(),
+  isFullscreenCinematicVisible: isCatDeathCGVisible,
   getCursorChar: () => cursorChar,
   getCityDialogs: () => cityDialogs,
   getBeachEncounterActive: () => Boolean(cityDialogs?.isOpen()),

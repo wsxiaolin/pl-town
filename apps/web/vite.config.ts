@@ -9,10 +9,10 @@ const webRoot = fileURLToPath(new URL('.', import.meta.url));
 // Cloudflare Pages injects CF_PAGES=1 at build time, and keeps Production and
 // Preview environments on separate variable sets. A preview branch can therefore
 // build without VITE_SERVER_URL and silently point its API and WebSocket at its
-// own hostname. Fall back to the shared Render backend on Pages so every branch
-// preview reaches the backend.
+// own hostname. Fall back to the self-hosted backend on Pages so every branch
+// preview reaches the backend (nginx terminates TLS and upgrades /ws).
 const cloudflarePages = process.env.CF_PAGES === '1';
-const fallbackServerUrl = 'wss://pl-town.onrender.com';
+const fallbackServerUrl = 'wss://play.pltown.online/ws';
 const serverUrl = process.env.VITE_SERVER_URL ?? (cloudflarePages ? fallbackServerUrl : '');
 
 // Build identity for the boot gate: a visitor only takes the fast path while

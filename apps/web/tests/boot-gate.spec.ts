@@ -9,9 +9,15 @@ import { seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCa
 test.describe.configure({ retries: 0 });
 test.setTimeout(200_000);
 
-function expectedMomentCaption(): string {
+// The splash picks its moment from the visitor's local hour. Pin both the page
+// clock and the expected caption to the same instant: a real-time run that
+// straddles a 5/11/17/20 boundary would otherwise compute the expectation at
+// the new hour while the already-painted splash still holds the old caption.
+const MOMENT_AT = new Date('2026-10-07T00:12:00Z');
+
+function expectedMomentCaption(date = new Date()): string {
   // Substring each caption actually contains ("夜幕下的…" has 夜幕, not 夜晚).
-  const hour = new Date().getHours();
+  const hour = date.getHours();
   if (hour >= 5 && hour < 11) return '清晨';
   if (hour >= 11 && hour < 17) return '正午';
   if (hour >= 17 && hour < 20) return '黄昏';
@@ -25,6 +31,7 @@ test('light boot shows the current real-world moment still and enters', async ({
   // Seed BEFORE any navigation: addInitScript applies to the next document,
   // so one goto boots the light path directly (no wasted first-visit load).
   await seedCityStorage(page);
+  await page.clock.setFixedTime(MOMENT_AT);
   await page.goto('/');
 
   await expect(page.locator('#bootScreen')).toHaveClass(/is-splash/);
@@ -36,7 +43,7 @@ test('light boot shows the current real-world moment still and enters', async ({
   await expect(page.locator('#bootMomentImg')).toHaveClass(/is-front/, { timeout: 20_000 });
   expect(await page.locator('#bootMomentStep1').getAttribute('src')).toBeNull();
   expect(await page.locator('#bootMomentStep2').getAttribute('src')).toBeNull();
-  await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption());
+  await expect(page.locator('#bootMomentCaption')).toContainText(expectedMomentCaption(MOMENT_AT));
   // Skip interaction (r8 nit: click-skip had no coverage): the splash binds a
   // capture-phase pointerdown listener; exercising THAT path via a real
   // locator.click() races the natural reveal — once cityReady + the 2.6 s
