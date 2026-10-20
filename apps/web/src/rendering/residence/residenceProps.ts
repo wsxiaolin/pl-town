@@ -302,6 +302,8 @@ export function fireEscape(
     kit.box(inner, 0.018, dropTop, 0.018, steel, [ladderX, dropTop / 2, out * 0.45 + side * 0.03], false);
   });
   for (let rung = 0; rung < 5; rung += 1) {
-    kit.box(inner, 0.014, 0.014, 0.06, steel, [ladderX, 0.12 + rung * 0.14, out * 0.45], false);
+    // Rungs bridge the two rails; keep the cross-section 4mm smaller than the
+    // rails so their side faces never land on the same depth plane.
+    kit.box(inner, 0.01, 0.01, 0.06, steel, [ladderX, 0.12 + rung * 0.14, out * 0.45], false);
   }
 }
