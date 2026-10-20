@@ -50,6 +50,14 @@ function pyramidGeometry(width: number, depth: number, height: number): THREE.Bu
     0, 4, 1, 1, 4, 2, 2, 4, 3, 3, 4, 0,
   ]);
   const flat = geometry.toNonIndexed();
+  // 自定义几何没有 uv，带 tex 的屋面会退化成纯色；按俯视投影补一组。
+  const position = flat.getAttribute('position');
+  const uv = new Float32Array(position.count * 2);
+  for (let i = 0; i < position.count; i += 1) {
+    uv[i * 2] = (position.getX(i) + hw) / (2 * hw);
+    uv[i * 2 + 1] = (position.getZ(i) + hd) / (2 * hd);
+  }
+  flat.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   flat.computeVertexNormals();
   return flat;
 }
@@ -159,7 +167,7 @@ export function buildSchoolCampus(options: SchoolCampusOptions, definition: Buil
   // ── 西体育馆：砖墙 + 筒拱屋顶 ────────────────────────
   addPart(group, new THREE.BoxGeometry(WING_W, WING_H, WING_D), { color: BRICK, roughness: 0.82, tex: 'schoolbrick', rx: 2, ry: 1 }, [-WING_X, F + WING_H / 2, WING_Z]);
   addPart(group, new THREE.BoxGeometry(WING_W + 0.04, 0.12, WING_D + 0.04), { color: TRIM, roughness: 0.7, tex: 'stone', rx: 1, ry: 1 }, [-WING_X, F + WING_H - 0.08, WING_Z], false);
-  const barrel = addPart(group, new THREE.CylinderGeometry(0.55, 0.55, 2.0, 18), { color: 0xa9a6a0, roughness: 0.45, metalness: 0.25, tex: 'metal', rx: 2, ry: 1 }, [-WING_X, F + WING_H, WING_Z]);
+  const barrel = addPart(group, new THREE.CylinderGeometry(0.55, 0.55, WING_D - 0.04, 18), { color: 0xa9a6a0, roughness: 0.45, metalness: 0.25, tex: 'metal', rx: 2, ry: 1 }, [-WING_X, F + WING_H, WING_Z]);
   barrel.rotation.x = Math.PI / 2;
 
   const gymFrontZ = WING_Z + WING_D / 2;
