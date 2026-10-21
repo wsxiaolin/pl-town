@@ -9,6 +9,7 @@ import {
   stationById,
 } from '../../src/city/data/year-towns/transit';
 import { transitGroundY } from '../../src/city/data/terrain/heightfield/transitGround';
+import type { TransitStationId } from '../../src/gameplay/world/sceneInteractions';
 
 // 乘车控制器单测（T4b-c5，docs/t4b-ride-plan.md §4）：把 transitRideController
 // 的四条核心行为固化成回归——弧长推进单调（s 逐帧严格递增、永不越走线长）、
@@ -170,4 +171,20 @@ test('取消（onManualStart 中断乘车）：立即停乘不落点不记账，
   // 空闲时 cancel 是安全 no-op。
   controller.cancel();
   assert.equal(controller.state().phase, 'idle');
+});
+
+test('取消面板态：interact 开目的地面板后 cancel 清空 panelStationId，不留陈旧 state', () => {
+  const cursor = makeFakeCursor();
+  const controller = createTransitRideController({
+    getCursorChar: () => cursor as unknown as Object3D,
+    getDialogs: () => ({ openStory: () => undefined, dismissNpc: () => undefined }),
+  });
+  assert.equal(controller.interact('station-stargate' as TransitStationId), true);
+  const opened = controller.state();
+  assert.equal(opened.phase, 'panel');
+  assert.equal(opened.panelStationId, 'station-stargate');
+  controller.cancel();
+  const cancelled = controller.state();
+  assert.equal(cancelled.phase, 'idle', 'cancel 后面板态应复位为 idle');
+  assert.equal(cancelled.panelStationId, null, 'cancel 后不应残留旧站 id');
 });

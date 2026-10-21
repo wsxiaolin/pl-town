@@ -274,6 +274,7 @@ export function createTransitRideController(options: TransitRideControllerOption
     isRiding: () => ride !== null,
     cancel() {
       ride = null; // 中途下车：cursor 停在当前走线点（无落点、不记账）
+      panelStationId = null; // 面板态一并复位，避免 state() 残留旧站
     },
     state() {
       if (ride) {
