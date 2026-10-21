@@ -151,3 +151,22 @@ test('stat achievements unlock from cloud progress without re-sending completed 
   );
   assert.deepEqual(commands.filter((command) => command.type === 'progress.achievement.unlock'), []);
 });
+
+test('dev currency stays pinned across cloud snapshots', () => {
+  const document = {
+    defaultView: { localStorage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined } },
+    getElementById: () => null,
+    querySelector: () => null,
+  } as unknown as Document;
+  const controller = createCloudProgressionController({
+    document,
+    signal: new AbortController().signal,
+    showToast: () => undefined,
+    send: () => true,
+    openPhoneView: () => undefined,
+    devCurrency: 999_999_999,
+  });
+  assert.equal(controller.getProgress().currency, 999_999_999);
+  controller.applySnapshot({ ...EMPTY_PLAYER_PROGRESS, currency: 0 }, EMPTY_PROGRESSION_CATALOG);
+  assert.equal(controller.getProgress().currency, 999_999_999);
+});

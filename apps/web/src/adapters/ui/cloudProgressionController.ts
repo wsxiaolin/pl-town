@@ -38,6 +38,9 @@ type Options = {
   showToast: (message: string) => void;
   send: (command: ProgressionCommand) => boolean;
   openPhoneView: (view: 'inventory') => void;
+  /** Dev portal only: pin the locally displayed balance. Purchases still
+   *  require a live connection, so this never settles server-side costs. */
+  devCurrency?: number;
 };
 
 const PRODUCT_PRESENTATIONS: Readonly<Record<string, { icon: string; detail: string }>> = Object.freeze({
@@ -65,7 +68,9 @@ const iceRewardById = new Map(Object.values(ICE_KING_REWARDS).map((reward) => [r
 export type CloudProgressionController = ReturnType<typeof createCloudProgressionController>;
 
 export function createCloudProgressionController(options: Options) {
-  let progress = normalizePlayerProgress(EMPTY_PLAYER_PROGRESS);
+  const withDevCurrency = (value: PlayerProgress): PlayerProgress =>
+    options.devCurrency === undefined ? value : { ...value, currency: options.devCurrency };
+  let progress = withDevCurrency(normalizePlayerProgress(EMPTY_PLAYER_PROGRESS));
   let catalog: ProgressionCatalog = EMPTY_PROGRESSION_CATALOG;
   let online = false;
   let pendingBuilding: { id: string; phase: 'unlock' | 'visit'; continueInteraction: () => void } | null = null;
@@ -159,7 +164,7 @@ export function createCloudProgressionController(options: Options) {
   }
 
   function applySnapshot(next: unknown, nextCatalog: ProgressionCatalog | undefined, event?: ProgressionEvent): void {
-    progress = normalizePlayerProgress(next);
+    progress = withDevCurrency(normalizePlayerProgress(next));
     if (nextCatalog) mergeCatalog(nextCatalog);
     if (event?.type === 'shop.purchased' && event.productId) pendingShopProducts.delete(event.productId);
     if (event?.type === 'daily.checkin') pendingDailyClaims.delete('checkin');

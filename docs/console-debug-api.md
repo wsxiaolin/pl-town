@@ -10,7 +10,8 @@
 - 不发起多人连接——保持离线，避免无凭据 connect 被 auth 拒绝后重新弹出登录层；
 - 入场动画照常运行（这是离线环境下建筑升起的唯一触发点）；
 - 正常玩家不带参数访问零感知，所有分支均以 `isDevPortalRequested()` 门控。
-- `?dev` 不新增任何数据访问或特权：不发起多人连接、没有居民 token，只读取免鉴权的只读端点（`/town-api/city/config`、`/city/state`）；治理写入（`/town-api/city/donate|decorate|vote`）仍会 401。
+- 本地开发便利（只改客户端，不写入服务端）：余额固定显示 `999999999` 并通过本地余额前置校验（离线时购买仍会提示需要连接服务器）、传送无需累计访问 5 栋建筑、路径移动与第一人称移动速度 ×2。
+- `?dev` 不新增任何服务端数据访问或特权：不发起多人连接、没有居民 token，只读取免鉴权的只读端点（`/town-api/city/config`、`/city/state`）；治理写入（`/town-api/city/donate|decorate|vote`）仍会 401。
 
 典型用途：云端预览（CF Pages）的视觉验证——
 
