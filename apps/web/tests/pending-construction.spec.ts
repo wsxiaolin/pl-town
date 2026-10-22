@@ -60,10 +60,13 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       await page.setViewportSize({ width: 844, height: 390 });
       await expect(page.locator('#landscapeRequired')).toBeHidden();
     }
+    // 年份镇建筑随世界启动常驻，不参与城筹的 pending 判定；本用例只验证
+    // 「未建成的主城建筑被隐藏」，故排除 yt-* 建筑。
     const renderedBuildingIds = () => page.evaluate(() => {
       const ids = new Set<string>();
       (window as any)._mini.scene.traverse((object: any) => {
-        if (object.isMesh && object.userData.buildingId) ids.add(object.userData.buildingId);
+        const buildingId = object.isMesh && object.userData.buildingId;
+        if (buildingId && !String(buildingId).startsWith('yt-')) ids.add(buildingId);
       });
       return [...ids].sort();
     });

@@ -128,10 +128,9 @@ export function createTransitStationSigns(options: TransitStationSignsOptions): 
     emissive: 0xf7efdc,
     emissiveMap: yearTexture,
     emissiveIntensity: 0.42,
-    transparent: true,
-    alphaTest: 0.05,
+    transparent: false,
+    alphaTest: 0.35,
     roughness: 0.5,
-    depthWrite: false,
   });
 
   for (const station of TRANSIT_STATIONS) {

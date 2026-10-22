@@ -10,6 +10,7 @@ import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
 import { createArchipelagoIsles } from '../rendering/terrain/archipelagoIsles';
 import { createYearTownTransit } from '../rendering/terrain/yearTownTransit';
 import { createYearTownDecor } from '../rendering/terrain/yearTownDecor';
+import { createYearTownGround } from '../rendering/terrain/yearTownGround';
 import { createCityGround } from '../rendering/terrain/cityGround';
 import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -185,6 +186,9 @@ export function assembleCityWorld(options: {
     isNight: options.getIsNight,
   });
   buildingSceneController.addBuildings();
+  // 年份镇镇区铺装（T6 视觉补强）：散水按 Box3 实测，必须排在建筑建成之后；
+  // 主街轴向与生成器同源（站台月台 → 镇心），单 mesh 一次 draw。
+  const yearTownGround = createYearTownGround({ scene, buildings: options.buildings });
   raycastBuildingGroups.push(...options.buildings.map((building) => building.group), ...options.buildingPlotTargets);
   // 年份镇主题装置 + XL 地标信标（T6，设计 §4「氛围道具」）：须在建筑建成
   // 后装配（信标顶面按 Box3 实测、建成时 group 在 baseY−3 入场位已折算）；
@@ -270,6 +274,7 @@ export function assembleCityWorld(options: {
         riverChenxi.dispose();
         minglanIsles.dispose();
         archipelagoIsles.dispose();
+        yearTownGround.dispose();
         yearTownTransit.dispose();
         yearTownDecor.dispose();
       },

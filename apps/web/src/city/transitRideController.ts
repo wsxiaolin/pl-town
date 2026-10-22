@@ -255,7 +255,7 @@ export function createTransitRideController(options: TransitRideControllerOption
       const current = ride;
       if (!current) return;
       const cursor = options.getCursorChar();
-      if (!cursor) {
+      if (!cursor?.position) {
         ride = null; // 场景已拆除：静默结束，不落点不记账
         return;
       }

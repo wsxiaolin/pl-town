@@ -286,8 +286,9 @@ export function createYearTownPanelController(options: YearTownPanelControllerOp
       refs.status.hidden = true;
       renderBody(loaded);
       renderComments(loaded);
-    } catch {
+    } catch (error) {
       if (token !== loadToken) return;
+      console.error('yearTownPanel loadDetail failed:', error);
       refs.status.textContent = '这一页暂时翻不开，稍后再试。';
     }
   }
