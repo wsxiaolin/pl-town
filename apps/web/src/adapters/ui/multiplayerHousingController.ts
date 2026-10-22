@@ -5,6 +5,7 @@ import { createCloudProgressionController } from './cloudProgressionController';
 import { createCommunityPanelController } from './communityPanelController';
 import type { LoginGate } from './loginController';
 import type { ResidenceEntity } from '../../city/buildingEntity';
+import { DEV_UNLIMITED_CURRENCY } from '../../city/devPortal';
 import { CHAT_MAX_LENGTH, HOUSE_NAME_MAX_LENGTH, sanitizeChatText, sanitizeHouseName } from '../../core/textLimits';
 import { renderVerifiedName } from './verifiedBadge';
 
@@ -54,6 +55,8 @@ export interface MultiplayerHousingOptions {
   onTheme?: (theme: { id: string }) => void;
   /** fireworks.* 服务端透传消息。 */
   onFireworksMessage?: (message: { type: string; [key: string]: unknown }) => void;
+  /** Dev portal only: pin the local balance (see cloudProgressionController). */
+  devMode?: boolean;
 }
 
 export function createMultiplayerHousingController(options: MultiplayerHousingOptions) {
@@ -92,6 +95,7 @@ export function createMultiplayerHousingController(options: MultiplayerHousingOp
       setPhoneOpen(true);
       activatePhoneTab(view);
     },
+    devCurrency: options.devMode ? DEV_UNLIMITED_CURRENCY : undefined,
   });
   const HOUSE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/><path d="M10.2 20v-5h3.6v5"/></svg>';
   // History loads up to 100 messages, so keep enough room for that plus live chat.
