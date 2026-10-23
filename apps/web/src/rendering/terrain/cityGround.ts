@@ -1,13 +1,14 @@
-// 城缘草甸（cityside meadow）装饰散布 —— 城市地面建模（v8，2026-10-11）。
+// 城缘草甸（cityside meadow）装饰散布 —— 城市地面建模（v9，2026-10-22）。
 //
 // 配置：city/data/terrain/ground-cityside.ts（CITYSIDE_MEADOW，纯数据）。
 // v7 的两片低多边形起伏草甸网格（南瓣起伏 ≤2.9 / 东北瓣 ≤1.7，三平面
 // 混合材质）在可信地形改造 R1（方案 §10）退役：高度场已收编
 // terrainHeight（heightfield/meadowField.ts），草甸的真实起伏由 farGround
-// 全域地形网格（worldGroundMesh.ts）统一承载；本文件只保留装饰层——
+// 全域地形网格（worldGroundMesh.ts）统一承载；本文件保留装饰层——
 // 草簇/花丛/灌木散布（城外草甸贴 sampleCitysideMeadowY，城内绿地矩形
 // 贴层高），并按步道切槽（trailCutAt）剔除槽影响区的装饰，防其在切低
-// 的床表上方悬空。
+// 的床表上方悬空。v9（issue #78）另铺一层低密度 InstancedMesh 草叶，
+// 梢部风动，不进入静态合批。
 //
 // 装饰（草簇/花丛/灌木）：合并为顶点色单材质几何，与松树同一合批协议
 // （cityWorldAssembly 挂接后调 batchStaticMeshes 实例化）。城市内落点
@@ -32,12 +33,14 @@ import { hashString, mulberry32 } from './massifGeometry';
 // 装饰避让步道切槽（床表低于自然场，槽内装饰会悬空）。
 import { MEADOW_GLOBAL_SEED, sampleCitysideMeadowY } from '../../city/data/terrain/heightfield/meadowField';
 import { trailCutAt } from '../../city/data/terrain/heightfield/worldReliefField';
+import { createGrassField, type GrassFieldHandle, type GrassSpot } from './grassField';
 
 export { sampleCitysideMeadowY } from './meadowField';
 
 export type CityGroundOptions = { scene: THREE.Scene };
 export type CityGroundHandle = {
   object: THREE.Group;
+  update(elapsedSeconds: number): void;
   dispose(): void;
 };
 
@@ -75,6 +78,7 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
 
   const geometries = new Set<THREE.BufferGeometry>();
   const ownedMaterials = new Set<THREE.Material>();
+  const grassSpots: GrassSpot[] = [];
   const track = <T extends THREE.BufferGeometry>(geometry: T): T => {
     geometries.add(geometry);
     return geometry;
@@ -194,6 +198,16 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
     object.add(prop);
   }
 
+  function addGrassSpot(x: number, y: number, z: number, rng: () => number): void {
+    grassSpots.push({
+      x,
+      y,
+      z,
+      scale: 0.85 + rng() * 0.55,
+      yaw: rng() * Math.PI * 2,
+    });
+  }
+
   // 城市绿地剔除：建筑脚印（plot 规格 + 边距）/ 环路环带 / 主路走廊 /
   // 北城大道 / 路口小广场 / 公园树阵。
   const ringInner = 34.5;
@@ -237,8 +251,18 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
       const z = rect.z0 + rng() * (rect.z1 - rect.z0);
       if (!isCityPropSpotClear(x, z)) continue;
       addProp(pickPropVariant(rng), x, rect.y, z, rng, `cityside-prop-green-${propIndex}`);
+      addGrassSpot(x, rect.y, z, rng);
       propIndex += 1;
       placed += 1;
+    }
+    const grassCount = Math.round(area / 100 * 4);
+    let grassPlaced = 0;
+    for (let attempt = 0; attempt < grassCount * 6 && grassPlaced < grassCount; attempt += 1) {
+      const x = rect.x0 + rng() * (rect.x1 - rect.x0);
+      const z = rect.z0 + rng() * (rect.z1 - rect.z0);
+      if (!isCityPropSpotClear(x, z)) continue;
+      addGrassSpot(x, rect.y, z, rng);
+      grassPlaced += 1;
     }
   }
 
@@ -259,15 +283,32 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
       // 于自然场，贴自然场的装饰在该区会悬空，直接剔除。
       if (trailCutAt(x, z) > 0) continue;
       addProp(pickPropVariant(rng), x, y, z, rng, `${feature.id}-prop-${propIndex}`);
+      addGrassSpot(x, y, z, rng);
+      // 草甸再铺一圈低密度草叶：每簇旁 0–2 株，覆盖仍受 density 约束。
+      const extra = Math.floor(rng() * 3);
+      for (let extraIndex = 0; extraIndex < extra; extraIndex += 1) {
+        const gx = x + (rng() - 0.5) * 1.6;
+        const gz = z + (rng() - 0.5) * 1.6;
+        const gy = sampleCitysideMeadowY(feature, gx, gz);
+        if (gy < 0.05 || trailCutAt(gx, gz) > 0) continue;
+        addGrassSpot(gx, gy, gz, rng);
+      }
       propIndex += 1;
       placed += 1;
     }
   }
 
+  const grassField: GrassFieldHandle | null = createGrassField(grassSpots);
+  if (grassField) object.add(grassField.object);
+
   return {
     object,
+    update(elapsedSeconds: number): void {
+      grassField?.update(elapsedSeconds);
+    },
     dispose(): void {
       object.removeFromParent();
+      grassField?.dispose();
       for (const geometry of geometries) geometry.dispose();
       geometries.clear();
       for (const material of ownedMaterials) material.dispose();

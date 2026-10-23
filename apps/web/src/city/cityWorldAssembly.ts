@@ -151,6 +151,7 @@ export function assembleCityWorld(options: {
   worldDecorations.setWaterDaylight = (value?: number, instant = false) => {
     baseSetWaterDaylight(value, instant);
     riverChenxi.setDaylight(value ?? 1, instant);
+    minglanIsles.setDaylight(value ?? 1, instant);
   };
   // 导航：不把地形注册为障碍组。registerObstacleGroup 对整组只生成一个
   // setFromObject AABB——山脉组横跨 x≈[-148,276]、z≈[-294,-110]，会把环线
@@ -228,6 +229,8 @@ export function assembleCityWorld(options: {
     updateDecorations(elapsed);
     constructionScene.update();
     riverChenxi.update(elapsed ?? 0);
+    cityGround.update(elapsed ?? 0);
+    minglanIsles.update(elapsed ?? 0);
     updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced);
   };
   return {

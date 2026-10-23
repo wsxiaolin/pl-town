@@ -84,10 +84,15 @@ function glslFloat(value: number): string {
 // tiles and day/night tinting, but renders with a plain shader — no mirror
 // render target — so it can never nest the mirror pass that breaks the sea.
 const POND_WATER_VERTEX = /* glsl */ `
+uniform float time;
+uniform float waveHeight;
 varying vec3 vWorldPosition;
 varying vec2 vUv;
 void main() {
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  float swellA = sin(dot(worldPosition.xz, vec2(0.18, 0.07)) - time * 1.15);
+  float swellB = sin(dot(worldPosition.xz, vec2(-0.11, 0.22)) - time * 0.74 + 1.3);
+  worldPosition.y += (swellA * 0.58 + swellB * 0.42) * waveHeight;
   vWorldPosition = worldPosition.xyz;
   vUv = uv;
   gl_Position = projectionMatrix * viewMatrix * worldPosition;
@@ -117,9 +122,16 @@ void main() {
   vec4 noise = texture2D(normalSampler, uv0) + texture2D(normalSampler, uv1) + texture2D(normalSampler, uv2) + texture2D(normalSampler, uv3);
   noise = noise * 0.5 - 1.0;
   vec3 surfaceNormal = normalize(noise.xzy * vec3(1.5, 1.0, 1.5));
-  float sunDiffuse = max(dot(surfaceNormal, normalize(sunDirection)), 0.0);
+  vec3 lightDir = normalize(sunDirection);
+  float sunDiffuse = max(dot(surfaceNormal, lightDir), 0.0);
+  vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+  vec3 halfDir = normalize(lightDir + viewDir);
+  float specular = pow(max(dot(surfaceNormal, halfDir), 0.0), 48.0);
+  float fresnel = pow(1.0 - clamp(dot(viewDir, surfaceNormal), 0.0, 1.0), 4.0);
   vec3 color = waterColor;
-  color += sunColor * pow(sunDiffuse, 6.0) * 0.1;
+  color += sunColor * sunDiffuse * 0.12;
+  color += sunColor * specular * 0.22;
+  color = mix(color, mix(waterColor, sunColor, 0.35), fresnel * 0.28);
   // 河口羽流渐变（mouthEnabled = 1 时生效，其余水面走原路径）：从
   // mouthRange.x（河口侧）向 mouthRange.y（海内，x 更小）把 alpha 渐隐
   // 至 0、水色混向 mouthSeaColor —— 河水以楔形羽流没入海面，取代两种
@@ -144,6 +156,8 @@ export type PondWaterConfig = {
   timeScale: number;
   size: number;
   alpha?: number;
+  /** 轻量水面的顶点涌浪幅度（世界单位）。河面保持很小以免切河床；外海可略高。 */
+  waveHeight?: number;
   /** 河口入海羽流渐变（可选）。xStart 是河口侧满色满 alpha 的起点，
    *  xEnd（更靠海、更小的 x）是 alpha 归零处；水色沿途混向 seaColor。
    *  仅河口湾等"没入另一片水"的水面使用——普通池塘保持默认直通路径。 */
@@ -168,6 +182,7 @@ export function createPondWaterSurface(
     sunColor: { value: config.sunColorDay.clone() },
     waterColor: { value: config.waterColorDay.clone() },
     alpha: { value: config.alpha ?? 1 },
+    waveHeight: { value: config.waveHeight ?? 0.028 },
     mouthEnabled: { value: mouth ? 1 : 0 },
     mouthRange: { value: mouth ? new THREE.Vector2(mouth.xStart, mouth.xEnd) : new THREE.Vector2(0, -1) },
     mouthSeaColor: { value: (mouth ? mouth.seaColorDay : new THREE.Color(0x000000)).clone() },

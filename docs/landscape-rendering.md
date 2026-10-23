@@ -1,4 +1,4 @@
-# 海面渲染
+# 海面与草地渲染
 
 海面复用项目已有的 Three.js `Water` 和 `waternormals.jpg`，参考
 [Three.js 官方水面示例](https://threejs.org/examples/?q=water)。
@@ -6,6 +6,11 @@
 镜面反射和深浅水过渡；海岸细分条带在浪头推进时显示断续泡沫，夜间随
 日照变暗。海面保持平面以兼容镜面裁剪，不改变岸线、碰撞或治理布局。
 关闭水面渲染时沿用原有静态水面。
+
+晨溪与明澜外海使用无镜像的轻量水面（法线滚动、菲涅尔高光、顶点涌浪），
+避免嵌套 mirror pass。城缘草甸与城区草坪在低多边形草簇之外铺一层
+InstancedMesh 草叶，梢部风动参考 [owenyuwono/gaia](https://github.com/owenyuwono/gaia)
+（MIT，Three.js r160）；高密度模式未接入，覆盖范围限于绿地与草甸有效区。
 
 `landscape-rendering.spec.ts` 检查桌面/移动端近景、海岸与远景的渲染、
 控制台错误、上下文丢失、横向溢出和节能降级。截图仍需人工检查色彩、

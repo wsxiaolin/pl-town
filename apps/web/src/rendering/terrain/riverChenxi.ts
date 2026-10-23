@@ -51,6 +51,7 @@ export function createRiverChenxi({ scene }: RiverChenxiOptions): RiverChenxiHan
     alpha: 0.94,
     size: 6,
     timeScale: 0.55,
+    waveHeight: 0.018,
     mouthFade: {
       xStart: -40, xEnd: -48,
       seaColorDay: new THREE.Color(0x2c8699),

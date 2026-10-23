@@ -120,6 +120,7 @@ export const MINGLAN_ISLES: readonly TerrainFeatureConfig[] = [
   {
     // 外海底层水面：单一 900×900 平面，y=-0.4，铺满世界边缘之外；
     // 海面本体（西海滩 y=0.06）与城市地表（y=0，±110）之下不可见。
+    // 轻量 3D 水面（法线 + 顶点涌浪），不建第二面 mirror Water。
     id: 'sea-minglan-outer',
     kind: 'sea',
     label: '明澜外海',
@@ -128,7 +129,7 @@ export const MINGLAN_ISLES: readonly TerrainFeatureConfig[] = [
     width: 900,
     depth: 900,
     height: -0.4,
-    renderHint: { color: 0x25667c, animated: false, castShadow: false },
+    renderHint: { color: 0x25667c, animated: true, castShadow: false },
     navigationBlocking: true,
     navigationClearance: 6,
   },

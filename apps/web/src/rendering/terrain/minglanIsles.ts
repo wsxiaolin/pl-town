@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MINGLAN_ISLES } from '../../city/data/terrain/sea-minglan';
 import type { TerrainFeatureConfig } from '../../city/data/terrain/_types';
+import { createPondWaterSurface, type AnimatedWaterSurface } from '../animatedWater';
 
 // 明澜外海渲染：低多边形离岛 + 远岸岬角群 + 外海底层水面。
 // 配置契约见 city/data/terrain/sea-minglan.ts（坐标/清空距核对记录在同文件头注释）。
@@ -39,6 +40,8 @@ export type MinglanIslesOptions = {
 
 export type MinglanIslesHandle = {
   object: THREE.Group;
+  update(elapsedSeconds: number): void;
+  setDaylight(value: number, instant?: boolean): void;
   dispose(): void;
 };
 
@@ -784,11 +787,32 @@ function buildHeadland(context: BuildContext, feature: TerrainFeatureConfig, sha
   });
 }
 
-function buildOuterSea(context: BuildContext, feature: TerrainFeatureConfig, material: THREE.Material): void {
-  const oceanGeometry = new THREE.PlaneGeometry(feature.width ?? 900, feature.depth ?? 900);
+function buildOuterSea(context: BuildContext, feature: TerrainFeatureConfig): AnimatedWaterSurface {
+  // 外海走轻量 pond 水面（法线 + 顶点涌浪），不建第二面 mirror Water。
+  // 镜面裁剪仍只属于西海滩海面；本层铺在 y=-0.4，远景裙板外才看见。
+  const oceanGeometry = new THREE.PlaneGeometry(feature.width ?? 900, feature.depth ?? 900, 48, 48);
   oceanGeometry.rotateX(-Math.PI / 2);
-  const ocean = addMesh(context, oceanGeometry, material, feature.id);
-  ocean.position.set(feature.x, feature.height ?? OCEAN_Y_FALLBACK, feature.z);
+  const surface = createPondWaterSurface(oceanGeometry, {
+    sunDirection: new THREE.Vector3(0.5, 0.8, 0.35),
+    waterColorDay: new THREE.Color(feature.renderHint?.color ?? OUTER_OCEAN_COLOR),
+    waterColorNight: new THREE.Color(0x0e2b36),
+    sunColorDay: new THREE.Color(0xbdd4e6),
+    sunColorNight: new THREE.Color(0x3a4a6a),
+    timeScale: 0.42,
+    size: 1.6,
+    alpha: 1,
+    waveHeight: 0.11,
+  });
+  surface.water.name = feature.id;
+  surface.water.position.set(feature.x, feature.height ?? OCEAN_Y_FALLBACK, feature.z);
+  surface.water.renderOrder = 0;
+  const oceanMaterial = surface.water.material as THREE.ShaderMaterial;
+  oceanMaterial.depthWrite = true;
+  oceanMaterial.transparent = false;
+  context.group.add(surface.water);
+  context.geometries.add(oceanGeometry);
+  context.materials.add(surface.water.material as THREE.Material);
+  return surface;
 }
 
 type SharedMaterials = {
@@ -797,7 +821,6 @@ type SharedMaterials = {
   lighthouseWhite: THREE.MeshStandardMaterial;
   lighthouseCap: THREE.MeshStandardMaterial;
   lighthouseWindow: THREE.MeshStandardMaterial;
-  ocean: THREE.MeshLambertMaterial;
 };
 
 function createSharedMaterials(): SharedMaterials {
@@ -814,7 +837,6 @@ function createSharedMaterials(): SharedMaterials {
       emissiveIntensity: 1.5,
       roughness: 0.6,
     }),
-    ocean: new THREE.MeshLambertMaterial({ color: OUTER_OCEAN_COLOR }),
   };
 }
 
@@ -828,17 +850,24 @@ export function createMinglanIsles(options: MinglanIslesOptions): MinglanIslesHa
     materials: new Set<THREE.Material>(),
   };
   const shared = createSharedMaterials();
+  let outerSea: AnimatedWaterSurface | null = null;
 
   for (const feature of MINGLAN_ISLES) {
     if (feature.kind === 'island') buildIsland(context, feature, shared);
     else if (feature.kind === 'mountain') buildHeadland(context, feature, shared);
-    else if (feature.kind === 'sea') buildOuterSea(context, feature, shared.ocean);
+    else if (feature.kind === 'sea') outerSea = buildOuterSea(context, feature);
   }
 
   options.scene.add(object);
 
   return {
     object,
+    update(elapsedSeconds) {
+      outerSea?.update(elapsedSeconds);
+    },
+    setDaylight(value, instant = false) {
+      outerSea?.setDaylight(value, instant);
+    },
     dispose() {
       object.parent?.remove(object);
       for (const geometry of context.geometries) geometry.dispose();
