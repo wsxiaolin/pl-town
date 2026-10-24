@@ -180,26 +180,23 @@ export const BRIDGE_TOWERS: readonly { x: number; z: number }[] = [
  * 首点=尾点（起源村·环线站，闭环总长 ≈1130u，设计 §5.2）。
  */
 export const RING_LOOP_NODES: readonly PolylineNode[] = [
-  { x: 96, z: 212 }, // 起源村·环线站（内环起点 = 外环终点，闭环）
-  { x: 28, z: 212 }, // 启明镇站（内环弦线）
-  { x: -48, z: 222 }, // 潮声镇站
-  { x: -126, z: 213 }, // 盛夏镇站
-  { x: -186, z: 196 }, // 回响镇站
-  { x: -221, z: 172 }, // 微光镇站
-  { x: -237, z: 116 }, // 长风镇站
-  { x: -212, z: 62 }, // 星港站（内环终点）
-  { x: -208, z: 40 }, // ── 外环回程航点（W→E）──
-  { x: -235, z: 30 },
-  { x: -262, z: 75 },
-  { x: -276, z: 130 },
-  { x: -272, z: 190 },
-  { x: -245, z: 235 },
-  { x: -195, z: 262 },
-  { x: -130, z: 278 },
-  { x: -55, z: 290 },
-  { x: 20, z: 286 },
-  { x: 85, z: 258 },
-  { x: 115, z: 222 },
+  { x: 96, z: 212 }, // 启源站·环线站（闭环起点）
+  { x: 40, z: 218 }, // 旧港·潮声站（2021）
+  { x: 20, z: 204 }, // 旧港北门
+  { x: 0, z: 218 }, // 旧港·启明站（2020）
+  { x: -12, z: 238 }, // 旧港西门（出城入海）
+  { x: -105, z: 244 }, // 两城之间海面
+  { x: -181, z: 250 }, // 星港东门（入城）
+  { x: -195, z: 230 }, // 星港·长风站（2025）
+  { x: -215, z: 214 }, // 星港北门
+  { x: -235, z: 230 }, // 星港·微光站（2024）
+  { x: -235, z: 270 }, // 星港西南门
+  { x: -215, z: 270 }, // 星港·星港站（2026）
+  { x: -195, z: 285 }, // 星港东南门（出城入海）
+  { x: -120, z: 300 }, // 南海回程
+  { x: -20, z: 302 }, // 旧港南侧海面
+  { x: 60, z: 288 }, // 旧港东南海面
+  { x: 100, z: 240 }, // 启源站南侧海面
 ];
 
 const RING_CLOSED_NODES: readonly PolylineNode[] = [...RING_LOOP_NODES, RING_LOOP_NODES[0]!];
@@ -293,32 +290,31 @@ const STATION_SEEDS: readonly StationSeed[] = [
   },
   {
     id: 'station-2019-bridge',
-    name: '起源村·桥站',
+    name: '启源站·桥站',
     line: 'stargate',
     x: 96,
     z: 197,
     townId: 'island-2019',
-    // 月台退向起源村主街（南向岛心，北广场侧）。
     towardX: 0,
     towardZ: 1,
   },
   {
     id: 'station-2019-ring',
-    name: '起源村·环线站',
+    name: '启源站·环线站',
     line: 'ring',
     x: 96,
     z: 212,
     townId: 'island-2019',
     towardX: 0,
-    towardZ: -1, // 南缘泊位 → 月台向岛心（北向）。
+    towardZ: -1,
   },
-  { id: 'station-2020', name: '启明镇站', line: 'ring', x: 28, z: 212, townId: 'island-2020', towardX: 0, towardZ: 1 },
-  { id: 'station-2021', name: '潮声镇站', line: 'ring', x: -48, z: 222, townId: 'island-2021', towardX: 0, towardZ: 1 },
-  { id: 'station-2022', name: '盛夏镇站', line: 'ring', x: -126, z: 213, townId: 'island-2022', towardX: 0, towardZ: 1 },
-  { id: 'station-2023', name: '回响镇站', line: 'ring', x: -186, z: 196, townId: 'island-2023', towardX: 0, towardZ: 1 },
-  { id: 'station-2024', name: '微光镇站', line: 'ring', x: -221, z: 172, townId: 'island-2024', towardX: -1, towardZ: 0 },
-  { id: 'station-2025', name: '长风镇站', line: 'ring', x: -237, z: 116, townId: 'island-2025', towardX: -1, towardZ: 0 },
-  { id: 'station-2026', name: '星港站', line: 'ring', x: -212, z: 62, townId: 'island-2026', towardX: -1, towardZ: 0 },
+  { id: 'station-2020', name: '旧港·启明站', line: 'ring', x: 0, z: 218, townId: 'island-2020', towardX: 0.707, towardZ: 0.707 },
+  { id: 'station-2021', name: '旧港·潮声站', line: 'ring', x: 40, z: 218, townId: 'island-2021', towardX: -0.707, towardZ: 0.707 },
+  { id: 'station-2022', name: '旧港·盛夏站', line: 'ring', x: 0, z: 258, townId: 'island-2022', towardX: 0.707, towardZ: -0.707 },
+  { id: 'station-2023', name: '旧港·回响站', line: 'ring', x: 40, z: 258, townId: 'island-2023', towardX: -0.707, towardZ: -0.707 },
+  { id: 'station-2024', name: '星港·微光站', line: 'ring', x: -235, z: 230, townId: 'island-2024', towardX: 0.707, towardZ: 0.707 },
+  { id: 'station-2025', name: '星港·长风站', line: 'ring', x: -195, z: 230, townId: 'island-2025', towardX: -0.707, towardZ: 0.707 },
+  { id: 'station-2026', name: '星港·星港站', line: 'ring', x: -215, z: 270, townId: 'island-2026', towardX: 0, towardZ: -1 },
 ];
 
 export const TRANSIT_STATIONS: readonly TransitStationSpec[] = STATION_SEEDS.map((seed) => {

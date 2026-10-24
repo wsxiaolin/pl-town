@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { YEAR_TOWNS, type YearTownSpec } from '../../city/data/year-towns/towns';
-import { TRANSIT_STATIONS } from '../../city/data/year-towns/transit';
+import { YEAR_TOWNS, yearDistrictById } from '../../city/data/year-towns/towns';
 import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
 import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
 
@@ -375,10 +374,13 @@ export function createYearTownDecor(options: {
       for (const entry of ORIGIN_DECOR) ground(BUILDERS[entry.kind](entry.tint), entry.x, entry.z);
       continue;
     }
-    const station = TRANSIT_STATIONS.find((s) => s.id === `station-${town.year}`);
-    if (!station) continue;
-    const ux = town.x - station.platformX;
-    const uz = town.z - station.platformZ;
+    // 轴向与街区布局同源：片区中心 → 大城中心（主干道方向）。旧实现用
+    // 「站台 → 镇心」向量，站点挪到片区中心后该向量退化为 +z，装置会偏离
+    // 主街；这里改为读取同一 district 轴线，保证装置落在迎宾带两侧。
+    const district = yearDistrictById(town.districtId);
+    if (!district) continue;
+    const ux = district.x - town.x;
+    const uz = district.z - town.z;
     const norm = Math.hypot(ux, uz) || 1;
     const uxN = ux / norm, uzN = uz / norm; // 站台 → 镇心
     const pxN = -uzN, pzN = uxN;           // 横向

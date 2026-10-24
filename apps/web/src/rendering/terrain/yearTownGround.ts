@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { YEAR_TOWNS, type YearTownSpec } from '../../city/data/year-towns/towns';
+import { YEAR_DISTRICTS, YEAR_TOWNS, yearTownsOfDistrict, type YearDistrictSpec, type YearTownSpec } from '../../city/data/year-towns/towns';
 import { TRANSIT_STATIONS } from '../../city/data/year-towns/transit';
 import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
 import { inferPlot } from '../../city/data/buildings/_shapeDefaults';
@@ -207,47 +207,66 @@ function boxExtents(building: BuildingEntity): { width: number; depth: number } 
   return { width: box.max.x - box.min.x, depth: box.max.z - box.min.z };
 }
 
-function addStreet(surface: Surface, town: YearTownSpec, buildings: readonly BuildingEntity[]): void {
-  const { ux, uz, px, pz } = streetBasis(town);
-  const centerX = town.x;
-  const centerZ = town.z;
-  const at = (s: number, lateral: number): Point2 => [centerX + ux * s + px * lateral, centerZ + uz * s + pz * lateral];
-  const strip = (s0: number, s1: number, lat0: number, lat1: number, y: number, color: THREE.Color) => {
-    pushQuad(surface, at(s0, lat0), at(s1, lat0), at(s1, lat1), at(s0, lat1), y, color);
-  };
-  const rBuild = town.plateauR - 3.5;
-  const sStart = -town.plateauR + 0.45;
-  let sEnd = rBuild - 0.9;
-  const xl = buildings.find((building) => building.id === `yt-w${town.year}-01`);
-  if (xl) {
-    const extents = boxExtents(xl);
-    const xlS = (xl.x - centerX) * ux + (xl.z - centerZ) * uz;
-    sEnd = Math.min(sEnd, xlS - Math.max(extents.width, extents.depth) / 2 - 0.55);
-  }
-  if (sEnd <= sStart + 1) return;
-
-  const base = town.topY;
+function addDistrictGround(surface: Surface, district: YearDistrictSpec): void {
+  const base = district.topY;
   const sidewalk = tint(0xc9c2b4);
   const paving = tint(0x8e8b84, 0.92);
-  const curb = tint(0xd6d0c4);
-  strip(sStart, sEnd, -WALK_OUTER, WALK_OUTER, base + PAVING_Y, sidewalk);
-  strip(sStart, sEnd, -STREET_HALF, STREET_HALF, base + PAVING_Y + 0.004, paving);
-  strip(sStart, sEnd, STREET_HALF, STREET_HALF + CURB, base + WALK_Y, curb);
-  strip(sStart, sEnd, -STREET_HALF - CURB, -STREET_HALF, base + WALK_Y, curb);
-  strip(sStart, sEnd, -0.08, 0.08, base + PAVING_Y + 0.01, tint(0xe8e4da));
+  const plaza = tint(0xd6cfc0);
+  const curb = tint(0xe0dacd);
+  const cx = district.x;
+  const cz = district.z;
 
-  const foreS = sStart + 1.8;
-  pushDisc(surface, centerX + ux * foreS, centerZ + uz * foreS, 2.1, base + WALK_Y + 0.004, tint(0xdcd6ca));
-  pushRing(surface, centerX + ux * foreS, centerZ + uz * foreS, 2.1, 2.32, base + WALK_Y + 0.006, tint(0xb8ad9a));
-  pushRing(surface, centerX + ux * foreS, centerZ + uz * foreS, 0.62, 0.8, base + WALK_Y + 0.012, tint(0x9a8f7c));
+  // 中央广场 + 环形路（城区公共中心）。
+  pushDisc(surface, cx, cz, 9.2, base + WALK_Y, plaza, 64);
+  pushRing(surface, cx, cz, 9.2, 10.4, base + WALK_Y + 0.004, tint(0xb8ad9a), 64);
+  pushRing(surface, cx, cz, 2.4, 3.2, base + WALK_Y + 0.01, tint(0x8f8674), 48);
+  pushDisc(surface, cx, cz, 2.4, base + WALK_Y + 0.014, tint(0xa8c08a), 40);
 
-  const crossS = sStart + (sEnd - sStart) * 0.45;
-  for (let i = 0; i < 5; i += 1) {
-    const s0 = crossS + i * 0.46;
-    strip(s0, s0 + 0.26, -STREET_HALF + 0.2, STREET_HALF - 0.2, base + PAVING_Y + 0.012, tint(0xe6e1d4));
+  // 连接各片区的主干道：广场边缘 → 片区中心（街道轴线与布局同源）。
+  for (const town of yearTownsOfDistrict(district.id)) {
+    const dx = town.x - cx;
+    const dz = town.z - cz;
+    const length = Math.hypot(dx, dz);
+    if (length < 11) continue;
+    const ux = dx / length;
+    const uz = dz / length;
+    const px = -uz;
+    const pz = ux;
+    const s0 = 10.2;
+    const s1 = length - 1.2;
+    const at = (s: number, lateral: number): Point2 => [cx + ux * s + px * lateral, cz + uz * s + pz * lateral];
+    const strip = (a: number, b: number, lat0: number, lat1: number, y: number, color: THREE.Color) => {
+      pushQuad(surface, at(a, lat0), at(b, lat0), at(b, lat1), at(a, lat1), y, color);
+    };
+    strip(s0, s1, -3.4, 3.4, base + PAVING_Y, sidewalk);
+    strip(s0, s1, -2.3, 2.3, base + PAVING_Y + 0.004, paving);
+    strip(s0, s1, 2.3, 2.45, base + WALK_Y, curb);
+    strip(s0, s1, -2.45, -2.3, base + WALK_Y, curb);
+    strip(s0, s1, -0.08, 0.08, base + PAVING_Y + 0.01, tint(0xe8e4da));
+
+    // 片区主街：从大城干道进入片区中心，止于中心，远端留给 XL 地标。
+    const point = (s: number, lat: number): Point2 => [town.x + ux * s - uz * lat, town.z + uz * s + ux * lat];
+    const seg = (a: number, b: number, lat0: number, lat1: number, y: number, color: THREE.Color) => {
+      pushQuad(surface, point(a, lat0), point(b, lat0), point(b, lat1), point(a, lat1), y, color);
+    };
+    seg(-16.5, 0, -2.3, 2.3, base + PAVING_Y + 0.002, paving);
+    seg(-16.5, 0, 2.3, 2.5, base + WALK_Y, curb);
+    seg(-16.5, 0, -2.5, -2.3, base + WALK_Y, curb);
+  }
+
+  // 码头：旧港城朝南（南海）、星港城朝西（西臂），轴向与岛缘齐平，
+  // 栈桥停在台缘内侧，不悬空到滩坡上。
+  const edge = district.plateauR - 1.6;
+  const deck = tint(0xb08a5e);
+  const cap = tint(0x8f6b46);
+  if (district.id === 'island-oldport') {
+    pushRect(surface, cx, cz + edge, 4.0, 7.2, base + 0.05, deck);
+    pushRect(surface, cx, cz + edge + 3.0, 4.0, 1.2, base + 0.06, cap);
+  } else {
+    pushRect(surface, cx - edge, cz, 7.2, 4.0, base + 0.05, deck);
+    pushRect(surface, cx - edge - 3.0, cz, 1.2, 4.0, base + 0.06, cap);
   }
 }
-
 
 function addPlots(surface: Surface, town: YearTownSpec, buildings: readonly BuildingEntity[]): void {
   const theme = new THREE.Color(town.theme.groundColor);
@@ -267,7 +286,7 @@ function addPlots(surface: Surface, town: YearTownSpec, buildings: readonly Buil
   }
 }
 
-function addSeawall(surface: Surface, town: YearTownSpec): void {
+function addSeawall(surface: Surface, town: Pick<YearTownSpec, 'x' | 'z' | 'topY' | 'plateauR'>): void {
   const base = town.topY;
   const stone = tint(0xb9b0a0);
   pushWallRing(surface, town.x, town.z, town.plateauR - 0.4, town.plateauR + 0.12, town.plateauR + 0.5, base + 0.04, base - 0.55, stone);
@@ -303,12 +322,13 @@ export type YearTownGround = {
 
 export function createYearTownGround(options: { scene: THREE.Scene; buildings: readonly BuildingEntity[] }): YearTownGround {
   const surface: Surface = { positions: [], colors: [], uvs: [] };
+  for (const district of YEAR_DISTRICTS) addDistrictGround(surface, district);
   for (const town of YEAR_TOWNS) {
     if (town.year === 2019) addVillageLane(surface, town, options.buildings);
-    else addStreet(surface, town, options.buildings);
     addPlots(surface, town, options.buildings);
-    addSeawall(surface, town);
   }
+  for (const district of YEAR_DISTRICTS) addSeawall(surface, district);
+  addSeawall(surface, YEAR_TOWNS[0]!);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(surface.positions, 3));

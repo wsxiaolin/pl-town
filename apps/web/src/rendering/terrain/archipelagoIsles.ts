@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { YEAR_TOWNS, type YearTownSpec } from '../../city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, type YearDistrictSpec } from '../../city/data/year-towns/towns';
 import { islandSurfaceYAt, ISLAND_SKIRT_BOTTOM, ISLAND_SKIRT_W } from '../../city/data/terrain/heightfield/islandField';
 
-// 南洋年份群岛渲染：8 座 flat-top 岛台（台面平台 + 滩坡 + 水下裙）+ 沙线盘。
+// 南洋年份群岛渲染：2 座大城 + 启源站，共 3 座 flat-top 岛台（台面平台 + 滩坡 + 水下裙）+ 沙线盘。
 // 配置契约见 city/data/year-towns/towns.ts 与设计文档 §3/§6.2；
 // 「配置在 data、渲染在 rendering」分层见 terrain/README.md。
 //
@@ -35,7 +35,7 @@ const SAND_RIM_COLOR = 0xd6c290;
 
 // 环半径表（相对量：0..1 → 0..beachR+ISLAND_SKIRT_W）。台面缘（ρ=plateauR）
 // 与水线穿越环各给一环，折面分带才干净。
-function ringRadii(town: YearTownSpec): number[] {
+function ringRadii(town: YearDistrictSpec): number[] {
   const outer = town.beachR + ISLAND_SKIRT_W;
   const radii = [
     0,
@@ -67,11 +67,11 @@ function facetJitter(seed: number): number {
 
 function buildIslandBody(
   context: BuildContext,
-  town: YearTownSpec,
+  town: YearDistrictSpec,
   facetMaterial: THREE.Material,
 ): void {
   const radii = ringRadii(town);
-  const segments = 26;
+  const segments = town.plateauR >= 40 ? 64 : 32;
   const townColor = new THREE.Color(town.theme.groundColor);
   const positions: number[] = [];
   const colors: number[] = [];
@@ -138,10 +138,10 @@ function buildIslandBody(
 
 function buildSandRim(
   context: BuildContext,
-  town: YearTownSpec,
+  town: YearDistrictSpec,
   rimMaterial: THREE.Material,
 ): void {
-  const geometry = new THREE.CircleGeometry(town.beachR + SAND_RIM_MARGIN, 26);
+  const geometry = new THREE.CircleGeometry(town.beachR + SAND_RIM_MARGIN, town.plateauR >= 40 ? 64 : 32);
   geometry.rotateX(-Math.PI / 2);
   geometry.computeBoundingSphere();
   const mesh = new THREE.Mesh(geometry, rimMaterial);
@@ -183,7 +183,7 @@ export function createArchipelagoIsles(options: { scene: THREE.Scene }): Archipe
   context.materials.add(facetMaterial);
   context.materials.add(rimMaterial);
 
-  for (const town of YEAR_TOWNS) {
+  for (const town of YEAR_ISLAND_SPECS) {
     buildIslandBody(context, town, facetMaterial);
     buildSandRim(context, town, rimMaterial);
   }

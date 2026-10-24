@@ -10,7 +10,7 @@
 // 岛屿 mesh（rendering/terrain/archipelagoIsles.ts）按同一函数采样发射顶点，
 // 图与地形永远一致（唯一采样器 DoD）；审计（worldTerrainAudit 'islands' 组）
 // 与导航/玩家落点（playerController 每帧 cursor.y = terrainHeight）共用。
-import { YEAR_TOWNS } from '../../year-towns/towns';
+import { YEAR_ISLAND_SPECS } from '../../year-towns/towns';
 
 /** 滩脚（滩坡终点，略低于水面 0.06，水线在滩环中段穿越）。 */
 export const ISLAND_BEACH_TO = -0.2;
@@ -26,15 +26,15 @@ function smoothStep01(t: number): number {
 
 /**
  * 岛面高度（含台面/滩坡/水下裙）。足印（ρ ≤ beachR + ISLAND_SKIRT_W）外
- * 返回 null——调用方保留自然场值。8 岛足印互不相交且全在恒海区，与
- * 草甸/河谷/台地/海床切割域零重叠（恒海判据，设计 §2）。
+ * 返回 null——调用方保留自然场值。2 城 + 启源站岛足印互不相交且全在
+ * 恒海区，与草甸/河谷/台地/海床切割域零重叠（恒海判据，设计 §2）。
  */
 export function islandSurfaceYAt(x: number, z: number): number | null {
-  for (const town of YEAR_TOWNS) {
+  for (const town of YEAR_ISLAND_SPECS) {
     const outerR = town.beachR + ISLAND_SKIRT_W;
     const dx = x - town.x;
     const dz = z - town.z;
-    // 包围盒快筛（圆足印外恒 null，避免 8 次 hypot 的全场景开销）。
+    // 包围盒快筛（圆足印外恒 null，避免逐岛 hypot 的全场景开销）。
     if (dx < -outerR || dx > outerR || dz < -outerR || dz > outerR) continue;
     const rho = Math.hypot(dx, dz);
     if (rho > outerR) continue;

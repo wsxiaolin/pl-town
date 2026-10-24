@@ -1,4 +1,4 @@
-// 南洋年份群岛地形配置（T3）：8 座岛台要素 + 南海水面覆盖域（waterGuard 数据）。
+// 南洋年份群岛地形配置（T3/T7）：3 座岛台（两城 + 启源站）+ 南海水面覆盖域。
 // 渲染实现见 rendering/terrain/archipelagoIsles.ts（岛体/沙线盘）与
 // rendering/westBeach.ts 消费的 rendering/terrain/archipelagoWater.ts（水面片）。
 // 「配置在 data、渲染在 rendering、导航避让在 navigation」分层见 terrain/README.md。
@@ -9,33 +9,33 @@
 //   岚屏岭南缘→+60 的 smoothStep，z ≥ −50 后恒 1）；x < −150 恒为海。
 // - 南海水面（唯一 Water 实例的扩展几何）：
 //   · 南带：x∈[−150,130]，z ∈ [z_edge(x)−12（贴陆缘下沉带）, 320]；
-//   · 西臂：x∈[−290, w_edge(z)+2]，z∈[40,310]（东缘沿西陆缘内收 2u，
+//   · 西臂：x∈[−290, w_edge(z)+2]，z∈[40,320]（东缘沿西陆缘内收 2u，
 //     藏在近缘下沉的陆地之下；z ≤ 112 段与西海条带西缘 sX(z)−96 取小
 //     对接，不重叠）；
 //   · 镇落位全在恒海区（z_min>180 或 x_max<−150），水面/岛体与 farGround
 //     网格零交叠。
 import type { TerrainFeatureConfig } from './_types';
 import { shorelineX } from '../cityConfig';
-import { YEAR_TOWNS } from '../year-towns/towns';
+import { YEAR_ISLAND_SPECS } from '../year-towns/towns';
 import { LANPING_ALPINE_FIELD } from './heightfield/alpineField';
 import { smoothStep } from './heightfield/noiseCore';
 
 /**
- * 年份群岛岛台要素表（kind 'island'）：
+ * 年份岛台要素表（kind 'island'）：2 座大城 + 启源站独立小岛。
  * - x/z = 岛心，width/depth = 台面直径（2·plateauR）；滩环宽在 renderHint。
- * - renderHint.groundColor = 台面地面色（镇主题差异，设计 §4）；
- *   renderHint.beachWidth = 滩环宽；renderHint.topY = 台面高（展示用，
- *   权威值在 heightfield/islandField.ts，两者同源于 YEAR_TOWNS）。
+ * - renderHint.groundColor = 台面地面色；renderHint.beachWidth = 滩环宽；
+ *   renderHint.topY = 台面高（展示用，权威值在 heightfield/islandField.ts，
+ *   两者同源于 YEAR_ISLAND_SPECS）。
  */
-export const YEAR_ISLANDS: readonly TerrainFeatureConfig[] = YEAR_TOWNS.map((town) => ({
-  id: town.id,
+export const YEAR_ISLANDS: readonly TerrainFeatureConfig[] = YEAR_ISLAND_SPECS.map((island) => ({
+  id: island.id,
   kind: 'island' as const,
-  label: town.label,
-  x: town.x,
-  z: town.z,
-  width: town.plateauR * 2,
-  depth: town.plateauR * 2,
-  renderHint: { color: town.theme.groundColor, beachWidth: town.beachR - town.plateauR, topY: town.topY, castShadow: false },
+  label: island.label,
+  x: island.x,
+  z: island.z,
+  width: island.plateauR * 2,
+  depth: island.plateauR * 2,
+  renderHint: { color: island.theme.groundColor, beachWidth: island.beachR - island.plateauR, topY: island.topY, castShadow: false },
   navigationBlocking: false,
   navigationClearance: 0,
 }));
@@ -54,7 +54,7 @@ export const SOUTH_SEA = Object.freeze({
   bandZMax: 320,
   armXMin: -290,
   armZMin: 40,
-  armZMax: 310,
+  armZMax: 320,
 });
 
 /** farGround 南陆缘（z_edge(x)，worldGroundMesh edgeDistance 第 4 项反解）。 */
@@ -82,7 +82,7 @@ const WEST_STRIP_WEST_OFFSET = 96;
 /**
  * 南海水面覆盖域谓词（waterGuard）。与渲染几何同一组公式：南带在南陆缘
  * 下沉带（z ≥ z_edge(x)−12 且 z ≤ 320、x∈[−150,130]）内为水；西臂在
- * x∈[−290, w_edge(z)+2]、z∈[40,310] 内为水，其中 z ≤ 112 段东缘让位给
+ * x∈[−290, w_edge(z)+2]、z∈[40,320] 内为水，其中 z ≤ 112 段东缘让位给
  * 西海条带西缘 sX(z)−96（取小对接、与条带零重叠，见头注释）。岛足印
  * （含滩/裙）由 isInsideIsland 另行判定——守卫应先岛后水。
  */

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { TRANSIT_STATION_IDS, SCENE_INTEREST_POINT_IDS } from '../../src/gameplay/world/sceneInteractions';
-import { yearTownById } from '../../src/city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, yearTownById } from '../../src/city/data/year-towns/towns';
 import { SOUTH_TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import {
   BRIDGE_CORRIDOR_HALF,
@@ -120,11 +120,13 @@ test('站点落位：滩环站泊位不出所属镇滩环，星门站镇守主�
     const town = yearTownById(station.townId);
     assert.ok(town, `站 ${station.id} 指向未知镇 ${station.townId}`);
     if (station.line === 'ring' || station.id === 'station-2019-bridge') {
-      // 滩环不变量：环线各站＋起源村桥站，泊位都在所属镇滩环内。
-      const dist = Math.hypot(station.x - town!.x, station.z - town!.z);
+      // 滩环不变量：环线各站＋起源村桥站，泊位都在所属岛/大城滩环内。
+      const island = YEAR_ISLAND_SPECS.find((spec) => spec.id === town!.districtId);
+      assert.ok(island, `站 ${station.id} 找不到所属岛 ${town!.districtId}`);
+      const dist = Math.hypot(station.x - island!.x, station.z - island!.z);
       assert.ok(
-        dist <= town!.beachR,
-        `站 ${station.id} 距 ${station.townId} 中心 ${dist.toFixed(1)} 超出滩环 ${town!.beachR}`,
+        dist <= island!.beachR,
+        `站 ${station.id} 距 ${island!.id} 中心 ${dist.toFixed(1)} 超出滩环 ${island!.beachR}`,
       );
     } else if (station.id === 'station-stargate') {
       // 星门站＝星门线起点、主城南桥头广场（接 S4），刻意在所有镇滩环之外

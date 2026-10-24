@@ -7,7 +7,8 @@
 // 为终点（主城建筑 baseY 恒 0，行为不变）。
 // plot：岛台自带镇主题台面色（archipelagoIsles 顶点色），不再叠加主城地面
 // plate（SURFACE_Y 固定主城标高会沉入岛体）→ hasPlot: false。
-import { YEAR_TOWN_BUILDING_CONFIGS, YEAR_TOWN_BUILDING_EXTRAS, YEAR_TOWN_NAMEPLATES, YEAR_TOWN_LANDMARK_BLURBS } from './gen-buildings';
+import { YEAR_TOWN_BUILDING_EXTRAS, YEAR_TOWN_NAMEPLATES, YEAR_TOWN_LANDMARK_BLURBS } from './gen-buildings';
+import { YEAR_TOWN_LAYOUT_CONFIGS } from './districtLayout';
 import { yearTownById } from './towns';
 import { terrainHeight } from '../terrain/heightfield/terrainHeight';
 import type { BuildingDefinition } from '../../buildingEntity';
@@ -29,7 +30,7 @@ const toDefinition = (config: BuildingConfig): BuildingDefinition => ({
 });
 
 /** 年份镇建筑定义（115 座；与 BUILDING_DEFS 合流进 buildingSceneController）。 */
-export const YEAR_TOWN_BUILDING_DEFS: readonly BuildingDefinition[] = YEAR_TOWN_BUILDING_CONFIGS.map(toDefinition);
+export const YEAR_TOWN_BUILDING_DEFS: readonly BuildingDefinition[] = YEAR_TOWN_LAYOUT_CONFIGS.map(toDefinition);
 
 /** 按 id 取建筑附加信息（kind/townId/year/workId/townRank）。 */
 export function yearTownExtras(id: string) {

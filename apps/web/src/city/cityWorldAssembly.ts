@@ -152,7 +152,7 @@ export function assembleCityWorld(options: {
   batchStaticMeshes(scene, [mountainTerrain.object, cityGround.object]);
   const riverChenxi = createRiverChenxi({ scene });
   const minglanIsles = createMinglanIsles({ scene });
-  // 南洋年份群岛（T3）：8 座岛台 + 沙线盘；南海水面扩展在 westBeach 的唯一
+  // 南洋年份群岛（T7）：2 座大城 + 启源站岛台 + 沙线盘；南海水面扩展在 westBeach 的唯一
   // Water 实例内完成（sceneInterestPoints 消费），这里只挂岛体。
   const archipelagoIsles = createArchipelagoIsles({ scene });
   // 跨海交通（T4a）：星门大桥 + 群岛环线 + 巡游列车（结构合并为单 mesh，

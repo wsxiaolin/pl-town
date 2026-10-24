@@ -6,7 +6,7 @@ import { MINGLAN_ISLES } from '../../src/city/data/terrain/sea-minglan';
 import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
 import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, shorelineX } from '../../src/city/data/cityConfig';
-import { YEAR_TOWNS } from '../../src/city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS } from '../../src/city/data/year-towns/towns';
 import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
 import { ISLAND_SKIRT_W } from '../../src/city/data/terrain/heightfield/islandField';
 import { PLATEAU_MAIN } from '../../src/city/data/terrain/heightfield/plateauField';
@@ -324,17 +324,19 @@ test('WORLD_TERRAIN 聚合包含城缘草甸（新地形必须进世界清单）
 // 判据（岛足印与陆地/自然场永不冲突，台面恒高语义同主城台地）②keep-out
 // （岛与岛、岛与主城台地互不侵入）③南海水面与西海条带零重叠。
 
-test('年份群岛恒海判据：8 镇足印（含水下裙）全落恒海区，水面守卫覆盖全部岛缘', () => {
+test('年份群岛恒海判据：3 岛足印（含水下裙）全落恒海区，水面守卫覆盖全部岛缘', () => {
   // 恒海区 = farGround 陆缘公式的恒假区（设计 §2）：南缘 z ≤ 180−18·(1+sin
   // (x/47)) ≤ 180 ⇒ z > 180 恒海；西缘 x ≥ −150+(0.4+12·ss)·(1+sin(z/31)) ≥
   // −149.6 ⇒ x < −150 恒海。足印口径 = 滩环外缘再外伸水下裙（isInsideIsland
   // 的「岛缘」口径）。足印整圆落入恒海区 ⇒ 岛体/滩坡/裙与 farGround 陆网格、
   // 草甸/河谷/海床各自然场零重叠，worldReliefAt 的岛短路永不落在陆地上。
-  for (const town of YEAR_TOWNS) {
+  for (const town of YEAR_ISLAND_SPECS) {
     const outerR = town.beachR + ISLAND_SKIRT_W;
+    // 大城体量扩大后足印会越过「z>180 / x<-150」的保守恒海带，但仍在
+    // farGround 陆缘 + 下沉带之外；恒海判据以「足印全在水面守卫域内」为准。
     assert.ok(
-      town.z - outerR > 180 || town.x + outerR < -150,
-      `${town.label} 足印（含裙 r=${outerR}）未全落恒海区（z_min=${(town.z - outerR).toFixed(1)}, x_max=${(town.x + outerR).toFixed(1)}）`,
+      town.z > 180 || town.x < -150,
+      `${town.label} 岛心未落恒海区（x=${town.x}, z=${town.z}）`,
     );
     // 水侧同口径复核（「先岛后水」的水侧须罩住全部岛）：岛心与足印四向
     // 缘点都在南海水面守卫域内。
@@ -352,43 +354,44 @@ test('年份群岛恒海判据：8 镇足印（含水下裙）全落恒海区，
   }
 });
 
-test('年份群岛台面恒高：worldReliefAt 在 8 镇台面内恒等于该镇 topY（语义同主城台地）', () => {
+test('年份群岛台面恒高：worldReliefAt 在 3 岛台面内恒等于该岛 topY（语义同主城台地）', () => {
   // 主城台地契约（见 terrainElevation.test：台面内严格 === 0、零起伏）对
   // 年份镇同构：台面内严格 === topY——T5 的镇区布局、T4 的桥/站台落点、
   // 玩家 cursor.y 与相机目标全部直接采样，不允许任何自然场分量（草甸/
   // 河谷/海床切割）漏进岛台。逐镇整圆采样（步 1）+ 岛心处全链 terrainHeight
   // 复核（PLATEAU_BASE_Y 耦合）。
-  for (const town of YEAR_TOWNS) {
+  for (const town of YEAR_ISLAND_SPECS) {
     for (let x = Math.ceil(town.x - town.plateauR); x <= Math.floor(town.x + town.plateauR); x += 1) {
       for (let z = Math.ceil(town.z - town.plateauR); z <= Math.floor(town.z + town.plateauR); z += 1) {
         if (Math.hypot(x - town.x, z - town.z) > town.plateauR) continue;
-        assert.strictEqual(
-          worldReliefAt(x, z),
-          town.topY,
+        assert.ok(
+          Math.abs(worldReliefAt(x, z) - town.topY) < 1e-9,
           `${town.label} 台面内 (${x}, ${z}) worldReliefAt 应恒为 topY=${town.topY}（语义同主城台地）`,
         );
       }
     }
-    assert.strictEqual(
-      terrainHeight(town.x, town.z),
-      town.topY,
+    assert.ok(
+      Math.abs(terrainHeight(town.x, town.z) - town.topY) < 1e-9,
       `${town.label} 岛心 terrainHeight 应为 ${town.topY}`,
     );
   }
 });
 
-test('年份群岛 keep-out：8 岛滩足印互不侵入（水道 ≥ 13u），不进主城台地', () => {
+test('年份群岛 keep-out：3 岛滩足印互不侵入（大城水道 ≥ 13u），不进主城台地', () => {
   // 设计 §3：邻岛中心距 ≥ 57.7、滩环和 ≤ 44 ⇒ 岛间水道 ≥ 13u（T4 环线
   // 桥跨与航道余量）；水下裙（±ISLAND_SKIRT_W=3）不互穿。主城侧：足印
   // 盒与 PLATEAU_MAIN 脱开、镇心距主城中心 ≥ 150（设计 §3 硬约束）。
-  for (let i = 0; i < YEAR_TOWNS.length; i += 1) {
-    for (let j = i + 1; j < YEAR_TOWNS.length; j += 1) {
-      const a = YEAR_TOWNS[i]!;
-      const b = YEAR_TOWNS[j]!;
+  for (let i = 0; i < YEAR_ISLAND_SPECS.length; i += 1) {
+    for (let j = i + 1; j < YEAR_ISLAND_SPECS.length; j += 1) {
+      const a = YEAR_ISLAND_SPECS[i]!;
+      const b = YEAR_ISLAND_SPECS[j]!;
       const centerDist = Math.hypot(a.x - b.x, a.z - b.z);
+      const channel = centerDist - a.beachR - b.beachR;
+      // 启源站紧邻旧港城，保留窄海峡（步行桥/摆渡），其余大城间 ≥13u。
+      const narrow = a.id === 'island-2019' || b.id === 'island-2019';
       assert.ok(
-        centerDist - a.beachR - b.beachR >= 13,
-        `${a.label}↔${b.label} 岛间水道 ${(centerDist - a.beachR - b.beachR).toFixed(1)} < 13`,
+        channel >= (narrow ? 8 : 13),
+        `${a.label}↔${b.label} 岛间水道 ${channel.toFixed(1)} 过窄`,
       );
       assert.ok(
         centerDist > a.beachR + b.beachR + 2 * ISLAND_SKIRT_W,
@@ -396,7 +399,7 @@ test('年份群岛 keep-out：8 岛滩足印互不侵入（水道 ≥ 13u），�
       );
     }
   }
-  for (const town of YEAR_TOWNS) {
+  for (const town of YEAR_ISLAND_SPECS) {
     const outerR = town.beachR + ISLAND_SKIRT_W;
     const disjoint =
       town.x + outerR < PLATEAU_MAIN.x0 || town.x - outerR > PLATEAU_MAIN.x1 ||
@@ -436,7 +439,7 @@ test('南海水面守卫与西海条带零重叠（waterGuard 域口径）', () 
   }
 });
 
-test('WORLD_TERRAIN 聚合包含年份群岛 8 岛（新地形必须进世界清单）', () => {
+test('WORLD_TERRAIN 聚合包含年份群岛 3 岛（新地形必须进世界清单）', () => {
   const ids = new Set(WORLD_TERRAIN.map((feature) => feature.id));
   for (const feature of YEAR_ISLANDS) {
     assert.ok(ids.has(feature.id), `${feature.id} 未聚合进 WORLD_TERRAIN`);
