@@ -457,6 +457,11 @@ try {
   const worldState = await fetch(`${adminBase}/world`, { headers: { cookie } });
   const worldPayload = await worldState.json();
   if (!worldState.ok || worldPayload.weather?.value !== 'clear' || typeof worldPayload.weather?.autoBroadcast !== 'boolean') throw new Error('Admin world GET must expose the persisted weather config');
+  const yearTownCatalog = worldPayload.yearTownCatalog;
+  if (!Array.isArray(yearTownCatalog) || yearTownCatalog.length !== 115) throw new Error('Admin world GET must expose the 115-entry year-town catalog');
+  const townSample = yearTownCatalog.find((entry) => entry.id === 'yt-w2022-01');
+  if (!townSample || townSample.townId !== 'island-2022' || townSample.num !== '2201' || typeof townSample.x !== 'number' || typeof townSample.z !== 'number' || typeof townSample.storyLocked !== 'boolean') throw new Error('Admin world year-town catalog entries must keep the YearTownCatalogEntry structure');
+  if (yearTownCatalog.some((entry) => typeof entry.id !== 'string' || typeof entry.label !== 'string' || typeof entry.townId !== 'string')) throw new Error('Admin world year-town catalog entries must be fully labeled');
   const litreview = worldPayload.states?.find((state) => state.id === 'litreview');
   if (!litreview || litreview.state !== 'locked' || litreview.defaultState !== 'locked') throw new Error('Admin world GET must resolve litreview as locked by default');
   const openLitreview = await fetch(`${adminBase}/world/buildings`, {
