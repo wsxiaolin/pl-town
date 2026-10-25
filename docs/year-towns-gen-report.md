@@ -1,6 +1,6 @@
 # 年份群岛纪念设施生成报告
 
-> 生成器：`scripts/generate_town_buildings.mjs`（幂等，先清后生成，--check 逐字节复核）
+> 生成器：`scripts/generate_town_buildings.mjs`（幂等，只覆盖明确产物，--check 逐字节复核）
 > 数据基线：离线重建（无数据源；结构取自既有 gen-buildings.ts）
 > 设计口径：设计 §7.1 修订——作品抽象为城市纪念设施，**作品原文/评论/热度/浏览量不进入年份群岛**。
 > 设施名与纪念导语来自手写目录 `apps/web/src/city/data/year-towns/yearTownMemorials.ts`。
@@ -48,11 +48,11 @@
 
 ## 布局语法（设计 §7.1 修订）
 
-1. 中央广场：镇心留空 r ≈ plateauR×0.22，不落建筑。
-2. 纪念轴线：站台 → 镇心 → 轴线尽端，首座设施（XL）置于轴端作对景。
-3. 环形主街：r ≈ plateauR×0.62 留作街道，建筑不得骑跨。
-4. 街区归拢：其余设施按设施族方位偏好成片分布，形成可辨认的同质街区。
-5. 密度梯度：主街内外两圈优先，广场边缘与台面外缘作补充。
+1. 海岸与地形先行：显式海岸线形成海湾、岬角和离岸小屿，山脊与城区阶地分开。
+2. 街网先行：车站、主街、横街、巷道、站前广场和码头先定稿。
+3. 逐栋手写：每座设施在纪念目录中登记世界坐标、地块尺寸和临街朝向。
+4. 围合街廓：建筑沿街廓边缘形成街墙，街廓中心保留院落。
+5. 交通避让：环线沿城区外围绕行，建筑、站房、道路和广场保持结构净距。
 
 ## 数据对齐说明（治理红线）
 
@@ -60,4 +60,4 @@
   合流点在 `yearTownBuildings.ts` → cityWorldAssembly 装配（与 BUILDING_DEFS 同一 buildingSceneController 管道）。
 - 服务端 `buildingCatalog.ts` 未改动；独立镜像 `yearTownCatalog.ts`（115 条，storyLocked 全 false），
   已筹资项目 ID 零变更（AGENTS 治理红线）。
-- gen-* 生成物不进 git（.gitignore 覆盖 `apps/web/src/city/data/year-towns/gen-*`）。
+- `gen-buildings.ts` 与 `gen-index.ts` 是运行时静态数据，随仓库提交；生成器只覆盖明确产物。

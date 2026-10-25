@@ -63,6 +63,10 @@ export interface BuildingConfig {
   x: number;
   /** 场景 Z 坐标。 */
   z: number;
+  /** 建筑整体绕 Y 轴旋转（弧度）；正面缺省朝 +Z。 */
+  rotY?: number;
+  /** 建筑整体缩放；年份群岛用它形成连续街墙。 */
+  scale?: number;
   /** 建筑建造器 key，决定程序化网格；可用值见 cityGraphics 的 buildingBuilders。 */
   shape: string;
   /** SVG 图标字符串，通常用本文件的 iconSvg() 包裹路径数据。 */

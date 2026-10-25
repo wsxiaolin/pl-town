@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { YEAR_TOWNS, yearDistrictById } from '../../city/data/year-towns/towns';
+import { YEAR_TOWNS } from '../../city/data/year-towns/towns';
 import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
 import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
 
@@ -7,10 +7,8 @@ import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildi
 // 「氛围道具」列）：每镇标志性装置 + 镇内地标（XL）夜间信标。
 //
 // 契约：
-// - 落位只走两条「结构零冲突带」：①进镇迎宾带（s ≤ −(rBuild+1)，大街建筑
-//   的 s 下界 ≈ −rBuild+3.5，环带 1 的外缘 ≈ rBuild−0.7+size/2，均触不到）；
-//   ②2019 手工带（逐项核过 ORIGIN_VILLAGE_LAYOUT 四矩形与两站泊位）。
-//   绝不进大街走廊（|lateral| < 2.3 的对景视廊）。
+// - 装饰逐件使用绝对世界坐标手写，分别服务主街、站前广场、街廓院落、
+//   滨水步道与离岸灯塔；不再由镇心向量批量推导位置。
 // - 主题色每镇 ≤3 常量（设计 §4「色彩 ≤3」），夜间灯效一律 emissive 材质，
 //   不加真实光源（单 WebGL 上下文与现有灯光体系红线，设计 §5）。
 // - XL 信标高度按建筑建成后的 Box3 实测（浮空光柱 = 通用对景语言，短 XL
@@ -23,66 +21,41 @@ type PropKind =
   | 'fountain' | 'palm' | 'billboard' | 'neonsign' | 'awning' | 'catsign'
   | 'lanternpost' | 'windflag' | 'lighthouse' | 'antenna' | 'glowpad';
 
-/** 每镇装置表：s = 沿街轴（站台→镇心为 +，负值靠站台）；lat = 横向（± 街两侧）。 */
-const TOWN_PROPS: Readonly<Record<number, readonly { kind: PropKind; s: number; lat: number; tint?: number; flip?: boolean }[]>> = {
-  2019: [], // 手工带：村口篝火 + 双旗杆（绝对方位见 ORIGIN_DECOR）
-  2020: [
-    { kind: 'streetlamp', s: -8.4, lat: -2.0 },
-    { kind: 'streetlamp', s: -8.4, lat: 2.0 },
-    { kind: 'board', s: -7.2, lat: -3.1 },
-    { kind: 'streetlamp', s: -10.2, lat: -2.0, flip: true },
-    { kind: 'streetlamp', s: -10.2, lat: 2.0, flip: true },
-  ],
-  2021: [
-    { kind: 'stringlights', s: -9.0, lat: -2.4 },
-    { kind: 'stringlights', s: -9.0, lat: 2.4, flip: true },
-    { kind: 'bench', s: -7.6, lat: -2.2 },
-    { kind: 'bench', s: -7.6, lat: 2.2, flip: true },
-    { kind: 'stringlights', s: -11.4, lat: -2.2, flip: true },
-  ],
-  2022: [
-    { kind: 'fountain', s: -10.4, lat: -3.4 },
-    { kind: 'palm', s: -12.2, lat: 2.6 },
-    { kind: 'palm', s: -12.2, lat: -3.6, flip: true },
-    { kind: 'billboard', s: -9.4, lat: 3.2, flip: true },
-    { kind: 'streetlamp', s: -16.0, lat: -2.0 },
-    { kind: 'streetlamp', s: -16.0, lat: 2.0 },
-    { kind: 'streetlamp', s: -13.6, lat: -2.0, flip: true },
-    { kind: 'streetlamp', s: -13.6, lat: 2.0, flip: true },
-  ],
-  2023: [
-    { kind: 'neonsign', s: -9.2, lat: -3.2, tint: 0xff6f9c },
-    { kind: 'neonsign', s: -9.2, lat: 3.2, tint: 0x7ce8d8, flip: true },
-    { kind: 'awning', s: -10.6, lat: -2.6, tint: 0xb59a7a },
-    { kind: 'awning', s: -10.6, lat: 2.6, tint: 0x8c6f52, flip: true },
-    { kind: 'neonsign', s: -13.4, lat: -2.8, tint: 0xffc873, flip: true },
-  ],
-  2024: [
-    { kind: 'catsign', s: -8.6, lat: -3.0 },
-    { kind: 'lanternpost', s: -7.4, lat: 2.4 },
-    { kind: 'lanternpost', s: -7.4, lat: -2.4, flip: true },
-    { kind: 'lanternpost', s: -10.2, lat: 2.8, flip: true },
-    { kind: 'catsign', s: -12.0, lat: 2.8, flip: true },
-  ],
-  2025: [
-    { kind: 'windflag', s: -8.6, lat: -2.2, tint: 0x2a3038 },
-    { kind: 'windflag', s: -8.6, lat: 2.2, tint: 0x2a3038, flip: true },
-    { kind: 'lighthouse', s: -12.4, lat: -3.6 },
-    { kind: 'windflag', s: -11.4, lat: 2.8, tint: 0x3b6fe0, flip: true },
-  ],
-  2026: [
-    { kind: 'antenna', s: -9.0, lat: -2.8 },
-    { kind: 'antenna', s: -9.0, lat: 2.8, flip: true },
-    { kind: 'glowpad', s: -11.2, lat: 0 },
-    { kind: 'antenna', s: -11.6, lat: 0, tint: 0x6fa8ff },
-  ],
-};
+type UrbanDecor = { kind: PropKind; x: number; z: number; rotY?: number; tint?: number; flip?: boolean };
 
-/** 2019 手工装置带（与生成器 ORIGIN_VILLAGE_LAYOUT 四矩形 + 桥/环线两泊位逐项核距）。 */
-const ORIGIN_DECOR: readonly { kind: PropKind; x: number; z: number; tint?: number }[] = [
-  { kind: 'bonfire', x: 100.5, z: 199.8 }, // 距 tower 4.45 / rank1 5.5 / 桥站泊位 4.5
-  { kind: 'flagpole', x: 92.3, z: 206.6, tint: 0xe8a838 },
-  { kind: 'flagpole', x: 99.7, z: 206.6, tint: 0xe8d5a8 },
+/** 城市装饰逐件手写：主街成列、院落成组、滨水节点有明确用途。 */
+const URBAN_DECOR: readonly UrbanDecor[] = [
+  // 起源村：村街中央火塘、进站旗杆与两栋屋之间的公告板。
+  { kind: 'bonfire', x: 150, z: 211 },
+  { kind: 'flagpole', x: 146.5, z: 204.5, tint: 0xe8a838 },
+  { kind: 'flagpole', x: 153.5, z: 204.5, tint: 0xe8d5a8 },
+  { kind: 'board', x: 150, z: 216, rotY: Math.PI / 2 },
+  // 旧港港口大道灯列与中央市集。
+  { kind: 'streetlamp', x: 15.5, z: 268 }, { kind: 'streetlamp', x: 24.5, z: 268, flip: true },
+  { kind: 'streetlamp', x: 15.5, z: 280 }, { kind: 'streetlamp', x: 24.5, z: 280, flip: true },
+  { kind: 'streetlamp', x: 15.5, z: 300 }, { kind: 'streetlamp', x: 24.5, z: 300, flip: true },
+  { kind: 'fountain', x: 20, z: 240 },
+  { kind: 'bench', x: 15.5, z: 240, rotY: Math.PI / 2 },
+  { kind: 'bench', x: 24.5, z: 240, rotY: -Math.PI / 2 },
+  // 四个旧港街廓的院落，各有不同生活主题。
+  { kind: 'board', x: 0, z: 240 },
+  { kind: 'stringlights', x: 43, z: 241 },
+  { kind: 'palm', x: 0, z: 288 }, { kind: 'bench', x: 5, z: 288, rotY: Math.PI / 2 },
+  { kind: 'awning', x: 43, z: 288, tint: 0x8c6f52 },
+  { kind: 'palm', x: -20, z: 272 }, { kind: 'palm', x: -19, z: 299 },
+  { kind: 'lighthouse', x: -20, z: 326 },
+  // 星港大道灯列与站前市集。
+  { kind: 'lanternpost', x: -219.5, z: 229 }, { kind: 'lanternpost', x: -210.5, z: 229 },
+  { kind: 'lanternpost', x: -219.5, z: 248 }, { kind: 'lanternpost', x: -210.5, z: 248 },
+  { kind: 'lanternpost', x: -219.5, z: 276 }, { kind: 'lanternpost', x: -210.5, z: 276 },
+  { kind: 'glowpad', x: -215, z: 240 },
+  // 三个港区院落与滨水节点。
+  { kind: 'catsign', x: -234, z: 238 }, { kind: 'bench', x: -239, z: 238, rotY: Math.PI / 2 },
+  { kind: 'windflag', x: -234, z: 279, tint: 0x3b6fe0 }, { kind: 'board', x: -240, z: 279 },
+  { kind: 'antenna', x: -196, z: 259, tint: 0x9ecbff }, { kind: 'bench', x: -196, z: 266 },
+  { kind: 'windflag', x: -251, z: 243, tint: 0x2a3038 },
+  { kind: 'windflag', x: -247, z: 302, tint: 0x3b6fe0 },
+  { kind: 'lighthouse', x: -152, z: 199 },
 ];
 
 export type YearTownDecorUpdate = (elapsed: number) => void;
@@ -367,35 +340,11 @@ export function createYearTownDecor(options: {
     root.add(group);
   }
 
-  // ── 装置落位（通用镇：迎宾带；2019：手工带）────────────────────────────
-  for (const town of YEAR_TOWNS) {
-    const entries = TOWN_PROPS[town.year] ?? [];
-    if (town.year === 2019) {
-      for (const entry of ORIGIN_DECOR) ground(BUILDERS[entry.kind](entry.tint), entry.x, entry.z);
-      continue;
-    }
-    // 轴向与街区布局同源：片区中心 → 大城中心（主干道方向）。旧实现用
-    // 「站台 → 镇心」向量，站点挪到片区中心后该向量退化为 +z，装置会偏离
-    // 主街；这里改为读取同一 district 轴线，保证装置落在迎宾带两侧。
-    const district = yearDistrictById(town.districtId);
-    if (!district) continue;
-    const ux = district.x - town.x;
-    const uz = district.z - town.z;
-    const norm = Math.hypot(ux, uz) || 1;
-    const uxN = ux / norm, uzN = uz / norm; // 站台 → 镇心
-    const pxN = -uzN, pzN = uxN;           // 横向
-    const rBuild = town.plateauR - 3.5;
-    for (const entry of entries) {
-      const builder = BUILDERS[entry.kind];
-      const group = builder(entry.tint, entry.flip);
-      // 平板校验：装置足印必须留在台面内（外圈装置靠站台侧本来就在台缘内）。
-      let s = entry.s;
-      if (s > 0) s = Math.min(s, rBuild - 0.4); // 防御性：表内不应出现正值
-      const x = town.x + uxN * s + pxN * entry.lat;
-      const z = town.z + uzN * s + pzN * entry.lat;
-      ground(group, x, z);
-      if (entry.flip) group.rotation.y = Math.PI; // 摆件朝向镜像（灯串/招牌面向来客）
-    }
+  // ── 装置落位：全部使用经人工核对的城市绝对坐标。──────────────────────
+  for (const entry of URBAN_DECOR) {
+    const group = BUILDERS[entry.kind](entry.tint, entry.flip);
+    ground(group, entry.x, entry.z);
+    group.rotation.y = entry.rotY ?? (entry.flip ? Math.PI : 0);
   }
 
   // ── XL 地标信标（实测 Box3 顶面；浮空光柱 + 脉冲光环）──────────────────

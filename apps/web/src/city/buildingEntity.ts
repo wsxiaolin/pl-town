@@ -7,6 +7,7 @@ export type BuildingDefinition = {
   label?: string;
   x: number;
   z: number;
+  rotY?: number;
   shape: string;
   icon: string;
   isStats?: boolean;

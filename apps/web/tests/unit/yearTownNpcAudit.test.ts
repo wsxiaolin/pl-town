@@ -24,10 +24,12 @@ test('年份镇 NPC：全部落在所属片区台面内', () => {
 });
 
 test('年份镇 NPC：与布局后的建筑保持净距', () => {
+  const conflicts: string[] = [];
   for (const npc of YEAR_TOWN_NPCS) {
     for (const building of YEAR_TOWN_LAYOUT_CONFIGS) {
       const dist = Math.hypot(npc.home[0]! - building.x!, npc.home[1]! - building.z!);
-      assert.ok(dist >= 2.9, `${npc.id} 距建筑 ${building.id} 仅 ${dist.toFixed(2)}`);
+      if (dist < 2.9) conflicts.push(`${npc.id} 距建筑 ${building.id} 仅 ${dist.toFixed(2)}`);
     }
   }
+  assert.deepEqual(conflicts, [], conflicts.join('\n'));
 });

@@ -6,7 +6,7 @@ import { MINGLAN_ISLES } from '../../src/city/data/terrain/sea-minglan';
 import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
 import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, shorelineX } from '../../src/city/data/cityConfig';
-import { YEAR_ISLAND_SPECS, islandShapeScaleAt } from '../../src/city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, islandRadiusScaleAt } from '../../src/city/data/year-towns/towns';
 import { bridgeDeckBlendAt, stationPadBlendAt } from '../../src/city/data/terrain/heightfield/transitField';
 import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
 import { ISLAND_SKIRT_W } from '../../src/city/data/terrain/heightfield/islandField';
@@ -355,27 +355,32 @@ test('年份群岛恒海判据：3 岛足印（含水下裙）全落恒海区，
   }
 });
 
-test('年份群岛台面恒高：worldReliefAt 在 3 岛台面内恒等于该岛 topY（语义同主城台地）', () => {
+test('年份群岛台面恒高：worldReliefAt 在 3 岛台面内恒等于该岛 topY + 阶地外起伏', () => {
   // 主城台地契约（见 terrainElevation.test：台面内严格 === 0、零起伏）对
-  // 年份镇同构：台面内严格 === topY——T5 的镇区布局、T4 的桥/站台落点、
-  // 玩家 cursor.y 与相机目标全部直接采样，不允许任何自然场分量（草甸/
-  // 河谷/海床切割）漏进岛台。逐镇整圆采样（步 1）+ 岛心处全链 terrainHeight
-  // 复核（PLATEAU_BASE_Y 耦合）。
+  // 年份镇同构：台面内只能有「显式地形」（山脊/山丘）抬升，城区阶地内仍
+  // 严格 === topY——T5 的镇区布局、T4 的桥/站台落点、玩家 cursor.y 与相机
+  // 目标全部直接采样，不允许任何自然场分量（草甸/河谷/海床切割）漏进岛台。
+  const terraceFlat = (town: (typeof YEAR_ISLAND_SPECS)[number], dx: number, dz: number): boolean =>
+    (town.terrain?.terraces ?? []).some((t) =>
+      t.polygon
+        ? pointInPolygon(t.polygon, dx, dz)
+        : Math.abs(dx - t.dx) <= t.halfW && Math.abs(dz - t.dz) <= t.halfD,
+    );
   for (const town of YEAR_ISLAND_SPECS) {
-    // 岛缘非正圆：台面范围按该方向的调制半径判定（islandShapeScaleAt）。
-    const maxR = town.plateauR * 1.2;
+    const maxR = town.plateauR * (town.outline ? 1.5 : 1.2);
     for (let x = Math.ceil(town.x - maxR); x <= Math.floor(town.x + maxR); x += 1) {
       for (let z = Math.ceil(town.z - maxR); z <= Math.floor(town.z + maxR); z += 1) {
         const dx = x - town.x;
         const dz = z - town.z;
-        const k = islandShapeScaleAt(town.shape, Math.atan2(dz, dx));
+        const k = islandRadiusScaleAt(town, Math.atan2(dz, dx));
         if (Math.hypot(dx, dz) > town.plateauR * k) continue;
+        if (!terraceFlat(town, dx, dz)) continue;
         // 交通件上盖（月台/桥面）本就高于台面，不属于「台面恒高」口径。
         if (stationPadBlendAt(x, z, town.topY) !== null) continue;
         if (bridgeDeckBlendAt(x, z, town.topY) !== null) continue;
         assert.ok(
           Math.abs(worldReliefAt(x, z) - town.topY) < 1e-9,
-          `${town.label} 台面内 (${x}, ${z}) worldReliefAt 应恒为 topY=${town.topY}（语义同主城台地）`,
+          `${town.label} 阶地内 (${x}, ${z}) worldReliefAt 应恒为 topY=${town.topY}（语义同主城台地）`,
         );
       }
     }
@@ -385,6 +390,19 @@ test('年份群岛台面恒高：worldReliefAt 在 3 岛台面内恒等于该岛
     );
   }
 });
+
+/** 多边形内判定（审计用，与 heightfield 的射线法同口径）。 */
+function pointInPolygon(poly: readonly { dx: number; dz: number }[], dx: number, dz: number): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if ((a.dz > dz) !== (b.dz > dz) && dx < ((b.dx - a.dx) * (dz - a.dz)) / (b.dz - a.dz) + a.dx) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
 
 test('年份群岛 keep-out：3 岛滩足印互不侵入（大城水道 ≥ 13u），不进主城台地', () => {
   // 设计 §3：邻岛中心距 ≥ 57.7、滩环和 ≤ 44 ⇒ 岛间水道 ≥ 13u（T4 环线

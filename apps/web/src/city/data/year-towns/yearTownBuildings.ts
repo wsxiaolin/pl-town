@@ -27,10 +27,12 @@ const toDefinition = (config: BuildingConfig): BuildingDefinition => ({
   label: config.label,
   x: config.x,
   z: config.z,
+  rotY: config.rotY,
   shape: config.shape,
   icon: config.icon,
   hasPlot: false,
   baseY: roundY(terrainHeight(config.x, config.z)),
+  scale: config.scale,
 });
 
 /** 年份镇建筑定义（115 座；与 BUILDING_DEFS 合流进 buildingSceneController）。 */

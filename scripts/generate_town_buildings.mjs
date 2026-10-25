@@ -5,7 +5,7 @@
 //   --data-dir  数据目录（默认仓库同级 ../data：blackhole_top1000.json + blackhole_details.json）
 //   --check     只读校验：重算全部产物并与磁盘逐字节比对（CI/门禁用），不写文件
 //
-// 产物（先清后生成，幂等：两次运行逐字节一致，无时间戳）：
+// 产物（只覆盖下列明确文件，幂等：两次运行逐字节一致，无时间戳）：
 //   apps/web/src/city/data/year-towns/gen-buildings.ts   115 座建筑配置（静态 import）
 //   apps/web/src/city/data/year-towns/gen-loaders.ts     懒加载路由表（静态 import，import() 全部字面量）
 //   apps/web/src/city/data/year-towns/gen-index.ts       1000 条 P 级铭牌索引（懒）
@@ -24,7 +24,7 @@
 //   ⑥ 空白评论过滤不渲染；
 //   ⑦ 字符口径 len()（代码点计数，中文 1 字符）。
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -34,7 +34,6 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOWNS_DIR = join(REPO_ROOT, 'apps/web/src/city/data/year-towns');
 const SERVER_DATA_DIR = join(REPO_ROOT, 'apps/server/src/data');
 const DOCS_DIR = join(REPO_ROOT, 'docs');
-const GITIGNORE = join(REPO_ROOT, '.gitignore');
 const NODE = process.execPath; // 必须用 /home/z/node22/bin/node 运行（README 教训 #12）
 
 // ── 设计常量（docs/year-towns-design.md）──────────────────────────────────
@@ -401,7 +400,8 @@ for (const town of YEAR_TOWNS) {
   placements[town.year] = townStructures[town.year].map((item) => {
     const layout = item.memorial?.layout ?? LANDMARK_LAYOUT[item.key];
     if (!layout) fail(`${item.key} 缺手写 layout（yearTownMemorials.ts 或 LANDMARK_LAYOUT）`);
-    return { ...item, x: layout.x, z: layout.z, plot: layout.plot ?? 4.2 };
+    const facingRotation = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 };
+    return { ...item, x: layout.x, z: layout.z, plot: layout.plot ?? 4.2, rotY: facingRotation[layout.facing] };
   });
 }
 
@@ -438,7 +438,8 @@ function buildingEntry(p) {
   const label = p.memorial
     ? p.memorial.facility
     : (p.tier === 'ARCH' ? `${townById.get(`island-${p.year ?? 0}`).name}纪念名录` : p.tier === 'TOWER' ? '千作总目塔' : '起源村·界碑');
-  return `  defineBuilding({ id: ${jstr(p.key)}, num: ${jstr(numOf(p))}, label: ${jstr(label)}, x: ${round2(p.x)}, z: ${round2(p.z)}, shape: ${jstr(p.shape)}, icon: iconFor(${jstr(p.shape)}) }),`;
+  const rotation = p.rotY === undefined ? '' : `, rotY: ${round2(p.rotY)}`;
+  return `  defineBuilding({ id: ${jstr(p.key)}, num: ${jstr(numOf(p))}, label: ${jstr(label)}, x: ${round2(p.x)}, z: ${round2(p.z)}, shape: ${jstr(p.shape)}, icon: iconFor(${jstr(p.shape)})${rotation} }),`;
 }
 function numOf(p) {
   if (p.memorial) return `${String(p.year).slice(2)}${String(p.townRank).padStart(2, '0')}`;
@@ -580,7 +581,7 @@ for (const p of memorialPlaced) {
 const fmt = (n) => n.toLocaleString('en-US');
 const reportMd = `# 年份群岛纪念设施生成报告
 
-> 生成器：\`scripts/generate_town_buildings.mjs\`（幂等，先清后生成，--check 逐字节复核）
+> 生成器：\`scripts/generate_town_buildings.mjs\`（幂等，只覆盖明确产物，--check 逐字节复核）
 > 数据基线：${hasDataSource ? 'blackhole_top1000.json + blackhole_details.json（仅用于确定年份与镇内排序）' : '离线重建（无数据源；结构取自既有 gen-buildings.ts）'}
 > 设计口径：设计 §7.1 修订——作品抽象为城市纪念设施，**作品原文/评论/热度/浏览量不进入年份群岛**。
 > 设施名与纪念导语来自手写目录 \`apps/web/src/city/data/year-towns/yearTownMemorials.ts\`。
@@ -610,11 +611,11 @@ ${Object.entries(familyCounts).sort((a, b) => b[1] - a[1]).map(([f, n]) => `| ${
 
 ## 布局语法（设计 §7.1 修订）
 
-1. 中央广场：镇心留空 r ≈ plateauR×0.22，不落建筑。
-2. 纪念轴线：站台 → 镇心 → 轴线尽端，首座设施（XL）置于轴端作对景。
-3. 环形主街：r ≈ plateauR×0.62 留作街道，建筑不得骑跨。
-4. 街区归拢：其余设施按设施族方位偏好成片分布，形成可辨认的同质街区。
-5. 密度梯度：主街内外两圈优先，广场边缘与台面外缘作补充。
+1. 海岸与地形先行：显式海岸线形成海湾、岬角和离岸小屿，山脊与城区阶地分开。
+2. 街网先行：车站、主街、横街、巷道、站前广场和码头先定稿。
+3. 逐栋手写：每座设施在纪念目录中登记世界坐标、地块尺寸和临街朝向。
+4. 围合街廓：建筑沿街廓边缘形成街墙，街廓中心保留院落。
+5. 交通避让：环线沿城区外围绕行，建筑、站房、道路和广场保持结构净距。
 
 ## 数据对齐说明（治理红线）
 
@@ -622,7 +623,7 @@ ${Object.entries(familyCounts).sort((a, b) => b[1] - a[1]).map(([f, n]) => `| ${
   合流点在 \`yearTownBuildings.ts\` → cityWorldAssembly 装配（与 BUILDING_DEFS 同一 buildingSceneController 管道）。
 - 服务端 \`buildingCatalog.ts\` 未改动；独立镜像 \`yearTownCatalog.ts\`（115 条，storyLocked 全 false），
   已筹资项目 ID 零变更（AGENTS 治理红线）。
-- gen-* 生成物不进 git（.gitignore 覆盖 \`apps/web/src/city/data/year-towns/gen-*\`）。
+- \`gen-buildings.ts\` 与 \`gen-index.ts\` 是运行时静态数据，随仓库提交；生成器只覆盖明确产物。
 `;
 
 
@@ -634,40 +635,19 @@ outputs.set(join(SERVER_DATA_DIR, 'yearTownCatalog.ts'), yearTownCatalogTs);
 outputs.set(join(DOCS_DIR, 'year-towns-gen-report.json'), `${JSON.stringify(report, null, 2)}\n`);
 outputs.set(join(DOCS_DIR, 'year-towns-gen-report.md'), reportMd);
 
-const GEN_GLOB_HINT = 'apps/web/src/city/data/year-towns/gen-*';
-
-function cleanGeneratedFiles() {
-  // 幂等：先清后生成（本目录 gen-* 全部由本脚本拥有）。
-  const stale = readdirSync(TOWNS_DIR).filter((f) => f.startsWith('gen-') && f.endsWith('.ts'));
-  for (const f of stale) rmSync(join(TOWNS_DIR, f));
-}
-
-function ensureGitignore() {
-  const current = readFileSync(GITIGNORE, 'utf8');
-  if (current.includes(GEN_GLOB_HINT)) return false;
-  const appended = `${current.endsWith('\n') ? '' : '\n'}\n# 年份镇 T5 生成物（scripts/generate_town_buildings.mjs 产出；GOAL 红线：生成物不入 git）\n${GEN_GLOB_HINT}\n`;
-  writeFileSync(GITIGNORE, appended);
-  return true;
-}
-
 if (CHECK_ONLY) {
   let mismatched = 0;
   for (const [path, text] of outputs) {
     if (!existsSync(path)) { log(`MISSING ${path}`); mismatched += 1; continue; }
     if (readFileSync(path, 'utf8') !== text) { log(`STALE   ${path}`); mismatched += 1; }
   }
-  if (!readFileSync(GITIGNORE, 'utf8').includes(GEN_GLOB_HINT)) { log(`MISSING .gitignore rule ${GEN_GLOB_HINT}`); mismatched += 1; }
   if (mismatched > 0) { log(`check 失败：${mismatched} 个产物与磁盘不一致（重跑 npm run gen:year-towns）`); process.exit(1); }
   log(`check 通过：${outputs.size} 个生成产物与磁盘逐字节一致。`);
 } else {
-  cleanGeneratedFiles();
   mkdirSync(TOWNS_DIR, { recursive: true });
   mkdirSync(SERVER_DATA_DIR, { recursive: true });
   mkdirSync(DOCS_DIR, { recursive: true });
   for (const [path, text] of outputs) writeFileSync(path, text);
-  const gitignoreUpdated = ensureGitignore();
   log(`生成完成：${outputs.size} 个文件（纪念设施 ${memorialPlaced.length} 座、总结构 ${allPlaced.length} 座）。`);
   log('  幂等性：npm run gen:year-towns -- --check 可逐字节复核（两次运行产出一致）。');
-  if (gitignoreUpdated) log('  .gitignore 已追加 gen-* 规则。');
 }
-

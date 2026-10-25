@@ -36,7 +36,7 @@ import type { SceneInterestPointEntity } from '../sceneInterestPoints';
 const SIGN_NAME_PREFIX = 'year-town-transit-structures-sign';
 
 // ── 尺寸（局部系：原点=月台中心，+Z 指向岛心/来客侧；单位=世界米）──────────
-const BOARD_SIZE: readonly [number, number, number] = [2.9, 0.07, 2.0];
+const BOARD_SIZE: readonly [number, number, number] = [5.4, 0.12, 2.5];
 const BOARD_BOTTOM_GAP = 0.004; // 对月台场地面的工艺缝（AGENTS.md ≥0.004）
 const BOARD_TOP = BOARD_BOTTOM_GAP + BOARD_SIZE[1];
 const PILLAR_RADIUS_TOP = 0.08;
@@ -46,11 +46,16 @@ const PILLAR_Z = -0.72; // 月台轨道侧边缘内 0.28（牌面立在台尾，
 const SIGN_CENTER_Y = 1.62; // 立柱中部，约人视线高度
 const SIGN_FRAME_SIZE: readonly [number, number, number] = [1.5, 0.74, 0.05];
 const SIGN_PANEL_SIZE: readonly [number, number, number] = [1.36, 0.6, 0.058]; // 厚于框 0.008 → 双面凸出 0.004
+const CANOPY_SIZE: readonly [number, number, number] = [5.15, 0.14, 2.25];
+const CANOPY_Y = 2.72;
 
 // ── 配色（月台板=桥面步道色族、立柱=石墨、牌面框=车身乳白、牌面=线路色）────
 const BOARD_MATERIAL = { color: 0xbdb8ae, roughness: 0.95 } as const;
 const PILLAR_MATERIAL = { color: 0x555e68, roughness: 0.82, metalness: 0.12 } as const;
 const SIGN_FRAME_MATERIAL = { color: 0xf4f0e8, roughness: 0.85 } as const;
+const CANOPY_MATERIAL = { color: 0xe7e3db, roughness: 0.76, metalness: 0.08 } as const;
+const GLASS_MATERIAL = { color: 0x9fc7d2, roughness: 0.22, metalness: 0.05, transparent: true, opacity: 0.42 } as const;
+const BENCH_MATERIAL = { color: 0x806345, roughness: 0.9 } as const;
 /** 线路色牌面：暖橙=星门线、青蓝=环线；低强度自发光供夜间寻站（对齐桥塔信标语汇）。 */
 const LINE_SIGN_MATERIALS: Record<TransitStationSpec['line'], Record<string, unknown>> = {
   stargate: { color: 0xd9842f, roughness: 0.62, emissive: 0x5c2a08, emissiveIntensity: 0.2 },
@@ -143,6 +148,20 @@ export function createTransitStationSigns(options: TransitStationSignsOptions): 
 
     // ① 月台板：月台场(baseY)上的候车台面，玩家落点即站于此。
     addSignMesh(object, options, new THREE.BoxGeometry(...BOARD_SIZE), BOARD_MATERIAL, [0, BOARD_BOTTOM_GAP + BOARD_SIZE[1] / 2, 0]);
+    // 站体：四柱雨棚、轨道侧挡风屏与候车长凳，让泊位读作一座小型车站。
+    for (const x of [-2.2, 2.2]) {
+      for (const z of [-0.86, 0.86]) {
+        addSignMesh(object, options, new THREE.CylinderGeometry(0.07, 0.09, 2.55, 8), PILLAR_MATERIAL, [x, BOARD_TOP + 1.275, z]);
+      }
+    }
+    addSignMesh(object, options, new THREE.BoxGeometry(...CANOPY_SIZE), CANOPY_MATERIAL, [0, CANOPY_Y, 0]);
+    addSignMesh(object, options, new THREE.BoxGeometry(4.35, 1.42, 0.06), GLASS_MATERIAL, [0, BOARD_TOP + 0.82, -0.88]);
+    addSignMesh(object, options, new THREE.BoxGeometry(2.7, 0.12, 0.42), BENCH_MATERIAL, [0.75, BOARD_TOP + 0.53, 0.38]);
+    for (const x of [-0.35, 1.85]) {
+      addSignMesh(object, options, new THREE.BoxGeometry(0.1, 0.5, 0.32), PILLAR_MATERIAL, [x, BOARD_TOP + 0.25, 0.38]);
+    }
+    // 线路色檐带从远处标识站点，和牌面使用同一线路颜色。
+    addSignMesh(object, options, new THREE.BoxGeometry(5.22, 0.18, 0.12), LINE_SIGN_MATERIALS[station.line], [0, CANOPY_Y - 0.02, 1.12]);
     // ② 立柱：台尾轨道侧，自月台板顶立起。
     addSignMesh(
       object,

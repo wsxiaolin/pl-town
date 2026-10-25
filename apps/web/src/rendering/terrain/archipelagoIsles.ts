@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { YEAR_ISLAND_SPECS, islandShapeScaleAt, type YearDistrictSpec } from '../../city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, islandRadiusScaleAt, type YearDistrictSpec } from '../../city/data/year-towns/towns';
 import { islandSurfaceYAt, ISLAND_SKIRT_BOTTOM, ISLAND_SKIRT_W } from '../../city/data/terrain/heightfield/islandField';
 
 // 南洋年份群岛渲染：2 座大城 + 启源站，共 3 座 flat-top 岛台（台面平台 + 滩坡 + 水下裙）+ 沙线盘。
@@ -72,7 +72,7 @@ function buildIslandBody(
 ): void {
   const radii = ringRadii(town);
   // 有岛形调制的岛需要更高分段，否则谐波岸线会呈折线。
-  const segments = town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
+  const segments = town.outline ? 192 : town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
   const townColor = new THREE.Color(town.theme.groundColor);
   const positions: number[] = [];
   const colors: number[] = [];
@@ -101,8 +101,9 @@ function buildIslandBody(
   };
   const vertexAt = (rho: number, segment: number): [number, number, number] => {
     const angle = (segment / segments) * Math.PI * 2;
-    const x = town.x + Math.cos(angle) * rho;
-    const z = town.z + Math.sin(angle) * rho;
+    const shapedRho = rho * islandRadiusScaleAt(town, angle);
+    const x = town.x + Math.cos(angle) * shapedRho;
+    const z = town.z + Math.sin(angle) * shapedRho;
     return [x, islandSurfaceYAt(x, z) ?? ISLAND_SKIRT_BOTTOM, z];
   };
   // 中心扇面。
@@ -139,10 +140,10 @@ function buildIslandBody(
 
 /**
  * 沙线盘几何：平铺在 y = SAND_RIM_Y 的环形带，用于遮住岛体与水面接缝。
- * 岸线非正圆时按 islandShapeScaleAt 逐角度缩放，与岛体/地形同源。
+ * 岸线非正圆时按 islandRadiusScaleAt 逐角度缩放，与岛体/地形同源。
  */
 function sandRimGeometry(town: YearDistrictSpec): THREE.BufferGeometry {
-  const segments = town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
+  const segments = town.outline ? 192 : town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
   const baseR = town.beachR + SAND_RIM_MARGIN;
   const positions: number[] = [];
   const indices: number[] = [];
@@ -151,7 +152,7 @@ function sandRimGeometry(town: YearDistrictSpec): THREE.BufferGeometry {
   positions.push(0, 0, 0);
   for (let i = 0; i < segments; i += 1) {
     const theta = (i / segments) * Math.PI * 2;
-    const k = islandShapeScaleAt(town.shape, theta);
+    const k = islandRadiusScaleAt(town, theta);
     positions.push(Math.cos(theta) * baseR * k, 0, Math.sin(theta) * baseR * k);
   }
   for (let i = 0; i < segments; i += 1) {
@@ -216,6 +217,25 @@ export function createArchipelagoIsles(options: { scene: THREE.Scene }): Archipe
   for (const town of YEAR_ISLAND_SPECS) {
     buildIslandBody(context, town, facetMaterial);
     buildSandRim(context, town, rimMaterial);
+    for (let index = 0; index < (town.satellites?.length ?? 0); index += 1) {
+      const satellite = town.satellites![index]!;
+      const satelliteTown: YearDistrictSpec = {
+        ...town,
+        id: `${town.id}-satellite-${index + 1}`,
+        x: town.x + satellite.dx,
+        z: town.z + satellite.dz,
+        plateauR: satellite.radius,
+        beachR: satellite.radius * 1.18,
+        topY: 0.85,
+        shape: satellite.shape,
+        outline: undefined,
+        satellites: undefined,
+        terrain: undefined,
+        grid: undefined,
+      };
+      buildIslandBody(context, satelliteTown, facetMaterial);
+      buildSandRim(context, satelliteTown, rimMaterial);
+    }
   }
 
   options.scene.add(object);

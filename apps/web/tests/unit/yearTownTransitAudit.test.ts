@@ -215,6 +215,7 @@ test('桥站发车不瞬移：路线首点贴近出发月台，枢纽段高度�
 
 test('环线与布局后的年份建筑保持结构净距（中心距 ≥5.5u）', () => {
   const loop = [...RING_LOOP_NODES, RING_LOOP_NODES[0]!];
+  const conflicts: string[] = [];
   for (const building of YEAR_TOWN_LAYOUT_CONFIGS) {
     let best = Number.POSITIVE_INFINITY;
     for (let i = 0; i + 1 < loop.length; i += 1) {
@@ -226,6 +227,7 @@ test('环线与布局后的年份建筑保持结构净距（中心距 ≥5.5u）
       const t = Math.max(0, Math.min(1, ((building.x! - a.x) * dx + (building.z! - a.z) * dz) / len2));
       best = Math.min(best, Math.hypot(building.x! - (a.x + dx * t), building.z! - (a.z + dz * t)));
     }
-    assert.ok(best >= 5.5, `建筑 ${building.id} 距环线 ${best.toFixed(2)} 低于结构冗余`);
+    if (best < 5.5) conflicts.push(`建筑 ${building.id} 距环线 ${best.toFixed(2)} 低于结构冗余`);
   }
+  assert.deepEqual(conflicts, [], conflicts.join('\n'));
 });

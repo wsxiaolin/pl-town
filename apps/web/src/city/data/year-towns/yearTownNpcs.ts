@@ -18,7 +18,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2019-lamplighter', name:'守灯人', role:'起源村 · 村口守灯人', core:false, spawnChance:1,
     behavior:'field', workHours:[0,24],
-    head:0xE8D8C8, body:0xB59A6A, home:[137,210], work:[137,210], patrolRadius:0,
+    head:0xE8D8C8, body:0xB59A6A, home:[145,218], work:[145,218], patrolRadius:0,
     dialog:[
       { text:'「欢迎来到一切开始的地方。荒原上的第一盏灯，就是我点的。」', options:[
         { text:'这里只有两栋屋？', next:1 },
@@ -134,7 +134,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2022-clerk', name:'条例文书', role:'盛夏镇 · 条例文书', core:false, spawnChance:1,
     behavior:'field', workHours:[9,17],
-    head:0xC8B89A, body:0x8A7A5A, home:[12.4,300.8], work:[12.4,300.8], patrolRadius:0,
+    head:0xC8B89A, body:0x8A7A5A, home:[17,297], work:[17,297], patrolRadius:0,
     dialog:[
       { text:'「盛夏镇办事有条章。新章的墨迹干了才三天，你要办事，先看墙上那份。」', options:[
         { text:'写了什么？', next:1 },
@@ -153,7 +153,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2022-collector', name:'收藏家', role:'盛夏镇 · 功能收藏家', core:false, spawnChance:1,
     behavior:'field', workHours:[10,20],
-    head:0xD4A574, body:0x5A6A5A, home:[3.1,300.2], work:[3.1,300.2], patrolRadius:0,
+    head:0xD4A574, body:0x5A6A5A, home:[3,297], work:[3,297], patrolRadius:0,
     dialog:[
       { text:'「想学点别人不知道的？我这本大全册，盛夏镇独一份。」', options:[
         { text:'大全册里有什么？', next:1 },
@@ -267,7 +267,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2024-keeper', name:'鸽咖饲养员', role:'微光镇 · 鸽咖饲养员', core:false, spawnChance:1,
     behavior:'field', workHours:[8,20],
-    head:0xD8B8A0, body:0x8AA0B5, home:[-233,229.4], work:[-233,229.4], patrolRadius:0,
+    head:0xD8B8A0, body:0x8AA0B5, home:[-234,237.5], work:[-234,237.5], patrolRadius:0,
     dialog:[
       { text:'「咕——啊，那是欢迎的意思。微光镇鸽咖，鸽子管打招呼，我管收拾。」', options:[
         { text:'猫咖之后开的？', next:1 },
@@ -289,7 +289,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2024-nightwatch', name:'夜灯巡夜人', role:'微光镇 · 夜灯巡夜人', core:false, spawnChance:1,
     behavior:'field', workHours:[20,6],
-    head:0xD0C8C0, body:0x3A4A5A, home:[-222.5,242.5], work:[-222.5,242.5], patrolRadius:0,
+    head:0xD0C8C0, body:0x3A4A5A, home:[-215,250], work:[-215,250], patrolRadius:0,
     dialog:[
       { text:'「……你也睡不着？正好，一起走一段。夜里的小镇，路灯一盏一盏替月亮值班。」', options:[
         { text:'你每晚都巡？', next:1 },

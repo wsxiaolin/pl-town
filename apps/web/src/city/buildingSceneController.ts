@@ -58,6 +58,7 @@ export function createBuildingSceneController(options: {
       const baseY = definition.baseY ?? 0;
       building.group.userData.baseY = baseY;
       building.group.position.y = baseY - 3;
+      building.group.rotation.y = definition.rotY ?? 0;
       // 体量缩放（年份群岛减少疏离感）：以建筑自身为基准放大，x/z/baseY 不变。
       const scale = definition.scale ?? 1;
       if (scale !== 1) {

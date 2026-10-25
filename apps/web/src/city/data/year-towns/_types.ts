@@ -39,8 +39,8 @@ export interface YearTownMemorial {
   family: FacilityFamily;
   /** 纪念导语（面板正文：为何在此立此物）。 */
   note: string;
-  /** 手写落位（世界坐标与地块尺寸）；由人工逐栋决定，不走算法布局。 */
-  layout?: { x: number; z: number; plot?: number };
+  /** 手写落位；facing 是正门朝向，由人工逐栋决定。 */
+  layout?: { x: number; z: number; plot?: number; facing?: 'n' | 's' | 'e' | 'w' };
   /** 可选便签交互（仅少数设施）。 */
   noteKind?: MemorialNoteKind;
 }

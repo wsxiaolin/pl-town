@@ -27,18 +27,22 @@ export const MEMORIAL_SCALE = 1.6;
  */
 /** 地标（纪念名录 / 千作总目塔 / 起源村界碑）的手写落位。 */
 const LANDMARK_PLACEMENTS: Readonly<Record<string, { x: number; z: number; plot: number }>> = {
-  'yt-arch-2020': { x: -12.5, z: 234.9, plot: 4.2 },
-  'yt-arch-2021': { x: 47.1, z: 229.5, plot: 4.2 },
-  'yt-arch-2022': { x: -7.1, z: 294.5, plot: 4.2 },
-  'yt-arch-2023': { x: 52.5, z: 289.1, plot: 4.2 },
-  'yt-arch-2024': { x: -215, z: 219.9, plot: 4.2 },
-  'yt-arch-2025': { x: -246.2, z: 274, plot: 4.2 },
-  'yt-arch-2026': { x: -183.8, z: 274, plot: 4.2 },
+  'yt-arch-2020': { x: -20, z: 232, plot: 4.2 }, // 启明站房：站台东南侧，面向站前街
+  'yt-arch-2021': { x: 60, z: 232, plot: 4.2 }, // 潮声站房：站台西南侧
+  'yt-arch-2022': { x: -20, z: 292, plot: 4.2 }, // 盛夏站房：南站广场北侧
+  'yt-arch-2023': { x: 60, z: 292, plot: 4.2 }, // 回响站房：南站广场北侧
+  'yt-arch-2024': { x: -207, z: 212, plot: 4.2 }, // 微光站房：北站广场东侧
+  'yt-arch-2025': { x: -252, z: 276, plot: 4.2 }, // 长风站房：西站广场北侧
+  'yt-arch-2026': { x: -181, z: 283, plot: 4.2 }, // 星港站房：东站广场西侧
   'yt-tower': { x: 138, z: 196, plot: 3.0 },
   'yt-stele-2019': { x: 150, z: 228, plot: 1.8 },
 };
 
-const PLACEMENTS: Readonly<Record<string, { x: number; z: number; plot: number }>> = {
+type Placement = { x: number; z: number; plot: number; rotY?: number };
+
+const FACING_ROTATION = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 } as const;
+
+const PLACEMENTS: Readonly<Record<string, Placement>> = {
   ...Object.fromEntries(
     Object.values(YEAR_TOWN_MEMORIAL_BY_KEY)
       .filter((memorial) => memorial.layout)
@@ -48,6 +52,7 @@ const PLACEMENTS: Readonly<Record<string, { x: number; z: number; plot: number }
           x: memorial.layout!.x,
           z: memorial.layout!.z,
           plot: memorial.layout!.plot ?? 4.2,
+          rotY: memorial.layout!.facing ? FACING_ROTATION[memorial.layout!.facing] : undefined,
         },
       ]),
   ),
@@ -68,6 +73,7 @@ export const YEAR_TOWN_LAYOUT_CONFIGS: readonly BuildingConfig[] = YEAR_TOWN_BUI
     ...config,
     x: placement.x,
     z: placement.z,
+    rotY: placement.rotY,
     plot: { tex: 'ground5', size: placement.plot, color: 0xe4e3e0 },
     scale: isMemorial ? MEMORIAL_SCALE : 1,
   };
