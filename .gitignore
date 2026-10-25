@@ -1,6 +1,7 @@
 
-# 年份镇 T5 生成物（scripts/generate_town_buildings.mjs 产出；GOAL 红线：生成物不入 git）
-apps/web/src/city/data/year-towns/gen-*
+# 年份镇产物：gen-buildings.ts（建筑配置）与 gen-index.ts（纪念名录索引）是运行时
+# 必需的静态数据，且需要外部数据源才能重算，故入库提交；
+# 历史上由正文/评论派生的大数据包（gen-t/gen-b/gen-c）已随纪念设施改造移除。
 
 # 依赖与构建产物
 node_modules/
