@@ -320,7 +320,7 @@ const roadNavigation = createRoadNavigationSystem({
   meadowTrail: buildMeadowTrailGraph(),
   westBeach: WEST_BEACH,
   cityLimit: CITY_LIMIT,
-  // T3a 年份群岛：8 镇锚点外扩 WORLD_BOUNDS，玩家在岛上不被钳回主城。
+  // T3a 年份群岛：3 座岛缘锚点外扩 WORLD_BOUNDS，玩家在岛上不被钳回主城。
   yearTownAnchors: yearTown.anchors,
   // T4a2 跨海交通：星门大桥 B 链（S4 挂接）+ 起源村枢纽街，走线唯一
   // 事实源 transit.ts（buildTransitRoadGraph 直出节点/边表）。

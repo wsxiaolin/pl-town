@@ -5,7 +5,7 @@ import { stubCityWebSocket, waitForCityReady } from './helpers';
 // → riding 推进 → 到站落点。走真实 UI 入口（interactInterestPoint 是用户点
 // 站牌铭牌的等价路由），不经 _mini.transit.start 免面板捷径。
 //
-// 航段选环线邻站 2023→2024（直线 ~42u，最短可乘段）。时间预算按 c6R 教训：
+// 航段选环线 2023→2024（跨两城 ~608u）。时间预算按 c6R 教训：
 // 设计速度 18u/s × 航程 + 软渲染帧率余量，断言在动作后立即采样。
 test('station sign opens the destination panel and rides to the adjacent town', async ({ page }) => {
   test.setTimeout(240_000);

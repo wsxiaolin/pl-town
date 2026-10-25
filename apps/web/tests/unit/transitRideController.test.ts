@@ -94,11 +94,11 @@ test('站周减速语义：泊位处因子恒 0.35（v=6.3），远离泊位（�
   }
   // 行为层：从环线站发车，起点即泊位 → state.speed = 18 × 0.35 = 6.3（精确）。
   const { controller } = makeRideHarness();
-  assert.equal(controller.startRide('station-2025', 'station-2024'), true);
+  assert.equal(controller.startRide('station-2025', 'station-2026'), true);
   const start = controller.state();
   assert.equal(start.phase, 'riding');
   assert.equal(start.speed, TRANSIT_RIDE_SPEED * 0.35, '泊位发车速度应为 6.3（18 × 0.35）');
-  // 推进到行程中点（两泊位各 ~29u，远离双方 ≥14u）→ 全速 18（精确）。
+  // 推进到行程中点（两侧泊位各 ~59u，远离全部泊位 ≥14u）→ 全速 18（精确）。
   const length = start.length!;
   let guard = 0;
   while (controller.isRiding() && controller.state().s! < length / 2) {

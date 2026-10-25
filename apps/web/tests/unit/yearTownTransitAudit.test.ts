@@ -2,15 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { TRANSIT_STATION_IDS, SCENE_INTEREST_POINT_IDS } from '../../src/gameplay/world/sceneInteractions';
 import { YEAR_ISLAND_SPECS, yearTownById } from '../../src/city/data/year-towns/towns';
+import { YEAR_TOWN_LAYOUT_CONFIGS } from '../../src/city/data/year-towns/districtLayout';
 import { SOUTH_TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import {
   BRIDGE_CORRIDOR_HALF,
   BRIDGE_TOWERS,
   BRIDGE_WALK_NODES,
+  RING_LOOP_NODES,
   TRANSIT_MAP_OVERLAY,
   TRANSIT_STATIONS,
   bridgeDeckProfileY,
   buildTransitRoadGraph,
+  buildTransitRoute,
   projectOnBridge,
 } from '../../src/city/data/year-towns/transit';
 
@@ -173,4 +176,56 @@ test('海图 overlay 契约：9 圆点/星门线=桥走线/环线闭环同源', 
   const first = ringLoop[0]!;
   const last = ringLoop[ringLoop.length - 1]!;
   assert.ok(Math.abs(first.x - last.x) < 1e-9 && Math.abs(first.z - last.z) < 1e-9, 'overlay 环线未闭环');
+});
+
+test('环线泊位落在环线走线上（2022/2023 不得被投影到远处）', () => {
+  const loop = [...RING_LOOP_NODES, RING_LOOP_NODES[0]!];
+  for (const station of TRANSIT_STATIONS) {
+    if (station.line !== 'ring') continue;
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i + 1 < loop.length; i += 1) {
+      const a = loop[i]!;
+      const b = loop[i + 1]!;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const len2 = dx * dx + dz * dz;
+      const t = Math.max(0, Math.min(1, ((station.x - a.x) * dx + (station.z - a.z) * dz) / len2));
+      best = Math.min(best, Math.hypot(station.x - (a.x + dx * t), station.z - (a.z + dz * t)));
+    }
+    assert.ok(best < 0.5, `站 ${station.id} 距环线走线 ${best.toFixed(2)}`);
+  }
+});
+
+test('桥站发车不瞬移：路线首点贴近出发月台，枢纽段高度连续', () => {
+  const bridge = TRANSIT_STATIONS.find((station) => station.id === 'station-2019-bridge')!;
+  const route = buildTransitRoute('station-2019-bridge', 'station-2022');
+  assert.ok(route);
+  const first = route!.points[0]!;
+  const startDist = Math.hypot(first.x - bridge.platformX, first.z - bridge.platformZ);
+  assert.ok(startDist < 3.0, `桥站发车首点距月台 ${startDist.toFixed(2)}`);
+
+  const ringRoute = buildTransitRoute('station-2024', 'station-2019-bridge');
+  assert.ok(ringRoute);
+  let maxJump = 0;
+  for (let i = 0; i + 1 < ringRoute!.points.length; i += 1) {
+    maxJump = Math.max(maxJump, Math.abs(ringRoute!.points[i + 1]!.y - ringRoute!.points[i]!.y));
+  }
+  assert.ok(maxJump < 0.35, `环线→桥站纵断面跳变 ${maxJump.toFixed(2)}`);
+});
+
+test('环线与布局后的年份建筑保持结构净距（中心距 ≥5.5u）', () => {
+  const loop = [...RING_LOOP_NODES, RING_LOOP_NODES[0]!];
+  for (const building of YEAR_TOWN_LAYOUT_CONFIGS) {
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i + 1 < loop.length; i += 1) {
+      const a = loop[i]!;
+      const b = loop[i + 1]!;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const len2 = dx * dx + dz * dz;
+      const t = Math.max(0, Math.min(1, ((building.x! - a.x) * dx + (building.z! - a.z) * dz) / len2));
+      best = Math.min(best, Math.hypot(building.x! - (a.x + dx * t), building.z! - (a.z + dz * t)));
+    }
+    assert.ok(best >= 5.5, `建筑 ${building.id} 距环线 ${best.toFixed(2)} 低于结构冗余`);
+  }
 });

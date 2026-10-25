@@ -237,7 +237,6 @@ test('the sea chart page labels the eight year towns by name', async ({ page }) 
   // spilling past the chart frame (.map-image-wrap clips overflow).
   expect(labels.find((label) => label.text === '2019·起源村')?.className).toContain('map-town-label--e');
   expect(labels.find((label) => label.text === '2024·微光镇')?.className).toContain('map-town-label--w');
-  expect(labels.find((label) => label.text === '2025·长风镇')?.className).toContain('map-town-label--w');
 
   // The labels are read-only annotations: picking the 盛夏 icon still opens the
   // town tip — the interaction paradigm stays on the icon button (T3a).

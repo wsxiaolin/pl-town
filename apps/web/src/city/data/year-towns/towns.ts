@@ -237,9 +237,15 @@ export function yearTownById(id: string): YearTownSpec | undefined {
   return YEAR_TOWNS.find((town) => town.id === id);
 }
 
-/** 8 镇中心锚点 [x,z]：roadNavigation 的 yearTownAnchors（WORLD_BOUNDS 外扩，T3a）。
+/** 岛体边缘锚点 [x,z]：roadNavigation 的 yearTownAnchors（WORLD_BOUNDS 外扩，T3a）。
+ *  用 3 座岛的滩环四向极值而非 8 个镇中心，避免大城边缘建筑被步行界钳回。
  *  元组保持可变形态以匹配 roadNavigation 的 Coord2 契约（外层数组只读防改写）。 */
-export const YEAR_TOWN_ANCHORS: readonly [number, number][] = YEAR_TOWNS.map((town) => [town.x, town.z]);
+export const YEAR_TOWN_ANCHORS: readonly [number, number][] = YEAR_ISLAND_SPECS.flatMap((island) => [
+  [island.x - island.beachR, island.z],
+  [island.x + island.beachR, island.z],
+  [island.x, island.z - island.beachR],
+  [island.x, island.z + island.beachR],
+]);
 
 /** 海图页镇标记 DTO（mapController 消费、MiniCityApp 接线）：零渲染依赖的纯数据视图。 */
 export interface YearTownMarker {
