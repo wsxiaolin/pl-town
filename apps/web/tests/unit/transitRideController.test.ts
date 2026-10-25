@@ -112,6 +112,14 @@ test('站周减速语义：泊位处因子恒 0.35（v=6.3），远离泊位（�
   controller.cancel();
 });
 
+test('无效站 id：interact/startRide 均拒绝且不进入乘车态', () => {
+  const { controller } = makeRideHarness();
+  assert.equal(controller.interact('not-a-station' as TransitStationId), false, '未知站牌不应开面板');
+  assert.equal(controller.startRide('not-a-station', 'station-2020'), false, '未知出发站不应派发');
+  assert.equal(controller.startRide('station-2020', 'not-a-station'), false, '未知目的站不应派发');
+  assert.equal(controller.state().phase, 'idle');
+});
+
 test('到站落点：transitGroundY(月台) = baseY（10 站 <1e-6），全程乘车 cursor 精确落月台三坐标', () => {
   // 数据层审计：10 站月台中心的 transitGroundY 与 baseY 全等（c1 收口后
   // 探针实测 10 站 delta 全为 0，含星门月台；此处锁 <1e-6 契约上限）。

@@ -15,3 +15,13 @@ export const YEAR_TOWN_SURFACE_Y = {
   dock: 0.065,
   dockCap: 0.07,
 } as const;
+
+// 模块加载期不变量：静态常量一旦被改坏，在开发/构建/测试阶段立即暴露。
+const LAYER_VALUES = Object.entries(YEAR_TOWN_SURFACE_Y).sort((a, b) => a[1] - b[1]);
+for (let i = 0; i + 1 < LAYER_VALUES.length; i += 1) {
+  const [nameA, a] = LAYER_VALUES[i]!;
+  const [nameB, b] = LAYER_VALUES[i + 1]!;
+  if (b - a < 0.004 - 1e-9) {
+    throw new Error(`year-town surface layers ${nameA}→${nameB} need >= 0.004u separation`);
+  }
+}
