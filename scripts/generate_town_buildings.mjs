@@ -118,10 +118,11 @@ function readJson(path) {
 
 async function bundleTownModules() {
   // esbuild 打包 towns.ts + transit.ts + sanitizeCommunityText.ts + yearTownMemorials.ts
+  // + districtLayout.ts，生成器与运行时共用手写地标坐标。
   // —— 生成器与运行时共用同一实现（设计 §7.3「生成期烘焙 + 运行时同源」红线）。
   const result = await build({
     stdin: {
-      contents: "export * from './sanitizeCommunityText'; export { YEAR_TOWNS } from './towns'; export { TRANSIT_STATIONS } from './transit'; export { YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES, FACILITY_SHAPES } from './yearTownMemorials';",
+      contents: "export * from './sanitizeCommunityText'; export { YEAR_TOWNS } from './towns'; export { TRANSIT_STATIONS } from './transit'; export { YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES, FACILITY_SHAPES } from './yearTownMemorials'; export { LANDMARK_PLACEMENTS } from './districtLayout';",
       loader: 'ts',
       resolveDir: TOWNS_DIR,
     },
@@ -134,7 +135,7 @@ async function bundleTownModules() {
 
 const townModules = await bundleTownModules();
 const {
-  YEAR_TOWNS, TRANSIT_STATIONS, YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES,
+  YEAR_TOWNS, TRANSIT_STATIONS, YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES, LANDMARK_PLACEMENTS,
 } = townModules;
 
 // 纪念目录完整性：106 座作品建筑必须逐一定义，且 key 与年份/名次一处不差。
@@ -378,27 +379,13 @@ for (const town of YEAR_TOWNS) {
 
 // 布局执行：坐标全部取自手写目录（yearTownMemorials.ts 的 layout 字段）。
 // 生成器只负责把设施名/设施族/坐标固化为 BuildingConfig，不再自行布局。
-// 地标手写落位（与 year-towns/districtLayout.ts 的 LANDMARK_PLACEMENTS 同源，
-// 由 unit 测试 yearTownGenLoaders/yearTownCatalog 交叉校验）。
-const LANDMARK_LAYOUT = {
-  'yt-arch-2020': { x: -12.5, z: 234.9, plot: 4.2 },
-  'yt-arch-2021': { x: 47.1, z: 229.5, plot: 4.2 },
-  'yt-arch-2022': { x: -7.1, z: 294.5, plot: 4.2 },
-  'yt-arch-2023': { x: 52.5, z: 289.1, plot: 4.2 },
-  'yt-arch-2024': { x: -215, z: 219.9, plot: 4.2 },
-  'yt-arch-2025': { x: -246.2, z: 274, plot: 4.2 },
-  'yt-arch-2026': { x: -183.8, z: 274, plot: 4.2 },
-  'yt-tower': { x: 138, z: 196, plot: 3.0 },
-  'yt-stele-2019': { x: 150, z: 228, plot: 1.8 },
-};
-
 const placements = {};
 const placementsScaleCache = {};
 for (const town of YEAR_TOWNS) {
   placementsScaleCache[town.year] = 1;
   placements[town.year] = townStructures[town.year].map((item) => {
-    const layout = item.memorial?.layout ?? LANDMARK_LAYOUT[item.key];
-    if (!layout) fail(`${item.key} 缺手写 layout（yearTownMemorials.ts 或 LANDMARK_LAYOUT）`);
+    const layout = item.memorial?.layout ?? LANDMARK_PLACEMENTS[item.key];
+    if (!layout) fail(`${item.key} 缺手写 layout（yearTownMemorials.ts 或 LANDMARK_PLACEMENTS）`);
     const facingRotation = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 };
     return { ...item, x: layout.x, z: layout.z, plot: layout.plot ?? 4.2, rotY: facingRotation[layout.facing] };
   });

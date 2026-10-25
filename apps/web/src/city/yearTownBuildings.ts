@@ -12,7 +12,7 @@ import { yearTownById } from './data/year-towns/towns';
 import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 import type { BuildingDefinition } from './buildingEntity';
 import type { BuildingConfig } from './data/buildings/_types';
-import type { BuildingContentLike } from '../adapters/ui/cityDialogController';
+import type { BuildingContentLike } from './buildingContent';
 
 const placements: Readonly<Record<string, YearTownPlacement>> = {
   ...Object.fromEntries(

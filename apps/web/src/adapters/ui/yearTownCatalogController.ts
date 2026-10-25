@@ -12,7 +12,7 @@ import { YEAR_TOWN_MEMORIAL_INDEX } from '../../city/data/year-towns/gen-index';
 import { YEAR_TOWN_LANDMARK_NOTES } from '../../city/data/year-towns/yearTownMemorials';
 import { YEAR_TOWNS, yearTownById } from '../../city/data/year-towns/towns';
 import type { MemorialIndexEntry } from '../../city/data/year-towns/_types';
-import type { BuildingContentLike } from './cityDialogController';
+import type { BuildingContentLike } from '../../city/buildingContent';
 import type { YearTownPanelController } from './yearTownPanelController';
 import { FAMILY_LABELS } from './yearTownPanelController';
 

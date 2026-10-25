@@ -12,9 +12,9 @@
 // 形状（shape）级别的默认地块 / 门面在 `_shapeDefaults.ts`；只有想覆盖
 // 默认值时才在建筑文件里写 `plot` / `facade`。
 
-import type { BuildingContentLike } from '../../../adapters/ui/cityDialogController';
+import type { BuildingContentLike } from '../../buildingContent';
 
-export type { BuildingContentLike };
+export type { BuildingContentLike } from '../../buildingContent';
 
 export type BuildingPlotSpec = { tex: string; size: number; color: number };
 

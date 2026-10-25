@@ -1,23 +1,8 @@
 import type { NpcQuestAction, QuestTransition } from '../../gameplay/quests/types';
+import type { BuildingContentLike, LegacyDialogueNode, LegacyDialogueOption } from '../../city/buildingContent';
 import { READ_BODY_ACTION_PREFIX } from './yearTownPanelController';
 
-export interface LegacyDialogueOption {
-  text: string;
-  next: number | null;
-  onPick?: () => void;
-  action?: string;
-  nextByVisitor?: {
-    includes: readonly string[];
-    maxLength?: number;
-    next: number;
-  };
-}
-
-export interface LegacyDialogueNode {
-  speaker?: string;
-  text: string;
-  options: readonly LegacyDialogueOption[];
-}
+export type { BuildingContentLike, LegacyDialogueNode, LegacyDialogueOption } from '../../city/buildingContent';
 
 export interface NpcEntityLike {
   profile: {
@@ -30,22 +15,6 @@ export interface NpcEntityLike {
     dialog: readonly LegacyDialogueNode[];
   };
   mesh: { rotation: { y: number }; position: { x: number; z: number } };
-}
-
-export interface BuildingContentLike {
-  name: string;
-  slogan: string;
-  dialog: readonly string[];
-  dialogTree?: readonly LegacyDialogueNode[];
-  dialogAvatar?: readonly [number, number];
-  /** 「阅读正文」入口标记（年份镇作品详情抽屉的路由键；纯数据标记，行为由
-   * onDialogueAction 消费，数据层不携带回调）。 */
-  readBody?: boolean;
-  /** readBody 入口文案；纪念设施使用“走近看看”，旧作品入口沿用默认文案。 */
-  readBodyLabel?: string;
-  /** 年份镇纪念设施的便签交互种类（盖章/点灯/留言/封存）；纯数据标记，
-   * 由弹窗渲染一个小动作，不携带回调。 */
-  noteKind?: string;
 }
 
 export interface BuildingLike {
