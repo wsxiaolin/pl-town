@@ -22,7 +22,7 @@ import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createYearTownWiring } from './yearTownWiring';
-import { mergeBuildingContent } from './data/year-towns/yearTownBuildings';
+import { mergeBuildingContent } from './yearTownBuildings';
 import type { YearTownPanelController } from '../adapters/ui/yearTownPanelController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';

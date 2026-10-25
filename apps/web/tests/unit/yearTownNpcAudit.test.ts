@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { YEAR_TOWNS } from '../../src/city/data/year-towns/towns';
-import { YEAR_TOWN_LAYOUT_CONFIGS } from '../../src/city/data/year-towns/districtLayout';
+import { YEAR_TOWN_LAYOUT_CONFIGS } from '../../src/city/yearTownBuildings';
 import { YEAR_TOWN_NPCS } from '../../src/city/data/year-towns/yearTownNpcs';
 
 // 年份镇 NPC 落位审计：坐标随 districtLayout 迁移后，必须仍在所属片区台面内、

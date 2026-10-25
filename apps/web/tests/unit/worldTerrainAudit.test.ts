@@ -9,7 +9,7 @@ import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, shorelineX } fr
 import { YEAR_ISLAND_SPECS, islandRadiusScaleAt } from '../../src/city/data/year-towns/towns';
 import { bridgeDeckBlendAt, stationPadBlendAt } from '../../src/city/data/terrain/heightfield/transitField';
 import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
-import { ISLAND_SKIRT_W } from '../../src/city/data/terrain/heightfield/islandField';
+import { ISLAND_SKIRT_W, islandSurfaceYAt } from '../../src/city/data/terrain/heightfield/islandField';
 import { PLATEAU_MAIN } from '../../src/city/data/terrain/heightfield/plateauField';
 import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
 import { TRAIL_NAV_NODES, SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES, TRAIL_SLOT_HALF, worldReliefAt } from '../../src/city/data/terrain/heightfield/worldReliefField';
@@ -388,6 +388,30 @@ test('年份群岛台面恒高：worldReliefAt 在 3 岛台面内恒等于该岛
       Math.abs(terrainHeight(town.x, town.z) - town.topY) < 1e-9,
       `${town.label} 岛心 terrainHeight 应为 ${town.topY}`,
     );
+  }
+});
+
+test('年份群岛起伏在有效台面边缘连续归零', () => {
+  for (const town of YEAR_ISLAND_SPECS) {
+    for (let index = 0; index < 64; index += 1) {
+      const theta = (index / 64) * Math.PI * 2;
+      const plateau = town.plateauR * islandRadiusScaleAt(town, theta);
+      const insideR = Math.max(0, plateau - 0.001);
+      const outsideR = plateau + 0.001;
+      const inside = islandSurfaceYAt(
+        town.x + Math.cos(theta) * insideR,
+        town.z + Math.sin(theta) * insideR,
+      );
+      const outside = islandSurfaceYAt(
+        town.x + Math.cos(theta) * outsideR,
+        town.z + Math.sin(theta) * outsideR,
+      );
+      assert.ok(inside !== null && outside !== null, `${town.label} 台面边缘采样落出岛体`);
+      assert.ok(
+        Math.abs(inside - outside) < 0.01,
+        `${town.label} 台面边缘 ${index}/64 高差 ${Math.abs(inside - outside).toFixed(4)} 过大`,
+      );
+    }
   }
 });
 

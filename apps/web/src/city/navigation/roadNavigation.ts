@@ -3,6 +3,9 @@ import { terrainHeight, slopeAlong, WALKABLE_SLOPE_MAX } from '../data/terrain/h
 import { transitGroundY } from '../data/terrain/heightfield/transitGround';
 import { SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES } from '../data/terrain/heightfield/worldReliefField';
 import { LANPING_ALPINE_FIELD } from '../data/terrain/heightfield/alpineField';
+import { isArchipelagoWaterAt } from '../data/terrain/sea-archipelago';
+import { isInsideIsland } from '../data/terrain/heightfield/islandField';
+import { bridgeCorridorWeight } from '../data/terrain/heightfield/transitField';
 
 type Coord2 = [number, number];
 type RoadSegment4 = [number, number, number, number];
@@ -74,6 +77,11 @@ export const MOUNTAIN_WALK_RISE_MAX = 0.35;
 export function mountainSurfaceBlocked(x: number, z: number): boolean {
   if (z > LANPING_ALPINE_FIELD.bounds.z1) return false;
   return LANPING_ALPINE_FIELD.heightAt(x, z) - terrainHeight(x, z) > MOUNTAIN_WALK_RISE_MAX;
+}
+
+/** 南海开放水面不可步行；岛体与星门步行桥走廊保持通行。 */
+export function archipelagoWaterBlocked(x: number, z: number): boolean {
+  return isArchipelagoWaterAt(x, z) && !isInsideIsland(x, z) && bridgeCorridorWeight(x, z) <= 0;
 }
 
 export function createRoadNavigationSystem(options: RoadNavigationOptions) {
@@ -390,6 +398,11 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   function pathBlocked(x1: number,z1: number,x2: number,z2: number): boolean {
     if(segHitsBuilding(x1,z1,x2,z2)) return true;
     const dx=x2-x1, dz=z2-z1;
+    const samples=Math.ceil(Math.hypot(dx,dz)/2);
+    for(let i=1;i<samples;i+=1) {
+      const ratio=i/samples;
+      if(archipelagoWaterBlocked(x1+dx*ratio,z1+dz*ratio)) return true;
+    }
     const len2=dx*dx+dz*dz;
     const t=len2<1e-9?0:clamp(((0-x1)*dx+(0-z1)*dz)/len2,0,1);
     const cx=x1+dx*t, cz=z1+dz*t;
@@ -407,6 +420,7 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     if(x<WORLD_BOUNDS.minX||x>WORLD_BOUNDS.maxX||z<WORLD_BOUNDS.minZ||z>WORLD_BOUNDS.maxZ) return true;
     if(x*x+z*z < FOUNTAIN_CLEAR*FOUNTAIN_CLEAR) return true;
     if(WEST_BEACH && x<WEST_BEACH.deepWaterX && z>=WEST_BEACH.minZ && z<=WEST_BEACH.maxZ) return true;
+    if(archipelagoWaterBlocked(x,z)) return true;
     if(z<DEEP_TERRAIN_Z_GATE && terrainHeight(x,z)<DEEP_TERRAIN_MIN_Y) return true;
     if(mountainSurfaceBlocked(x,z)) return true;
     return pointInAnyBuilding(x,z);

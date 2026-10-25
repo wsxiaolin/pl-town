@@ -1,4 +1,4 @@
-// 年份片区建筑装配层（设计 §7.1 修订：手写坐标 + 体量放大）。
+// 年份片区手写布局常量。运行时派生位于 city/yearTownBuildings.ts。
 //
 // 历史：本模块曾在这里跑「主街两侧 + 环巷贪心」二次布局，把生成器给的
 // 镇内坐标重排到片区圆里。结果是每座片区被半径 19 的小圆裁住，建筑只能
@@ -13,10 +13,6 @@
 //
 // 输出仍是标准 BuildingConfig（补 plot/scale），继续走
 // yearTownBuildings → buildingSceneController，与主城同管道。
-import { YEAR_TOWN_BUILDING_CONFIGS, YEAR_TOWN_BUILDING_EXTRAS } from './gen-buildings';
-import { YEAR_TOWN_MEMORIAL_BY_KEY } from './yearTownMemorials';
-import type { BuildingConfig } from '../buildings/_types';
-
 /** 年份群岛建筑统一体量系数（builder 几何是硬编码常量，靠 group 缩放放大）。 */
 export const MEMORIAL_SCALE = 1.6;
 
@@ -26,7 +22,9 @@ export const MEMORIAL_SCALE = 1.6;
  * plot 与体量缩放联动：体量放大后地块同步放大，避免地面色块小于建筑。
  */
 /** 地标（纪念名录 / 千作总目塔 / 起源村界碑）的手写落位。 */
-const LANDMARK_PLACEMENTS: Readonly<Record<string, { x: number; z: number; plot: number }>> = {
+export type YearTownPlacement = { x: number; z: number; plot: number; rotY?: number };
+
+export const LANDMARK_PLACEMENTS: Readonly<Record<string, YearTownPlacement>> = {
   'yt-arch-2020': { x: -20, z: 232, plot: 4.2 }, // 启明站房：站台东南侧，面向站前街
   'yt-arch-2021': { x: 60, z: 232, plot: 4.2 }, // 潮声站房：站台西南侧
   'yt-arch-2022': { x: -20, z: 292, plot: 4.2 }, // 盛夏站房：南站广场北侧
@@ -38,46 +36,7 @@ const LANDMARK_PLACEMENTS: Readonly<Record<string, { x: number; z: number; plot:
   'yt-stele-2019': { x: 150, z: 228, plot: 1.8 },
 };
 
-type Placement = { x: number; z: number; plot: number; rotY?: number };
-
-const FACING_ROTATION = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 } as const;
-
-const PLACEMENTS: Readonly<Record<string, Placement>> = {
-  ...Object.fromEntries(
-    Object.values(YEAR_TOWN_MEMORIAL_BY_KEY)
-      .filter((memorial) => memorial.layout)
-      .map((memorial) => [
-        memorial.key,
-        {
-          x: memorial.layout!.x,
-          z: memorial.layout!.z,
-          plot: memorial.layout!.plot ?? 4.2,
-          rotY: memorial.layout!.facing ? FACING_ROTATION[memorial.layout!.facing] : undefined,
-        },
-      ]),
-  ),
-  ...LANDMARK_PLACEMENTS,
-};
-
-/** 布局后的年份建筑配置（手写坐标 + 统一放大）。未登记布局的建筑保留生成器坐标。 */
-export const YEAR_TOWN_LAYOUT_CONFIGS: readonly BuildingConfig[] = YEAR_TOWN_BUILDING_CONFIGS.map((config) => {
-  const placement = PLACEMENTS[config.id];
-  const extras = YEAR_TOWN_BUILDING_EXTRAS[config.id];
-  const isMemorial = extras?.kind === 'work';
-  if (!placement) {
-    return isMemorial
-      ? { ...config, plot: { tex: 'ground5', size: 4.2, color: 0xe4e3e0 }, scale: MEMORIAL_SCALE }
-      : config;
-  }
-  return {
-    ...config,
-    x: placement.x,
-    z: placement.z,
-    rotY: placement.rotY,
-    plot: { tex: 'ground5', size: placement.plot, color: 0xe4e3e0 },
-    scale: isMemorial ? MEMORIAL_SCALE : 1,
-  };
-});
+export const FACING_ROTATION = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 } as const;
 
 /**
  * 片区道路/街区参数（地面渲染与装饰共用）。

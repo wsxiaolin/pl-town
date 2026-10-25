@@ -2,7 +2,7 @@
 // 由 scripts/generate_town_buildings.mjs 产出（幂等；重跑前会清理旧 gen-* 文件）。
 // 设施数据：手写目录 yearTownMemorials.ts（作品原文/评论/热度不进入年份群岛）。
 // Mirrors apps/web/src/city/data/year-towns (T5) for the admin world-config map.
-// Regenerate with `npm run gen:year-towns` after regenerating town buildings.
+// Regenerate with `node scripts/generate_town_buildings.mjs` after editing source data.
 // 治理口径（设计 §10）：年份镇建筑不入治理账本（无 personalPlots/Areas），
 // 本镜像仅作 admin 世界图展示；已筹资项目 ID 不受影响（新增目录项零迁移）。
 

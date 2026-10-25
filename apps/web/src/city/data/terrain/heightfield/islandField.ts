@@ -31,6 +31,7 @@ export const ISLAND_BEACH_TO = -0.2;
 export const ISLAND_SKIRT_BOTTOM = -0.7;
 /** 水下裙宽（滩环外缘再外伸的半径量）。 */
 export const ISLAND_SKIRT_W = 3;
+const RISE_FADE_W = 4;
 
 function smoothStep01(t: number): number {
   const c = Math.min(1, Math.max(0, t));
@@ -138,7 +139,11 @@ function profileY(
   const plateau = base.plateauR * scale;
   const beach = base.beachR * scale;
   if (rho > beach + ISLAND_SKIRT_W) return null;
-  if (rho <= plateau) return base.topY + rise;
+  if (rho <= plateau) {
+    const fadeWidth = Math.min(RISE_FADE_W, plateau);
+    const edge = smoothStep01((rho - (plateau - fadeWidth)) / fadeWidth);
+    return base.topY + rise * (1 - edge);
+  }
   if (rho <= beach) {
     const t = smoothStep01((rho - plateau) / Math.max(1e-6, beach - plateau));
     return base.topY + (ISLAND_BEACH_TO - base.topY) * t;

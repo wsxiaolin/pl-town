@@ -41,6 +41,8 @@ export interface BuildingContentLike {
   /** 「阅读正文」入口标记（年份镇作品详情抽屉的路由键；纯数据标记，行为由
    * onDialogueAction 消费，数据层不携带回调）。 */
   readBody?: boolean;
+  /** readBody 入口文案；纪念设施使用“走近看看”，旧作品入口沿用默认文案。 */
+  readBodyLabel?: string;
   /** 年份镇纪念设施的便签交互种类（盖章/点灯/留言/封存）；纯数据标记，
    * 由弹窗渲染一个小动作，不携带回调。 */
   noteKind?: string;
@@ -504,7 +506,7 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         const read = document.createElement('button');
         read.type = 'button';
         read.className = 'modal-read';
-        read.textContent = '阅读正文';
+        read.textContent = content.readBodyLabel ?? '阅读正文';
         read.addEventListener('click', () => {
           controller.closeBuilding();
           options.onDialogueAction?.(`${READ_BODY_ACTION_PREFIX}${building.id}`, 'city-dialog');

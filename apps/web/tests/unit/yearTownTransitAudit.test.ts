@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { TRANSIT_STATION_IDS, SCENE_INTEREST_POINT_IDS } from '../../src/gameplay/world/sceneInteractions';
 import { YEAR_ISLAND_SPECS, yearTownById } from '../../src/city/data/year-towns/towns';
-import { YEAR_TOWN_LAYOUT_CONFIGS } from '../../src/city/data/year-towns/districtLayout';
+import { YEAR_TOWN_LAYOUT_CONFIGS } from '../../src/city/yearTownBuildings';
 import { SOUTH_TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import {
   BRIDGE_CORRIDOR_HALF,

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { YEAR_TOWN_BUILDING_EXTRAS } from '../../src/city/data/year-towns/gen-buildings';
 import { YEAR_TOWN_MEMORIAL_INDEX } from '../../src/city/data/year-towns/gen-index';
+import { yearTownBuildingContent } from '../../src/city/yearTownBuildings';
 import {
   FAMILY_LABELS,
   READ_BODY_ACTION_PREFIX,
@@ -41,6 +42,20 @@ test('纪念名录建筑有导语视图（7 座名录 + 总目塔）', () => {
     assert.ok(view, `${id} 应有地标导语视图`);
     assert.ok(view?.note.length, `${id} 导语不应为空`);
   }
+});
+
+test('设施铭牌接入纪念面板，界碑保留配置名称', () => {
+  const facility = yearTownBuildingContent('yt-w2019-01');
+  assert.equal(facility?.readBody, true);
+  assert.equal(facility?.readBodyLabel, '走近看看');
+  assert.equal(yearTownBuildingContent('yt-stele-2019')?.name, '起源村·界碑');
+  assert.equal(memorialViewOfBuilding('yt-stele-2019')?.facility, '起源村·界碑');
+});
+
+test('四类便签交互均绑定到真实纪念设施', () => {
+  const kinds = ['yt-w2019-01', 'yt-w2024-16', 'yt-w2025-08', 'yt-w2026-09']
+    .map((id) => memorialOfBuilding(id)?.noteKind);
+  assert.deepEqual(kinds, ['stamp', 'lamp', 'leaving', 'capsule']);
 });
 
 test('设施视图不含社区统计数据（无热度/评论/浏览量字段）', () => {

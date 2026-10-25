@@ -401,7 +401,7 @@ function nearestRingBerth(x: number, z: number): { dist: number; stationY: numbe
  */
 export function ringBeamYAt(x: number, z: number): number {
   const { dist, stationY } = nearestRingBerth(x, z);
-  const t = smoothStep01((dist - RING_STATION_BLEND_NEAR) / (RING_STATION_BLEND_NEAR + RING_STATION_BLEND_FAR - RING_STATION_BLEND_NEAR));
+  const t = smoothStep01((dist - RING_STATION_BLEND_NEAR) / (RING_STATION_BLEND_FAR - RING_STATION_BLEND_NEAR));
   return stationY + (RING_BEAM_SEA_Y - stationY) * t;
 }
 

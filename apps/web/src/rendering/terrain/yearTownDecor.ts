@@ -53,8 +53,8 @@ const URBAN_DECOR: readonly UrbanDecor[] = [
   { kind: 'catsign', x: -234, z: 238 }, { kind: 'bench', x: -239, z: 238, rotY: Math.PI / 2 },
   { kind: 'windflag', x: -234, z: 279, tint: 0x3b6fe0 }, { kind: 'board', x: -240, z: 279 },
   { kind: 'antenna', x: -196, z: 259, tint: 0x9ecbff }, { kind: 'bench', x: -196, z: 266 },
-  { kind: 'windflag', x: -251, z: 243, tint: 0x2a3038 },
-  { kind: 'windflag', x: -247, z: 302, tint: 0x3b6fe0 },
+  { kind: 'windflag', x: -248.2, z: 243, tint: 0x2a3038 },
+  { kind: 'windflag', x: -247, z: 303.5, tint: 0x3b6fe0 },
   { kind: 'lighthouse', x: -152, z: 199 },
 ];
 

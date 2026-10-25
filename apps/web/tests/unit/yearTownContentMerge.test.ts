@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BUILDING_CONTENT } from '../../src/city/data/buildings';
-import { mergeBuildingContent, YEAR_TOWN_BUILDING_CONTENT } from '../../src/city/data/year-towns/yearTownBuildings';
+import { mergeBuildingContent, YEAR_TOWN_BUILDING_CONTENT } from '../../src/city/yearTownBuildings';
 import { YEAR_TOWN_CATALOG_CONTENT } from '../../src/adapters/ui/yearTownCatalogController';
 
 test('主城与年份镇建筑内容键不重叠', () => {

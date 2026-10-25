@@ -34,7 +34,6 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOWNS_DIR = join(REPO_ROOT, 'apps/web/src/city/data/year-towns');
 const SERVER_DATA_DIR = join(REPO_ROOT, 'apps/server/src/data');
 const DOCS_DIR = join(REPO_ROOT, 'docs');
-const NODE = process.execPath; // 必须用 /home/z/node22/bin/node 运行（README 教训 #12）
 
 // ── 设计常量（docs/year-towns-design.md）──────────────────────────────────
 const TOP_N = { 2019: 2, 2020: 10, 2021: 16, 2022: 20, 2023: 18, 2024: 16, 2025: 12, 2026: 12 };
@@ -502,7 +501,7 @@ export const YEAR_TOWN_MEMORIAL_INDEX: readonly MemorialIndexEntry[] = data.memo
 `;
 
 const yearTownCatalogTs = `${GEN_HEADER}// Mirrors apps/web/src/city/data/year-towns (T5) for the admin world-config map.
-// Regenerate with \`npm run gen:year-towns\` after regenerating town buildings.
+// Regenerate with \`node scripts/generate_town_buildings.mjs\` after editing source data.
 // 治理口径（设计 §10）：年份镇建筑不入治理账本（无 personalPlots/Areas），
 // 本镜像仅作 admin 世界图展示；已筹资项目 ID 不受影响（新增目录项零迁移）。
 
@@ -535,7 +534,7 @@ for (const p of memorialPlaced) familyCounts[p.family] = (familyCounts[p.family]
 
 const report = {
   generator: 'scripts/generate_town_buildings.mjs',
-  node: NODE,
+  node: `node${process.versions.node.split('.')[0]}`,
   dataBaseline: { mode: hasDataSource ? 'full-data' : 'offline-rebuild' },
   towns: YEAR_TOWNS.map((town) => ({
     year: town.year,
@@ -641,7 +640,7 @@ if (CHECK_ONLY) {
     if (!existsSync(path)) { log(`MISSING ${path}`); mismatched += 1; continue; }
     if (readFileSync(path, 'utf8') !== text) { log(`STALE   ${path}`); mismatched += 1; }
   }
-  if (mismatched > 0) { log(`check 失败：${mismatched} 个产物与磁盘不一致（重跑 npm run gen:year-towns）`); process.exit(1); }
+  if (mismatched > 0) { log(`check 失败：${mismatched} 个产物与磁盘不一致（重跑 node scripts/generate_town_buildings.mjs）`); process.exit(1); }
   log(`check 通过：${outputs.size} 个生成产物与磁盘逐字节一致。`);
 } else {
   mkdirSync(TOWNS_DIR, { recursive: true });
@@ -649,5 +648,5 @@ if (CHECK_ONLY) {
   mkdirSync(DOCS_DIR, { recursive: true });
   for (const [path, text] of outputs) writeFileSync(path, text);
   log(`生成完成：${outputs.size} 个文件（纪念设施 ${memorialPlaced.length} 座、总结构 ${allPlaced.length} 座）。`);
-  log('  幂等性：npm run gen:year-towns -- --check 可逐字节复核（两次运行产出一致）。');
+  log('  幂等性：node scripts/generate_town_buildings.mjs --check 可逐字节复核（两次运行产出一致）。');
 }

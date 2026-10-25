@@ -47,6 +47,7 @@ export const YEAR_TOWN_MEMORIALS: readonly YearTownMemorial[] = [
     layout: { x: 138, z: 211, plot: 5.5, facing: 'e' },
     facility: '律法碑廊',
     family: 'law',
+    noteKind: 'stamp',
     note: '这里立着社区最早的成文规矩。它把「怎样共处」写成可宣读的条文，此后每一次修订都以它为准绳。',
   },
   {
@@ -705,6 +706,7 @@ export const YEAR_TOWN_MEMORIALS: readonly YearTownMemorial[] = [
     layout: { x: -230, z: 241, plot: 3.8, facing: 'n' }, // 内巷夜售店照亮院口
     facility: '夜售店',
     family: 'market',
+    noteKind: 'lamp',
     note: '一盏通宵不灭的灯。店里卖什么并不重要，重要的是它证明这里夜里也有人。',
   },
 
@@ -771,6 +773,7 @@ export const YEAR_TOWN_MEMORIALS: readonly YearTownMemorial[] = [
     layout: { x: -231, z: 292, plot: 3.2, facing: 's' }, // 南排送别亭
     facility: '远行公告亭',
     family: 'memorial',
+    noteKind: 'leaving',
     note: '有人要走时，会在这里留一张纸条。亭子不挽留，只把纸条收好。',
   },
   {
@@ -877,6 +880,7 @@ export const YEAR_TOWN_MEMORIALS: readonly YearTownMemorial[] = [
     layout: { x: -200, z: 292, plot: 3.2, facing: 's' }, // 南排时间胶囊亭
     facility: '时间胶囊亭',
     family: 'memorial',
+    noteKind: 'capsule',
     note: '亭下埋着这一年封存的记录。开启的日期写在石板上，谁都可以来看它还剩多久。',
   },
   {

@@ -24,7 +24,7 @@ import { createNpcSystem, type Npc } from './npcSystem';
 import { NPC_PROFILES } from './data/npcs';
 import { YEAR_TOWN_NPCS } from './data/year-towns/yearTownNpcs';
 import { BUILDING_DEFS } from './data/buildings';
-import { YEAR_TOWN_BUILDING_DEFS } from './data/year-towns/yearTownBuildings';
+import { YEAR_TOWN_BUILDING_DEFS } from './yearTownBuildings';
 import { CITY_LIMIT, NORTH_DISTRICT_AREA, PALETTE, ROAD_COORDS } from './data/cityConfig';
 import { addCityFountain } from './citySceneBootstrap';
 import type { CityGraphics } from './cityGraphics';

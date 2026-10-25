@@ -1,6 +1,6 @@
 {
   "generator": "scripts/generate_town_buildings.mjs",
-  "node": "/usr/local/bin/node",
+  "node": "node22",
   "dataBaseline": {
     "mode": "offline-rebuild"
   },

@@ -1,3 +1,25 @@
+.DS_Store
+.pixi/
+.claude/
+.opencode/
+.agents/
+.env
+diagnostics-output/
+.tmp-check/
+apps/server/data/
+/data/
+logs/
+apps/server/logs/
+todo.txt
+.texture-responses/
+texture-batch-4k.png
+texture-batch-response.json
+weather-atlas-*.png
+review_prompt.txt
+review_report.md
+review_report_clean.md
+final_comment.md
+conclusion.md
 
 # 年份镇产物：gen-buildings.ts（建筑配置）与 gen-index.ts（纪念名录索引）是运行时
 # 必需的静态数据，且需要外部数据源才能重算，故入库提交；

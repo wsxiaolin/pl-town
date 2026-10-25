@@ -8,7 +8,7 @@
 // MiniCityApp 组合根路由到本控制器 open(buildingId)；纪念名录条目经
 // yearTownCatalogController 直接按条目开卷。
 // 单 WebGL 上下文红线：纯 DOM 抽屉，不新增 canvas；样式见 modules/year-town-panel.css。
-import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
+import { YEAR_TOWN_BUILDING_CONFIGS, YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
 import { YEAR_TOWN_MEMORIAL_INDEX } from '../../city/data/year-towns/gen-index';
 import { YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES } from '../../city/data/year-towns/yearTownMemorials';
 import { YEAR_TOWNS } from '../../city/data/year-towns/towns';
@@ -45,6 +45,7 @@ const NOTE_LABELS: Readonly<Record<string, { action: string; done: string }>> = 
   leaving: { action: '留一句话', done: '话留在这里了。' },
   capsule: { action: '封存此刻', done: '已封存。下次开启时再来看。' },
 };
+const YEAR_TOWN_LABEL_BY_ID = new Map(YEAR_TOWN_BUILDING_CONFIGS.map((config) => [config.id, config.label]));
 
 /** 取便签交互文案（无交互返回 undefined）。 */
 export function noteLabelOf(noteKind: string | undefined) {
@@ -99,7 +100,7 @@ export function memorialViewOfBuilding(buildingId: string): MemoralView | undefi
   const town = YEAR_TOWNS.find((t) => t.id === extras.townId);
   return {
     key: buildingId,
-    facility: town ? `${town.label}纪念名录` : '纪念名录',
+    facility: YEAR_TOWN_LABEL_BY_ID.get(buildingId) ?? (town ? `${town.label}纪念名录` : '纪念名录'),
     note,
     family: 'press',
     year: extras.year,

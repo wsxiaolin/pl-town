@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { clipPlotToMainRoad, footprintOverlapsMainRoad } from '../../src/city/data/cityConfig';
 import { BUILDING_PLOT_MAP } from '../../src/city/data/buildingPlots';
 import { BUILDING_DEFS } from '../../src/city/data/buildings';
-import { createRoadNavigationSystem, buildMeadowTrailGraph, mountainSurfaceBlocked, MOUNTAIN_WALK_RISE_MAX } from '../../src/city/navigation/roadNavigation';
+import { archipelagoWaterBlocked, createRoadNavigationSystem, buildMeadowTrailGraph, mountainSurfaceBlocked, MOUNTAIN_WALK_RISE_MAX } from '../../src/city/navigation/roadNavigation';
 import { NORTH_TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 import { LANPING_ALPINE_FIELD } from '../../src/city/data/terrain/heightfield/alpineField';
@@ -65,6 +65,12 @@ test('deep water returns the player to the beach', () => {
   const navigation = navigationWithBuilding();
   const returned = navigation.resolveMovement(new THREE.Vector3(-44, 0, 10), new THREE.Vector3(-46, 0, 10));
   assert.deepEqual(returned.toArray(), [-42.2, 0, 10]);
+});
+
+test('south sea blocks walking while islands and the stargate bridge stay open', () => {
+  assert.equal(archipelagoWaterBlocked(80, 180), true, '南海开放水面应阻挡步行');
+  assert.equal(archipelagoWaterBlocked(150, 210), false, '起源村岛面应保持可走');
+  assert.equal(archipelagoWaterBlocked(121, 165.5), false, '星门步行桥走廊应保持可走');
 });
 
 test('building clearance leaves nearby walking space available', () => {

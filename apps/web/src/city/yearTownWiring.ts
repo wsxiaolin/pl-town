@@ -13,7 +13,7 @@ import type { YearTownPanelController } from '../adapters/ui/yearTownPanelContro
 import type { TransitStationId } from '../gameplay/world/sceneInteractions';
 import { buildTransitRoadGraph } from './data/year-towns/transit';
 import { YEAR_TOWN_ANCHORS, YEAR_TOWN_MARKERS, yearTownPanBounds } from './data/year-towns/towns';
-import { YEAR_TOWN_BUILDING_CONTENT } from './data/year-towns/yearTownBuildings';
+import { YEAR_TOWN_BUILDING_CONTENT } from './yearTownBuildings';
 import { createTransitRideController } from './transitRideController';
 
 type TransitDialogs = Pick<CityDialogController, 'openStory' | 'dismissNpc'>;

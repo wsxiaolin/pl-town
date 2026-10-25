@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { YEAR_DISTRICTS, YEAR_ISLAND_SPECS, YEAR_TOWNS, islandOutlinePolygon, yearTownsOfDistrict, type IslandStreetGrid, type YearDistrictSpec, type YearTownSpec } from '../../city/data/year-towns/towns';
+import { terrainHeight } from '../../city/data/terrain/heightfield/terrainHeight';
 import { YEAR_TOWN_SURFACE_Y } from './yearTownGroundLayers';
 import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
 import { inferPlot } from '../../city/data/buildings/_shapeDefaults';
@@ -130,24 +131,32 @@ function pushSegmentStrip(
   x1: number,
   z1: number,
   halfWidth: number,
-  y: number,
+  layerOffset: number,
   color: THREE.Color,
 ): void {
   const dx = x1 - x0;
   const dz = z1 - z0;
   const length = Math.hypot(dx, dz);
   if (length < 0.01) return;
-  const px = (-dz / length) * halfWidth;
-  const pz = (dx / length) * halfWidth;
-  pushQuad(
-    surface,
-    [x0 + px, z0 + pz],
-    [x1 + px, z1 + pz],
-    [x1 - px, z1 - pz],
-    [x0 - px, z0 - pz],
-    y,
-    color,
-  );
+  const ux = dx / length;
+  const uz = dz / length;
+  const px = -uz * halfWidth;
+  const pz = ux * halfWidth;
+  const sections = Math.max(1, Math.ceil(length / 2));
+  for (let index = 0; index < sections; index += 1) {
+    const start = index / sections;
+    const end = (index + 1) / sections;
+    const ax = x0 + dx * start;
+    const az = z0 + dz * start;
+    const bx = x0 + dx * end;
+    const bz = z0 + dz * end;
+    const a: [number, number, number] = [ax + px, terrainHeight(ax + px, az + pz) + layerOffset, az + pz];
+    const b: [number, number, number] = [bx + px, terrainHeight(bx + px, bz + pz) + layerOffset, bz + pz];
+    const c: [number, number, number] = [bx - px, terrainHeight(bx - px, bz - pz) + layerOffset, bz - pz];
+    const d: [number, number, number] = [ax - px, terrainHeight(ax - px, az - pz) + layerOffset, az - pz];
+    pushTriangle(surface, a, b, c, color);
+    pushTriangle(surface, a, c, d, color);
+  }
 }
 
 function pushDisc(surface: Surface, x: number, z: number, radius: number, y: number, color: THREE.Color, segments = 40): void {
@@ -232,14 +241,14 @@ function addStreetGrid(surface: Surface, district: YearDistrictSpec): void {
     const half = street.halfWidth;
     const walkExtra = street.kind === 'avenue' ? 1.2 : street.kind === 'promenade' ? 0.65 : 0.9;
     const roadColor = street.kind === 'promenade' ? tint(0xb8aa91) : paving;
-    pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, half + walkExtra, base + L.sidewalk, sidewalk);
-    pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, half, base + L.road, roadColor);
+    pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, half + walkExtra, L.sidewalk, sidewalk);
+    pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, half, L.road, roadColor);
     if (street.kind !== 'promenade') {
-      pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, half, base + L.curb, curb);
-      pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, Math.max(0, half - CURB), base + L.road, roadColor);
+      pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, half, L.curb, curb);
+      pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, Math.max(0, half - CURB), L.road, roadColor);
     }
     if (street.kind === 'avenue') {
-      pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, 0.09, base + L.centerline, tint(0xe8e4da));
+      pushSegmentStrip(surface, street.x0, street.z0, street.x1, street.z1, 0.09, L.centerline, tint(0xe8e4da));
     }
   }
 

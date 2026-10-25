@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { YEAR_TOWN_BUILDING_DEFS } from '../../src/city/data/year-towns/yearTownBuildings';
+import { YEAR_TOWN_BUILDING_DEFS } from '../../src/city/yearTownBuildings';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 import { islandSurfaceYAt } from '../../src/city/data/terrain/heightfield/islandField';
 import { YEAR_DISTRICTS } from '../../src/city/data/year-towns/towns';
