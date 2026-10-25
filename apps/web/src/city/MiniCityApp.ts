@@ -275,8 +275,7 @@ const interactionTracker = createInteractionTracker({
 
 const sceneAnimations = createSceneAnimations({ getBuildings: () => buildings, reduced: REDUCED });
 
-// 年份镇接线：乘车控制器立即可用；HUD 面板、dialog、mapController 均在 init 内就绪，走惰性 getter。
-let yearTownPanel: YearTownPanelController | undefined;
+let yearTownPanel: YearTownPanelController | undefined; // 面板在 init 内就绪，yearTown 走惰性 getter
 const yearTown = createYearTownWiring({ document, getSignal: () => lifecycle.signal, cityLimit: CITY_LIMIT, getPanel: () => yearTownPanel,
   getCursorChar: () => cursorChar, getDialogs: () => cityDialogs, getMap: () => mapController, clearPlayerPath: () => view.clearPlayerPath(), showToast: showUnlockToast });
 
