@@ -32,6 +32,22 @@ const toDefinition = (config: BuildingConfig): BuildingDefinition => ({
 /** 年份镇建筑定义（115 座；与 BUILDING_DEFS 合流进 buildingSceneController）。 */
 export const YEAR_TOWN_BUILDING_DEFS: readonly BuildingDefinition[] = YEAR_TOWN_LAYOUT_CONFIGS.map(toDefinition);
 
+/**
+ * 主城与年份镇建筑内容合流（T6R-b1）。冲突时保留主城内容并告警：
+ * 年份镇使用独立 id 前缀（yt-），当前不应有重叠；未来扩展若撞键，
+ * 主城对话/任务入口不会被静默替换。
+ */
+export function mergeBuildingContent(
+  main: Readonly<Record<string, BuildingContentLike>>,
+  extra: Readonly<Record<string, BuildingContentLike>>,
+): Record<string, BuildingContentLike> {
+  const overlap = Object.keys(extra).filter((id) => id in main);
+  if (overlap.length > 0) {
+    console.warn(`year-town building content conflicts with main city: ${overlap.join(', ')}`);
+  }
+  return { ...extra, ...main };
+}
+
 /** 按 id 取建筑附加信息（kind/townId/year/workId/townRank）。 */
 export function yearTownExtras(id: string) {
   return YEAR_TOWN_BUILDING_EXTRAS[id];

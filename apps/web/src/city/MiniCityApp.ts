@@ -22,6 +22,7 @@ import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
 import { createSceneInterestPointController } from './sceneInterestPointController';
 import { initStoryTaskGuideWiring } from './storyTaskGuideWiring';
 import { createYearTownWiring } from './yearTownWiring';
+import { mergeBuildingContent } from './data/year-towns/yearTownBuildings';
 import type { YearTownPanelController } from '../adapters/ui/yearTownPanelController';
 import { createMapController } from './mapController';
 import { createPlayerController } from './navigation/playerController';
@@ -739,7 +740,7 @@ function init() {
   });
   cityDialogs = createCityDialogController({
     document,
-    buildingContent: { ...BUILDING_CONTENT, ...yearTown.buildingContent }, // T6R-b1 铭牌合流 + b3 档案馆/总目塔目录入口（无内容键落兜底）
+    buildingContent: mergeBuildingContent(BUILDING_CONTENT, yearTown.buildingContent), // T6R-b1 铭牌合流 + b3 档案馆/总目塔目录入口（无内容键落兜底）
     isConstructionPending,
     getQuestAction: (npcId) => questRuntime.getNpcAction(npcId, readQuestProgressView(multiplayerHousing)),
     performQuestAction: (action, at) => questRuntime.performNpcAction(action, at),
