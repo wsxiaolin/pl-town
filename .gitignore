@@ -1,31 +1,12 @@
-.DS_Store
-.pixi/
-.claude/
-.opencode/
-.agents/
-.env
+
+# 年份镇 T5 生成物（scripts/generate_town_buildings.mjs 产出；GOAL 红线：生成物不入 git）
+apps/web/src/city/data/year-towns/gen-*
+
+# 依赖与构建产物
 node_modules/
+apps/web/node_modules/
 dist/
+apps/web/dist/
+apps/server/dist/
 test-results/
 playwright-report/
-diagnostics-output/
-apps/server/data/
-/data/
-logs/
-apps/server/logs/
-todo.txt
-.texture-responses/
-texture-batch-4k.png
-texture-batch-response.json
-weather-atlas-*.png
-# AI review workflow scratch files (written to the repo root at runtime)
-review_prompt.txt
-review_report.md
-review_report_clean.md
-final_comment.md
-conclusion.md
-
-# 年份镇 T5 生成物（scripts/generate_town_buildings.mjs 产出）
-# 2026-10-19 用户决定采用方案 A：gen-* 40 模块随 PR 入库，保证 clone 后
-# typecheck/build/dev 全绿，因此这里故意不设置忽略规则。重新生成后记得
-# 把变化的 gen-* 一并提交；体积由 check:asset-size 另行把关。

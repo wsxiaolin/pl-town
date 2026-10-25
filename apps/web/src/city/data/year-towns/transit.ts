@@ -117,11 +117,11 @@ function smoothStep01(t: number): number {
 /** 桥面走廊中心线折线（B1..B5 + 北广场端点；星门站 (36,101) 在首段上）。 */
 export const BRIDGE_WALK_NODES: readonly PolylineNode[] = [
   { x: 34, z: 98 }, // B1 自南步道 S4 观景平台 (34,96) 南缘出发
-  { x: 48, z: 118 }, // B2 城南草甸东南裙坡
-  { x: 66, z: 142 }, // B3 入海前最后陆点（z≈144 入海）
-  { x: 82, z: 166 }, // B4 海上主跨
-  { x: 96, z: 189 }, // B5 落起源村北滩
-  { x: 96, z: 197 }, // 起源村·桥站北广场
+  { x: 63, z: 120.5 }, // B2 城南草甸东南裙坡
+  { x: 92, z: 143 }, // B3 入海前最后陆点
+  { x: 121, z: 165.5 }, // B4 海上主跨
+  { x: 150, z: 188 }, // B5 落起源村北滩
+  { x: 150, z: 196 }, // 起源村·桥站北广场
 ];
 
 /** 桥面半宽（桥面宽 4.2 = 中央电车轨 1.8 + 两侧步道各 1.2，设计 §5.1）。 */
@@ -169,8 +169,8 @@ export function bridgePointAt(s: number): PolylineTangentPoint {
 
 /** 双塔位（装饰塔，高 14，斜拉索造型；设计 §5.1）。 */
 export const BRIDGE_TOWERS: readonly { x: number; z: number }[] = [
-  { x: 70, z: 148 },
-  { x: 86, z: 170 },
+  { x: 107, z: 154 },
+  { x: 136, z: 177 },
 ];
 
 // ── 群岛环线（磁悬浮，设计 §5.2）───────────────────────────────────────────
@@ -181,30 +181,42 @@ export const BRIDGE_TOWERS: readonly { x: number; z: number }[] = [
  * 保证上车点、轨道梁、海图圆点三者同坐标；外环与片区建筑中心净距 ≥6.7u。
  */
 export const RING_LOOP_NODES: readonly PolylineNode[] = [
-  // 启源站枢纽（闭环起点）
-  { x: 96, z: 212 },
-  // 旧港城：半径 50 的片区外环，站点位于各片区朝外主街延长线
-  { x: 55.36, z: 202.64 }, // 潮声镇站（2021）
-  { x: 70, z: 238 },
-  { x: 55.36, z: 273.36 }, // 回响镇站（2023）
-  { x: 20, z: 288 },
-  { x: -15.36, z: 273.36 }, // 盛夏镇站（2022）
-  { x: -30, z: 238 },
-  { x: -15.36, z: 202.64 }, // 启明镇站（2020）
-  { x: 20, z: 189 },
-  // 两城之间的海面联络线
-  { x: -179.64, z: 214.64 }, // 长风镇站（2025）
-  { x: -165, z: 250 },
-  { x: -215, z: 300 }, // 星港站（2026）
-  { x: -265, z: 250 },
-  { x: -250.36, z: 214.64 }, // 微光镇站（2024）
-  { x: -270, z: 185 }, // 星港西北外海（避开 2024 片区外圈建筑）
-  { x: -270, z: 320 },
-  // 南海回程（避开两城滩环）
-  { x: -120, z: 320 },
-  { x: 20, z: 320 },
-  { x: 70, z: 305 },
-  { x: 96, z: 285 },
+  // 起源村·环线站（闭环起点）
+  { x: 150, z: 197 },
+  { x: 150, z: 212 },
+  // 起源村 → 旧港城东侧海面（从东侧接近旧港环，避开北侧建筑区）
+  { x: 132, z: 222 },
+  { x: 104, z: 244 },
+  { x: 80, z: 262 },
+  // 旧港城环（半径 60，串四个年份站）
+  { x: 68.5, z: 297.3 },
+  { x: 65.9, z: 294.79 }, // 回响镇站（2023）
+  { x: 20, z: 322.0 },
+  { x: -25.9, z: 294.79 }, // 盛夏镇站（2022）
+  { x: -28.5, z: 297.3 },
+  { x: -40.0, z: 262.0 },
+  { x: -28.5, z: 226.7 },
+  { x: -25.9, z: 229.21 }, // 启明镇站（2020）
+  { x: 20, z: 202.0 },
+  { x: 65.9, z: 229.21 }, // 潮声镇站（2021）
+  { x: 68.5, z: 226.7 },
+  // 旧港 → 星港海面联络
+  { x: 40, z: 190 },
+  { x: -120, z: 190 },
+  // 星港城环（串三个站）
+  { x: -172.34, z: 282.66 }, // 星港站（2026）
+  { x: -215, z: 306 },
+  { x: -257.66, z: 282.66 }, // 长风镇站（2025）
+  { x: -265, z: 256 },
+  { x: -280, z: 232 },
+  { x: -215, z: 208 }, // 微光镇站（2024）
+  { x: -190, z: 205 },
+  { x: -175, z: 232 },
+  // 回程：绕开两城与起源村
+  { x: -120, z: 172 },
+  { x: 40, z: 170 },
+  { x: 110, z: 168 },
+  { x: 140, z: 180 },
 ];
 
 const RING_CLOSED_NODES: readonly PolylineNode[] = [...RING_LOOP_NODES, RING_LOOP_NODES[0]!];
@@ -300,8 +312,8 @@ const STATION_SEEDS: readonly StationSeed[] = [
     id: 'station-2019-bridge',
     name: '启源站·桥站',
     line: 'stargate',
-    x: 96,
-    z: 197,
+    x: 150,
+    z: 196,
     townId: 'island-2019',
     towardX: 0,
     towardZ: 1,
@@ -310,19 +322,19 @@ const STATION_SEEDS: readonly StationSeed[] = [
     id: 'station-2019-ring',
     name: '启源站·环线站',
     line: 'ring',
-    x: 96,
-    z: 212,
+    x: 150,
+    z: 203,
     townId: 'island-2019',
     towardX: 0,
     towardZ: -1,
   },
-  { id: 'station-2020', name: '启明镇站', line: 'ring', x: -15.36, z: 202.64, townId: 'island-2020', towardX: 0.707, towardZ: 0.707 },
-  { id: 'station-2021', name: '潮声镇站', line: 'ring', x: 55.36, z: 202.64, townId: 'island-2021', towardX: -0.707, towardZ: 0.707 },
-  { id: 'station-2022', name: '盛夏镇站', line: 'ring', x: -15.36, z: 273.36, townId: 'island-2022', towardX: 0.707, towardZ: -0.707 },
-  { id: 'station-2023', name: '回响镇站', line: 'ring', x: 55.36, z: 273.36, townId: 'island-2023', towardX: -0.707, towardZ: -0.707 },
-  { id: 'station-2024', name: '微光镇站', line: 'ring', x: -250.36, z: 214.64, townId: 'island-2024', towardX: 0.707, towardZ: 0.707 },
-  { id: 'station-2025', name: '长风镇站', line: 'ring', x: -179.64, z: 214.64, townId: 'island-2025', towardX: -0.707, towardZ: 0.707 },
-  { id: 'station-2026', name: '星港站', line: 'ring', x: -215, z: 300, townId: 'island-2026', towardX: 0, towardZ: -1 },
+  { id: 'station-2020', name: '启明镇站', line: 'ring', x: -25.9, z: 229.21, townId: 'island-2020', towardX: -0.814, towardZ: -0.581 },
+  { id: 'station-2021', name: '潮声镇站', line: 'ring', x: 65.9, z: 229.21, townId: 'island-2021', towardX: 0.814, towardZ: -0.581 },
+  { id: 'station-2022', name: '盛夏镇站', line: 'ring', x: -25.9, z: 294.79, townId: 'island-2022', towardX: -0.814, towardZ: 0.581 },
+  { id: 'station-2023', name: '回响镇站', line: 'ring', x: 65.9, z: 294.79, townId: 'island-2023', towardX: 0.814, towardZ: 0.581 },
+  { id: 'station-2024', name: '微光镇站', line: 'ring', x: -215, z: 208, townId: 'island-2024', towardX: 0, towardZ: -1 },
+  { id: 'station-2025', name: '长风镇站', line: 'ring', x: -257.66, z: 282.66, townId: 'island-2025', towardX: -0.848, towardZ: 0.53 },
+  { id: 'station-2026', name: '星港站', line: 'ring', x: -172.34, z: 282.66, townId: 'island-2026', towardX: 0.848, towardZ: 0.53 },
 ];
 
 export const TRANSIT_STATIONS: readonly TransitStationSpec[] = STATION_SEEDS.map((seed) => {
@@ -404,7 +416,7 @@ export function buildTransitRoadGraph(): {
   const nodes: [number, number][] = [
     [34, 96], // S4 观景平台（与南步道端点重合，桥链由此挂接）
     ...BRIDGE_WALK_NODES.map((node) => [node.x, node.z] as [number, number]),
-    [96, 212], // 起源村·环线站（村主街端点）
+    [150, 203], // 起源村·环线站（村主街端点）
   ];
   const segments: [number, number, number, number][] = [];
   for (let i = 0; i + 1 < nodes.length; i += 1) {
@@ -435,8 +447,8 @@ export interface TransitRoute {
 
 /** 起源村枢纽街（桥站 (96,197) ↔ 环线站 (96,212)，村主街）。 */
 export const HUB_CONNECTOR_NODES: readonly PolylineNode[] = [
-  { x: 96, z: 197 },
-  { x: 96, z: 212 },
+  { x: 150, z: 196 },
+  { x: 150, z: 203 },
 ];
 
 const ROUTE_SAMPLE_STEP = 2; // 飞掠折线采样步长
@@ -461,10 +473,15 @@ function bridgePiece(reversed: boolean): TransitRoutePoint[] {
 
 /** 枢纽街折线（y 自桥端 1.0 缓升至环线站梁高，换乘视作站台缓升）。 */
 function hubPiece(fromRing: boolean): TransitRoutePoint[] {
-  const bridgeEndY = bridgeDeckProfileY(197);
+  // 枢纽街端点取自实际节点（桥站 ↔ 环线站），按弧长比例线性爬升，
+  // 不再硬编码坐标与分母（岛屿坐标调整后仍保持纵断面连续）。
+  const startNode = HUB_CONNECTOR_NODES[0]!;
+  const endNode = HUB_CONNECTOR_NODES[HUB_CONNECTOR_NODES.length - 1]!;
+  const span = Math.hypot(endNode.x - startNode.x, endNode.z - startNode.z) || 1;
+  const bridgeEndY = bridgeDeckProfileY(startNode.z);
   const ringStationY = (stationById('station-2019-ring')?.baseY ?? 1) + RING_BEAM_STATION_LIFT;
-  return samplePiece(HUB_CONNECTOR_NODES, fromRing, (_x, z) => {
-    const t = Math.abs(z - 197) / 15;
+  return samplePiece(HUB_CONNECTOR_NODES, fromRing, (x, z) => {
+    const t = Math.min(1, Math.hypot(x - startNode.x, z - startNode.z) / span);
     return bridgeEndY + (ringStationY - bridgeEndY) * t;
   });
 }
@@ -592,7 +609,7 @@ export interface TransitMapOverlay {
 export const TRANSIT_MAP_OVERLAY: TransitMapOverlay = {
   stations: [
     { id: 'station-stargate', label: '星门站', x: 36, z: 101 },
-    { id: 'station-2019', label: '起源村枢纽', x: 96, z: 204 },
+    { id: 'station-2019', label: '起源村枢纽', x: 150, z: 200 },
     ...TRANSIT_STATIONS
       .filter((station) => station.line === 'ring' && station.id !== 'station-2019-ring')
       .map((station) => ({ id: station.id, label: station.name, x: station.x, z: station.z })),

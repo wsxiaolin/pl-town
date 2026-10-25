@@ -1,86 +1,89 @@
-// 年份镇集中检索目录（T6R-b3，GOAL#5：1000 条作品全部可被浏览）。
-// 入口：镇档案馆（yt-arch-*）/ 千作总目塔（yt-tower）走铭牌对话的选项层
-// （BuildingContentLike.dialogTree，与酒馆/神社同款既有 DOM 范式）→
-// onDialogueAction 发 `open-catalog:{buildingId}` → MiniCityApp 组合根路由到本
-// 控制器 open(buildingId)。
-// 数据路由：gen-index 懒加载 1000 条 P 级铭牌（import() 字面量由 Vite 静态分片，
-// 与 b2 的 D 级模块同管道，零实时 API）。档案馆=按年过滤 + 镇内名次排架；总目塔
-// =全量 50/页分页 + 题名/作者/年份检索。条目点击复用 b2 详情抽屉的 openWork
-// （全部 1000 条可读正文/评论精选，含无建筑的 894 条）；「飞往」复用 mapController
-// 的既有传送 API（作品建筑优先，其余落所在镇），不新造交互范式。
+// 年份镇纪念名录（设计 §7.1 修订，取代原「作品集中检索目录」）。
+//
+// 定位：档案馆与千作总目塔不再承担「全量作品检索 / 原文详情」——那些社区数据
+// 不属于年份群岛。名录只收录各镇立起的纪念设施：设施名、设施族、纪念导语。
+// 入口：镇纪念名录（yt-arch-*）/ 千作总目塔（yt-tower）走铭牌对话的选项层
+// （BuildingContentLike.dialogTree）→ onDialogueAction 发 `open-catalog:{id}`
+// → MiniCityApp 组合根路由到本控制器 open(buildingId)。
+// 数据：gen-index 的 106 条纪念设施索引（静态分片，零实时 API）。
 // 单 WebGL 上下文红线：纯 DOM 抽屉，不新增 canvas；样式见 modules/year-town-panel.css。
-import { YEAR_TOWN_BUILDING_EXTRAS, YEAR_TOWN_LANDMARK_BLURBS } from '../../city/data/year-towns/gen-buildings';
+import { YEAR_TOWN_BUILDING_EXTRAS } from '../../city/data/year-towns/gen-buildings';
+import { YEAR_TOWN_MEMORIAL_INDEX } from '../../city/data/year-towns/gen-index';
+import { YEAR_TOWN_LANDMARK_NOTES } from '../../city/data/year-towns/yearTownMemorials';
 import { YEAR_TOWNS, yearTownById } from '../../city/data/year-towns/towns';
-import type { YearWorkNameplate } from '../../city/data/year-towns/_types';
+import type { MemorialIndexEntry } from '../../city/data/year-towns/_types';
 import type { BuildingContentLike } from './cityDialogController';
 import type { YearTownPanelController } from './yearTownPanelController';
+import { FAMILY_LABELS } from './yearTownPanelController';
 
 /** 目录对话选项发出的动作前缀（cityDialogController 选项层 → 组合根路由）。 */
 export const CATALOG_ACTION_PREFIX = 'open-catalog:';
 
-/** 总目/馆藏分页步长（千作总目 50/页；镇馆藏超步长同样分页）。 */
-export const CATALOG_PAGE_SIZE = 50;
+/** 名录分页步长。 */
+export const CATALOG_PAGE_SIZE = 20;
 
 /** `open-catalog:{buildingId}` → buildingId；其余动作返回 null。 */
 export function parseCatalogAction(action: string): string | null {
   return action.startsWith(CATALOG_ACTION_PREFIX) ? action.slice(CATALOG_ACTION_PREFIX.length) : null;
 }
 
-/** 数字千分位（热度/条数展示用）。 */
 const fmt = (v: number) => v.toLocaleString('zh-Hans-CN');
 
-/** 检索过滤（题名/作者不分大小写；年份空=不限）。纯函数。 */
-export function filterCatalogWorks(
-  works: readonly YearWorkNameplate[],
+/** 名录检索（设施名 / 导语 / 设施族中文名，不分大小写；年份空=不限）。纯函数。 */
+export function filterMemorials(
+  entries: readonly MemorialIndexEntry[],
   query: string,
   year: number | null,
-): readonly YearWorkNameplate[] {
+): readonly MemorialIndexEntry[] {
   const keyword = query.trim().toLowerCase();
-  return works.filter((work) => {
-    if (year !== null && work.year !== year) return false;
+  return entries.filter((entry) => {
+    if (year !== null && entry.year !== year) return false;
     if (!keyword) return true;
-    return work.subject.toLowerCase().includes(keyword) || work.author.toLowerCase().includes(keyword);
+    const family = FAMILY_LABELS[entry.family] ?? entry.family;
+    return entry.facility.toLowerCase().includes(keyword)
+      || entry.note.toLowerCase().includes(keyword)
+      || family.toLowerCase().includes(keyword);
   });
 }
 
-/** 镇馆藏视图（该年全量，按镇内名次=热度排架；不依赖生成期顺序）。 */
-export function archiveYearWorks(works: readonly YearWorkNameplate[], year: number): readonly YearWorkNameplate[] {
-  return filterCatalogWorks(works, '', year).slice().sort((a, b) => a.townRank - b.townRank);
+/** 镇纪念名录取视图（该年全部设施，按镇内名次排架）。 */
+export function archiveYearMemorials(entries: readonly MemorialIndexEntry[], year: number): readonly MemorialIndexEntry[] {
+  return filterMemorials(entries, '', year).slice().sort((a, b) => a.townRank - b.townRank);
 }
 
-/** 作品 → 地标建筑 id 反查（106 座作品建筑；其余 894 条「飞往」落所在镇）。 */
-const WORK_BUILDING_BY_WORK_ID = new Map<string, string>(
+/** 设施 → 建筑 id（106 座设施建筑）。 */
+const BUILDING_BY_MEMORIAL_KEY = new Map<string, string>(
   Object.entries(YEAR_TOWN_BUILDING_EXTRAS).flatMap(([buildingId, extras]) =>
-    extras.kind === 'work' && extras.workId ? [[extras.workId, buildingId] as [string, string]] : [],
+    extras.memorialKey ? [[extras.memorialKey, buildingId] as [string, string]] : [],
   ),
 );
 
-export function yearTownWorkBuildingId(workId: string): string | undefined {
-  return WORK_BUILDING_BY_WORK_ID.get(workId);
+export function yearTownMemorialBuildingId(memorialKey: string): string | undefined {
+  return BUILDING_BY_MEMORIAL_KEY.get(memorialKey);
 }
 
 /**
- * 档案馆/总目塔的对话入口内容（b1 buildingContent 分流点的覆盖层：组合根以
+ * 纪念馆/总目塔的对话入口内容（b1 buildingContent 分流点的覆盖层：组合根以
  * {...YEAR_TOWN_BUILDING_CONTENT, ...YEAR_TOWN_CATALOG_CONTENT} 合流，本表优先）。
- * 选项层动作 `open-catalog:{buildingId}` 由组合根路由到本目录抽屉。
+ * 选项层动作 `open-catalog:{buildingId}` 由组合根路由到本名录抽屉。
  */
 export function yearTownCatalogEntryContent(id: string): BuildingContentLike | undefined {
   const extras = YEAR_TOWN_BUILDING_EXTRAS[id];
   if (!extras || (extras.kind !== 'archive' && extras.kind !== 'tower')) return undefined;
   const town = yearTownById(extras.townId);
-  const blurb = YEAR_TOWN_LANDMARK_BLURBS[id];
-  if (!town || !blurb) return undefined;
+  const note = YEAR_TOWN_LANDMARK_NOTES[id];
+  if (!town || !note) return undefined;
   const isTower = extras.kind === 'tower';
-  const name = isTower ? '千作总目塔' : `${town.name}档案馆`;
+  const name = isTower ? '千作总目塔' : `${town.name}纪念名录`;
   return {
     name,
     slogan: `${town.label} · ${town.tagline}`,
-    dialog: [blurb],
+    dialog: [note],
     dialogTree: [{
       speaker: name,
-      text: blurb,
+      text: note,
       options: [
-        { text: isTower ? '检索千作总目' : '翻阅馆藏目录', next: null, action: `${CATALOG_ACTION_PREFIX}${id}` },
+        { text: isTower ? '翻阅千作总目' : '翻阅纪念名录', next: null, action: `${CATALOG_ACTION_PREFIX}${id}` },
         { text: '告辞', next: null },
       ],
     }],
@@ -97,10 +100,10 @@ export const YEAR_TOWN_CATALOG_CONTENT: Readonly<Record<string, BuildingContentL
 export interface YearTownCatalogControllerOptions {
   document: Document;
   signal?: AbortSignal;
-  /** b2 详情抽屉（openWork 支持全部 1000 条；isOpen 用于 Esc 只关最上层）。 */
-  panel: Pick<YearTownPanelController, 'openWork' | 'isOpen'>;
-  /** 定位/飞往（组合根注入 mapController 既有传送：作品建筑优先，否则所在镇）。 */
-  locate: (work: YearWorkNameplate) => boolean;
+  /** 纪念设施面板（openMemorial；isOpen 用于 Esc 只关最上层）。 */
+  panel: Pick<YearTownPanelController, 'openMemorial' | 'isOpen'>;
+  /** 定位/飞往（组合根注入 mapController 既有传送）。 */
+  locate: (entry: MemorialIndexEntry) => boolean;
 }
 
 export interface YearTownCatalogController {
@@ -132,7 +135,7 @@ function buildCatalogSkeleton(document: Document): CatalogRefs {
   panel.className = 'ytc-panel';
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'false');
-  panel.setAttribute('aria-label', '年份镇馆藏目录');
+  panel.setAttribute('aria-label', '年份群岛纪念名录');
 
   const head = document.createElement('header');
   head.className = 'ytc-head';
@@ -146,7 +149,7 @@ function buildCatalogSkeleton(document: Document): CatalogRefs {
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'ytc-close';
-  close.setAttribute('aria-label', '收起目录');
+  close.setAttribute('aria-label', '收起名录');
   close.textContent = '×';
   headText.append(kicker, title, meta);
   head.append(headText, close);
@@ -156,8 +159,8 @@ function buildCatalogSkeleton(document: Document): CatalogRefs {
   const search = document.createElement('input');
   search.type = 'search';
   search.className = 'ytc-search';
-  search.placeholder = '检索题名 / 作者…';
-  search.setAttribute('aria-label', '检索馆藏');
+  search.placeholder = '检索设施名 / 纪念说明…';
+  search.setAttribute('aria-label', '检索纪念名录');
   const year = document.createElement('select');
   year.className = 'ytc-year';
   year.setAttribute('aria-label', '按年份筛选');
@@ -184,7 +187,7 @@ function buildCatalogSkeleton(document: Document): CatalogRefs {
 
   const pager = document.createElement('nav');
   pager.className = 'ytc-pager';
-  pager.setAttribute('aria-label', '目录分页');
+  pager.setAttribute('aria-label', '名录分页');
   const prev = document.createElement('button');
   prev.type = 'button';
   prev.className = 'ytc-page-btn';
@@ -205,7 +208,7 @@ function buildCatalogSkeleton(document: Document): CatalogRefs {
 
 function renderRow(
   document: Document,
-  work: YearWorkNameplate,
+  entry: MemorialIndexEntry,
   mode: CatalogMode,
   onOpen: () => void,
   onLocate: () => void,
@@ -217,17 +220,16 @@ function renderRow(
   row.className = 'ytc-row';
   const rank = document.createElement('span');
   rank.className = 'ytc-rank';
-  rank.textContent = mode === 'archive' ? `镇内 ${work.townRank}` : `全站 ${work.rank}`;
+  rank.textContent = mode === 'archive' ? `镇内 ${entry.townRank}` : `${entry.year}`;
   const main = document.createElement('span');
   main.className = 'ytc-main';
   const subject = document.createElement('span');
   subject.className = 'ytc-subject';
-  subject.textContent = work.subject;
+  subject.textContent = entry.facility;
   const line = document.createElement('span');
   line.className = 'ytc-row-meta';
-  line.textContent = mode === 'tower'
-    ? `${work.year} · ${work.author} · 热度 ${fmt(work.popularity)}`
-    : `${work.author} · 热度 ${fmt(work.popularity)}`;
+  const family = FAMILY_LABELS[entry.family] ?? entry.family;
+  line.textContent = mode === 'tower' ? `${family} · ${entry.note}` : family;
   main.append(subject, line);
   row.append(rank, main);
   row.addEventListener('click', onOpen);
@@ -235,7 +237,7 @@ function renderRow(
   locate.type = 'button';
   locate.className = 'ytc-locate';
   locate.textContent = '飞往';
-  locate.title = yearTownWorkBuildingId(work.id) ? '飞往该作品建筑' : '飞往所在镇';
+  locate.title = '飞往该纪念设施';
   locate.addEventListener('click', onLocate);
   item.append(row, locate);
   return item;
@@ -245,22 +247,19 @@ export function createYearTownCatalogController(options: YearTownCatalogControll
   const { document, signal } = options;
   const refs = buildCatalogSkeleton(document);
 
-  // 单实例状态：mode/activeYear 定视图；query/yearFilter/pageIndex 由检索与分页
-  // 驱动；indexCache 常驻 1000 条 P 级索引；loadToken 淘汰在途异步（换目录/换条件）。
   let openState = false;
   let mode: CatalogMode = 'tower';
   let activeYear = 0;
   let query = '';
   let yearFilter: number | null = null;
   let pageIndex = 0;
-  let filtered: readonly YearWorkNameplate[] = [];
-  let indexCache: readonly YearWorkNameplate[] | null = null;
-  let loadToken = 0;
+  let filtered: readonly MemorialIndexEntry[] = [];
+  const indexCache: readonly MemorialIndexEntry[] = YEAR_TOWN_MEMORIAL_INDEX;
 
-  function applyFilter(index: readonly YearWorkNameplate[]): void {
+  function applyFilter(): void {
     filtered = mode === 'archive'
-      ? filterCatalogWorks(archiveYearWorks(index, activeYear), query, null)
-      : filterCatalogWorks(index, query, yearFilter);
+      ? filterMemorials(archiveYearMemorials(indexCache, activeYear), query, null)
+      : filterMemorials(indexCache, query, yearFilter);
     renderPage();
   }
 
@@ -270,40 +269,21 @@ export function createYearTownCatalogController(options: YearTownCatalogControll
     pageIndex = Math.min(pageIndex, pageCount - 1);
     if (total === 0) {
       refs.status.hidden = false;
-      refs.status.textContent = '没有匹配的馆藏。';
+      refs.status.textContent = '没有匹配的设施。';
       refs.list.replaceChildren();
       refs.pager.hidden = true;
       return;
     }
     const start = pageIndex * CATALOG_PAGE_SIZE;
     refs.status.hidden = true;
-    refs.list.replaceChildren(...filtered.slice(start, start + CATALOG_PAGE_SIZE).map((work) =>
-      renderRow(document, work, mode, () => options.panel.openWork(work), () => {
-        if (options.locate(work)) controller.close();
+    refs.list.replaceChildren(...filtered.slice(start, start + CATALOG_PAGE_SIZE).map((entry) =>
+      renderRow(document, entry, mode, () => options.panel.openMemorial(entry), () => {
+        if (options.locate(entry)) controller.close();
       })));
     refs.pager.hidden = pageCount <= 1;
     refs.prev.disabled = pageIndex <= 0;
     refs.next.disabled = pageIndex >= pageCount - 1;
-    refs.page.textContent = `第 ${pageIndex + 1} / ${pageCount} 页 · 共 ${fmt(total)} 条`;
-  }
-
-  async function render(): Promise<void> {
-    const token = ++loadToken;
-    if (!indexCache) {
-      refs.status.hidden = false;
-      refs.status.textContent = '正在翻开馆藏…';
-      refs.list.replaceChildren();
-      refs.pager.hidden = true;
-      try {
-        indexCache = (await import('../../city/data/year-towns/gen-index')).YEAR_TOWN_INDEX;
-      } catch {
-        if (token !== loadToken) return;
-        refs.status.textContent = '目录暂时翻不开，稍后再试。';
-        return;
-      }
-    }
-    if (token !== loadToken || !indexCache) return;
-    applyFilter(indexCache);
+    refs.page.textContent = `第 ${pageIndex + 1} / ${pageCount} 页 · 共 ${fmt(total)} 座`;
   }
 
   const controller: YearTownCatalogController = {
@@ -321,20 +301,20 @@ export function createYearTownCatalogController(options: YearTownCatalogControll
       refs.year.hidden = mode === 'archive';
       if (town) refs.panel.style.setProperty('--ytc-accent', town.theme.iconColor);
       if (mode === 'archive') {
-        refs.kicker.textContent = `${town?.label ?? extras.year} · 镇档案馆`;
-        refs.title.textContent = `${extras.year} 年馆藏`;
-        refs.meta.textContent = '按镇内热度排架 · 点击条目阅读正文与评论精选';
+        refs.kicker.textContent = `${town?.label ?? extras.year} · 纪念名录`;
+        refs.title.textContent = `${extras.year} 年立起的设施`;
+        refs.meta.textContent = '按镇内名次排架 · 点击条目查看纪念说明';
       } else {
-        refs.kicker.textContent = '黑洞区历史热门 Top1000';
+        refs.kicker.textContent = '逐年立册';
         refs.title.textContent = '千作总目';
-        refs.meta.textContent = '2019–2026 全收录 · 按年份分架 · 点击条目阅读正文';
+        refs.meta.textContent = '2019–2026 · 按年份分架 · 点击条目查看纪念说明';
       }
       if (!openState) {
         openState = true;
         refs.panel.classList.add('open');
       }
       refs.close.focus();
-      void render();
+      applyFilter();
     },
     close(): void {
       if (!openState) return;
@@ -348,12 +328,12 @@ export function createYearTownCatalogController(options: YearTownCatalogControll
   refs.search.addEventListener('input', () => {
     query = refs.search.value;
     pageIndex = 0;
-    if (indexCache) applyFilter(indexCache);
+    applyFilter();
   }, { signal });
   refs.year.addEventListener('change', () => {
     yearFilter = refs.year.value === '' ? null : Number(refs.year.value);
     pageIndex = 0;
-    if (indexCache) applyFilter(indexCache);
+    applyFilter();
   }, { signal });
   refs.prev.addEventListener('click', () => {
     pageIndex = Math.max(0, pageIndex - 1);
@@ -365,7 +345,7 @@ export function createYearTownCatalogController(options: YearTownCatalogControll
   }, { signal });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !openState || event.defaultPrevented) return;
-    if (options.panel.isOpen()) return; // b2 详情抽屉在上层，先让它吃掉 Esc
+    if (options.panel.isOpen()) return; // 纪念设施面板在上层，先让它吃掉 Esc
     event.preventDefault();
     controller.close();
   }, { capture: true, signal });

@@ -40,16 +40,42 @@ const NODE = process.execPath; // 必须用 /home/z/node22/bin/node 运行（REA
 // ── 设计常量（docs/year-towns-design.md）──────────────────────────────────
 const TOP_N = { 2019: 2, 2020: 10, 2021: 16, 2022: 20, 2023: 18, 2024: 16, 2025: 12, 2026: 12 };
 const YEAR_COUNTS = { 2019: 2, 2020: 75, 2021: 147, 2022: 217, 2023: 202, 2024: 170, 2025: 128, 2026: 59 };
-/** 各镇 shape 池（设计 §4 材质/shape 倾向 → 映射到既有程序化 builder）。 */
-const TOWN_SHAPES = {
-  2019: ['pavilion', 'shaft', 'ruins'],
-  2020: ['clocktower', 'campus', 'kiosk', 'school'],
-  2021: ['market', 'school', 'greenhouse', 'mall'],
-  2022: ['tower', 'skyscraper', 'bank', 'mall'],
-  2023: ['temple', 'qipai', 'tavern', 'market'],
-  2024: ['greenhouse', 'library', 'academy', 'bank'],
-  2025: ['bank', 'tower', 'campus', 'school'],
-  2026: ['observatory', 'television_tower', 'skyscraper', 'darktower'],
+/**
+ * 各镇街区的方位偏好（设计 §7.1 修订：设施族 → 街区）。
+ * 值 = 该街区相对镇心的方位角偏移（弧度）；同族设施归拢成片，形成可辨认的城区，
+ * 而不是按序号轮转散布。缺席的族按当前最小占用自动落位。
+ */
+const DISTRICT_BEARINGS = {
+  // 制度与名录临主街（进入镇子第一眼看到秩序）。
+  law: 0,
+  guild: 0.5,
+  press: 1.1,
+  // 学理与观察在后街高处（安静、视野好）。
+  academy: 2.2,
+  observatory: 2.9,
+  lab: 3.6,
+  // 生活与聚会在另一侧（热闹、临水）。
+  tavern: 4.3,
+  gathering: 4.9,
+  market: 5.4,
+  dwelling: 5.9,
+  narrative: 1.7,
+};
+
+/** 设施族 → 既有程序化 shape（与 yearTownMemorials.ts 的 FACILITY_SHAPES 同源）。 */
+const FAMILY_SHAPES = {
+  law: 'bank',
+  gathering: 'market',
+  academy: 'academy',
+  observatory: 'observatory',
+  narrative: 'pagoda',
+  lab: 'greenhouse',
+  tavern: 'tavern',
+  market: 'mall',
+  memorial: 'temple',
+  dwelling: 'school',
+  press: 'tower',
+  guild: 'qipai',
 };
 /** 热度分层地块基准（设计 §7.1），过密镇按容量等比缩放（下限 0.5）。 */
 const PLOT_BASE = { XL: 5.5, L: 4.6, M: 3.8, S: 3.2, ARCH: 4.2, TOWER: 3.0, STELE: 1.8 };
@@ -93,11 +119,11 @@ function readJson(path) {
 }
 
 async function bundleTownModules() {
-  // esbuild 打包 towns.ts + transit.ts + sanitizeCommunityText.ts —— 生成器与
-  // 运行时共用同一实现（设计 §7.3「生成期烘焙 + 运行时同源」红线）。
+  // esbuild 打包 towns.ts + transit.ts + sanitizeCommunityText.ts + yearTownMemorials.ts
+  // —— 生成器与运行时共用同一实现（设计 §7.3「生成期烘焙 + 运行时同源」红线）。
   const result = await build({
     stdin: {
-      contents: "export * from './sanitizeCommunityText'; export { YEAR_TOWNS } from './towns'; export { TRANSIT_STATIONS } from './transit';",
+      contents: "export * from './sanitizeCommunityText'; export { YEAR_TOWNS } from './towns'; export { TRANSIT_STATIONS } from './transit'; export { YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES, FACILITY_SHAPES } from './yearTownMemorials';",
       loader: 'ts',
       resolveDir: TOWNS_DIR,
     },
@@ -108,55 +134,93 @@ async function bundleTownModules() {
   return import(pathToFileURL(temp).href);
 }
 
-const top1000 = readJson(join(DATA_DIR, 'blackhole_top1000.json'));
-const details = readJson(join(DATA_DIR, 'blackhole_details.json'));
 const townModules = await bundleTownModules();
-const { sanitizeCommunityText, labelSafeText, sanitizeAuthorNickname, abstractOf, truncateByCodePoints, YEAR_TOWNS, TRANSIT_STATIONS } = townModules;
+const {
+  YEAR_TOWNS, TRANSIT_STATIONS, YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES,
+} = townModules;
+
+// 纪念目录完整性：106 座作品建筑必须逐一定义，且 key 与年份/名次一处不差。
+{
+  const expected = [];
+  for (const town of YEAR_TOWNS) {
+    const n = TOP_N[town.year];
+    for (let i = 1; i <= n; i += 1) expected.push(`yt-w${town.year}-${String(i).padStart(2, '0')}`);
+  }
+  const defined = Object.keys(YEAR_TOWN_MEMORIAL_BY_KEY);
+  const missing = expected.filter((k) => !YEAR_TOWN_MEMORIAL_BY_KEY[k]);
+  const extra = defined.filter((k) => !expected.includes(k));
+  if (missing.length > 0) fail(`纪念目录缺 ${missing.length} 项：${missing.slice(0, 5).join(', ')}…`);
+  if (extra.length > 0) fail(`纪念目录多出 ${extra.length} 项：${extra.slice(0, 5).join(', ')}…`);
+  for (const [key, m] of Object.entries(YEAR_TOWN_MEMORIAL_BY_KEY)) {
+    if (!m.facility || !m.note) fail(`纪念设施 ${key} 缺设施名或导语`);
+    if (!FAMILY_SHAPES[m.family]) fail(`纪念设施 ${key} 的设施族未知：${m.family}`);
+  }
+}
 
 // ── 2. 数据对账与合并 ─────────────────────────────────────────────────────
-const topWorks = top1000.works ?? [];
-const detailWorks = details.works ?? [];
-if (topWorks.length !== 1000 || detailWorks.length !== 1000) fail(`条数非 1000：top=${topWorks.length} details=${detailWorks.length}`);
-const detailById = new Map(detailWorks.map((w) => [w.id, w]));
-const topIds = new Set(topWorks.map((w) => w.id));
-for (const w of detailWorks) if (!topIds.has(w.id)) fail(`details 多出未知作品 ${w.id}`);
-for (const id of topIds) if (!detailById.has(id)) fail(`details 缺作品 ${id}`);
-if (new Set(detailWorks.map((w) => w.id)).size !== 1000) fail('details 存在重复 ID');
+// 两种来源：
+//   A. 完整数据源（blackhole_top1000.json + blackhole_details.json）——原始秩/热度可用；
+//   B. 离线重建（--from-catalog）：数据源不可得时，从现有 gen-buildings.ts 的
+//      extras 与手写纪念目录恢复「建筑 → workId → 年份/名次」结构，只重排布局、
+//      重算设施 image 与标签。作品正文/评论/热度一律不需要（设计 §7.1 修订）。
+const CATALOG_PATH = join(TOWNS_DIR, 'gen-buildings.ts');
+const hasDataSource = existsSync(join(DATA_DIR, 'blackhole_top1000.json'))
+  && existsSync(join(DATA_DIR, 'blackhole_details.json'));
 
-const works = topWorks.map((w) => {
-  const d = detailById.get(w.id);
-  const year = Number(String(d.meta?.createdAt ?? w.createdAt ?? '').slice(0, 4));
-  if (!Number.isFinite(year) || year < 2019 || year > 2026) fail(`作品 ${w.id} 年份异常: ${year}`);
-  return {
-    id: w.id,
-    rank: d.rank,
-    subjectRaw: w.subject,
-    authorRaw: w.author?.nickname ?? '',
-    bodyRaw: d.body ?? '',
-    comments: d.comments ?? [],
-    totalComments: d.totalComments ?? 0,
-    commentsTruncated: d.commentsTruncated === true,
-    locked: w.id === LOCKED_WORK_ID,
-    model: d.model,
-    meta: d.meta ?? {},
-    year,
-  };
-});
+let works;
+let townById = new Map(YEAR_TOWNS.map((t) => [t.id, t]));
+let townWorks = {};
 
-const byYear = {};
-for (const w of works) byYear[w.year] = (byYear[w.year] ?? 0) + 1;
-for (const [year, count] of Object.entries(YEAR_COUNTS)) {
-  if (byYear[year] !== count) fail(`${year} 年条数 ${byYear[year]} ≠ 设计表 ${count}`);
-}
-const townById = new Map(YEAR_TOWNS.map((t) => [t.id, t]));
+if (hasDataSource) {
+  const top1000 = readJson(join(DATA_DIR, 'blackhole_top1000.json'));
+  const details = readJson(join(DATA_DIR, 'blackhole_details.json'));
+  const topWorks = top1000.works ?? [];
+  const detailWorks = details.works ?? [];
+  if (topWorks.length !== 1000 || detailWorks.length !== 1000) fail(`条数非 1000：top=${topWorks.length} details=${detailWorks.length}`);
+  const detailById = new Map(detailWorks.map((w) => [w.id, w]));
+  const topIds = new Set(topWorks.map((w) => w.id));
+  for (const w of detailWorks) if (!topIds.has(w.id)) fail(`details 多出未知作品 ${w.id}`);
+  for (const id of topIds) if (!detailById.has(id)) fail(`details 缺作品 ${id}`);
+  if (new Set(detailWorks.map((w) => w.id)).size !== 1000) fail('details 存在重复 ID');
 
-// ── 3. 镇内排序（热度降、id 升）与镇内名次 ───────────────────────────────
-const townWorks = {};
-for (const town of YEAR_TOWNS) {
-  const list = works.filter((w) => w.year === town.year)
-    .sort((a, b) => (b.meta.popularity ?? 0) - (a.meta.popularity ?? 0) || (a.id < b.id ? -1 : 1));
-  list.forEach((w, i) => { w.townRank = i + 1; });
-  townWorks[town.year] = list;
+  works = topWorks.map((w) => {
+    const d = detailById.get(w.id);
+    const year = Number(String(d.meta?.createdAt ?? w.createdAt ?? '').slice(0, 4));
+    if (!Number.isFinite(year) || year < 2019 || year > 2026) fail(`作品 ${w.id} 年份异常: ${year}`);
+    return { id: w.id, rank: d.rank, subjectRaw: w.subject, year, meta: d.meta ?? {} };
+  });
+
+  const byYear = {};
+  for (const w of works) byYear[w.year] = (byYear[w.year] ?? 0) + 1;
+  for (const [year, count] of Object.entries(YEAR_COUNTS)) {
+    if (byYear[year] !== count) fail(`${year} 年条数 ${byYear[year]} ≠ 设计表 ${count}`);
+  }
+
+  // 镇内排序（热度降、id 升）与镇内名次。
+  for (const town of YEAR_TOWNS) {
+    const list = works.filter((w) => w.year === town.year)
+      .sort((a, b) => (b.meta.popularity ?? 0) - (a.meta.popularity ?? 0) || (a.id < b.id ? -1 : 1));
+    list.forEach((w, i) => { w.townRank = i + 1; });
+    townWorks[town.year] = list;
+  }
+} else {
+  // 离线重建：结构完全取自手写纪念目录（唯一事实源，不会被产物覆盖）。
+  // key 形如 yt-w{year}-{rank}，rank 即镇内名次。
+  const restored = Object.values(YEAR_TOWN_MEMORIAL_BY_KEY).map((mem) => {
+    const parsed = /^yt-w(20\d\d)-(\d\d)$/.exec(mem.key);
+    if (!parsed) fail(`纪念目录 key 格式异常：${mem.key}`);
+    return { key: mem.key, year: Number(parsed[1]), townRank: Number(parsed[2]), workId: mem.workId };
+  }).sort((a, b) => a.year - b.year || a.townRank - b.townRank);
+  if (restored.length !== 106) fail(`纪念目录读到 ${restored.length} 座设施 ≠ 106`);
+  works = restored.map((r) => ({ id: r.workId, townRank: r.townRank, year: r.year, meta: {} }));
+  for (const town of YEAR_TOWNS) {
+    const expected = TOP_N[town.year];
+    const got = restored.filter((r) => r.year === town.year);
+    if (got.length !== expected) fail(`${town.label} 设施数 ${got.length} ≠ ${expected}`);
+    townWorks[town.year] = works.filter((w) => w.year === town.year)
+      .sort((a, b) => a.townRank - b.townRank);
+  }
+  log(`离线重建：从手写纪念目录恢复 106 座设施（不含作品原文/评论/热度）。`);
 }
 
 // ── 4. 布局（确定性：无 Math.random；2019 手工，其余镇街+环贪心）────────────
@@ -183,7 +247,14 @@ function rectClearsPads(rect, pads) {
 const stationPads = TRANSIT_STATIONS.map((s) => ({ x: s.platformX, z: s.platformZ, r: 2.6 }));
 
 function layoutTown(town, items) {
-  // items: [{ key, tier, size }] —— 顺序即优先级（XL 定轴端，L/arch 优先大街，M/S 街+环）。
+  // items: [{ key, tier, size, family }] —— 按设施族归拢到各自街区方位。
+  //
+  // 布局语法（设计 §7.1 修订）：
+  //   1. 中央广场：镇心留空 r ≈ plateauR×0.22，不落建筑；
+  //   2. 纪念轴线：站台 → 镇心 → 轴线终点，XL（设施 #1）置于轴线尽端作对景；
+  //   3. 环形主街：r = ringR 一圈留作街道，建筑不得骑跨；
+  //   4. 街区分布：其余设施按 family 的方位偏好归拢，形成可辨认的同质街区；
+  //   5. 密度梯度：靠近镇心（主街内侧）放 L/M，外圈放 S，形成核心密、边缘疏。
   const cx = town.x, cz = town.z;
   const rBuild = round2(town.plateauR - 3.5);
   const station = TRANSIT_STATIONS.find((s) => s.id === `station-${town.year}`);
@@ -191,96 +262,93 @@ function layoutTown(town, items) {
   const norm = Math.hypot(ux, uz) || 1;
   const uxN = ux / norm, uzN = uz / norm;          // 进镇方向（站台 → 镇心）
   const pxN = -uzN, pzN = uxN;                     // 垂直向（大街两侧）
-  const cornerLimit = round2(town.plateauR - (town.year === 2019 ? 2.2 : 0.9)); // plot 不越台面缘（设计 §9.4：≤ r_top−0.5 再留 0.4）
-  const centerLimit = rBuild;                                                       // 建筑中心 ≤ r_top−3.5（设计 §7.1，轨道梁净空）
+  const cornerLimit = round2(town.plateauR - (town.year === 2019 ? 2.2 : 0.9));
+  const centerLimit = rBuild;
   const pads = stationPads;
-
-  let scale = Math.min(1, Math.sqrt((Math.PI * rBuild * rBuild * 0.4) / items.reduce((a, i) => a + i.size * i.size, 0)));
-  scale = Math.max(0.45, scale);
+  const plazaR = round2(town.plateauR * 0.22);      // 中央广场（禁止落位）
+  const ringR = round2(town.plateauR * 0.62);       // 环形主街中心线
+  const ringHalf = 1.15;                            // 街道半宽（含路缘）
   const streetAxisPhi = Math.atan2(uzN, uxN);
-  // θ 与大街轴（含反方向）的角距，∈[0, π]。
-  const axisDistance = (th) => {
-    let d = Math.abs(th - streetAxisPhi) % Math.PI;
-    if (d > Math.PI / 2) d = Math.PI - d;
-    return d;
-  };
+
+  let scale = Math.min(1, Math.sqrt((Math.PI * rBuild * rBuild * 0.36) / items.reduce((a, i) => a + i.size * i.size, 0)));
+  scale = Math.max(0.45, scale);
+
+  const insideRingBand = (r, half) => r > ringR - ringHalf - half && r < ringR + ringHalf + half;
+  const insidePlaza = (r, half) => r < plazaR + half;
+
   let lastFailed = '';
-  for (let attempt = 0; attempt < 10; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     const placed = [];
     const placedRects = [];
     const place = (item, x, z, size) => {
       placed.push({ ...item, x: round2(x), z: round2(z), plot: round2(size) });
       placedRects.push(rectOf(x, z, size));
     };
-    // XL 置轴线终点（对景地标，设计 §7.1）。
+    const fits = (x, z, size) => {
+      const r = Math.hypot(x - cx, z - cz);
+      if (r > centerLimit) return false;
+      if (insidePlaza(r, size / 2)) return false;
+      if (insideRingBand(r, size / 2)) return false;
+      const rect = rectOf(x, z, size);
+      if (!rectWithinCircle(rect, cx, cz, cornerLimit)) return false;
+      if (!rectClearsPads(rect, pads)) return false;
+      return placedRects.every((o) => rectsSeparated(rect, o, RECT_GAP));
+    };
+
+    // 1. XL：轴线尽端对景（落在环形主街之外，正对进镇方向）。
     const xl = items.find((i) => i.tier === 'XL');
     if (xl) {
       const xlSize = round2(xl.size * scale);
-      const xlS = rBuild - xlSize / 2 - 0.35;
-      place(xl, cx + uxN * xlS, cz + uzN * xlS, xlSize);
+      const reach = Math.min(centerLimit - xlSize / 2 - 0.35, cornerLimit - xlSize / 2 - 0.6);
+      place(xl, cx + uxN * reach, cz + uzN * reach, xlSize);
     }
-    // 大街两侧候选（远端 → 近门端；侧向 = 街半宽 + 地块半宽 + 路缘余量）。
+
+    // 2. 其余设施：按街区方位归拢，沿该方位在内外两圈之间寻位。
     const rest = items.filter((i) => i.tier !== 'XL');
+    // 同族连续落位（族内保持街道相邻），族间按方位角排序成环。
+    const familyOrder = [...new Set(rest.map((i) => i.family))].sort(
+      (a, b) => (DISTRICT_BEARINGS[a] ?? 0) - (DISTRICT_BEARINGS[b] ?? 0),
+    );
+    const ordered = familyOrder.flatMap((f) => rest.filter((i) => i.family === f));
     let allOk = true;
-    for (const item of rest) {
+    for (const item of ordered) {
       const size = round2(item.size * scale);
-      const lat = 2.3 + size / 2;
-      const sStep = Math.max(2.2, size + 1.1); // 沿街候选密度：碰撞检查把关实际间距
-      const sMax = rBuild - 2.2 - size / 2 - 0.4;
-      const sMin = -(rBuild - 2.0) + size / 2 + 0.4;
+      const bearing = streetAxisPhi + (DISTRICT_BEARINGS[item.family] ?? 0);
+      // 内外两圈候选半径：内圈贴主街内侧，外圈贴台面边缘（密度梯度）。
+      const radii = [
+        round2(ringR + ringHalf + size / 2 + 0.5),        // 主街外侧
+        round2(ringR - ringHalf - size / 2 - 0.5),        // 主街内侧
+        round2(ringR + ringHalf + size / 2 + 2.4),        // 外环邻巷
+        round2(ringR - ringHalf - size / 2 - 2.4),        // 内环邻巷
+        round2(plazaR + size / 2 + 0.8),                  // 广场边缘
+      ].filter((r) => r > plazaR + size / 2 + 0.4 && r <= centerLimit - size / 2 + 0.001);
       let done = false;
-      // 大街候选顺序：本侧优先（side ±1 交替的街景节奏），本侧放不下再试对侧
-      // （过密镇如 2020·11 项收敛修复：仅单侧街 + 粗候选粒度会差 0.02–0.3u 溢出）。
-      for (const sideSign of [item.side, -item.side]) {
+      // 方位候选：族方位附近逐级外扩（保持街区成片，又允许绕开已落位建筑）。
+      for (const r of radii) {
         if (done) break;
-        const side = sideSign * lat;
-        for (let s = sMax; s >= sMin && !done; s -= sStep) {
-          const x = cx + uxN * s + pxN * side;
-          const z = cz + uzN * s + pzN * side;
-          if (Math.hypot(x - cx, z - cz) > centerLimit) continue;
-          const rect = rectOf(x, z, size);
-          if (!rectWithinCircle(rect, cx, cz, cornerLimit)) continue;
-          if (!rectClearsPads(rect, pads)) continue;
-          if (!placedRects.every((r) => rectsSeparated(rect, r, RECT_GAP))) continue;
-          place(item, x, z, size);
-          done = true;
-        }
-      }
-      if (!done) {
-        // 环巷候选（4 圈环带，外→内）：远离大街轴优先（角距大者优先）。
-        const bands = [rBuild - 0.7, rBuild - 2.3, rBuild - 3.9, rBuild - 5.5]
-          .map((band) => band - size / 2)
-          .filter((r) => r > size / 2 + 0.6 && r <= centerLimit);
-        for (const rRing of bands) {
-          if (done) break;
-          const step = Math.max(0.36, 2.0 / rRing);
-          const angles = [];
-          for (let th = 0; th < Math.PI * 2 - 1e-9; th += step) angles.push(th);
-          angles.sort((a, b) => axisDistance(b) - axisDistance(a));
-          for (const th of angles) {
-            if (axisDistance(th) < 0.3) continue; // 大街走廊让位
-            const dx = Math.cos(th) * rRing, dz = Math.sin(th) * rRing;
-            if (Math.hypot(dx, dz) > centerLimit) continue;
-            const rect = rectOf(cx + dx, cz + dz, size);
-            if (!rectWithinCircle(rect, cx, cz, cornerLimit)) continue;
-            if (!rectClearsPads(rect, pads)) continue;
-            if (!placedRects.every((r) => rectsSeparated(rect, r, RECT_GAP))) continue;
-            place(item, cx + dx, cz + dz, size);
+        for (let dth = 0; dth <= Math.PI * 0.9 && !done; dth += 0.14) {
+          for (const sign of [1, -1]) {
+            if (dth === 0 && sign === -1) continue;
+            const th = bearing + sign * dth;
+            const x = cx + Math.cos(th) * r;
+            const z = cz + Math.sin(th) * r;
+            if (!fits(x, z, size)) continue;
+            place(item, x, z, size);
             done = true;
             break;
           }
         }
       }
-      if (!done) { allOk = false; lastFailed = item.key; break; }
+      if (!done) { allOk = false; lastFailed = `${item.key}(${item.family})`; break; }
     }
     if (allOk) return { placed, scale: round2(scale * 100) / 100 };
-    scale = Math.max(0.45, scale * 0.9);
-    if (attempt === 9) fail(`${town.label} 布局未收敛（最后失败项 ${lastFailed}，scale=${scale.toFixed(2)}）`);
+    scale = Math.max(0.45, scale * 0.92);
+    if (attempt === 11) fail(`${town.label} 布局未收敛（最后失败项 ${lastFailed}，scale=${scale.toFixed(2)}）`);
   }
-  fail(`${town.label} 布局未收敛（10 次缩放重试后仍有建筑无法落位）`);
+  fail(`${town.label} 布局未收敛（12 次缩放重试后仍有建筑无法落位）`);
 }
 
-// 组装各镇建筑条目（works / archive / tower / stele）。
+// 组装各镇建筑条目（纪念设施 / archive / tower / stele）。
 const townStructures = {};
 for (const town of YEAR_TOWNS) {
   const topN = TOP_N[town.year];
@@ -288,140 +356,59 @@ for (const town of YEAR_TOWNS) {
   const structures = [];
   const tierOf = (townRank) => (townRank === 1 ? 'XL' : townRank <= 3 ? 'L' : townRank <= 10 ? 'M' : 'S');
   list.slice(0, topN).forEach((w, i) => {
+    const key = `yt-w${town.year}-${String(i + 1).padStart(2, '0')}`;
+    const memorial = YEAR_TOWN_MEMORIAL_BY_KEY[key];
     structures.push({
-      key: `yt-w${town.year}-${String(i + 1).padStart(2, '0')}`,
-      tier: tierOf(i + 1), size: PLOT_BASE[tierOf(i + 1)], side: i % 2 === 0 ? 1 : -1,
-      shape: i === 0 ? TOWN_SHAPES[town.year][0] : TOWN_SHAPES[town.year][(i + 1) % TOWN_SHAPES[town.year].length],
-      work: w, townRank: i + 1,
+      key,
+      tier: tierOf(i + 1),
+      size: PLOT_BASE[tierOf(i + 1)],
+      family: memorial.family,
+      shape: FAMILY_SHAPES[memorial.family],
+      memorial,
+      workId: w.id,
+      townRank: i + 1,
     });
   });
   if (town.year !== 2019) {
-    structures.splice(3, 0, { key: `yt-arch-${town.year}`, tier: 'ARCH', size: PLOT_BASE.ARCH, side: -1, shape: 'library' });
+    structures.splice(3, 0, { key: `yt-arch-${town.year}`, tier: 'ARCH', size: PLOT_BASE.ARCH, family: 'press', shape: 'library', landmark: true });
   } else {
-    structures.push({ key: 'yt-tower', tier: 'TOWER', size: PLOT_BASE.TOWER, shape: 'pavilion' });
-    structures.push({ key: 'yt-stele-2019', tier: 'STELE', size: PLOT_BASE.STELE, shape: 'shaft' });
+    structures.push({ key: 'yt-tower', tier: 'TOWER', size: PLOT_BASE.TOWER, family: 'press', shape: 'pavilion', landmark: true });
+    structures.push({ key: 'yt-stele-2019', tier: 'STELE', size: PLOT_BASE.STELE, family: 'memorial', shape: 'shaft', landmark: true });
   }
   townStructures[town.year] = structures;
 }
 
-// 布局执行（2019 手工定稿解，其余走通用算法）。
+// 布局执行：坐标全部取自手写目录（yearTownMemorials.ts 的 layout 字段）。
+// 生成器只负责把设施名/设施族/坐标固化为 BuildingConfig，不再自行布局。
+// 地标手写落位（与 year-towns/districtLayout.ts 的 LANDMARK_PLACEMENTS 同源，
+// 由 unit 测试 yearTownGenLoaders/yearTownCatalog 交叉校验）。
+const LANDMARK_LAYOUT = {
+  'yt-arch-2020': { x: -12.5, z: 234.9, plot: 4.2 },
+  'yt-arch-2021': { x: 47.1, z: 229.5, plot: 4.2 },
+  'yt-arch-2022': { x: -7.1, z: 294.5, plot: 4.2 },
+  'yt-arch-2023': { x: 52.5, z: 289.1, plot: 4.2 },
+  'yt-arch-2024': { x: -215, z: 219.9, plot: 4.2 },
+  'yt-arch-2025': { x: -246.2, z: 274, plot: 4.2 },
+  'yt-arch-2026': { x: -183.8, z: 274, plot: 4.2 },
+  'yt-tower': { x: 138, z: 196, plot: 3.0 },
+  'yt-stele-2019': { x: 150, z: 228, plot: 1.8 },
+};
+
 const placements = {};
 const placementsScaleCache = {};
 for (const town of YEAR_TOWNS) {
-  if (town.year === 2019) {
-    placementsScaleCache[2019] = 1;
-    const L = ORIGIN_VILLAGE_LAYOUT;
-    const map = {
-      'yt-w2019-01': { ...L.rank1, plot: 3.6 },
-      'yt-w2019-02': { ...L.rank2, plot: 2.8 },
-      'yt-tower': { ...L.tower, plot: 3.0 },
-      'yt-stele-2019': { ...L.stele, plot: 1.8 },
-    };
-    const placed = townStructures[2019].map((item) => ({ ...item, ...map[item.key] }));
-    // 手工解同样过校验（不通过即 fail，防数据漂移）。
-    const rects = placed.map((p) => rectOf(p.x, p.z, p.plot));
-    rects.forEach((r, i) => {
-      if (!rectWithinCircle(r, town.x, town.z, town.plateauR - 2.2)) fail(`2019 ${placed[i].key} 越角点界`);
-      if (!rectClearsPads(r, stationPads)) fail(`2019 ${placed[i].key} 与站台泊位冲突`);
-      rects.forEach((o, j) => { if (i < j && !rectsSeparated(r, o, RECT_GAP)) fail(`2019 ${placed[i].key} 与 ${placed[j].key} 间距不足`); });
-    });
-    placements[2019] = placed;
-  } else {
-    const result = layoutTown(town, townStructures[town.year]);
-    placementsScaleCache[town.year] = result.scale;
-    placements[town.year] = result.placed;
-  }
-}
-
-// ── 5. P 级铭牌数据（全部 1000 条）──────────────────────────────────────
-function nameplateOf(w) {
-  const sanitizedComments = w.comments
-    .map((c) => ({ nickname: sanitizeAuthorNickname(c.nickname ?? ''), content: sanitizeCommunityText(c.content ?? ''), time: c.createdAt, verification: c.verification }))
-    .filter((c) => c.content.trim().length > 0);
-  return {
-    id: w.id,
-    rank: w.rank,
-    year: w.year,
-    townRank: w.townRank,
-    subject: labelSafeText(w.subjectRaw, SUBJECT_MAX),
-    label: labelSafeText(w.subjectRaw, LABEL_MAX),
-    author: sanitizeAuthorNickname(w.authorRaw),
-    popularity: w.meta.popularity ?? 0,
-    visits: w.meta.visits ?? 0,
-    stars: w.meta.stars ?? 0,
-    tags: (w.meta.tags ?? []).slice(0, TAGS_MAX).map((t) => labelSafeText(String(t), 12)).filter(Boolean),
-    abstract: abstractOf(w.bodyRaw, ABSTRACT_MAX),
-    totalComments: w.totalComments,
-    sampledComments: sanitizedComments.length,
-    commentsTruncated: w.commentsTruncated,
-    commentsLocked: w.locked,
-    hasModel: w.model?.present === true,
-  };
-}
-const nameplates = works
-  .slice().sort((a, b) => a.year - b.year || a.townRank - b.townRank)
-  .map(nameplateOf);
-const nameplateById = new Map(nameplates.map((n) => [n.id, n]));
-
-// ── 6. D 级详情 + F 级评论包 + 超长正文包 ────────────────────────────────
-function commentOf(c) {
-  const content = sanitizeCommunityText(c.content ?? '');
-  const out = { nickname: sanitizeAuthorNickname(c.nickname ?? '') };
-  if (c.createdAt) out.time = String(c.createdAt);
-  const truncated = codePoints(content).length > COMMENT_MAX;
-  out.content = truncated ? truncateByCodePoints(content, COMMENT_MAX) : content;
-  if (c.verification) out.verification = String(c.verification);
-  return out;
-}
-const detailByTown = {};   // year -> [{ id, body, bodyExternal, comments, pack?, locked? }]
-const bodyPacks = {};      // year -> { workId: fullBody }
-const commentPacks = {};   // year -> [ { key, works: [{id, comments}] } ]
-let blankFiltered = 0, longCommentTruncated = 0, bodyExternalCount = 0;
-for (const town of YEAR_TOWNS) {
-  const dRecords = [];
-  const bodies = {};
-  const packs = [];
-  let packWorks = [];
-  let packBytes = 0;
-  let packIndex = 1;
-  for (const w of townWorks[town.year]) {
-    const body = sanitizeCommunityText(w.bodyRaw);
-    const bodyLong = codePoints(body).length > BODY_INLINE_LIMIT;
-    if (bodyLong) { bodies[w.id] = body; bodyExternalCount += 1; }
-    const filtered = w.comments.filter((c) => sanitizeCommunityText(c.content ?? '').trim().length > 0);
-    blankFiltered += w.comments.length - filtered.length;
-    const comments = filtered.map(commentOf);
-    longCommentTruncated += comments.filter((c) => c.content.endsWith('…')).length;
-    const record = {
-      id: w.id,
-      body: bodyLong ? truncateByCodePoints(body, BODY_EXCERPT) : body,
-      bodyExternal: bodyLong,
-      comments: comments.slice(0, COMMENT_INLINE),
-    };
-    if (w.locked) { record.locked = true; record.comments = []; }
-    if (comments.length > COMMENT_INLINE && !w.locked) {
-      record.pack = `${town.year}-${packIndex}`;
-      const entry = { id: w.id, comments };
-      const entryBytes = jstr(entry).length;
-      if (packBytes > 0 && packBytes + entryBytes > PACK_BYTES) {
-        packs.push({ key: `${town.year}-${packIndex}`, works: packWorks });
-        packIndex += 1; packWorks = []; packBytes = 0;
-        record.pack = `${town.year}-${packIndex}`;
-      }
-      packWorks.push(entry); packBytes += entryBytes;
-    }
-    dRecords.push(record);
-  }
-  if (packWorks.length > 0) packs.push({ key: `${town.year}-${packIndex}`, works: packWorks });
-  detailByTown[town.year] = dRecords;
-  if (Object.keys(bodies).length > 0) bodyPacks[town.year] = bodies;
-  commentPacks[town.year] = packs;
+  placementsScaleCache[town.year] = 1;
+  placements[town.year] = townStructures[town.year].map((item) => {
+    const layout = item.memorial?.layout ?? LANDMARK_LAYOUT[item.key];
+    if (!layout) fail(`${item.key} 缺手写 layout（yearTownMemorials.ts 或 LANDMARK_LAYOUT）`);
+    return { ...item, x: layout.x, z: layout.z, plot: layout.plot ?? 4.2 };
+  });
 }
 
 // ── 7. 生成模块文本（确定性，无时间戳）─────────────────────────────────
 const GEN_HEADER = '// GENERATED FILE — do not edit by hand.\n' +
   '// 由 scripts/generate_town_buildings.mjs 产出（幂等；重跑前会清理旧 gen-* 文件）。\n' +
-  '// 数据源：../data/blackhole_top1000.json + blackhole_details.json（T4.5 质检收口口径）。\n';
+  '// 设施数据：手写目录 yearTownMemorials.ts（作品原文/评论/热度不进入年份群岛）。\n';
 
 const ICON_GLYPHS = {
   tower: '<rect x="9" y="4" width="6" height="17"/><path d="M9 8h6M9 12h6M9 16h6"/>',
@@ -448,13 +435,13 @@ const ICON_GLYPHS = {
 };
 
 function buildingEntry(p) {
-  const label = p.work
-    ? labelSafeText(p.work.subjectRaw, LABEL_MAX)
-    : (p.tier === 'ARCH' ? `${townById.get(`island-${p.year ?? 0}`).name}档案馆` : p.tier === 'TOWER' ? '千作总目塔' : '起源村·界碑');
+  const label = p.memorial
+    ? p.memorial.facility
+    : (p.tier === 'ARCH' ? `${townById.get(`island-${p.year ?? 0}`).name}纪念名录` : p.tier === 'TOWER' ? '千作总目塔' : '起源村·界碑');
   return `  defineBuilding({ id: ${jstr(p.key)}, num: ${jstr(numOf(p))}, label: ${jstr(label)}, x: ${round2(p.x)}, z: ${round2(p.z)}, shape: ${jstr(p.shape)}, icon: iconFor(${jstr(p.shape)}) }),`;
 }
 function numOf(p) {
-  if (p.work) return `${String(p.year).slice(2)}${String(p.townRank).padStart(2, '0')}`;
+  if (p.memorial) return `${String(p.year).slice(2)}${String(p.townRank).padStart(2, '0')}`;
   if (p.tier === 'ARCH') return `${String(p.year).slice(2)}98`;
   if (p.tier === 'TOWER') return '1988';
   return '1989';
@@ -463,11 +450,12 @@ function numOf(p) {
 const allPlaced = [];
 for (const town of YEAR_TOWNS) allPlaced.push(...placements[town.year].map((p) => ({ ...p, year: town.year, townId: town.id })));
 
-const genBuildingsTs = `${GEN_HEADER}// 115 座年份镇建筑配置（106 作品 + 7 档案馆 + 千作总目塔 + 起源村界碑）。
-// 静态导入（建筑随世界启动渲染；铭牌数据随配置常驻，设计 §7.2 P 级）。
+const genBuildingsTs = `${GEN_HEADER}// 115 座年份镇纪念设施配置（106 座设施 + 7 座纪念名录 + 千作总目塔 + 起源村界碑）。
+// 静态导入（建筑随世界启动渲染）。作品原文/评论/热度等社区数据不进入年份群岛，
+// 设施名与纪念导语来自手写目录 \`yearTownMemorials.ts\`（设计 §7.1 修订）。
 import { defineBuilding } from '../buildings/_types';
 import type { BuildingConfig } from '../buildings/_types';
-import type { YearTownBuildingExtras, YearWorkNameplate } from './_types';
+import type { YearTownBuildingExtras } from './_types';
 import { iconSvg } from '../buildings/_types';
 
 const ICON_GLYPHS: Record<string, string> = ${jstr(ICON_GLYPHS)};
@@ -482,119 +470,34 @@ ${allPlaced.map(buildingEntry).join('\n')}
 
 export const YEAR_TOWN_BUILDING_EXTRAS: Readonly<Record<string, YearTownBuildingExtras>> = {
 ${allPlaced.map((p) => {
-    const kind = p.work ? 'work' : p.tier === 'ARCH' ? 'archive' : p.tier === 'TOWER' ? 'tower' : 'stele';
+    const kind = p.memorial ? 'work' : p.tier === 'ARCH' ? 'archive' : p.tier === 'TOWER' ? 'tower' : 'stele';
     const extras = { kind, townId: p.townId, year: p.year };
-    if (p.work) { extras.workId = p.work.id; extras.townRank = p.townRank; }
+    if (p.memorial) extras.memorialKey = p.key;
     return `  ${jstr(p.key)}: ${jstr(extras)},`;
   }).join('\n')}
 };
-
-/** 106 座作品建筑的铭牌数据（点击即开，不依赖懒加载模块）。 */
-export const YEAR_TOWN_NAMEPLATES: Readonly<Record<string, YearWorkNameplate>> = {
-${allPlaced.filter((p) => p.work).map((p) => `  ${jstr(p.key)}: ${jstr(nameplateById.get(p.work.id))},`).join('\n')}
-};
-
-/** 档案馆/总目塔/界碑的一句话导览（铭牌卡渲染）。 */
-export const YEAR_TOWN_LANDMARK_BLURBS: Readonly<Record<string, string>> = {
-${allPlaced.filter((p) => !p.work).map((p) => {
-    const town = townById.get(p.townId);
-    const text = p.tier === 'ARCH'
-      ? `${town.label} · ${townWorks[p.year].length - TOP_N[p.year]} 条馆藏，可按热度检索。`
-      : p.tier === 'TOWER'
-        ? `${town.tagline} 收录黑洞区历史热门 Top1000 总目，可全局检索。`
-        : '社区的起点——2019 年，黑洞区只有两块基石。';
-    return `  ${jstr(p.key)}: ${jstr(text)},`;
-  }).join('\n')}
-};
 `;
 
-const genIndexTs = `${GEN_HEADER}// 1000 条 P 级铭牌索引（档案馆列表 / 总目塔检索共用；懒加载，≤350KB 预算）。
-import type { YearIndexModule, YearWorkNameplate } from './_types';
+// 纪念名录索引：各镇立起的设施（设施名 + 设施族 + 导语），不再含作品原文/评论。
+const memorialIndex = allPlaced
+  .filter((p) => p.memorial)
+  .map((p) => ({
+    key: p.key,
+    townId: p.townId,
+    year: p.year,
+    townRank: p.townRank,
+    facility: p.memorial.facility,
+    family: p.memorial.family,
+    note: p.memorial.note,
+  }));
 
-const data: YearIndexModule = { works: ${jstr(nameplates)} };
+const genIndexTs = `${GEN_HEADER}// 106 条纪念设施索引（纪念名录 / 千作总目塔共用）。
+// 仅含设施名、设施族与纪念导语；不含作品原文、评论与热度统计。
+import type { MemorialIndexModule, MemorialIndexEntry } from './_types';
+
+const data: MemorialIndexModule = { memorials: ${jstr(memorialIndex)} };
 export default data;
-export const YEAR_TOWN_INDEX: readonly YearWorkNameplate[] = data.works;
-`;
-
-function dModule(year, partWorks) {
-  return `${GEN_HEADER}// D 级详情（${year} 镇分片；正文 + 评论精选前 ${COMMENT_INLINE} 条；懒加载）。
-import type { YearTownDetailModule } from './_types';
-
-const data: YearTownDetailModule = { year: ${year}, works: ${jstr(partWorks)} };
-export default data;
-`;
-}
-function bodyPackModule(year, bodies) {
-  return `${GEN_HEADER}// 超长正文包（${year} 镇；>${BODY_INLINE_LIMIT} 字外置全文，「展开全文」懒加载）。
-import type { YearTownBodyPack } from './_types';
-
-const data: YearTownBodyPack = { bodies: ${jstr(bodies)} };
-export default data;
-`;
-}
-function commentPackModule(pack) {
-  return `${GEN_HEADER}// F 级全部评论包 ${pack.key}（≤${PACK_BYTES}B/包；「载入全部评论」懒加载）。
-import type { YearTownCommentPackModule } from './_types';
-
-const data: YearTownCommentPackModule = { works: ${jstr(pack.works)} };
-export default data;
-`;
-}
-
-// D 级分片（>PACK_BYTES 拆 -a/-b/…）。
-const dFiles = {}; // filename -> text
-for (const town of YEAR_TOWNS) {
-  const records = detailByTown[town.year];
-  if (jstr(records).length <= PACK_BYTES) {
-    dFiles[`gen-t${town.year}.ts`] = dModule(town.year, records);
-  } else {
-    const parts = [];
-    let current = [], currentBytes = 0;
-    for (const record of records) {
-      const bytes = jstr(record).length;
-      if (currentBytes > 0 && currentBytes + bytes > PACK_BYTES) { parts.push(current); current = []; currentBytes = 0; }
-      current.push(record); currentBytes += bytes;
-    }
-    if (current.length) parts.push(current);
-    parts.forEach((part, i) => {
-      dFiles[`gen-t${town.year}-${String.fromCharCode(97 + i)}.ts`] = dModule(town.year, part);
-    });
-  }
-}
-
-const townLoaderEntries = YEAR_TOWNS.map((town) => {
-  const files = Object.keys(dFiles).filter((f) => f.startsWith(`gen-t${town.year}-`) || f === `gen-t${town.year}.ts`).sort();
-  const fileOf = (f) => `./${f.replace(/\.ts$/, '')}`;
-  if (files.length === 1) return `  ${town.year}: () => import(${jstr(fileOf(files[0]))}).then((m) => m.default),`;
-  const parts = files.map((f) => `import(${jstr(fileOf(f))}).then((m) => m.default.works)`).join(', ');
-  return `  ${town.year}: () => Promise.all([${parts}]).then((parts) => ({ year: ${town.year}, works: parts.flat() })),`;
-}).join('\n');
-
-const bodyPackLoaderEntries = Object.entries(bodyPacks).map(([year]) =>
-  `  ${year}: () => import('./gen-b${year}').then((m) => m.default),`).join('\n');
-
-const commentPackLoaderEntries = [];
-for (const town of YEAR_TOWNS) for (const pack of commentPacks[town.year]) {
-  commentPackLoaderEntries.push(`  ${jstr(pack.key)}: () => import('./gen-c${pack.key}').then((m) => m.default),`);
-}
-
-const genLoadersTs = `${GEN_HEADER}// 懒加载路由表（全部 import() 路径字面量——Vite 静态分析与分片的前提）。
-import type { YearTownDetailModule, YearTownBodyPack, YearTownCommentPackModule } from './_types';
-
-/** 镇 D 级模块（分片自动合并）。 */
-export const TOWN_LOADERS: Readonly<Record<number, () => Promise<YearTownDetailModule>>> = {
-${townLoaderEntries}
-};
-
-/** 超长正文包（有外置作品的镇才有）。 */
-export const BODY_PACK_LOADERS: Readonly<Record<number, () => Promise<YearTownBodyPack>>> = {
-${bodyPackLoaderEntries || '  //（无 >8KB 正文的镇）'}
-};
-
-/** 全部评论包。 */
-export const COMMENT_PACK_LOADERS: Readonly<Record<string, () => Promise<YearTownCommentPackModule>>> = {
-${commentPackLoaderEntries.join('\n') || '  //（无评论包）'}
-};
+export const YEAR_TOWN_MEMORIAL_INDEX: readonly MemorialIndexEntry[] = data.memorials;
 `;
 
 const yearTownCatalogTs = `${GEN_HEADER}// Mirrors apps/web/src/city/data/year-towns (T5) for the admin world-config map.
@@ -615,7 +518,7 @@ export type YearTownCatalogEntry = {
 export const YEAR_TOWN_CATALOG: readonly YearTownCatalogEntry[] = Object.freeze(
 ${jstr(allPlaced.map((p) => ({
     id: p.key,
-    label: p.work ? labelSafeText(p.work.subjectRaw, LABEL_MAX) : (p.tier === 'ARCH' ? `${townById.get(p.townId).name}档案馆` : p.tier === 'TOWER' ? '千作总目塔' : '起源村·界碑'),
+    label: p.memorial ? p.memorial.facility : (p.tier === 'ARCH' ? `${townById.get(p.townId).name}纪念名录` : p.tier === 'TOWER' ? '千作总目塔' : '起源村·界碑'),
     num: numOf(p),
     x: round2(p.x), z: round2(p.z),
     townId: p.townId,
@@ -625,134 +528,108 @@ ${jstr(allPlaced.map((p) => ({
 `;
 
 // ── 8. 报告 ────────────────────────────────────────────────────────────
-const totalArchiveEntries = nameplates.length - 106;
+const memorialPlaced = allPlaced.filter((p) => p.memorial);
+const familyCounts = {};
+for (const p of memorialPlaced) familyCounts[p.family] = (familyCounts[p.family] ?? 0) + 1;
+
 const report = {
   generator: 'scripts/generate_town_buildings.mjs',
   node: NODE,
-  dataBaseline: { fetchedAt: details.fetchedAt ?? top1000.fetchedAt ?? null, works: 1000 },
-  towns: YEAR_TOWNS.map((town) => {
-    const dBytes = Object.entries(dFiles).filter(([f]) => f === `gen-t${town.year}.ts` || f.startsWith(`gen-t${town.year}-`))
-      .reduce((a, [, text]) => a + Buffer.byteLength(text), 0);
-    return {
-      year: town.year, town: town.label,
-      works: townWorks[town.year].length,
-      topBuildings: TOP_N[town.year],
-      archiveEntries: townWorks[town.year].length - TOP_N[town.year],
-      archiveBuilding: town.year !== 2019,
-      placementScale: town.year === 2019 ? 1 : placementsScaleCache[town.year],
-      dFiles: Object.keys(dFiles).filter((f) => f === `gen-t${town.year}.ts` || f.startsWith(`gen-t${town.year}-`)),
-      dBytes,
-      bodyExternal: Object.keys(bodyPacks[town.year] ?? {}).length,
-      commentPacks: commentPacks[town.year].length,
-    };
-  }),
+  dataBaseline: { mode: hasDataSource ? 'full-data' : 'offline-rebuild' },
+  towns: YEAR_TOWNS.map((town) => ({
+    year: town.year,
+    town: town.label,
+    facilities: TOP_N[town.year],
+    hasArchive: town.year !== 2019,
+    placementScale: town.year === 2019 ? 1 : placementsScaleCache[town.year],
+  })),
   totals: {
     buildings: allPlaced.length,
-    workBuildings: allPlaced.filter((p) => p.work).length,
-    archiveBuildings: allPlaced.filter((p) => p.tier === 'ARCH').length,
-    landmarkBuildings: allPlaced.filter((p) => p.tier === 'TOWER' || p.tier === 'STELE').length,
-    archiveEntries: totalArchiveEntries,
-    coverage: allPlaced.filter((p) => p.work).length + totalArchiveEntries,
-    nameplates: nameplates.length,
-    detailRecords: Object.values(detailByTown).reduce((a, list) => a + list.length, 0),
-    bodyCoverage: Object.values(detailByTown).reduce((a, list) => a + list.length, 0),
-    bodyExternalCount,
-    worksWithComments: nameplates.filter((n) => n.sampledComments > 0).length,
-    worksCommentsLocked: nameplates.filter((n) => n.commentsLocked).length,
-    blankCommentsFiltered: blankFiltered,
-    longCommentTruncated,
-    commentsTruncatedWorks: nameplates.filter((n) => n.commentsTruncated).length,
-    commentsTruncatedAt200: nameplates.filter((n) => n.commentsTruncated && n.sampledComments === 200).length,
-    commentPackWorks: Object.values(commentPacks).reduce((a, packs) => a + packs.reduce((b, p) => b + p.works.length, 0), 0),
-    generatedFiles: 6 + Object.keys(dFiles).length + Object.keys(bodyPacks).length + Object.values(commentPacks).reduce((a, p) => a + p.length, 0), // buildings/index/loaders + catalog + report md/json
+    facilities: memorialPlaced.length,
+    archives: allPlaced.filter((p) => p.tier === 'ARCH').length,
+    landmarks: allPlaced.filter((p) => p.tier === 'TOWER' || p.tier === 'STELE').length,
+    families: familyCounts,
+    generatedFiles: 3 + 3, // buildings + index（loaders 已移除）+ catalog + report json/md
   },
 };
 
-// ── 8b. 内置断言（任务红线：总建筑 + 档案条目 = 1000 全覆盖）──────────────
-const workBuildingCount = allPlaced.filter((p) => p.work).length;
-if (workBuildingCount !== 106) fail(`作品建筑数 ${workBuildingCount} ≠ 106`);
-if (allPlaced.filter((p) => p.tier === 'ARCH').length !== 7) fail('档案馆数 ≠ 7');
+// ── 8b. 内置断言（纪念设施红线）──────────────────────────────────────────
+if (memorialPlaced.length !== 106) fail(`纪念设施数 ${memorialPlaced.length} ≠ 106`);
+if (allPlaced.filter((p) => p.tier === 'ARCH').length !== 7) fail('纪念名录数 ≠ 7');
 if (allPlaced.filter((p) => p.tier === 'TOWER').length !== 1 || allPlaced.filter((p) => p.tier === 'STELE').length !== 1) fail('总目塔/界碑缺失');
 if (allPlaced.length !== 115) fail(`总结构 ${allPlaced.length} ≠ 115`);
-if (nameplates.length !== 1000) fail(`P 级索引 ${nameplates.length} ≠ 1000`);
-if (workBuildingCount + totalArchiveEntries !== 1000) fail(`覆盖对账失败：${workBuildingCount}+${totalArchiveEntries} ≠ 1000`);
-const detailIds = new Set(Object.values(detailByTown).flat().map((r) => r.id));
-if (detailIds.size !== 1000) fail(`D 级覆盖 ${detailIds.size} ≠ 1000`);
-for (const w of works) if (!detailIds.has(w.id)) fail(`D 级缺 ${w.id}`);
 const buildingIds = new Set(allPlaced.map((p) => p.key));
 if (buildingIds.size !== 115) fail('建筑 ID 重复');
 const nums = allPlaced.map((p) => numOf(p));
 if (new Set(nums).size !== 115) fail('建筑 num 重复');
-for (const n of nameplates) {
-  if (/[<>\u0000-\u001F]/.test(n.label)) fail(`label 不 label-safe: ${n.id}`);
-  if (n.commentsLocked !== (n.id === LOCKED_WORK_ID)) fail(`锁定标记口径错误: ${n.id}`);
+for (const p of memorialPlaced) {
+  if (!p.memorial.facility) fail(`设施 ${p.key} 缺设施名`);
+  if (!p.memorial.note) fail(`设施 ${p.key} 缺纪念导语`);
+  if (!FAMILY_SHAPES[p.memorial.family]) fail(`设施 ${p.key} 设施族未知`);
 }
-const locked = nameplates.find((n) => n.id === LOCKED_WORK_ID);
-if (!locked || locked.subject.includes('电学实验的问号') === false) fail('rank 344 锁定作品缺失');
+// 设施名不得直接复述作品标题（纪念设施必须经过改写）。
+for (const p of memorialPlaced) {
+  const work = works.find((w) => w.id === p.workId);
+  if (!work) continue;
+  const subject = String(work.subjectRaw ?? '').replace(/[《》「」〃"'（）()\s]/g, '');
+  const facility = p.memorial.facility.replace(/[·・\s]/g, '');
+  if (subject.length >= 3 && facility === subject) fail(`设施 ${p.key} 直接复述作品标题：${facility}`);
+}
 
 // ── 9. 报告 Markdown ───────────────────────────────────────────────────
 const fmt = (n) => n.toLocaleString('en-US');
-const reportMd = `# 年份镇建筑生成报告（T5）
+const reportMd = `# 年份群岛纪念设施生成报告
 
 > 生成器：\`scripts/generate_town_buildings.mjs\`（幂等，先清后生成，--check 逐字节复核）
-> 数据基线：blackhole_top1000.json + blackhole_details.json（fetchedAt ${details.fetchedAt ?? '-'}，1000/1000 全量）
-> 布局算法：街+环确定性贪心（无随机；排序键=热度降、id 升）；2019 起源村为设计 §7.1 手工定稿解
-> 治理口径：年份镇建筑不入治理账本（无 personalPlots/Areas，设计 §10）——服务端镜像
-> \`apps/server/src/data/yearTownCatalog.ts\` 仅作 admin 世界图登记，**已筹资项目 ID 零改动**（新目录项零迁移）。
+> 数据基线：${hasDataSource ? 'blackhole_top1000.json + blackhole_details.json（仅用于确定年份与镇内排序）' : '离线重建（无数据源；结构取自既有 gen-buildings.ts）'}
+> 设计口径：设计 §7.1 修订——作品抽象为城市纪念设施，**作品原文/评论/热度/浏览量不进入年份群岛**。
+> 设施名与纪念导语来自手写目录 \`apps/web/src/city/data/year-towns/yearTownMemorials.ts\`。
+> 治理口径：年份群岛建筑不入治理账本（无 personalPlots/Areas，设计 §10）——服务端镜像仅作 admin 世界图登记。
 
 ## 各镇产出
 
-| 镇 | 作品数 | 主题建筑(Top N) | 档案馆藏 | 布局缩放 | D 分片 | D 体积 | 外置正文 | 评论包 |
-|---|---|---|---|---|---|---|---|---|
-${report.towns.map((t) => `| ${t.town} | ${t.works} | ${t.topBuildings} | ${t.archiveEntries} | ${t.placementScale} | ${t.dFiles.length} | ${fmt(t.dBytes)}B | ${t.bodyExternal} | ${t.commentPacks} |`).join('\n')}
+| 镇 | 纪念设施 | 纪念名录 | 布局缩放 |
+|---|---|---|---|
+${report.towns.map((t) => `| ${t.town} | ${t.facilities} | ${t.hasArchive ? '1' : '—'} | ${t.placementScale} |`).join('\n')}
 
 ## 总量对账
 
 | 项 | 数值 |
 |---|---|
-| 主题建筑（作品） | ${report.totals.workBuildings}/106 |
-| 镇档案馆 | ${report.totals.archiveBuildings}/7（各镇 1 座，起源村除外） |
-| 千作总目塔 + 起源村界碑 | ${report.totals.landmarkBuildings}/2 |
+| 纪念设施（作品抽象） | ${report.totals.facilities}/106 |
+| 镇纪念名录 | ${report.totals.archives}/7（起源村除外） |
+| 千作总目塔 + 起源村界碑 | ${report.totals.landmarks}/2 |
 | 总结构 | ${report.totals.buildings}/115 |
-| **作品建筑 + 档案馆藏条目** | **${workBuildingCount} + ${totalArchiveEntries} = ${workBuildingCount + totalArchiveEntries}/1000 ✅** |
-| P 级铭牌索引（gen-index） | ${report.totals.nameplates}/1000 |
-| D 级详情记录（正文+评论精选） | ${report.totals.detailRecords}/1000 |
-| 正文覆盖 | ${report.totals.bodyCoverage}/1000（其中 ${report.totals.bodyExternalCount} 条 >8KB 外置 gen-b 包，详情级截断 2000 字） |
-| 有评论的作品 | ${report.totals.worksWithComments}/1000（rank 344 服务端 403 锁定 → 「评论区已锁定」占位） |
-| 空白评论（过滤不渲染） | ${fmt(report.totals.blankCommentsFiltered)} 条 |
-| 单条 >500 字评论（截断加 …） | ${report.totals.longCommentTruncated} 条 |
-| commentsTruncated 作品 | ${report.totals.commentsTruncatedWorks}（其中满 200 条采样 ${report.totals.commentsTruncatedAt200}，面板标「仅展示最新 N 条 / 共 totalComments 条」） |
-| F 级评论包覆盖作品 | ${report.totals.commentPackWorks}（评论 >20 条 → 懒加载全部） |
 | 生成模块文件数 | ${report.totals.generatedFiles} |
 
-## T4.5 质检 7 条落实情况
+## 设施族分布
 
-1. 巨楼标记：commentsTruncated 随 P 级数据落盘，面板渲染「仅展示最新 {sampled} 条 / 共 {totalComments} 条」。
-2. Count 偏差：面板评论条数一律取 \`len(comments)\`（sampledComments 字段），断言不使用 totalComments。
-3. rank 344「电学实验的问号」：D 级 locked=true + 评论置空，面板「评论区已锁定」占位；正文 682 字正常内联。
-4. 社区富文本（<discussion>/<user>/<color>/<a>…）：sanitizeCommunityText 生成期统一烘焙（与运行时同源，单测覆盖）。
-5. 评论平铺前缀：数据无嵌套结构，面板线性渲染。
-6. 空白评论：生成期过滤（${fmt(report.totals.blankCommentsFiltered)} 条不落盘）。
-7. 字符口径：全部按代码点计数（Array.from，中文 1 字符，与 Python len() 一致）。
+| 设施族 | 座数 |
+|---|---|
+${Object.entries(familyCounts).sort((a, b) => b[1] - a[1]).map(([f, n]) => `| ${f} | ${n} |`).join('\n')}
+
+## 布局语法（设计 §7.1 修订）
+
+1. 中央广场：镇心留空 r ≈ plateauR×0.22，不落建筑。
+2. 纪念轴线：站台 → 镇心 → 轴线尽端，首座设施（XL）置于轴端作对景。
+3. 环形主街：r ≈ plateauR×0.62 留作街道，建筑不得骑跨。
+4. 街区归拢：其余设施按设施族方位偏好成片分布，形成可辨认的同质街区。
+5. 密度梯度：主街内外两圈优先，广场边缘与台面外缘作补充。
 
 ## 数据对齐说明（治理红线）
 
-- \`buildings/_registry.ts\` 未改动：设计 §7.1 明确年份镇建筑不逐座进主城注册表（106 import 不可维护），
+- \`buildings/_registry.ts\` 未改动：年份群岛建筑不逐座进主城注册表，
   合流点在 \`yearTownBuildings.ts\` → cityWorldAssembly 装配（与 BUILDING_DEFS 同一 buildingSceneController 管道）。
-- 服务端 \`buildingCatalog.ts\` 未改动；新增独立镜像 \`yearTownCatalog.ts\`（115 条，storyLocked 全 false），
-  \`check:building-catalog\` 门禁已扩展同源校验。已筹资项目 ID 零变更（AGENTS 治理红线）。
-- gen-* 生成物不进 git（GOAL 红线「不留生成物入 git」；.gitignore 覆盖 \`apps/web/src/city/data/year-towns/gen-*\`），
-  交付（T8 send_file 全目录）不受影响；yearTownCatalog.ts 镜像与本报告为提交物。
+- 服务端 \`buildingCatalog.ts\` 未改动；独立镜像 \`yearTownCatalog.ts\`（115 条，storyLocked 全 false），
+  已筹资项目 ID 零变更（AGENTS 治理红线）。
+- gen-* 生成物不进 git（.gitignore 覆盖 \`apps/web/src/city/data/year-towns/gen-*\`）。
 `;
+
 
 // ── 10. 输出与校验（--check 与磁盘逐字节比对）──────────────────────────
 const outputs = new Map();
 outputs.set(join(TOWNS_DIR, 'gen-buildings.ts'), genBuildingsTs);
-outputs.set(join(TOWNS_DIR, 'gen-loaders.ts'), genLoadersTs);
 outputs.set(join(TOWNS_DIR, 'gen-index.ts'), genIndexTs);
-for (const [name, text] of Object.entries(dFiles)) outputs.set(join(TOWNS_DIR, name), text);
-for (const [year, bodies] of Object.entries(bodyPacks)) outputs.set(join(TOWNS_DIR, `gen-b${year}.ts`), bodyPackModule(year, bodies));
-for (const packs of Object.values(commentPacks)) for (const pack of packs) outputs.set(join(TOWNS_DIR, `gen-c${pack.key}.ts`), commentPackModule(pack));
 outputs.set(join(SERVER_DATA_DIR, 'yearTownCatalog.ts'), yearTownCatalogTs);
 outputs.set(join(DOCS_DIR, 'year-towns-gen-report.json'), `${JSON.stringify(report, null, 2)}\n`);
 outputs.set(join(DOCS_DIR, 'year-towns-gen-report.md'), reportMd);
@@ -789,7 +666,7 @@ if (CHECK_ONLY) {
   mkdirSync(DOCS_DIR, { recursive: true });
   for (const [path, text] of outputs) writeFileSync(path, text);
   const gitignoreUpdated = ensureGitignore();
-  log(`生成完成：${outputs.size} 个文件（建筑 ${allPlaced.length}、馆藏 ${totalArchiveEntries}、覆盖 1000/1000）。`);
+  log(`生成完成：${outputs.size} 个文件（纪念设施 ${memorialPlaced.length} 座、总结构 ${allPlaced.length} 座）。`);
   log('  幂等性：npm run gen:year-towns -- --check 可逐字节复核（两次运行产出一致）。');
   if (gitignoreUpdated) log('  .gitignore 已追加 gen-* 规则。');
 }

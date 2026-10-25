@@ -1,150 +1,86 @@
 {
   "generator": "scripts/generate_town_buildings.mjs",
-  "node": "/home/z/node22/bin/node",
+  "node": "/usr/local/bin/node",
   "dataBaseline": {
-    "fetchedAt": "2026-10-18T04:36:33+08:00",
-    "works": 1000
+    "mode": "offline-rebuild"
   },
   "towns": [
     {
       "year": 2019,
       "town": "2019·起源村",
-      "works": 2,
-      "topBuildings": 2,
-      "archiveEntries": 0,
-      "archiveBuilding": false,
-      "placementScale": 1,
-      "dFiles": [
-        "gen-t2019.ts"
-      ],
-      "dBytes": 30350,
-      "bodyExternal": 0,
-      "commentPacks": 1
+      "facilities": 2,
+      "hasArchive": false,
+      "placementScale": 1
     },
     {
       "year": 2020,
       "town": "2020·启明镇",
-      "works": 75,
-      "topBuildings": 10,
-      "archiveEntries": 65,
-      "archiveBuilding": true,
-      "placementScale": 0.4924,
-      "dFiles": [
-        "gen-t2020.ts"
-      ],
-      "dBytes": 455625,
-      "bodyExternal": 0,
-      "commentPacks": 1
+      "facilities": 10,
+      "hasArchive": true,
+      "placementScale": 1
     },
     {
       "year": 2021,
       "town": "2021·潮声镇",
-      "works": 147,
-      "topBuildings": 16,
-      "archiveEntries": 131,
-      "archiveBuilding": true,
-      "placementScale": 0.7298,
-      "dFiles": [
-        "gen-t2021.ts"
-      ],
-      "dBytes": 909750,
-      "bodyExternal": 2,
-      "commentPacks": 2
+      "facilities": 16,
+      "hasArchive": true,
+      "placementScale": 1
     },
     {
       "year": 2022,
       "town": "2022·盛夏镇",
-      "works": 217,
-      "topBuildings": 20,
-      "archiveEntries": 197,
-      "archiveBuilding": true,
-      "placementScale": 0.8536,
-      "dFiles": [
-        "gen-t2022.ts"
-      ],
-      "dBytes": 1589522,
-      "bodyExternal": 3,
-      "commentPacks": 4
+      "facilities": 20,
+      "hasArchive": true,
+      "placementScale": 1
     },
     {
       "year": 2023,
       "town": "2023·回响镇",
-      "works": 202,
-      "topBuildings": 18,
-      "archiveEntries": 184,
-      "archiveBuilding": true,
-      "placementScale": 0.8240000000000001,
-      "dFiles": [
-        "gen-t2023.ts"
-      ],
-      "dBytes": 1427189,
-      "bodyExternal": 3,
-      "commentPacks": 4
+      "facilities": 18,
+      "hasArchive": true,
+      "placementScale": 1
     },
     {
       "year": 2024,
       "town": "2024·微光镇",
-      "works": 170,
-      "topBuildings": 16,
-      "archiveEntries": 154,
-      "archiveBuilding": true,
-      "placementScale": 0.7933,
-      "dFiles": [
-        "gen-t2024.ts"
-      ],
-      "dBytes": 1220666,
-      "bodyExternal": 5,
-      "commentPacks": 4
+      "facilities": 16,
+      "hasArchive": true,
+      "placementScale": 1
     },
     {
       "year": 2025,
       "town": "2025·长风镇",
-      "works": 128,
-      "topBuildings": 12,
-      "archiveEntries": 116,
-      "archiveBuilding": true,
-      "placementScale": 0.6552,
-      "dFiles": [
-        "gen-t2025.ts"
-      ],
-      "dBytes": 1001753,
-      "bodyExternal": 2,
-      "commentPacks": 3
+      "facilities": 12,
+      "hasArchive": true,
+      "placementScale": 1
     },
     {
       "year": 2026,
       "town": "2026·星港",
-      "works": 59,
-      "topBuildings": 12,
-      "archiveEntries": 47,
-      "archiveBuilding": true,
-      "placementScale": 0.5928,
-      "dFiles": [
-        "gen-t2026.ts"
-      ],
-      "dBytes": 424550,
-      "bodyExternal": 6,
-      "commentPacks": 1
+      "facilities": 12,
+      "hasArchive": true,
+      "placementScale": 1
     }
   ],
   "totals": {
     "buildings": 115,
-    "workBuildings": 106,
-    "archiveBuildings": 7,
-    "landmarkBuildings": 2,
-    "archiveEntries": 894,
-    "coverage": 1000,
-    "nameplates": 1000,
-    "detailRecords": 1000,
-    "bodyCoverage": 1000,
-    "bodyExternalCount": 21,
-    "worksWithComments": 999,
-    "worksCommentsLocked": 1,
-    "blankCommentsFiltered": 1343,
-    "longCommentTruncated": 5593,
-    "commentsTruncatedWorks": 421,
-    "commentsTruncatedAt200": 200,
-    "commentPackWorks": 965,
-    "generatedFiles": 40
+    "facilities": 106,
+    "archives": 7,
+    "landmarks": 2,
+    "families": {
+      "law": 7,
+      "lab": 8,
+      "guild": 17,
+      "academy": 6,
+      "observatory": 5,
+      "memorial": 9,
+      "gathering": 18,
+      "tavern": 8,
+      "narrative": 7,
+      "press": 12,
+      "market": 4,
+      "dwelling": 5
+    },
+    "generatedFiles": 6
   }
 }

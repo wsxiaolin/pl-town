@@ -1,21 +1,18 @@
-// T6R-b2：年份镇作品详情抽屉的懒加载路由 / 数据组装纯函数单测。
-// gen-* 模块经 tsconfig.test-run 的 CommonJS 编译后，import() 字面量退化为
-// 延迟 require——TOWN_LOADERS 可以在 Node 单测里真实执行（懒加载路由验证）。
+// 年份镇纪念设施面板单测（设计 §7.1 修订：取代作品详情抽屉）。
+// 口径：动作解析、设施视图组装、便签交互文案、纪念名录按年份取。
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { YEAR_TOWN_BUILDING_EXTRAS, YEAR_TOWN_NAMEPLATES } from '../../src/city/data/year-towns/gen-buildings';
-import { TOWN_LOADERS } from '../../src/city/data/year-towns/gen-loaders';
+import { YEAR_TOWN_BUILDING_EXTRAS } from '../../src/city/data/year-towns/gen-buildings';
+import { YEAR_TOWN_MEMORIAL_INDEX } from '../../src/city/data/year-towns/gen-index';
 import {
-  COMMENT_PAGE_SIZE,
+  FAMILY_LABELS,
   READ_BODY_ACTION_PREFIX,
-  SELECTED_COMMENT_PREVIEW,
-  commentPages,
-  findPackComments,
-  findWorkDetail,
-  formatCommentTime,
+  memorialIndexForYear,
+  memorialOfBuilding,
+  memorialViewOfBuilding,
+  noteLabelOf,
   parseReadBodyAction,
 } from '../../src/adapters/ui/yearTownPanelController';
-import type { YearTownCommentPackModule, YearWorkDetail } from '../../src/city/data/year-towns/_types';
 
 test('read-body 动作前缀与解析互为逆运算', () => {
   assert.equal(READ_BODY_ACTION_PREFIX, 'read-body:');
@@ -28,62 +25,69 @@ test('parseReadBodyAction 拒绝非本面板动作与残缺动作', () => {
   assert.equal(parseReadBodyAction(''), null);
 });
 
-test('findWorkDetail 按作品 ID 定位详情并干净落空', () => {
-  const works: readonly YearWorkDetail[] = [
-    { id: 'a', body: '甲', bodyExternal: false, comments: [] },
-    { id: 'b', body: '乙', bodyExternal: true, comments: [], pack: '2022-1' },
-  ];
-  assert.equal(findWorkDetail(works, 'b')?.body, '乙');
-  assert.equal(findWorkDetail(works, 'c'), undefined);
+test('设施视图：建筑 → 设施名/导语/年份/镇名，未知建筑落空', () => {
+  const view = memorialViewOfBuilding('yt-w2020-01');
+  assert.ok(view, '启明镇 #1 应有设施视图');
+  assert.equal(view?.facility, '议事厅');
+  assert.ok(view?.note.length);
+  assert.equal(view?.year, 2020);
+  assert.ok(view?.townLabel.includes('启明镇'), '镇名应包含启明镇');
+  assert.equal(memorialViewOfBuilding('no-such-building'), undefined);
 });
 
-test('findPackComments 在评论包中按作品 ID 取全部评论', () => {
-  const pack: YearTownCommentPackModule = {
-    works: [{ id: 'a', comments: [{ nickname: '居民', content: '路过' }] }],
-  };
-  assert.equal(findPackComments(pack, 'a')?.length, 1);
-  assert.equal(findPackComments(pack, 'zz'), undefined);
+test('纪念名录建筑有导语视图（7 座名录 + 总目塔）', () => {
+  for (const id of ['yt-arch-2020', 'yt-arch-2026', 'yt-tower']) {
+    const view = memorialViewOfBuilding(id);
+    assert.ok(view, `${id} 应有地标导语视图`);
+    assert.ok(view?.note.length, `${id} 导语不应为空`);
+  }
 });
 
-test('formatCommentTime 渲染 ISO 时间为日期，无效输入落空串', () => {
-  assert.equal(formatCommentTime('2026-10-06T12:16:45+08:00'), '2026-10-06');
-  assert.equal(formatCommentTime(undefined), '');
-  assert.equal(formatCommentTime('not-a-date'), '');
+test('设施视图不含社区统计数据（无热度/评论/浏览量字段）', () => {
+  const view = memorialViewOfBuilding('yt-w2022-01');
+  assert.ok(view);
+  const keys = Object.keys(view!).sort();
+  assert.deepEqual(keys, ['facility', 'family', 'key', 'note', 'noteKind', 'townLabel', 'year'].filter((k) => k in view!));
 });
 
-test('全部评论分页遵循 50/批哨兵节奏', () => {
-  assert.equal(COMMENT_PAGE_SIZE, 50);
-  assert.equal(SELECTED_COMMENT_PREVIEW, 5);
-  assert.equal(commentPages(0), 0);
-  assert.equal(commentPages(50), 1);
-  assert.equal(commentPages(51), 2);
-  assert.equal(commentPages(200), 4);
+test('memorialOfBuilding 返回手写目录条目，地标建筑返回 undefined', () => {
+  const memorial = memorialOfBuilding('yt-w2023-04');
+  assert.ok(memorial);
+  assert.equal(memorial?.facility, '往生堂');
+  assert.equal(memorialOfBuilding('yt-arch-2022'), undefined);
 });
 
-test('全部 106 座作品建筑的路由键齐备（extras → 镇 loader → 铭牌）', () => {
-  let works = 0;
+test('便签交互文案：四种交互各有动作与完成反馈，未知种类落空', () => {
+  for (const kind of ['stamp', 'lamp', 'leaving', 'capsule']) {
+    const label = noteLabelOf(kind);
+    assert.ok(label, `${kind} 应有文案`);
+    assert.ok(label!.action.length);
+    assert.ok(label!.done.length);
+  }
+  assert.equal(noteLabelOf(undefined), undefined);
+  assert.equal(noteLabelOf('no-such-kind'), undefined);
+});
+
+test('设施族中文名覆盖全部出现的设施族', () => {
+  const used = new Set(YEAR_TOWN_MEMORIAL_INDEX.map((entry) => entry.family));
+  for (const family of used) {
+    assert.ok(FAMILY_LABELS[family], `设施族 ${family} 缺中文名`);
+  }
+});
+
+test('按年份取纪念名录：条数与设计表一致', () => {
+  assert.equal(memorialIndexForYear(2019).length, 2);
+  assert.equal(memorialIndexForYear(2022).length, 20);
+  assert.equal(memorialIndexForYear(2026).length, 12);
+  assert.equal(memorialIndexForYear(1999).length, 0);
+});
+
+test('每座设施建筑都能解析出面板视图（106 座无遗漏）', () => {
+  let count = 0;
   for (const [buildingId, extras] of Object.entries(YEAR_TOWN_BUILDING_EXTRAS)) {
     if (extras.kind !== 'work') continue;
-    works += 1;
-    assert.ok(TOWN_LOADERS[extras.year], `${buildingId} 缺少年份 ${extras.year} 的镇懒加载路由`);
-    const nameplate = YEAR_TOWN_NAMEPLATES[buildingId];
-    assert.ok(nameplate, `${buildingId} 缺少铭牌`);
-    assert.equal(extras.workId, nameplate?.id, `${buildingId} 的 extras.workId 与铭牌 id 不一致`);
+    count += 1;
+    assert.ok(memorialViewOfBuilding(buildingId), `${buildingId} 应能打开纪念面板`);
   }
-  assert.equal(works, 106);
-});
-
-test('镇懒加载路由可真实解析 D 级模块（2022 样本：Top 作品 + 锁定作品）', async () => {
-  const loader = TOWN_LOADERS[2022];
-  assert.ok(loader);
-  const module = await loader();
-  assert.equal(module.year, 2022);
-  const topWorkId = YEAR_TOWN_BUILDING_EXTRAS['yt-w2022-01']?.workId;
-  assert.ok(topWorkId);
-  const top = findWorkDetail(module.works, topWorkId);
-  assert.ok(top, '盛夏镇第 1 名作品应存在于 D 级模块');
-  assert.ok(top!.comments.length <= 20, 'D 级评论精选不超过 20 条');
-  assert.ok(top!.pack, '评论多于 20 条的作品应带评论包键');
-  const locked = findWorkDetail(module.works, '6256584dfa4ee80001c7104d');
-  assert.equal(locked?.locked, true, 'rank 344（服务端 403）应带锁定标记');
+  assert.equal(count, 106);
 });

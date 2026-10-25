@@ -6,7 +6,8 @@ import { MINGLAN_ISLES } from '../../src/city/data/terrain/sea-minglan';
 import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
 import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, shorelineX } from '../../src/city/data/cityConfig';
-import { YEAR_ISLAND_SPECS } from '../../src/city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, islandShapeScaleAt } from '../../src/city/data/year-towns/towns';
+import { bridgeDeckBlendAt, stationPadBlendAt } from '../../src/city/data/terrain/heightfield/transitField';
 import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
 import { ISLAND_SKIRT_W } from '../../src/city/data/terrain/heightfield/islandField';
 import { PLATEAU_MAIN } from '../../src/city/data/terrain/heightfield/plateauField';
@@ -361,9 +362,17 @@ test('年份群岛台面恒高：worldReliefAt 在 3 岛台面内恒等于该岛
   // 河谷/海床切割）漏进岛台。逐镇整圆采样（步 1）+ 岛心处全链 terrainHeight
   // 复核（PLATEAU_BASE_Y 耦合）。
   for (const town of YEAR_ISLAND_SPECS) {
-    for (let x = Math.ceil(town.x - town.plateauR); x <= Math.floor(town.x + town.plateauR); x += 1) {
-      for (let z = Math.ceil(town.z - town.plateauR); z <= Math.floor(town.z + town.plateauR); z += 1) {
-        if (Math.hypot(x - town.x, z - town.z) > town.plateauR) continue;
+    // 岛缘非正圆：台面范围按该方向的调制半径判定（islandShapeScaleAt）。
+    const maxR = town.plateauR * 1.2;
+    for (let x = Math.ceil(town.x - maxR); x <= Math.floor(town.x + maxR); x += 1) {
+      for (let z = Math.ceil(town.z - maxR); z <= Math.floor(town.z + maxR); z += 1) {
+        const dx = x - town.x;
+        const dz = z - town.z;
+        const k = islandShapeScaleAt(town.shape, Math.atan2(dz, dx));
+        if (Math.hypot(dx, dz) > town.plateauR * k) continue;
+        // 交通件上盖（月台/桥面）本就高于台面，不属于「台面恒高」口径。
+        if (stationPadBlendAt(x, z, town.topY) !== null) continue;
+        if (bridgeDeckBlendAt(x, z, town.topY) !== null) continue;
         assert.ok(
           Math.abs(worldReliefAt(x, z) - town.topY) < 1e-9,
           `${town.label} 台面内 (${x}, ${z}) worldReliefAt 应恒为 topY=${town.topY}（语义同主城台地）`,

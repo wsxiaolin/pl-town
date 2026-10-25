@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { YEAR_ISLAND_SPECS, type YearDistrictSpec } from '../../city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, islandShapeScaleAt, type YearDistrictSpec } from '../../city/data/year-towns/towns';
 import { islandSurfaceYAt, ISLAND_SKIRT_BOTTOM, ISLAND_SKIRT_W } from '../../city/data/terrain/heightfield/islandField';
 
 // 南洋年份群岛渲染：2 座大城 + 启源站，共 3 座 flat-top 岛台（台面平台 + 滩坡 + 水下裙）+ 沙线盘。
@@ -71,7 +71,8 @@ function buildIslandBody(
   facetMaterial: THREE.Material,
 ): void {
   const radii = ringRadii(town);
-  const segments = town.plateauR >= 40 ? 64 : 32;
+  // 有岛形调制的岛需要更高分段，否则谐波岸线会呈折线。
+  const segments = town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
   const townColor = new THREE.Color(town.theme.groundColor);
   const positions: number[] = [];
   const colors: number[] = [];
@@ -136,13 +137,42 @@ function buildIslandBody(
   context.geometries.add(geometry);
 }
 
+/**
+ * 沙线盘几何：平铺在 y = SAND_RIM_Y 的环形带，用于遮住岛体与水面接缝。
+ * 岸线非正圆时按 islandShapeScaleAt 逐角度缩放，与岛体/地形同源。
+ */
+function sandRimGeometry(town: YearDistrictSpec): THREE.BufferGeometry {
+  const segments = town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
+  const baseR = town.beachR + SAND_RIM_MARGIN;
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  // 顶点：中心 + 外缘（逐角度调制半径）。
+  positions.push(0, 0, 0);
+  for (let i = 0; i < segments; i += 1) {
+    const theta = (i / segments) * Math.PI * 2;
+    const k = islandShapeScaleAt(town.shape, theta);
+    positions.push(Math.cos(theta) * baseR * k, 0, Math.sin(theta) * baseR * k);
+  }
+  for (let i = 0; i < segments; i += 1) {
+    const a = 1 + i;
+    const b = 1 + ((i + 1) % segments);
+    indices.push(0, b, a);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.rotateX(-Math.PI / 2);
+  return geometry;
+}
+
 function buildSandRim(
   context: BuildContext,
   town: YearDistrictSpec,
   rimMaterial: THREE.Material,
 ): void {
-  const geometry = new THREE.CircleGeometry(town.beachR + SAND_RIM_MARGIN, town.plateauR >= 40 ? 64 : 32);
-  geometry.rotateX(-Math.PI / 2);
+  const geometry = sandRimGeometry(town);
   geometry.computeBoundingSphere();
   const mesh = new THREE.Mesh(geometry, rimMaterial);
   mesh.position.set(town.x, SAND_RIM_Y, town.z);

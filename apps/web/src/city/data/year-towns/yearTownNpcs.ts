@@ -18,7 +18,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2019-lamplighter', name:'守灯人', role:'起源村 · 村口守灯人', core:false, spawnChance:1,
     behavior:'field', workHours:[0,24],
-    head:0xE8D8C8, body:0xB59A6A, home:[98.4,201.6], work:[98.4,201.6], patrolRadius:0,
+    head:0xE8D8C8, body:0xB59A6A, home:[137,210], work:[137,210], patrolRadius:0,
     dialog:[
       { text:'「欢迎来到一切开始的地方。荒原上的第一盏灯，就是我点的。」', options:[
         { text:'这里只有两栋屋？', next:1 },
@@ -39,7 +39,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2020-guide', name:'晨星向导', role:'启明镇 · 晨星学堂向导', core:false, spawnChance:1,
     behavior:'field', workHours:[8,18],
-    head:0xD7B49A, body:0x8FA3B8, home:[9.9,218.2], work:[9.9,218.2], patrolRadius:0,
+    head:0xD7B49A, body:0x8FA3B8, home:[-21,252.1], work:[-21,252.1], patrolRadius:0,
     dialog:[
       { text:'「新来的吧？欢迎！启明镇的入门手册我都背下来了——这一页是基础，这一页是进阶。」', options:[
         { text:'你在教什么？', next:1 },
@@ -57,7 +57,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2020-stargazer', name:'观星人', role:'启明镇 · 观星人', core:false, spawnChance:1,
     behavior:'field', workHours:[20,6],
-    head:0xE0C0A8, body:0x5A6A8A, home:[3.4,225.3], work:[3.4,225.3], patrolRadius:0,
+    head:0xE0C0A8, body:0x5A6A8A, home:[-13.3,243.2], work:[-13.3,243.2], patrolRadius:0,
     dialog:[
       { text:'「嘘——等一颗亮起来。启明镇的夜空，是这一带最好的。」', options:[
         { text:'在看什么？', next:1 },
@@ -76,7 +76,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2021-wallkeeper', name:'守墙人', role:'潮声镇 · 初代守墙人', core:false, spawnChance:1,
     behavior:'field', workHours:[7,23],
-    head:0xD6B2A0, body:0x7A8A7E, home:[34.2,227.5], work:[34.2,227.5], patrolRadius:0,
+    head:0xD6B2A0, body:0x7A8A7E, home:[29.9,220.9], work:[29.9,220.9], patrolRadius:0,
     dialog:[
       { text:'「这面墙，是全镇最老的一面。第一句留言刻在最上头——现在潮水一涨，正好淹到那行字。」', options:[
         { text:'墙上都写什么？', next:1 },
@@ -96,7 +96,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2021-recorder', name:'潮汐记录员', role:'潮声镇 · 潮汐记录员', core:false, spawnChance:1,
     behavior:'field', workHours:[9,17],
-    head:0xC89973, body:0x4A6A7A, home:[42.3,225.0], work:[42.3,225.0], patrolRadius:0,
+    head:0xC89973, body:0x4A6A7A, home:[34.3,225.7], work:[34.3,225.7], patrolRadius:0,
     dialog:[
       { text:'「第三本了。前两本记满了，锁在镇公所的柜子里。」', options:[
         { text:'记什么？', next:1 },
@@ -114,7 +114,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2021-beachcomber', name:'拾贝人', role:'潮声镇 · 退潮拾贝人', core:false, spawnChance:1,
     behavior:'field', workHours:[6,12],
-    head:0xE3B7A0, body:0x9A8A6A, home:[36.1,218.0], work:[36.1,218.0], patrolRadius:0,
+    head:0xE3B7A0, body:0x9A8A6A, home:[51.6,238.9], work:[51.6,238.9], patrolRadius:0,
     dialog:[
       { text:'「退潮以后滩上全是好东西——别人聊剩的话题、没人接的下半句、还有一句问了好几天没人答的问题。」', options:[
         { text:'你捡这些做什么？', next:1 },
@@ -134,7 +134,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2022-clerk', name:'条例文书', role:'盛夏镇 · 条例文书', core:false, spawnChance:1,
     behavior:'field', workHours:[9,17],
-    head:0xC8B89A, body:0x8A7A5A, home:[12.1,249.6], work:[12.1,249.6], patrolRadius:0,
+    head:0xC8B89A, body:0x8A7A5A, home:[12.4,300.8], work:[12.4,300.8], patrolRadius:0,
     dialog:[
       { text:'「盛夏镇办事有条章。新章的墨迹干了才三天，你要办事，先看墙上那份。」', options:[
         { text:'写了什么？', next:1 },
@@ -153,7 +153,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2022-collector', name:'收藏家', role:'盛夏镇 · 功能收藏家', core:false, spawnChance:1,
     behavior:'field', workHours:[10,20],
-    head:0xD4A574, body:0x5A6A5A, home:[4.0,250.1], work:[4.0,250.1], patrolRadius:0,
+    head:0xD4A574, body:0x5A6A5A, home:[3.1,300.2], work:[3.1,300.2], patrolRadius:0,
     dialog:[
       { text:'「想学点别人不知道的？我这本大全册，盛夏镇独一份。」', options:[
         { text:'大全册里有什么？', next:1 },
@@ -176,7 +176,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2022-signmaker', name:'招牌匠', role:'盛夏镇 · 艺术字招牌匠', core:false, spawnChance:1,
     behavior:'field', workHours:[8,16],
-    head:0xC68642, body:0x9A6A4A, home:[10.2,257.1], work:[10.2,257.1], patrolRadius:0,
+    head:0xC68642, body:0x9A6A4A, home:[-0.4,294.8], work:[-0.4,294.8], patrolRadius:0,
     dialog:[
       { text:'「抬头看——全镇的招牌，一半出自我的手笔。会发光的、会变色的、会拐弯的字，都有。」', options:[
         { text:'怎么做到的？', next:1 },
@@ -196,7 +196,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2023-barkeep', name:'当班酒保', role:'回响镇 · 科特维酒馆当班酒保', core:false, spawnChance:1,
     behavior:'field', workHours:[18,2],
-    head:0xBFA58E, body:0x6E5A4A, home:[34.2,248.5], work:[34.2,248.5], patrolRadius:0,
+    head:0xBFA58E, body:0x6E5A4A, home:[61,271.9], work:[61,271.9], patrolRadius:0,
     dialog:[
       { text:'「坐吧。科特维就这条件——油灯昏、椅子旧，酒是掺的，故事是真的。」', options:[
         { text:'这里是酒馆？', next:1 },
@@ -222,7 +222,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2023-storyteller', name:'讲故事的人', role:'回响镇 · 讲故事的人', core:false, spawnChance:1,
     behavior:'field', workHours:[10,22],
-    head:0xE8C4A0, body:0x8A6A8A, home:[31.6,267.9], work:[31.6,267.9], patrolRadius:0,
+    head:0xE8C4A0, body:0x8A6A8A, home:[25.2,296.1], work:[25.2,296.1], patrolRadius:0,
     dialog:[
       { text:'「你路过的时候，正好——我把自己的故事讲到第三章了，还缺个听众。」', options:[
         { text:'讲的是谁？', next:1 },
@@ -244,7 +244,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2023-baker', name:'月饼师傅', role:'回响镇 · 金月店师傅', core:false, spawnChance:1,
     behavior:'field', workHours:[7,19],
-    head:0xE0B890, body:0xA05A2A, home:[42.3,251.0], work:[42.3,251.0], patrolRadius:0,
+    head:0xE0B890, body:0xA05A2A, home:[53.1,284], work:[53.1,284], patrolRadius:0,
     dialog:[
       { text:'「金月店，镇上独一份。招牌货：五金月饼，配一瓶山泉——别处你买不着。」', options:[
         { text:'五金月饼是什么？', next:1 },
@@ -267,7 +267,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2024-keeper', name:'鸽咖饲养员', role:'微光镇 · 鸽咖饲养员', core:false, spawnChance:1,
     behavior:'field', workHours:[8,20],
-    head:0xD8B8A0, body:0x8AA0B5, home:[-225.1,230.2], work:[-225.1,230.2], patrolRadius:0,
+    head:0xD8B8A0, body:0x8AA0B5, home:[-233,229.4], work:[-233,229.4], patrolRadius:0,
     dialog:[
       { text:'「咕——啊，那是欢迎的意思。微光镇鸽咖，鸽子管打招呼，我管收拾。」', options:[
         { text:'猫咖之后开的？', next:1 },
@@ -289,7 +289,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2024-nightwatch', name:'夜灯巡夜人', role:'微光镇 · 夜灯巡夜人', core:false, spawnChance:1,
     behavior:'field', workHours:[20,6],
-    head:0xD0C8C0, body:0x3A4A5A, home:[-242.6,236.2], work:[-242.6,236.2], patrolRadius:0,
+    head:0xD0C8C0, body:0x3A4A5A, home:[-222.5,242.5], work:[-222.5,242.5], patrolRadius:0,
     dialog:[
       { text:'「……你也睡不着？正好，一起走一段。夜里的小镇，路灯一盏一盏替月亮值班。」', options:[
         { text:'你每晚都巡？', next:1 },
@@ -309,7 +309,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2025-inspector', name:'公展评审员', role:'长风镇 · 年度公展评审员', core:false, spawnChance:1,
     behavior:'field', workHours:[9,17],
-    head:0xE3B7A0, body:0x5A7A8A, home:[-192.0,236.7], work:[-192.0,236.7], patrolRadius:0,
+    head:0xE3B7A0, body:0x5A7A8A, home:[-235.3,282.1], work:[-235.3,282.1], patrolRadius:0,
     dialog:[
       { text:'「长风镇公展，每年一届。今年的名单刚挂上桅杆——从两百多件里挑出来的，风都吹不动的那种好。」', options:[
         { text:'怎么挑的？', next:1 },
@@ -328,7 +328,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2025-shopkeeper', name:'无名店主', role:'长风镇 · 无名店主', core:false, spawnChance:1,
     behavior:'field', workHours:[10,19],
-    head:0xC0A890, body:0x6A6A5A, home:[-200.6,239.3], work:[-200.6,239.3], patrolRadius:0,
+    head:0xC0A890, body:0x6A6A5A, home:[-242.6,277], work:[-242.6,277], patrolRadius:0,
     dialog:[
       { text:'「别看招牌，也别问我名字。店在这儿，东西在架上，你想要什么自己认。」', options:[
         { text:'为什么不能看？', next:1 },
@@ -351,7 +351,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2026-monumentkeeper', name:'守碑员', role:'星港 · 守碑员', core:false, spawnChance:1,
     behavior:'field', workHours:[0,24],
-    head:0xD6B2A0, body:0x4A5A6A, home:[-211.8,257.6], work:[-211.8,257.6], patrolRadius:0,
+    head:0xD6B2A0, body:0x4A5A6A, home:[-182.7,254.1], work:[-182.7,254.1], patrolRadius:0,
     dialog:[
       { text:'「欢迎来星港。碑在前面，我守着它——这是全岛最新的伤疤，也是最硬的一课。」', options:[
         { text:'碑上记着什么？', next:1 },
@@ -370,7 +370,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2026-typesetter', name:'排字工', role:'星港 · 星辉周刊排字工', core:false, spawnChance:1,
     behavior:'field', workHours:[14,23],
-    head:0xC89973, body:0x3A5A7A, home:[-207.2,265.1], work:[-207.2,265.1], patrolRadius:0,
+    head:0xC89973, body:0x3A5A7A, home:[-182.7,269.7], work:[-182.7,269.7], patrolRadius:0,
     dialog:[
       { text:'「截稿前两小时，别催。星辉周刊——星港每周一次的灯火汇编，我是让字排队的人。」', options:[
         { text:'本周头条是什么？', next:1 },

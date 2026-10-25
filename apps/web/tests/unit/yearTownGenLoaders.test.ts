@@ -1,23 +1,43 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { resolve } from 'node:path';
 
-// 年份镇离线数据审计：加载器只能静态 import 同目录 gen-* 模块，
-// 不得出现 fetch/http 等运行时网络依赖（首屏离线可用的前提）。
-const loaderPath = resolve(process.cwd(), 'src/city/data/year-towns/gen-loaders.ts');
-const source = readFileSync(loaderPath, 'utf8');
+// 年份群岛产物审计（设计 §7.1 修订）：年份群岛只呈现改写后的纪念设施，
+// 不得再把社区原始数据（作品正文 / 评论 / 热度 / 浏览量）烘焙进产物。
+const dir = resolve(process.cwd(), 'src/city/data/year-towns');
+const genFiles = readdirSync(dir).filter((f) => f.startsWith('gen-') && f.endsWith('.ts'));
 
-test('gen-loaders 不含运行时网络请求', () => {
-  assert.ok(!/\bfetch\s*\(/.test(source), 'gen-loaders 不应调用 fetch');
-  assert.ok(!/https?:\/\//.test(source), 'gen-loaders 不应引用远程 URL');
+test('生成产物只保留设施配置与纪念索引（不再生成正文/评论包）', () => {
+  assert.deepEqual(genFiles.sort(), ['gen-buildings.ts', 'gen-index.ts']);
 });
 
-test('gen-loaders 的每个 import() 都是同目录 gen-* 字面量且文件存在', () => {
-  const specs = [...source.matchAll(/import\((['"])(.+?)\1\)/g)].map((m) => m[2]!);
-  assert.ok(specs.length >= 30, `import() 数量异常：${specs.length}`);
-  for (const spec of specs) {
-    assert.match(spec, /^\.\/gen-[a-z0-9-]+$/, `非字面量/越界模块：${spec}`);
-    assert.ok(existsSync(resolve(loaderPath, '..', `${spec}.ts`)), `模块缺失：${spec}.ts`);
+test('生成产物不含运行时网络依赖', () => {
+  for (const file of genFiles) {
+    const source = readFileSync(resolve(dir, file), 'utf8');
+    assert.ok(!/\bfetch\s*\(/.test(source), `${file} 不应调用 fetch`);
+    assert.ok(!/https?:\/\//.test(source), `${file} 不应引用远程 URL`);
+  }
+});
+
+test('生成产物不含作品原始数据字段', () => {
+  const forbidden = ['"body"', 'comments', 'popularity', 'visits', '"stars"', 'abstract', 'totalComments'];
+  for (const file of genFiles) {
+    const source = readFileSync(resolve(dir, file), 'utf8');
+    for (const key of forbidden) {
+      assert.ok(!source.includes(key), `${file} 不应包含原始数据字段 ${key}`);
+    }
+  }
+});
+
+test('纪念索引暴露设施名与导语，且逐条可对应手写目录', async () => {
+  const index = await import('../../src/city/data/year-towns/gen-index');
+  const memorials = await import('../../src/city/data/year-towns/yearTownMemorials');
+  assert.equal(index.YEAR_TOWN_MEMORIAL_INDEX.length, 106);
+  for (const entry of index.YEAR_TOWN_MEMORIAL_INDEX) {
+    const source = memorials.YEAR_TOWN_MEMORIAL_BY_KEY[entry.key];
+    assert.ok(source, `${entry.key} 应存在于手写目录`);
+    assert.equal(entry.facility, source.facility);
+    assert.equal(entry.note, source.note);
   }
 });

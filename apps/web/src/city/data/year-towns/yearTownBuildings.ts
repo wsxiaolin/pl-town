@@ -7,8 +7,12 @@
 // 为终点（主城建筑 baseY 恒 0，行为不变）。
 // plot：岛台自带镇主题台面色（archipelagoIsles 顶点色），不再叠加主城地面
 // plate（SURFACE_Y 固定主城标高会沉入岛体）→ hasPlot: false。
-import { YEAR_TOWN_BUILDING_EXTRAS, YEAR_TOWN_NAMEPLATES, YEAR_TOWN_LANDMARK_BLURBS } from './gen-buildings';
+//
+// 纪念设施（设计 §7.1 修订）：年份群岛只呈现改写后的城市设施——设施名 +
+// 纪念导语 + 可选便签交互。作品原文、评论、热度、浏览量不进入年份群岛。
+import { YEAR_TOWN_BUILDING_EXTRAS } from './gen-buildings';
 import { YEAR_TOWN_LAYOUT_CONFIGS } from './districtLayout';
+import { YEAR_TOWN_MEMORIAL_BY_KEY, YEAR_TOWN_LANDMARK_NOTES } from './yearTownMemorials';
 import { yearTownById } from './towns';
 import { terrainHeight } from '../terrain/heightfield/terrainHeight';
 import type { BuildingDefinition } from '../../buildingEntity';
@@ -48,42 +52,43 @@ export function mergeBuildingContent(
   return { ...extra, ...main };
 }
 
-/** 按 id 取建筑附加信息（kind/townId/year/workId/townRank）。 */
+/** 按 id 取建筑附加信息（kind/townId/year/memorialKey）。 */
 export function yearTownExtras(id: string) {
   return YEAR_TOWN_BUILDING_EXTRAS[id];
 }
 
-/** 数字千分位（热度/馆藏数展示用）。 */
-const fmt = (v: number) => v.toLocaleString('zh-Hans-CN');
+/** 取建筑对应的纪念设施条目（非作品建筑返回 undefined）。 */
+export function yearTownMemorialOf(id: string) {
+  const extras = YEAR_TOWN_BUILDING_EXTRAS[id];
+  return extras?.memorialKey ? YEAR_TOWN_MEMORIAL_BY_KEY[extras.memorialKey] : undefined;
+}
+
+/** 取纪念名录/总目塔/界碑的导语（非地标返回 undefined）。 */
+export function yearTownLandmarkNoteOf(id: string): string | undefined {
+  return YEAR_TOWN_LANDMARK_NOTES[id];
+}
 
 /**
- * 铭牌级对话内容（设计 §7.2 P 级的 dialog 载体）：题名 + 作者/年份/热度 +
- * 摘要（≤120 字，生成期已 sanitize）。作品铭牌带 readBody 标记（T6R-b2），
- * 弹窗由 cityDialogController 渲染「阅读正文」入口 → 详情抽屉（D5/D6）。
+ * 铭牌级对话内容（设计 §7.2）：设施名 + 纪念导语 + 便签交互标记。
+ * 不再附带作品摘要、标签、评论数或热度——那些社区数据不属于年份群岛。
  */
 export function yearTownBuildingContent(id: string): BuildingContentLike | undefined {
   const extras = YEAR_TOWN_BUILDING_EXTRAS[id];
   if (!extras) return undefined;
   const town = yearTownById(extras.townId);
   if (!town) return undefined;
-  const blurb = YEAR_TOWN_LANDMARK_BLURBS[id];
-  const nameplate = extras.kind === 'work' ? YEAR_TOWN_NAMEPLATES[id] : undefined;
-  if (!nameplate && !blurb) return undefined;
-  const lines: string[] = [];
-  if (blurb) lines.push(blurb);
-  if (nameplate) {
-    lines.push(`「${nameplate.abstract}」`);
-    if (nameplate.tags.length > 0) lines.push(`标签：${nameplate.tags.join(' · ')}`);
-    lines.push(`评论区采样 ${nameplate.sampledComments} 条（共 ${fmt(nameplate.totalComments)} 条）。`);
-  }
+
+  const memorial = extras.memorialKey ? YEAR_TOWN_MEMORIAL_BY_KEY[extras.memorialKey] : undefined;
+  const landmarkNote = YEAR_TOWN_LANDMARK_NOTES[id];
+  const note = memorial?.note ?? landmarkNote;
+  if (!note) return undefined;
+
   return {
-    name: nameplate?.label ?? town.label,
-    slogan: nameplate
-      ? `${town.label} · 作者「${nameplate.author}」 · 全站第 ${nameplate.rank} 名 · 热度 ${fmt(nameplate.popularity)}`
-      : `${town.label} · ${town.tagline}`,
-    dialog: lines.length > 0 ? lines : [town.tagline],
-    // T6R-b2：作品建筑才有铭牌 → 弹窗出现「阅读正文」按钮（纯数据标记）。
-    readBody: nameplate !== undefined,
+    name: memorial?.facility ?? `${town.label}纪念名录`,
+    slogan: `${town.label} · ${town.year} 年`,
+    dialog: [note],
+    // 便签交互：仅少数设施拥有，弹窗据此渲染一个小动作（盖章/点灯/留言/封存）。
+    noteKind: memorial?.noteKind,
   };
 }
 

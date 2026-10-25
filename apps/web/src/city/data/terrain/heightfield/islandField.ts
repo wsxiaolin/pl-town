@@ -10,7 +10,7 @@
 // 岛屿 mesh（rendering/terrain/archipelagoIsles.ts）按同一函数采样发射顶点，
 // 图与地形永远一致（唯一采样器 DoD）；审计（worldTerrainAudit 'islands' 组）
 // 与导航/玩家落点（playerController 每帧 cursor.y = terrainHeight）共用。
-import { YEAR_ISLAND_SPECS } from '../../year-towns/towns';
+import { YEAR_ISLAND_SPECS, islandShapeScaleAt } from '../../year-towns/towns';
 
 /** 滩脚（滩坡终点，略低于水面 0.06，水线在滩环中段穿越）。 */
 export const ISLAND_BEACH_TO = -0.2;
@@ -24,26 +24,38 @@ function smoothStep01(t: number): number {
   return c * c * (3 - 2 * c);
 }
 
+/** 岛在某方向上的有效半径倍率（正圆岛恒 1）。 */
+function shapeScaleOf(island: { shape?: Parameters<typeof islandShapeScaleAt>[0] }, dx: number, dz: number): number {
+  return islandShapeScaleAt(island.shape, Math.atan2(dz, dx));
+}
+
 /**
  * 岛面高度（含台面/滩坡/水下裙）。足印（ρ ≤ beachR + ISLAND_SKIRT_W）外
  * 返回 null——调用方保留自然场值。2 城 + 启源站岛足印互不相交且全在
  * 恒海区，与草甸/河谷/台地/海床切割域零重叠（恒海判据，设计 §2）。
+ *
+ * 岛缘非正圆：大城按 `shape` 谐波调制每个方向的有效半径（海湾/岬角），
+ * plateauR / beachR 是该方向的基准半径。所有采样点共用本函数。
  */
 export function islandSurfaceYAt(x: number, z: number): number | null {
   for (const town of YEAR_ISLAND_SPECS) {
-    const outerR = town.beachR + ISLAND_SKIRT_W;
     const dx = x - town.x;
     const dz = z - town.z;
-    // 包围盒快筛（圆足印外恒 null，避免逐岛 hypot 的全场景开销）。
-    if (dx < -outerR || dx > outerR || dz < -outerR || dz > outerR) continue;
+    // 包围盒快筛（按最大可能半径放大，避免调制后漏检）。
+    const outerR = town.beachR + ISLAND_SKIRT_W;
+    const maxR = outerR * 1.2;
+    if (dx < -maxR || dx > maxR || dz < -maxR || dz > maxR) continue;
     const rho = Math.hypot(dx, dz);
-    if (rho > outerR) continue;
-    if (rho <= town.plateauR) return town.topY;
-    if (rho <= town.beachR) {
-      const t = smoothStep01((rho - town.plateauR) / (town.beachR - town.plateauR));
+    const k = shapeScaleOf(town, dx, dz);
+    const plateau = town.plateauR * k;
+    const beach = town.beachR * k;
+    if (rho > beach + ISLAND_SKIRT_W) continue;
+    if (rho <= plateau) return town.topY;
+    if (rho <= beach) {
+      const t = smoothStep01((rho - plateau) / Math.max(1e-6, beach - plateau));
       return town.topY + (ISLAND_BEACH_TO - town.topY) * t;
     }
-    const t = smoothStep01((rho - town.beachR) / ISLAND_SKIRT_W);
+    const t = smoothStep01((rho - beach) / ISLAND_SKIRT_W);
     return ISLAND_BEACH_TO + (ISLAND_SKIRT_BOTTOM - ISLAND_BEACH_TO) * t;
   }
   return null;

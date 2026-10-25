@@ -6,7 +6,7 @@ import {
   CATALOG_ACTION_PREFIX,
   YEAR_TOWN_CATALOG_CONTENT,
   createYearTownCatalogController,
-  yearTownWorkBuildingId,
+  yearTownMemorialBuildingId,
 } from '../adapters/ui/yearTownCatalogController';
 import type { YearTownCatalogController } from '../adapters/ui/yearTownCatalogController';
 import type { YearTownPanelController } from '../adapters/ui/yearTownPanelController';
@@ -54,11 +54,11 @@ export function createYearTownWiring(options: YearTownWiringOptions) {
       document: options.document,
       signal: options.getSignal(),
       panel,
-      locate: (work) => {
+      locate: (entry) => {
         const map = options.getMap();
         if (!map) return false;
-        const buildingId = yearTownWorkBuildingId(work.id);
-        return buildingId ? map.teleportToBuilding(buildingId) : map.teleportToTown(`island-${work.year}`);
+        const buildingId = yearTownMemorialBuildingId(entry.key);
+        return buildingId ? map.teleportToBuilding(buildingId) : map.teleportToTown(`island-${entry.year}`);
       },
     });
     return catalog;

@@ -41,6 +41,27 @@ export interface YearTownSpec {
   };
   /** 镇一句话寓意（海图页 tip slogan；详细面板是 T5）。 */
   tagline: string;
+  /** 岛缘自然形状（缺省为正圆）。 */
+  shape?: IslandShapeMod;
+}
+
+/** 岛形调制：让岛缘随角度自然起伏（海湾/岬角），而不是正圆盘。
+ *  以「极角 θ 上的半径倍率」表示，1 = 不调制。所有采样点（高度场、岛体网格、
+ *  沙线盘、审计）共用同一函数，图与地形永不漂移。 */
+export interface IslandShapeMod {
+  /** 谐波项：freq（角频率，整数）× amp（振幅，相对 plateauR 的比例）× phase（相位）。 */
+  harmonics: readonly { freq: number; amp: number; phase: number }[];
+}
+
+/**
+ * 岛形调制倍率（θ 为相对岛心的极角，弧度）。返回值 ∈ [1−Σ|amp|, 1+Σ|amp|]。
+ * 纯函数、确定性、无随机：同角度永远同倍率。
+ */
+export function islandShapeScaleAt(shape: IslandShapeMod | undefined, theta: number): number {
+  if (!shape) return 1;
+  let scale = 1;
+  for (const h of shape.harmonics) scale += h.amp * Math.sin(h.freq * theta + h.phase);
+  return scale;
 }
 
 /** 大城（年份片区的承载岛）：启源站岛之外的 2 座可扩建城区。 */
@@ -55,6 +76,8 @@ export interface YearDistrictSpec {
   topY: number;
   theme: { groundColor: number; iconColor: string };
   tagline: string;
+  /** 岛缘自然形状（缺省为正圆；大城启用起伏岸线）。 */
+  shape?: IslandShapeMod;
 }
 
 /** 两座大城（设计 D1 修订：岛弧收敛为 2 城，启源站仍为独立小岛）。 */
@@ -64,24 +87,41 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
     name: '旧港城',
     label: '旧港城',
     x: 20,
-    z: 238,
-    plateauR: 52,
-    beachR: 62,
+    z: 262,
+    plateauR: 62,
+    beachR: 72,
     topY: 1.2,
     theme: { groundColor: 0xcfc3a6, iconColor: '#cfc3a6' },
     tagline: '2019–2023 的旧港：从村口第一盏灯长成的滨海城区。',
+    // 旧港：朝起源村方向（东北，约 −35°）凹入一处海湾，把水域让给起源村；
+    // 反方向（西南）鼓出岬角，岸线明显不对称。
+    shape: {
+      harmonics: [
+        { freq: 1, amp: -0.15, phase: 2.1817 },
+        { freq: 2, amp: -0.04, phase: 2.7925 },
+        { freq: 3, amp: 0.03, phase: 1.9 },
+      ],
+    },
   },
   {
     id: 'island-starport',
     name: '星港城',
     label: '星港城',
     x: -215,
-    z: 250,
-    plateauR: 52,
-    beachR: 62,
+    z: 256,
+    plateauR: 56,
+    beachR: 66,
     topY: 0.9,
     theme: { groundColor: 0xaeb8c2, iconColor: '#aeb8c2' },
     tagline: '2024–2026 的星港：磁悬、灯塔与夜航码头。',
+    // 星港：北侧伸出长岬迎向航道，南侧收成内湾（一阶 + 二阶谐波）。
+    shape: {
+      harmonics: [
+        { freq: 1, amp: 0.10, phase: -Math.PI / 2 },
+        { freq: 2, amp: 0.05, phase: 2.2 },
+        { freq: 3, amp: 0.02, phase: -1.1 },
+      ],
+    },
   },
 ];
 
@@ -96,10 +136,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2019',
     name: '起源村',
     label: '2019·起源村',
-    x: 96,
-    z: 202,
-    plateauR: 9,
-    beachR: 13,
+    x: 150,
+    z: 210,
+    plateauR: 22,
+    beachR: 26,
     topY: 1.0,
     districtId: 'island-2019',
     theme: { groundColor: 0xd9c8a0, iconColor: '#d9c8a0' },
@@ -110,10 +150,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2020',
     name: '启明镇',
     label: '2020·启明镇',
-    x: 0,
-    z: 218,
-    plateauR: 19,
-    beachR: 23,
+    x: -8,
+    z: 242,
+    plateauR: 34,
+    beachR: 38,
     topY: 1.2,
     districtId: 'island-oldport',
     theme: { groundColor: 0xc9a184, iconColor: '#c9a184' },
@@ -124,10 +164,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2021',
     name: '潮声镇',
     label: '2021·潮声镇',
-    x: 40,
-    z: 218,
-    plateauR: 19,
-    beachR: 23,
+    x: 48,
+    z: 242,
+    plateauR: 34,
+    beachR: 38,
     topY: 1.2,
     districtId: 'island-oldport',
     theme: { groundColor: 0xd6d9d4, iconColor: '#d6d9d4' },
@@ -138,10 +178,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2022',
     name: '盛夏镇',
     label: '2022·盛夏镇',
-    x: 0,
-    z: 258,
-    plateauR: 19,
-    beachR: 23,
+    x: -8,
+    z: 282,
+    plateauR: 34,
+    beachR: 38,
     topY: 1.2,
     districtId: 'island-oldport',
     theme: { groundColor: 0xd8cfa4, iconColor: '#d8cfa4' },
@@ -152,10 +192,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2023',
     name: '回响镇',
     label: '2023·回响镇',
-    x: 40,
-    z: 258,
-    plateauR: 19,
-    beachR: 23,
+    x: 48,
+    z: 282,
+    plateauR: 34,
+    beachR: 38,
     topY: 1.2,
     districtId: 'island-oldport',
     theme: { groundColor: 0xbfa98a, iconColor: '#bfa98a' },
@@ -166,10 +206,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2024',
     name: '微光镇',
     label: '2024·微光镇',
-    x: -235,
+    x: -215,
     z: 230,
-    plateauR: 19,
-    beachR: 23,
+    plateauR: 25,
+    beachR: 29,
     topY: 0.9,
     districtId: 'island-starport',
     theme: { groundColor: 0xb9c6cd, iconColor: '#b9c6cd' },
@@ -180,10 +220,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2025',
     name: '长风镇',
     label: '2025·长风镇',
-    x: -195,
-    z: 230,
-    plateauR: 19,
-    beachR: 23,
+    x: -239,
+    z: 271,
+    plateauR: 25,
+    beachR: 29,
     topY: 0.9,
     districtId: 'island-starport',
     theme: { groundColor: 0xdadad4, iconColor: '#dadad4' },
@@ -194,10 +234,10 @@ export const YEAR_TOWNS: readonly YearTownSpec[] = [
     id: 'island-2026',
     name: '星港',
     label: '2026·星港',
-    x: -215,
-    z: 270,
-    plateauR: 19,
-    beachR: 23,
+    x: -191,
+    z: 271,
+    plateauR: 25,
+    beachR: 29,
     topY: 0.9,
     districtId: 'island-starport',
     theme: { groundColor: 0x9aa4ae, iconColor: '#9aa4ae' },
@@ -222,10 +262,10 @@ export const YEAR_ISLAND_SPECS: readonly YearDistrictSpec[] = [
     id: 'island-2019',
     name: '启源站',
     label: '2019·起源村',
-    x: 96,
-    z: 202,
-    plateauR: 9,
-    beachR: 13,
+    x: 150,
+    z: 210,
+    plateauR: 22,
+    beachR: 26,
     topY: 1.0,
     theme: { groundColor: 0xd9c8a0, iconColor: '#d9c8a0' },
     tagline: '社区的第一块基石——荒原上的第一盏灯。',
