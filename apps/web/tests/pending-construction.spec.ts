@@ -177,7 +177,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     const reloadedState = page.waitForResponse('**/town-api/city/state');
     releaseReload();
     await reloadedState;
-    await expect(page.locator('.b-label-item')).toHaveCount(1);
+    // 年份群岛建筑也常驻标签；这里只数主城建筑。
+    await expect(page.locator('.b-label-item:not([data-building-id^="yt-"])')).toHaveCount(1);
     await expect(page.locator('.b-label-item[data-building-id="commons"]')).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath('pending-near.png') });
     for (let i = 0; i < 20; i++) await page.locator('#c').dispatchEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true });
