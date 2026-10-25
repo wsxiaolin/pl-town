@@ -115,17 +115,16 @@ const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
       new THREE.Plane(new THREE.Vector3(0, 0, -1), -40), // keep z <= -40
     ],
   }),
-  // 南洋年份群岛海图（设计 §5.3）：中心/跨度取 8 镇滩域包络（x∈[−270,109]、
-  // z∈[45,257]，towns.ts 镇表）的轴对齐中心 (−80,150) 与半幅 190——群岛居中
-  // 整框收纳，画框内另含南陆缘草甸与南海水面；z<44 的画框上缘沿主城页同款
-  // 裁剪约定留给背景（比例异于城图，T6 美术收口再打磨页纸）。
+  // 南洋年份群岛海图（设计 §5.3）：当前两城、起源村与环线包络约为
+  // x∈[-274,150]、z∈[98,326]。视域取中心 x=-62、半幅 220，完整收纳岛岸、
+  // 站点和轨道，并给两侧镇名标签保留画框内边距。
   archipelago: Object.freeze({
     id: 'archipelago',
     title: '物实小城 · 群岛海图',
     alt: '南洋年份群岛海图',
-    centerX: -80,
+    centerX: -62,
     centerZ: 150,
-    span: 190,
+    span: 220,
     contains: (_x: number, z: number) => z >= ARCHIPELAGO_GATE_Z,
     clipPlanes: [
       new THREE.Plane(new THREE.Vector3(0, 0, 1), 44), // keep z >= 44
@@ -441,7 +440,7 @@ export function createMapController(options: MapControllerOptions) {
       label.dataset.townId = town.id;
       label.setAttribute('aria-hidden', 'true');
       label.textContent = town.label;
-      if (leftPct <= 10) label.classList.add('map-town-label--w');
+      if (leftPct <= 18) label.classList.add('map-town-label--w');
       else if (leftPct >= 90) label.classList.add('map-town-label--e');
       label.style.left = `${leftPct}%`;
       label.style.top = `${topPct}%`;
