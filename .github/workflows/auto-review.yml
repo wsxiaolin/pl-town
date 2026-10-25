@@ -18,8 +18,10 @@ concurrency:
 
 jobs:
   code-review:
-    # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # 暂停 OpenCode reviewbot：仅在仓库 Actions 变量 ENABLE_OPENCODE_REVIEW
+    # 明确设为 true 时恢复。保留 PR 触发与 job 名称，让 required check 以 skipped 完成。
+    # fork PR 的 GITHUB_TOKEN 为只读，无法下发评论，直接跳过。
+    if: vars.ENABLE_OPENCODE_REVIEW == 'true' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     # 20m 主模型 + 3 × 10m 免费回退，加上各次 30s kill-after 与启动/评论
     # 开销约 57 分钟；超过会在循环内被 job 硬杀，bot_failed 分支与评论
