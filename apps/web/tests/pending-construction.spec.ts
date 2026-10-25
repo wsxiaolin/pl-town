@@ -189,7 +189,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     expect(await page.evaluate(() => (window as any)._mini.interactBuilding('photostudio'))).toBe(false);
     await page.locator('#mapToggle').click({ force: true });
     await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
-    await expect(page.locator('.map-icon')).toHaveCount(1);
+    // 年份镇建筑也有地图图标；这里只数主城（pending library 必须消失）。
+    await expect(page.locator('.map-icon:not([data-building-id^="yt-"])')).toHaveCount(1);
     await page.locator('#mapSearchInput').fill('图书馆');
     await expect(page.locator('.map-search-result')).toHaveCount(0);
     await page.locator('#mapClose').click({ force: true });
