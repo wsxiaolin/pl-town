@@ -61,7 +61,7 @@ export function createWorldDecorations(options: WorldDecorationsOptions) {
     addSuburbHouse(-12, -32, -90);
     const decorationRoots = scene.children.filter((child)=>!existingSceneChildren.has(child));
     batchStaticMeshes(scene, decorationRoots, interactiveDecorationRoots);
-    residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots);
+    residenceVisualBatch = batchRetainedStaticMeshes(scene, residenceRoots, resources);
   }
 
   function addDistrictBuildings() {

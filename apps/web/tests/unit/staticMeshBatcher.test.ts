@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
+import { ResourcePool } from '../../src/core/ResourcePool';
 import { batchRetainedStaticMeshes, batchStaticMeshes } from '../../src/rendering/staticMeshBatcher';
 
 test('static decoration meshes with shared resources collapse into one batch', () => {
@@ -38,6 +39,7 @@ test('interactive and unique meshes remain untouched', () => {
 
 test('retained batches keep source meshes for interaction and toggle individual roots', () => {
   const scene = new THREE.Scene();
+  const resources = new ResourcePool();
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const firstRoot = new THREE.Group();
@@ -53,7 +55,7 @@ test('retained batches keep source meshes for interaction and toggle individual 
   const result = batchRetainedStaticMeshes(scene, [
     { key: 'first', root: firstRoot },
     { key: 'second', root: secondRoot },
-  ]);
+  ], resources);
   const batch = scene.children.find((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh)!;
   const matrix = new THREE.Matrix4();
 
@@ -72,4 +74,41 @@ test('retained batches keep source meshes for interaction and toggle individual 
   result.setVisible('first', true);
   batch.getMatrixAt(0, matrix);
   assert.deepEqual(new THREE.Vector3().setFromMatrixPosition(matrix).toArray(), [1, 0, 0]);
+});
+
+test('retained batches share unit primitives across dimensions and former spatial cells', () => {
+  const scene = new THREE.Scene();
+  const resources = new ResourcePool();
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const firstRoot = new THREE.Group();
+  const secondRoot = new THREE.Group();
+  const first = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 6), material);
+  const second = new THREE.Mesh(new THREE.BoxGeometry(3, 5, 7), material);
+  firstRoot.add(first);
+  secondRoot.add(second);
+  firstRoot.position.x = 1;
+  secondRoot.position.x = 100;
+  scene.add(firstRoot, secondRoot);
+
+  const result = batchRetainedStaticMeshes(scene, [
+    { key: 'first', root: firstRoot },
+    { key: 'second', root: secondRoot },
+  ], resources);
+  const batch = scene.children.find((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh)!;
+  const matrix = new THREE.Matrix4();
+
+  assert.deepEqual({ batches: result.batches, sourceMeshes: result.sourceMeshes }, { batches: 1, sourceMeshes: 2 });
+  assert.deepEqual((batch.geometry as THREE.BoxGeometry).parameters, {
+    width: 1,
+    height: 1,
+    depth: 1,
+    widthSegments: 1,
+    heightSegments: 1,
+    depthSegments: 1,
+  });
+  batch.getMatrixAt(0, matrix);
+  assert.deepEqual(new THREE.Vector3().setFromMatrixScale(matrix).toArray(), [2, 4, 6]);
+  batch.getMatrixAt(1, matrix);
+  assert.deepEqual(new THREE.Vector3().setFromMatrixScale(matrix).toArray(), [3, 5, 7]);
+  assert.deepEqual(new THREE.Vector3().setFromMatrixPosition(matrix).toArray(), [100, 0, 0]);
 });
