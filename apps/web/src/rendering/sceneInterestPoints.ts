@@ -4,7 +4,6 @@ import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 export type { SceneInterestPointId };
 import { createWestBeach } from './westBeach';
 import { createCatCafeIceWall } from './iceKing/catCafeIceWall';
-import { createTransitStationSigns } from './terrain/transitStationSigns';
 
 export interface SceneInterestPointEntity {
   id: SceneInterestPointId;
@@ -377,12 +376,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
   };
   const westBeach = createWestBeach(options);
   const catCafeIceWall = createCatCafeIceWall(options);
-  // 年份群岛站牌（T4b-c2，docs/t4b-ride-plan.md §2 编辑④）：与 yearTownTransit
-  // 同批装配/同批销毁；实体并入 entities + baseRaycastTargets（非 story、
-  // 非 autoTrigger → 自动进基础拾取集），interactionPointer 的 3.5 距离判定
-  // 直接可用，tag 语义同 tag()。
-  const stationSigns = createTransitStationSigns(options);
-  const list = [createCatCafeNote(options), catCafeIceWall, createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options), ...stationSigns.entities];
+  const list = [createCatCafeNote(options), catCafeIceWall, createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options)];
   const entities = new Map(list.map((entity) => [entity.id, entity]));
   const storyEntities = ECHO_STORY_POINT_IDS
     .map((id) => entities.get(id))
@@ -483,9 +477,6 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
           child.userData.dynamicMaterial.dispose();
         }
       });
-      // 站牌摘除场景节点（生命周期对齐 yearTownTransit；几何/材质由
-      // ResourcePool 与下方材质缓存既有路径释放）。
-      stationSigns.dispose();
       materialCache.forEach((material) => material.dispose());
       materialCache.clear();
     },

@@ -9,9 +9,8 @@ export type SceneAnimationsOptions = {
 export function createSceneAnimations(options: SceneAnimationsOptions) {
   function entranceAnimation() {
     options.getBuildings().forEach((b, i) => {
-      const baseY = (b.group.userData.baseY as number | undefined) ?? 0; // 年份镇建筑落地岛台面（T6）；主城恒 0
-      if (b.group.userData.constructionPending) { b.group.position.y = baseY; return; }
-      gsap.to(b.group.position, { y: baseY, duration: 0.85, delay: 0.1 + i * 0.06, ease: 'back.out(1.6)' });
+      if (b.group.userData.constructionPending) { b.group.position.y = 0; return; }
+      gsap.to(b.group.position, { y: 0, duration: 0.85, delay: 0.1 + i * 0.06, ease: 'back.out(1.6)' });
     });
     gsap.from('.welcome-block', { opacity: 0, y: 8, duration: 0.9, delay: 0.2, ease: 'power2.out' });
     gsap.from('.ui-header', { opacity: 0, y: -6, duration: 0.7, delay: 0.1, ease: 'power2.out' });

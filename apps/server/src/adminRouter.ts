@@ -17,7 +17,6 @@ import { logger } from './logger.js';
 import { clientIp, jsonSecurityHeaders, pathOf, requestOriginAllowed } from './requestSecurity.js';
 import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog.js';
 import { NPC_CATALOG } from './npcCatalog.js';
-import { YEAR_TOWN_CATALOG } from './data/yearTownCatalog.js';
 import { applyShopCatalog, resolveBuildingUnlockStates } from './progression.js';
 import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, getThemeConfig, setThemeConfig, sanitizeThemeId, type ThemeConfig, type WeatherConfig } from './worldConfig.js';
 import { missingStoryReferencedItems, SHOP_NAME_MAX, SHOP_PRICE_MAX, SHOP_PRODUCT_MAX } from './shopCatalog.js';
@@ -177,7 +176,6 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       weather: context.getWeatherConfig(),
       theme: context.getThemeConfig(),
       states: resolveBuildingUnlockStates(),
-      yearTownCatalog: YEAR_TOWN_CATALOG,
       shop: getShopProducts(),
       shopLimits: { nameMax: SHOP_NAME_MAX, priceMax: SHOP_PRICE_MAX, productMax: SHOP_PRODUCT_MAX },
     });

@@ -544,11 +544,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   });
   expect(Math.abs(worldAudit.projected.x)).toBeLessThan(0.001);
   expect(Math.abs(worldAudit.projected.y)).toBeLessThan(0.001);
-  expect(worldAudit.interestIds).toEqual([
-    'cat-cafe-ice-wall', 'cat-cafe-note', 'longjing-well', 'origin-orange-tree',
-    'station-2019-bridge', 'station-2019-ring', 'station-2020', 'station-2021', 'station-2022',
-    'station-2023', 'station-2024', 'station-2025', 'station-2026', 'station-stargate',
-  ]);
+  expect(worldAudit.interestIds).toEqual(['cat-cafe-ice-wall', 'cat-cafe-note', 'longjing-well', 'origin-orange-tree']);
   expect(worldAudit.interactivePlot).toBe(true);
   expect(worldAudit.hasStoryNpc).toBe(true);
 

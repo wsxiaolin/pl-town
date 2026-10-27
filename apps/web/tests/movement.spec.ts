@@ -152,29 +152,14 @@ test('canvas click marks the selected route target with expanding orange pulses'
   expect(initial.octahedronColor).toBe(0xf28c28);
   expect(initial.octahedronScale).toEqual([1, 1.65, 1]);
 
-  // SwiftShader 下帧间隔抖动大。脉冲是周期动画，长等待可能绕回起点，
-  // 因此在同一次轮询里比较相邻两帧，只断言「发生过变化」，窗口给 10s。
-  await expect.poll(async () => page.evaluate(() => new Promise<boolean>((resolve) => {
-    const read = () => {
-      const marker = (window as any)._mini.scene.getObjectByName('navigation-target-marker');
-      const pulse = marker.getObjectByName('navigation-target-pulse-1');
-      const octahedron = marker.getObjectByName('navigation-target-octahedron');
-      return {
-        scale: pulse.scale.x as number,
-        opacity: pulse.material.opacity as number,
-        rotation: octahedron.rotation.y as number,
-      };
-    };
-    const first = read();
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const second = read();
-      resolve(
-        second.scale !== first.scale
-        && second.opacity !== first.opacity
-        && second.rotation !== first.rotation,
-      );
-    }));
-  })), { timeout: 10_000, intervals: [100, 200, 400] }).toBe(true);
+  await expect.poll(async () => page.evaluate((start) => {
+    const marker = (window as any)._mini.scene.getObjectByName('navigation-target-marker');
+    const pulse = marker.getObjectByName('navigation-target-pulse-1');
+    const octahedron = marker.getObjectByName('navigation-target-octahedron');
+    return pulse.scale.x > start.pulseScale + 0.05
+      && pulse.material.opacity < start.pulseOpacity
+      && Math.abs(octahedron.rotation.y - start.octahedronRotation) > 0.05;
+  }, initial), { timeout: 5_000, intervals: [50, 100, 200] }).toBe(true);
 });
 
 test('Wushi restaurant model, dialogue, and Shinian teleport are available', async ({ page }) => {
