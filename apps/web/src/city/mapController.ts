@@ -1,8 +1,5 @@
 import * as THREE from 'three';
 import type { BuildingEntity } from './buildingEntity';
-import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
-import type { YearTownMarker } from './data/year-towns/towns';
-import { TRANSIT_MAP_OVERLAY } from './data/year-towns/transit';
 
 type MapContent = { name: string; slogan: string };
 
@@ -29,8 +26,6 @@ export type MapControllerOptions = {
   clearPlayerPath: () => void;
   renderMapHouseTags: () => void;
   openResidence: (buildingId: string) => void;
-  /** T3a 年份群岛：海图页 8 镇标记（label/tagline/主题色/落位）。 */
-  getTownMarkers: () => readonly YearTownMarker[];
 };
 
 // Map compass convention: the on-screen isometric view is captured by a camera
@@ -43,12 +38,10 @@ export type MapControllerOptions = {
 const MAP_SHOT = 1024;
 const MAX_SEARCH_RESULTS = 6;
 
-/** The atlas pages: the main city, 星语北城, and the year-town archipelago sea
- *  chart. The two city pages share the same span (world units per page edge) so
- *  they read at the same scale — the frame only slides north to center the
- *  district. The sea chart is a deliberate exception (设计 §5.3)：span 190 把
- *  8 镇滩域整框收纳并居中，页纸按「海图·比例异于城图」独立读图。 */
-type MapRegionId = 'main' | 'north' | 'archipelago';
+/** The two atlas pages: the main city and 星语北城. Both share the same
+ *  span (world units per page edge) so the pages read at the same scale —
+ *  the frame only slides north to center the district. */
+type MapRegionId = 'main' | 'north';
 
 type MapRegion = {
   id: MapRegionId;
@@ -74,21 +67,17 @@ type MapRegion = {
   clipPlanes: THREE.Plane[];
 };
 
-// The boundary between the two city pages runs between the ring walkway's outer
+// The boundary between the two pages runs between the ring walkway's outer
 // edge (RING_ROAD_RADII.outer = 39) and the north gate (z = -40.8): the
 // central avenue's first north-district node sits at z = -40.
 const NORTH_REGION_GATE_Z = -40;
-// Both city pages share span 48 — a 96×96 world frame, so the map reads at one
+// Both pages share span 48 — a 96×96 world frame, so the map reads at one
 // scale and only slides. The main page centres on (0,0) → z∈[-48,48]; the
 // north page centres on the district (0,-64) → z∈[-112,-16]. The north frame
 // therefore reaches ~28 world units south of the gate into the main city
 // (ground; buildings at z=-33…-21) while the district's own ground only spans
 // z∈[-44,-86.5] (NORTH_DISTRICT_AREA.ground). `clipPlanes` cuts each frame at
 // the z=-40 gate so neither capture is contaminated by the other district.
-// Sea chart boundary (T3a): the main page keeps its historic z <= 44 cut, so
-// the archipelago page picks up z >= 45 (contains) / z >= 44 (clip) — the
-// southern meadow, south sea, and the 8 islands all live on the third page.
-const ARCHIPELAGO_GATE_Z = 45;
 const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
   main: Object.freeze({
     id: 'main',
@@ -115,28 +104,9 @@ const MAP_REGIONS: Record<MapRegionId, MapRegion> = Object.freeze({
       new THREE.Plane(new THREE.Vector3(0, 0, -1), -40), // keep z <= -40
     ],
   }),
-  // 南洋年份群岛海图（设计 §5.3）：中心/跨度取 8 镇滩域包络（x∈[−270,109]、
-  // z∈[45,257]，towns.ts 镇表）的轴对齐中心 (−80,150) 与半幅 190——群岛居中
-  // 整框收纳，画框内另含南陆缘草甸与南海水面；z<44 的画框上缘沿主城页同款
-  // 裁剪约定留给背景（比例异于城图，T6 美术收口再打磨页纸）。
-  archipelago: Object.freeze({
-    id: 'archipelago',
-    title: '物实小城 · 群岛海图',
-    alt: '南洋年份群岛海图',
-    centerX: -80,
-    centerZ: 150,
-    span: 190,
-    contains: (_x: number, z: number) => z >= ARCHIPELAGO_GATE_Z,
-    clipPlanes: [
-      new THREE.Plane(new THREE.Vector3(0, 0, 1), 44), // keep z >= 44
-    ],
-  }),
-} satisfies { main: MapRegion; north: MapRegion; archipelago: MapRegion });
+} satisfies { main: MapRegion; north: MapRegion });
 
 function regionAt(x: number, z: number): MapRegion {
-  // Archipelago first: the main page's contains (z >= -40) also matches the
-  // islands, but the sea chart is the page the player actually stands on.
-  if (MAP_REGIONS.archipelago.contains(x, z)) return MAP_REGIONS.archipelago;
   return MAP_REGIONS.north.contains(x, z) ? MAP_REGIONS.north : MAP_REGIONS.main;
 }
 
@@ -144,7 +114,7 @@ export function createMapController(options: MapControllerOptions) {
   const view = options.document.defaultView ?? window;
   let open = false;
   let activeRegion: MapRegion = MAP_REGIONS.main;
-  const shotData: Record<MapRegionId, string | null> = { main: null, north: null, archipelago: null };
+  const shotData: Record<MapRegionId, string | null> = { main: null, north: null };
   let shotsPreloaded = false;
   let shotsPreloadSettled = false;
   let destroyed = false;
@@ -153,8 +123,6 @@ export function createMapController(options: MapControllerOptions) {
   let shotRefreshFrame: number | null = null;
   let iconsBuilt = false;
   let tipBuilding: BuildingEntity | null = null;
-  /** 海图页镇名 tip 的当前镇（与 tipBuilding 互斥：同用 #mapTip 面板）。 */
-  let tipTown: YearTownMarker | null = null;
   let markerLeft = Number.NaN;
   let markerTop = Number.NaN;
   let searchResults: MapSearchResult[] = [];
@@ -166,9 +134,8 @@ export function createMapController(options: MapControllerOptions) {
     options.document.getElementById('mapToggle')?.classList.toggle('active', open);
     const overlay = options.document.getElementById('mapOverlay');
     if (open) {
-      // 在哪里打开就显示哪里的：主城、星语北城与群岛海图各成一页图，翻页
-      // 跟随玩家脚下——环城步道以北（z < -40）开北城页，南域（z ≥ 45，
-      // 南草甸/岛台）开海图页。
+      // 在哪里打开就显示哪里的：主城与星语北城各成一页图，翻页跟随玩家
+      // 脚下——环城步道以北（z < -40）落在北城门内，打开的就是北城页。
       const cursor = options.getCursor();
       if (cursor) activeRegion = regionAt(cursor.position.x, cursor.position.z);
       overlay?.classList.add('show');
@@ -198,9 +165,8 @@ export function createMapController(options: MapControllerOptions) {
     if (!scene || destroyed) return;
     // Top-down with world +x to the right and world -z pointing up, matching
     // the on-screen isometric compass (North = -z, East = +x). The camera
-    // slides to the page's center; the two city pages share the span so they
-    // never change scale between them (the sea chart is the deliberate
-    // exception, see MAP_REGIONS.archipelago).
+    // slides to the page's center; both pages share the span, so the
+    // projection never changes scale between them.
     if (!shotCamera) {
       shotCamera = new THREE.OrthographicCamera(
         -region.span,
@@ -272,7 +238,6 @@ export function createMapController(options: MapControllerOptions) {
       shotsPreloaded = true;
       if (!shotData.main) captureShot(MAP_REGIONS.main);
       if (!shotData.north) captureShot(MAP_REGIONS.north);
-      if (!shotData.archipelago) captureShot(MAP_REGIONS.archipelago);
       // The one-shot attempt has finished, whether or not a capture succeeded.
       // Tests use this to distinguish "preload failed (page left uncached)" from
       // "preload still pending", so a genuine SwiftShader capture failure does
@@ -344,11 +309,6 @@ export function createMapController(options: MapControllerOptions) {
   function renderIcons(): void {
     const wrap = options.document.getElementById('mapIcons');
     if (!wrap) return;
-    // 镇标记只依赖 towns 常量、不随建筑列表加载，先于 buildings 空表早退渲染
-    // （boot 抢跑开图也能看到 8 镇圆标）。
-    renderTownIcons(wrap);
-    // 交通层同样只吃 transit 常量（T4a2），与镇标记同一早退口径。
-    renderTransitOverlay(wrap);
     const buildings = options.getBuildings();
     if (buildings.length === 0) {
       iconsBuilt = false;
@@ -393,105 +353,6 @@ export function createMapController(options: MapControllerOptions) {
     syncIconState();
   }
 
-  /** 海图页专属的 8 镇标记（T3a）＋镇名常显标签（T6R-b5，设计 §5.3「8 镇名
-   *  标注」）：建筑图标按 region.contains 过滤即可（主城/北城建筑都不落在
-   *  z≥45 的海图域内），但镇表全在 z≥62——主城页的 contains（z≥−40）也会
-   *  误收，故镇标记按页白名单渲染而非 contains 过滤。镇名标签与图标同锚
-   *  （同一镇心投影百分比，勿偏移出岛），纯读图标注，交互仍由图标承担。 */
-  function renderTownIcons(wrap: HTMLElement): void {
-    const towns = activeRegion.id === 'archipelago' ? options.getTownMarkers() : [];
-    const visibleIds = new Set(towns.map((town) => town.id));
-    wrap.querySelectorAll<HTMLButtonElement>('.map-town-icon').forEach((icon) => {
-      const townId = icon.dataset.townId;
-      if (!townId || !visibleIds.has(townId)) {
-        icon.remove();
-        return;
-      }
-    });
-    wrap.querySelectorAll<HTMLElement>('.map-town-label').forEach((label) => {
-      const townId = label.dataset.townId;
-      if (!townId || !visibleIds.has(townId)) {
-        label.remove();
-        return;
-      }
-    });
-    towns.forEach((town) => {
-      const iconSelector = `.map-town-icon[data-town-id="${CSS.escape(town.id)}"]`;
-      if (options.document.querySelector(iconSelector)) return;
-      const icon = options.document.createElement('button');
-      icon.type = 'button';
-      icon.className = 'map-town-icon';
-      icon.dataset.townId = town.id;
-      icon.title = town.label;
-      icon.setAttribute('aria-pressed', 'false');
-      // 镇主题色直接作圆标填充（towns.ts theme.iconColor，CSS 只管描边/选中态）。
-      icon.style.backgroundColor = town.iconColor;
-      const leftPct = ((town.x - activeRegion.centerX + activeRegion.span) / (2 * activeRegion.span)) * 100;
-      const topPct = ((town.z - activeRegion.centerZ + activeRegion.span) / (2 * activeRegion.span)) * 100;
-      icon.style.left = `${leftPct}%`;
-      icon.style.top = `${topPct}%`;
-      icon.addEventListener('click', () => openTownTip(town));
-      wrap.appendChild(icon);
-      // 镇名常显标签（T6R-b5）：文本「年份·镇名」（towns.ts label，地图统一
-      // 口径）；与图标同锚百分比防偏移出岛。纯读图（aria-hidden + CSS
-      // pointer-events 关闭）；东西两端的近页缘镇翻转对齐防画框裁剪
-      // （admin 世界图 world-marker-label--left 同款先例）。
-      const label = options.document.createElement('span');
-      label.className = 'map-town-label';
-      label.dataset.townId = town.id;
-      label.setAttribute('aria-hidden', 'true');
-      label.textContent = town.label;
-      if (leftPct <= 10) label.classList.add('map-town-label--w');
-      else if (leftPct >= 90) label.classList.add('map-town-label--e');
-      label.style.left = `${leftPct}%`;
-      label.style.top = `${topPct}%`;
-      wrap.appendChild(label);
-    });
-  }
-
-  /** 海图页交通层（T4a2，设计 §5.3）：TRANSIT_MAP_OVERLAY 的站点圆点 +
-   *  线路描线（星门线实线 = 电车、环线虚线 = 磁悬浮），投影公式与镇标记
-   *  同源（页中心 + span 归一化百分比）。站圆点是镇标记的小一档变体；
-   *  线路为铺在图纸上的 SVG 折线（viewBox 0 0 100 100 = 页面百分比坐标，
-   *  页纸 aspect-ratio 1/1 → 无拉伸变形）。乘车交互（点站圆点出面板）
-   *  归 T4b——本层暂只读图，站圆点 pointer-events 由 CSS 关闭。 */
-  function renderTransitOverlay(wrap: HTMLElement): void {
-    const onSeaChart = activeRegion.id === 'archipelago';
-    wrap.querySelector('.map-transit-lines')?.remove();
-    wrap.querySelectorAll('.map-transit-station').forEach((dot) => dot.remove());
-    if (!onSeaChart) return;
-    const region = activeRegion;
-    const paperX = (x: number): number => ((x - region.centerX + region.span) / (2 * region.span)) * 100;
-    const paperZ = (z: number): number => ((z - region.centerZ + region.span) / (2 * region.span)) * 100;
-
-    const svg = options.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'map-transit-lines');
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.setAttribute('preserveAspectRatio', 'none');
-    const toPoints = (line: readonly { x: number; z: number }[]): string =>
-      line.map((node) => `${paperX(node.x).toFixed(3)},${paperZ(node.z).toFixed(3)}`).join(' ');
-    for (const [className, line] of [
-      ['map-transit-stargate', TRANSIT_MAP_OVERLAY.stargateLine],
-      ['map-transit-ring', TRANSIT_MAP_OVERLAY.ringLoop],
-    ] as const) {
-      const polyline = options.document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      polyline.setAttribute('class', className);
-      polyline.setAttribute('points', toPoints(line));
-      svg.appendChild(polyline);
-    }
-    wrap.appendChild(svg);
-
-    for (const station of TRANSIT_MAP_OVERLAY.stations) {
-      const dot = options.document.createElement('div');
-      dot.className = 'map-transit-station';
-      dot.dataset.stationId = station.id;
-      dot.title = station.label;
-      dot.style.left = `${paperX(station.x).toFixed(3)}%`;
-      dot.style.top = `${paperZ(station.z).toFixed(3)}%`;
-      wrap.appendChild(dot);
-    }
-  }
-
   function canTeleport(): boolean {
     return options.canTeleport();
   }
@@ -503,7 +364,6 @@ export function createMapController(options: MapControllerOptions) {
     if (open) setRegion(regionAt(building.group.position.x, building.group.position.z));
     closeSearchResults();
     tipBuilding = building;
-    tipTown = null;
     confirmedBuildingId = building.id;
     const iconSelector = `.map-icon[data-building-id="${CSS.escape(building.id)}"]`;
     if (!iconsBuilt || !options.document.querySelector(iconSelector)) renderIcons();
@@ -516,37 +376,14 @@ export function createMapController(options: MapControllerOptions) {
     teleport && (teleport.disabled = !unlocked);
     options.document.getElementById('mapTipLock')?.classList.toggle('hidden', unlocked);
     options.document.getElementById('mapTip')?.classList.add('open');
-    options.document.querySelectorAll('.map-icon.is-selected, .map-town-icon.is-selected').forEach((icon) => icon.classList.remove('is-selected'));
-    options.document.querySelector(iconSelector)?.classList.add('is-selected');
-  }
-
-  /** 海图页镇名 tip（T3a）：与建筑 tip 共用 #mapTip 面板与传送解锁门槛
-   *  （参观 5 座建筑解锁传送），镇标记与建筑图标互斥选中。 */
-  function openTownTip(town: YearTownMarker): void {
-    // 镇标记只渲染在海图页；若跨页唤起（防御），先翻页再定位选中图标。
-    if (open) setRegion(MAP_REGIONS.archipelago);
-    closeSearchResults();
-    tipBuilding = null;
-    confirmedBuildingId = null;
-    tipTown = town;
-    const iconSelector = `.map-town-icon[data-town-id="${CSS.escape(town.id)}"]`;
-    if (!iconsBuilt || !options.document.querySelector(iconSelector)) renderIcons();
-    options.document.getElementById('mapTipTitle')!.textContent = town.label;
-    options.document.getElementById('mapTipSlogan')!.textContent = town.tagline;
-    const unlocked = canTeleport();
-    const teleport = options.document.getElementById('mapTipTele') as HTMLButtonElement | null;
-    teleport && (teleport.disabled = !unlocked);
-    options.document.getElementById('mapTipLock')?.classList.toggle('hidden', unlocked);
-    options.document.getElementById('mapTip')?.classList.add('open');
-    options.document.querySelectorAll('.map-icon.is-selected, .map-town-icon.is-selected').forEach((icon) => icon.classList.remove('is-selected'));
+    options.document.querySelectorAll('.map-icon.is-selected').forEach((icon) => icon.classList.remove('is-selected'));
     options.document.querySelector(iconSelector)?.classList.add('is-selected');
   }
 
   function closeTip(): void {
     tipBuilding = null;
-    tipTown = null;
     options.document.getElementById('mapTip')?.classList.remove('open');
-    options.document.querySelectorAll('.map-icon.is-selected, .map-town-icon.is-selected').forEach((icon) => icon.classList.remove('is-selected'));
+    options.document.querySelectorAll('.map-icon.is-selected').forEach((icon) => icon.classList.remove('is-selected'));
   }
 
   function findSearchResults(query: string): MapSearchResult[] {
@@ -680,25 +517,6 @@ export function createMapController(options: MapControllerOptions) {
     return true;
   }
 
-  /** 镇传送（T3a）：复用建筑传送的 clearPlayerPath + setCameraTarget 机制；
-   *  岛上无路网入口（T4 桥/站接线前的唯一抵达方式），落点直取镇中心并
-   *  用权威采样器 terrainHeight 落到岛台面（playerController 每帧也会以
-   *  同一采样器复核 y，此处先行落对避免一帧下坠观感）。 */
-  function teleportTown(town: YearTownMarker): void {
-    const cursor = options.getCursor();
-    if (!cursor) return;
-    options.clearPlayerPath();
-    cursor.position.set(town.x, terrainHeight(town.x, town.z), town.z);
-    options.setCameraTarget(town.x, town.z, true);
-  }
-
-  function teleportToTown(townId: string): boolean {
-    const town = options.getTownMarkers().find((item) => item.id === townId);
-    if (!town) return false;
-    teleportTown(town);
-    return true;
-  }
-
   function setup(signal: AbortSignal): void {
     options.document.getElementById('mapToggle')?.addEventListener('click', toggle, { signal });
     options.document.getElementById('mapClose')?.addEventListener('click', () => { if (open) toggle(); }, { signal });
@@ -736,15 +554,7 @@ export function createMapController(options: MapControllerOptions) {
       }
     }, { signal });
     options.document.getElementById('mapTipTele')?.addEventListener('click', () => {
-      if (!canTeleport()) return;
-      const town = tipTown;
-      if (town) {
-        closeTip();
-        if (open) toggle();
-        teleportTown(town);
-        return;
-      }
-      if (!tipBuilding) return;
+      if (!tipBuilding || !canTeleport()) return;
       const building = tipBuilding;
       closeTip();
       if (open) toggle();
@@ -758,11 +568,10 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function invalidateShot(reason: 'availability' | 'theme' | 'scene' = 'availability'): void {
-    // Theme flips and scene edits invalidate EVERY atlas page — the stale
+    // Theme flips and scene edits invalidate BOTH atlas pages — the stale
     // capture must never resurface when the player crosses the district.
     shotData.main = null;
     shotData.north = null;
-    shotData.archipelago = null;
     if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {
       // Availability changes update live controls without taking a new snapshot
@@ -792,13 +601,11 @@ export function createMapController(options: MapControllerOptions) {
     shotCamera = null;
     shotData.main = null;
     shotData.north = null;
-    shotData.archipelago = null;
     shotsPreloaded = false;
     shotsPreloadSettled = false;
     destroyed = true;
     iconsBuilt = false;
     tipBuilding = null;
-    tipTown = null;
     searchResults = [];
     activeSearchIndex = -1;
     confirmedBuildingId = null;
@@ -818,10 +625,9 @@ export function createMapController(options: MapControllerOptions) {
     openTip,
     closeTip,
     teleportToBuilding,
-    teleportToTown,
     isOpen: () => open,
     areIconsBuilt: () => iconsBuilt,
-    shotsReady: () => ({ main: Boolean(shotData.main), north: Boolean(shotData.north), archipelago: Boolean(shotData.archipelago) }),
+    shotsReady: () => ({ main: Boolean(shotData.main), north: Boolean(shotData.north) }),
     /** True once the boot preload attempt has run to completion — success or
      *  failure. Lets tests wait for the attempt to settle without assuming it
      *  produced both pages (a software-GL capture may legitimately fail). */

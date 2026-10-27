@@ -59,7 +59,7 @@ async function stubCityAndBoot(page: Parameters<typeof stubCityWebSocket>[0], us
   });
 }
 
-test('boot preloads all three atlas map pages before the map is ever opened', async ({ page }) => {
+test('boot preloads both district map pages before the map is ever opened', async ({ page }) => {
   // Keep the town clock in daytime: theme flips invalidate atlas pages and
   // would race the preload assertions.
   await page.clock.setFixedTime(new Date('2026-09-25T00:12:00Z'));
@@ -68,11 +68,10 @@ test('boot preloads all three atlas map pages before the map is ever opened', as
   await stubCityAndBoot(page, 'map-regions-preload-tester');
   await waitForCityReady(page, 'map-regions-preload-tester');
   await waitForMapShotsPreloaded(page);
-  // All three atlas pages (main, north, and the year-town archipelago sea
-  // chart) are cached without the overlay ever having opened: the captures
-  // came from the boot-time preload, and the <img> is still untouched.
+  // Both atlas pages are cached without the overlay ever having opened: the
+  // captures came from the boot-time preload, and the <img> is still untouched.
   const ready = await page.evaluate(() => (window as unknown as CityWindow)._mini.mapShotsReady());
-  expect(ready).toEqual({ main: true, north: true, archipelago: true });
+  expect(ready).toEqual({ main: true, north: true });
   await expect(page.locator('#mapOverlay')).not.toHaveClass(/show/);
   expect(await page.locator('#mapImage').getAttribute('src')).toBeNull();
   expect(errors).toEqual([]);
@@ -121,10 +120,6 @@ test('the atlas page follows where the player stands', async ({ page }) => {
 });
 
 test('a search hit across the district boundary turns the page', async ({ page }) => {
-  // Same budget bump as the two walk-through tests below: the boot preload now
-  // captures a third atlas page (the archipelago sea chart), and one SwiftShader
-  // boot alone eats 30–40 s of the default 60 s budget.
-  test.setTimeout(150_000);
   await page.clock.setFixedTime(new Date('2026-09-25T00:12:00Z'));
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -183,64 +178,5 @@ test('the north page capture hides main-city buildings inside its frame', async 
   // compression / antialiasing / DPR swings on software GL cannot flake them.
   expect(northBrightness).toBeGreaterThan(170);
   expect(northBrightness - mainBrightness).toBeGreaterThan(30);
-  expect(errors).toEqual([]);
-});
-
-// T6R-b5 (设计 §5.3「8 镇名标注」): the sea chart page carries a persistent
-// 「年份·镇名」 label for each of the 8 year towns, anchored on the same
-// projection percentages as the T3a town icons (towns.ts town centres), while
-// the click-to-tip interaction stays on the icon button itself.
-test('the sea chart page labels the eight year towns by name', async ({ page }) => {
-  test.setTimeout(150_000);
-  await page.clock.setFixedTime(new Date('2026-09-25T00:12:00Z'));
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await stubCityAndBoot(page, 'map-town-labels-tester');
-  await waitForCityReady(page, 'map-town-labels-tester');
-  await waitForMapShotsPreloaded(page);
-
-  // Standing on 盛夏镇's island flips the paper to the sea chart page.
-  await page.evaluate(() => (window as unknown as CityWindow)._mini.teleport(-126, 232));
-  await page.locator('#mapToggle').click({ force: true });
-  await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
-  await expect(page.locator('#mapTitle')).toHaveText('物实小城 · 群岛海图');
-  await expect(page.locator('.map-town-icon')).toHaveCount(8);
-
-  // Every town gets one label with the「年份·镇名」wording, anchored exactly on
-  // its icon (same left/top percentages — the label never drifts off the
-  // island) and fully inside the chart frame.
-  const labels = await page.evaluate(() => {
-    const wrap = document.getElementById('mapIcons')!;
-    const frame = document.getElementById('mapImageWrap')!.getBoundingClientRect();
-    return Array.from(wrap.querySelectorAll<HTMLElement>('.map-town-label')).map((label) => {
-      const icon = wrap.querySelector<HTMLElement>(`.map-town-icon[data-town-id="${label.dataset.townId}"]`);
-      const box = label.getBoundingClientRect();
-      return {
-        text: label.textContent,
-        className: label.className,
-        anchored: icon?.style.left === label.style.left && icon?.style.top === label.style.top,
-        insideFrame: box.left >= frame.left - 0.5 && box.right <= frame.right + 0.5
-          && box.top >= frame.top - 0.5 && box.bottom <= frame.bottom + 0.5,
-      };
-    });
-  });
-  expect(labels.map((label) => label.text)).toEqual([
-    '2019·起源村', '2020·启明镇', '2021·潮声镇', '2022·盛夏镇',
-    '2023·回响镇', '2024·微光镇', '2025·长风镇', '2026·星港',
-  ]);
-  for (const label of labels) {
-    expect(label.anchored).toBe(true);
-    expect(label.insideFrame).toBe(true);
-  }
-
-  // The eastern/western edge towns flip their label alignment instead of
-  // spilling past the chart frame (.map-image-wrap clips overflow).
-  expect(labels.find((label) => label.text === '2019·起源村')?.className).toContain('map-town-label--e');
-  expect(labels.find((label) => label.text === '2024·微光镇')?.className).toContain('map-town-label--w');
-
-  // The labels are read-only annotations: picking the 盛夏 icon still opens the
-  // town tip — the interaction paradigm stays on the icon button (T3a).
-  await page.locator('.map-town-icon[data-town-id="island-2022"]').click({ force: true });
-  await expect(page.locator('#mapTipTitle')).toHaveText('2022·盛夏镇');
   expect(errors).toEqual([]);
 });

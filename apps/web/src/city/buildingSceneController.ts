@@ -55,9 +55,7 @@ export function createBuildingSceneController(options: {
           if (right) { right.position.x = parameters.width / 2 + offset; right.rotation.y = Math.PI / 2; }
         }
       }
-      const baseY = definition.baseY ?? 0;
-      building.group.userData.baseY = baseY;
-      building.group.position.y = baseY - 3;
+      building.group.position.y = -3;
       options.scene.add(building.group);
       options.addBuilding(building);
       if (definition.hasPlot !== false) addPlot(definition);

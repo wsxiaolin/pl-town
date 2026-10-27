@@ -29,11 +29,9 @@ import { SURFACE_Y } from '../layers';
 import { hashString, mulberry32 } from './massifGeometry';
 // 高度场在 heightfield/（纯计算，无 Three.js 网格）：worldTerrainAudit
 // 的数值审计与装饰散布共用同一份 sampleCitysideMeadowY；trailCutAt 用于
-// 装饰避让步道切槽（床表低于自然场，槽内装饰会悬空）；bridgeCorridorWeight
-// 用于避让星门大桥走廊（正向填方高于自然场，槽内装饰会埋进路堤/长上桥）。
+// 装饰避让步道切槽（床表低于自然场，槽内装饰会悬空）。
 import { MEADOW_GLOBAL_SEED, sampleCitysideMeadowY } from '../../city/data/terrain/heightfield/meadowField';
 import { trailCutAt } from '../../city/data/terrain/heightfield/worldReliefField';
-import { bridgeCorridorWeight } from '../../city/data/terrain/heightfield/transitField';
 
 export { sampleCitysideMeadowY } from './meadowField';
 
@@ -260,10 +258,6 @@ export function createCityGround(options: CityGroundOptions): CityGroundHandle {
       // 步道切槽避让（trailCutAt > 0 = 槽床 + 融合坡影响区）：床表被切低
       // 于自然场，贴自然场的装饰在该区会悬空，直接剔除。
       if (trailCutAt(x, z) > 0) continue;
-      // 大桥走廊避让（T4a2，bridgeCorridorWeight > 0 = 桥面 + 融合坡影响
-      // 区）：走廊是正向填方（贴自然场的草会被埋进路堤，海上段更是悬在
-      // 桥面下），整带剔除防草长上桥。
-      if (bridgeCorridorWeight(x, z) > 0) continue;
       addProp(pickPropVariant(rng), x, y, z, rng, `${feature.id}-prop-${propIndex}`);
       propIndex += 1;
       placed += 1;

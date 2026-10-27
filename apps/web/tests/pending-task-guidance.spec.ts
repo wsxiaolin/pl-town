@@ -28,8 +28,7 @@ async function freshCity(page: Page) {
     return route.fulfill({ status: 204, body: '' });
   });
   await waitForCityReady(page, 'pending-guide-tester');
-  // 年份群岛建筑也常驻标签；这里只数主城建筑，验证「初始仅 1 座已建」。
-  await expect(page.locator('.b-label-item:not([data-building-id^="yt-"])')).toHaveCount(1);
+  await expect(page.locator('.b-label-item')).toHaveCount(1);
   return {
     errors,
     async build(buildingId: string) {
