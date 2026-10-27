@@ -19,6 +19,9 @@ export type BuildingDefinition = {
   hasPlot?: boolean;
   featureIds?: readonly string[];
   plot?: BuildingPlotSpec;
+  /** 地基绝对 Y（主城恒 0/缺省；年份镇建筑 = 岛台面高度，T6）。入场动画与
+   *  buildingSceneController 以此为落位终点，缺省 0 行为不变（回归安全）。 */
+  baseY?: number;
 };
 
 export type BuildingEntity = BuildingDefinition & {

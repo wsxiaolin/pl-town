@@ -24,3 +24,8 @@ review_report.md
 review_report_clean.md
 final_comment.md
 conclusion.md
+
+# 年份镇 T5 生成物（scripts/generate_town_buildings.mjs 产出）
+# 2026-10-19 用户决定采用方案 A：gen-* 40 模块随 PR 入库，保证 clone 后
+# typecheck/build/dev 全绿，因此这里故意不设置忽略规则。重新生成后记得
+# 把变化的 gen-* 一并提交；体积由 check:asset-size 另行把关。

@@ -3,6 +3,7 @@ import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH, shorelineX, westBeachWaterlineMaxX } from '../city/data/cityConfig';
 import { seaBedCutAt, shoreSandLiftAt } from '../city/data/terrain/heightfield/worldReliefField';
+import { createArchipelagoWaterGeometry, mergeWaterSheets } from './terrain/archipelagoWater';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -331,7 +332,12 @@ export function createWestBeach(options: BeachOptions): {
   // underneath it, and it spans past the ground edge so no land shows beyond.
   const waterMinZ = -112;
   const waterMaxZ = 112;
-  const waterGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
+  const westRibbonGeometry = createShoreRibbonGeometry((z) => shorelineX(z) - 96, shorelineX, waterMinZ, waterMaxZ, options.waterRendering ? 64 : 12, options.waterRendering ? 220 : 96);
+  // T3 南洋年份群岛（设计 §6.1）：把南海覆盖域（南带 + 西臂）合并进这唯一
+  // 一份海面几何——Water 实例/镜像 pass/昼夜接线仍只有一个，静态兜底
+  // （waterRendering=false 的 addMesh 分支）随之同步扩展。
+  const waterGeometry = mergeWaterSheets([westRibbonGeometry, createArchipelagoWaterGeometry()]);
+  westRibbonGeometry.dispose();
   const waterSurface = options.waterRendering
     ? createAnimatedWaterSurface(waterGeometry, {
         sunDirection: SUN_DIRECTION,

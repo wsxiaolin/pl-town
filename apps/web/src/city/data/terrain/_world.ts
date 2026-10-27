@@ -10,9 +10,10 @@ import { LANPING_RANGE } from './range-lanping';
 import { CHENXI_RIVER } from './river-chenxi';
 import { MINGLAN_ISLES } from './sea-minglan';
 import { CITYSIDE_MEADOW } from './ground-cityside';
+import { YEAR_ISLANDS } from './sea-archipelago';
 
 /**
- * 世界级地形要素列表（岚屏岭山脉 + 晨溪河 + 明澜外海 + 城缘草甸）。
+ * 世界级地形要素列表（岚屏岭山脉 + 晨溪河 + 明澜外海 + 城缘草甸 + 南洋年份群岛）。
  * 渲染器逐条消费上述分文件配置；导航系统按 navigation* 字段避让
  * （当前由各渲染器/装配层按需接线，见 rendering/terrain/ 与
  * city/cityWorldAssembly.ts）。
@@ -22,4 +23,5 @@ export const WORLD_TERRAIN: readonly TerrainFeatureConfig[] = [
   ...CHENXI_RIVER,
   ...MINGLAN_ISLES,
   ...CITYSIDE_MEADOW,
+  ...YEAR_ISLANDS,
 ];

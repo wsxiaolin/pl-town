@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { terrainHeight, slopeAlong, WALKABLE_SLOPE_MAX } from '../data/terrain/heightfield/terrainHeight';
+import { transitGroundY } from '../data/terrain/heightfield/transitGround';
 import { SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES } from '../data/terrain/heightfield/worldReliefField';
 import { LANPING_ALPINE_FIELD } from '../data/terrain/heightfield/alpineField';
 
@@ -19,7 +20,14 @@ export interface RoadNavigationOptions {
   northDistrictArea?: { roadNodes: readonly Coord2[]; avenueSegment: readonly [number, number, number, number]; laneSegments: readonly RoadSegment4[]; roadJunctions?: readonly RoadSegment4[] };
   /** 南草甸出城步道（方案 §5.3/§6.1）：S1..S4 挂接路网，WORLD_BOUNDS 随新节点外扩至观景平台。 */
   meadowTrail?: { roadNodes: readonly Coord2[]; roadSegments: readonly RoadSegment4[] };
+  /** T4a 跨海交通（设计 §5.1/§5.2）：星门大桥 B 链（S4 观景平台挂接）+
+   *  起源村枢纽街。走线/纵断面唯一事实源 = data/year-towns/transit.ts
+   *  （buildTransitRoadGraph 工厂产出，本模块只接线不造数）。 */
+  transit?: { roadNodes: readonly Coord2[]; roadSegments: readonly RoadSegment4[] };
   westBeach?: { deepWaterX: number; safeReturnX: number; minZ: number; maxZ: number };
+  /** 年份群岛（T3）：8 镇中心作为 bounds 外扩锚点（不是路网节点——T4 桥
+   *  节点接入前，玩家传送/飞抵后的自由行走不被 WORLD_BOUNDS 钳回主城）。 */
+  yearTownAnchors?: readonly Coord2[];
   cityLimit: number;
   getBuildings: () => readonly { group: THREE.Object3D }[];
 }
@@ -78,15 +86,17 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     roadJunctions: [...(options.northDistrictArea?.roadJunctions ?? [])] as RoadSegment4[],
   };
   const MEADOW_TRAIL = { roadNodes: [...(options.meadowTrail?.roadNodes ?? [])] as Coord2[], roadSegments: [...(options.meadowTrail?.roadSegments ?? [])] as RoadSegment4[] };
+  const TRANSIT = { roadNodes: [...(options.transit?.roadNodes ?? [])] as Coord2[], roadSegments: [...(options.transit?.roadSegments ?? [])] as RoadSegment4[] };
   const CITY_LIMIT = options.cityLimit;
   const PLAYER_CLEARANCE = 0.2;
   const WEST_BEACH = options.westBeach;
-  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes, ...NORTH_DISTRICT_AREA.roadNodes, ...MEADOW_TRAIL.roadNodes];
+  const YEAR_TOWN_ANCHORS = options.yearTownAnchors ?? [];
+  const allExtraNodes = [...ECHO_OBSERVATORY_AREA.roadNodes, ...NORTH_DISTRICT_AREA.roadNodes, ...MEADOW_TRAIL.roadNodes, ...TRANSIT.roadNodes];
   const WORLD_BOUNDS = {
-    minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) - 8,
-    maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x)) + 8,
-    minZ: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([,z]) => z)) - 8,
-    maxZ: Math.max(CITY_LIMIT, ...allExtraNodes.map(([,z]) => z)) + 8,
+    minX: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([x]) => x), ...YEAR_TOWN_ANCHORS.map(([x]) => x)) - 8,
+    maxX: Math.max(CITY_LIMIT, ...allExtraNodes.map(([x]) => x), ...YEAR_TOWN_ANCHORS.map(([x]) => x)) + 8,
+    minZ: Math.min(-CITY_LIMIT, ...allExtraNodes.map(([,z]) => z), ...YEAR_TOWN_ANCHORS.map(([,z]) => z)) - 8,
+    maxZ: Math.max(CITY_LIMIT, ...allExtraNodes.map(([,z]) => z), ...YEAR_TOWN_ANCHORS.map(([,z]) => z)) + 8,
   };
   const buildings = options.getBuildings();
   const buildingBoxes: CollisionBox[] = [];
@@ -236,8 +246,15 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
   let roadGraph: RoadGraph | null = null;
   
   // 地面点构造（唯一权威采样器落位，GOAL 红线：禁止硬编码 0）。
+  // T4b 乘车交互（transitField 契约消费方——桥面/月台可步行）：桥面/月台
+  // 段的地面 y 由 transitGroundY 统一接管（月台 > 桥走廊 > 自然地形，
+  // 与 worldReliefAt 岛分支同口径——月台是乘车落点的精确基准面，星门
+  // 月台不再被桥走廊压偏 0.1054）；岛足印内 terrainHeight 已按同一
+  // 函数融过桥/台（桥/月台节点在中心线上、走廊权重恒 1 → 重采样幂等）；
+  // 恒海区 z≥145 无 farGround 网格的桥中段由此补齐 y=deck（走桥不沉
+  // 海）。两域之外返回原值，主城/步道全部落点零回归。
   function groundPoint(x: number,z: number): THREE.Vector3 {
-    return new THREE.Vector3(x,terrainHeight(x,z),z);
+    return new THREE.Vector3(x,transitGroundY(x,z),z);
   }
 
   // 坡度可通行判定（方案 §6.1）：建边时对两端点与中点沿边方向采样
@@ -315,6 +332,18 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       const bIdx=nodeIdx.get(x2+','+z2);
       if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
     });
+
+    // 跨海交通（T4a2，设计 §5.1/§5.2）：星门大桥 B 链首节点 [34,96] 与南步道
+    // S4 观景平台重合（addNode 按坐标去重 → 桥链自然挂进步道图）；末端
+    // (96,197)→(96,212) 为起源村枢纽街。海上段（z≥145 无 farGround 网格）
+    // terrainHeight 仍是自然场（≈海床），坡度判定采两端点恒 0 → 边恒放行；
+    // 节点 y 由 groundPoint 的 transitGroundY 接管（T4b 换月台优先口径）。
+    TRANSIT.roadNodes.forEach(([x,z])=>addNode(x,z));
+    TRANSIT.roadSegments.forEach(([x1,z1,x2,z2])=>{
+      const aIdx=nodeIdx.get(x1+','+z1);
+      const bIdx=nodeIdx.get(x2+','+z2);
+      if(aIdx!==undefined && bIdx!==undefined) addEdge(nodes[aIdx]!,nodes[bIdx]!);
+    });
     
     NORTH_DISTRICT_AREA.roadNodes.forEach(([x,z])=>addNode(x,z));
     // 街道按途经节点切分成逐交叉口边，保证每个路口都是图节点
@@ -387,11 +416,12 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
     const fromX=from.x, fromZ=from.z;
     const desiredX=clamp(target.x,WORLD_BOUNDS.minX,WORLD_BOUNDS.maxX);
     const desiredZ=clamp(target.z,WORLD_BOUNDS.minZ,WORLD_BOUNDS.maxZ);
-    // 落点 y 一律由唯一权威采样器赋值（方案 §6.2；台地内恒 0 零回归）。
-    result.set(desiredX,terrainHeight(desiredX,desiredZ),desiredZ);
+    // 落点 y 一律由权威采样器赋值（方案 §6.2；台地内恒 0 零回归）。T4b：
+    // 交通件上盖（桥面/月台）由 transitGroundY 接管——走桥 y=桥面纵断面。
+    result.set(desiredX,transitGroundY(desiredX,desiredZ),desiredZ);
     if(WEST_BEACH && desiredX<WEST_BEACH.deepWaterX && desiredZ>=WEST_BEACH.minZ && desiredZ<=WEST_BEACH.maxZ) {
       const returnZ=clamp(desiredZ,WEST_BEACH.minZ,WEST_BEACH.maxZ);
-      return result.set(WEST_BEACH.safeReturnX,terrainHeight(WEST_BEACH.safeReturnX,returnZ),returnZ);
+      return result.set(WEST_BEACH.safeReturnX,transitGroundY(WEST_BEACH.safeReturnX,returnZ),returnZ);
     }
     // 坡度可通行判定（方案 §6.1 movement 层兜底）：图外自由移动时按
     // 「落点处沿运动方向」采样 slopeAlong，超阈值视为不可走，与建筑
@@ -401,18 +431,18 @@ export function createRoadNavigationSystem(options: RoadNavigationOptions) {
       if(dx*dx+dz*dz<1e-9) return false;
       return slopeAlong(x,z,dx,dz)>WALKABLE_SLOPE_MAX;
     };
-    if(positionBlocked(fromX,fromZ)) return positionBlocked(desiredX,desiredZ) ? result.set(fromX,terrainHeight(fromX,fromZ),fromZ) : result;
+    if(positionBlocked(fromX,fromZ)) return positionBlocked(desiredX,desiredZ) ? result.set(fromX,transitGroundY(fromX,fromZ),fromZ) : result;
     if(!positionBlocked(desiredX,desiredZ)&&!pathBlocked(fromX,fromZ,desiredX,desiredZ)&&!stepTooSteep(desiredX,desiredZ)) return result;
     const alongXClear=!positionBlocked(desiredX,fromZ)&&!pathBlocked(fromX,fromZ,desiredX,fromZ)&&!stepTooSteep(desiredX,fromZ);
     const alongZClear=!positionBlocked(fromX,desiredZ)&&!pathBlocked(fromX,fromZ,fromX,desiredZ)&&!stepTooSteep(fromX,desiredZ);
     if(alongXClear&&alongZClear){
       const alongXDistance=(fromZ-desiredZ)**2;
       const alongZDistance=(fromX-desiredX)**2;
-      return alongXDistance<=alongZDistance ? result.set(desiredX,terrainHeight(desiredX,fromZ),fromZ) : result.set(fromX,terrainHeight(fromX,desiredZ),desiredZ);
+      return alongXDistance<=alongZDistance ? result.set(desiredX,transitGroundY(desiredX,fromZ),fromZ) : result.set(fromX,transitGroundY(fromX,desiredZ),desiredZ);
     }
-    if(alongXClear) return result.set(desiredX,terrainHeight(desiredX,fromZ),fromZ);
-    if(alongZClear) return result.set(fromX,terrainHeight(fromX,desiredZ),desiredZ);
-    return result.set(fromX,terrainHeight(fromX,fromZ),fromZ);
+    if(alongXClear) return result.set(desiredX,transitGroundY(desiredX,fromZ),fromZ);
+    if(alongZClear) return result.set(fromX,transitGroundY(fromX,desiredZ),desiredZ);
+    return result.set(fromX,transitGroundY(fromX,fromZ),fromZ);
   }
   
   function aStarRoad(sNode: RoadNode, eNode: RoadNode, _graph: RoadGraph): RoadNode[] | null {

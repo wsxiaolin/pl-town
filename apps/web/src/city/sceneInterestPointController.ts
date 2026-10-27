@@ -19,6 +19,10 @@ interface SceneInterestPointControllerOptions {
   focusBeachEncounter?: () => void;
   interactWithStory?: (id: SceneInterestPointId) => boolean;
   interactWithFeature?: (id: SceneInterestPointId) => boolean | Promise<boolean>;
+  /** 年份群岛乘车（T4b-c3）：站牌 interact 路由到 transitRideController
+   *（可选注入，c4 接线；走既有 interactionPointer 距离 3.5 → pending →
+   * interact 路由，本控制器零渲染副作用）。 */
+  interactWithTransit?: (id: SceneInterestPointId) => boolean;
 }
 
 export interface SceneInterestPointController {
@@ -165,6 +169,9 @@ export function createSceneInterestPointController(
   return {
     armBeachEncounter() { beachTriggerArmed = true; },
     async interact(id) {
+      // 站牌优先交乘车控制器（T4b-c3）：station-* ID 与故事/特性/内置分支无交集，
+      // 钩子未注入（c4 之前）时此处短路为 false，路由照旧。
+      if (options.interactWithTransit?.(id)) return;
       if (options.interactWithStory?.(id)) return;
       if (await options.interactWithFeature?.(id)) return;
       if (id === 'cat-cafe-note') {
