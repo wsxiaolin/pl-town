@@ -541,10 +541,8 @@ function init() {
     buildingPlotTargets,
     npcList,
     actors: {
-      get cursorChar() { return cursorChar; },
-      set cursorChar(value) { cursorChar = value; },
-      get playerMarker() { return playerMarker; },
-      set playerMarker(value) { playerMarker = value; },
+      get cursorChar() { return cursorChar; }, set cursorChar(value) { cursorChar = value; },
+      get playerMarker() { return playerMarker; }, set playerMarker(value) { playerMarker = value; },
     },
     raycaster,
     getGameClock: () => gameClock,
@@ -559,8 +557,7 @@ function init() {
     isStoryLocked: availability.isStoryLocked,
     interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
     onModelsLoaded: () => buildingDamageController?.applyPersisted(),
-    onConstructionChanged: () => mapController?.invalidateShot(),
-    bindTransitVehicles: yearTown.bindTransitVehicles,
+    onConstructionChanged: () => mapController?.invalidateShot(), bindTransitVehicles: yearTown.bindTransitVehicles,
   });
   worldDecorations = world.worldDecorations;
   npcSystem = world.npcSystem;
