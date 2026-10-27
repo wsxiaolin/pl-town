@@ -40,6 +40,8 @@ function createMiniCityApi(options: DebugApiOptions) {
     get THREE() { return options.getThree(); },
     get npcs() { return options.getNpcList(); },
     get player() { return options.getCursorChar(); },
+    /** Effective path/first-person speed for the current entry (?dev doubles it). */
+    get playerSpeed() { return options.getPlayerSpeed(); },
     get navigation() { return options.getNavigation(); },
     get residences() { return options.getResidences(); },
     getPlayerPath: () => options.getPlayerPath().map(point => point.clone()),
@@ -169,6 +171,7 @@ export type DebugApiOptions = {
   getThree: () => typeof THREE;
   getNpcList: () => NpcEntity[];
   getCursorChar: () => THREE.Object3D | null;
+  getPlayerSpeed: () => number;
   getNavigation: () => NavigationApi;
   getPlayerPath: () => THREE.Vector3[];
   getBuildings: () => BuildingEntity[];

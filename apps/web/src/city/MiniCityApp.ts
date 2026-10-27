@@ -52,7 +52,7 @@ import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
 import { createPaintingAiStudio } from './paintingAiStudio';
 import { createPaintingAiCanvasController } from '../adapters/ui/paintingAiCanvasController';
 import { installDebugApi } from './debugApi';
-import { isDevPortalRequested } from './devPortal';
+import { isDevPortalRequested, resolvePlayerSpeed } from './devPortal';
 import { createBuildingInteraction } from './buildingInteraction';
 import { createEventBindings } from './eventBindings';
 import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
@@ -482,6 +482,7 @@ function init() {
     getThree: () => THREE,
     getNpcList: () => npcList,
     getCursorChar: () => cursorChar,
+    getPlayerSpeed: () => resolvePlayerSpeed(CONFIG.playerSpeed),
     getNavigation: () => roadNavigation,
     getPlayerPath: () => view.getPlayerPath(),
     getBuildings: () => buildings,
@@ -588,6 +589,7 @@ function init() {
     setWeather: (value) => graphics.weather.set(value),
     getLoginGate: () => loginController?.asLoginGate() ?? null,
     onWorldCatalog: applyWorldCatalog,
+    devMode: isDevPortalRequested(),
     ...fireworksHandlers,
   });
   buildingDamageController = createBuildingDamageController({
@@ -644,7 +646,7 @@ function init() {
     getScene: () => scene,
     getBuildings: () => buildings,
     getCursor: () => cursorChar,
-    canTeleport: () => multiplayerHousing.progression.getProgress().visitedBuildings.length >= 5,
+    canTeleport: () => isDevPortalRequested() || multiplayerHousing.progression.getProgress().visitedBuildings.length >= 5,
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isBuildingUnavailable: availability.isBuildingUnavailable,
@@ -682,7 +684,7 @@ function init() {
     getCursor: () => cursorChar,
     getIsoMovement: () => movementInputController?.getMovement() ?? { x: 0, z: 0 },
     resolveMovement: (from, target) => roadNavigation.resolveMovement(from, target),
-    walkSpeed: CONFIG.playerSpeed,
+    walkSpeed: resolvePlayerSpeed(CONFIG.playerSpeed),
     sendPosition: (x, y, z, rotation) => multiplayerHousing?.sendLocalPosition({ x, y, z, rotation }, performance.now()),
     onEnter: () => {
       view.clearPlayerPath(); interactionPointer.clearPending(); view.clearNavigationTarget();
@@ -711,7 +713,7 @@ function init() {
     isMapOpen: () => Boolean(mapController?.isOpen()),
     buildRoadPath: roadNavigation.buildRoadPath,
     clamp: roadNavigation.clamp,
-    playerSpeed: CONFIG.playerSpeed,
+    playerSpeed: resolvePlayerSpeed(CONFIG.playerSpeed),
     getNpcs: () => npcList,
     getEcho: () => stories?.echo,
     getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
