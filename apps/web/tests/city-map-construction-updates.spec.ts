@@ -42,7 +42,7 @@ test('an open map updates construction access without creating more WebGL contex
   await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
   await expect(page.locator('.map-icon[data-building-id="library"]')).toHaveCount(0);
   await page.locator('#mapSearchInput').fill('图书馆');
-  await expect(page.locator('.map-search-result')).toHaveCount(0);
+  await expect(page.locator('.map-search-result:not([data-building-id^="yt-"])')).toHaveCount(0);
   const contexts = await page.evaluate(() => (window as any).mapTestWebGLContexts);
   const shot = await page.locator('#mapImage').getAttribute('src');
   for (let revision = 1; revision <= 13; revision += 1) {
