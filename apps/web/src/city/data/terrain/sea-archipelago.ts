@@ -50,11 +50,11 @@ export const SOUTH_SEA_COAST_TUCK = 12;
 /** 南带/西臂的世界范围（设计 §6.1）。 */
 export const SOUTH_SEA = Object.freeze({
   bandXMin: -150,
-  bandXMax: 200,
-  bandZMax: 340,
-  armXMin: -290,
+  bandXMax: 220,
+  bandZMax: 470,
+  armXMin: -490,
   armZMin: 40,
-  armZMax: 340,
+  armZMax: 470,
 });
 
 /** farGround 南陆缘（z_edge(x)，worldGroundMesh edgeDistance 第 4 项反解）。 */

@@ -54,6 +54,9 @@ export interface TransitRideControllerOptions {
   getDialogs: () => TransitRidePort | null;
   /** 乘车期间停掉点击寻路（MiniCityApp 接 view.clearPlayerPath，防抢 cursor）。 */
   clearPlayerPath?: () => void;
+  /** 专用乘车车辆端口：车辆沿轨道行驶，玩家只作为乘客随动。 */
+  setRideVehicle?: (line: 'stargate' | 'ring', x: number, y: number, z: number, tx: number, tz: number) => void;
+  endRide?: () => void;
   showToast?: (message: string) => void;
 }
 
@@ -177,8 +180,10 @@ export function createTransitRideController(options: TransitRideControllerOption
     if (!current) return;
     const station = stationById(current.toId);
     ride = null;
+    options.endRide?.();
     const cursor = options.getCursorChar();
     if (!station || !cursor) return;
+    cursor.visible = true;
     // 到站落点：月台中心，y 取 transitGroundY 精确基准面（= baseY，c1 探针核验）。
     const arrivalY = transitGroundY(station.platformX, station.platformZ);
     cursor.position.set(station.platformX, arrivalY, station.platformZ);
@@ -234,6 +239,9 @@ export function createTransitRideController(options: TransitRideControllerOption
       s: 0,
     };
     options.clearPlayerPath?.();
+    // 发车第一帧就创建可见车辆，避免玩家先沿轨道滑动、车辆随后才出现。
+    sampleTransitRoute(route, 0, sample);
+    options.setRideVehicle?.(route.fromId === 'station-stargate' || route.fromId === 'station-2019-bridge' ? 'stargate' : 'ring', sample.x, sample.y, sample.z, sample.tx, sample.tz);
     return true;
   }
 
@@ -257,8 +265,11 @@ export function createTransitRideController(options: TransitRideControllerOption
       const cursor = options.getCursorChar();
       if (!cursor?.position) {
         ride = null; // 场景已拆除：静默结束，不落点不记账
+        options.endRide?.();
         return;
       }
+      // 车厢里只看见城市与行驶车辆；到站/下车时恢复角色。
+      cursor.visible = false;
       // 乘车期间每帧清点击寻路（onCanvasClick 可能中途设 path，防与推进抢 cursor）。
       options.clearPlayerPath?.();
       const dt = Math.min(Math.max(deltaSeconds, 0), MAX_RIDE_FRAME_DT);
@@ -266,14 +277,21 @@ export function createTransitRideController(options: TransitRideControllerOption
       const speed = TRANSIT_RIDE_SPEED * ringStationSpeedFactor(sample.x, sample.z);
       current.s = Math.min(current.s + speed * dt, current.route.length);
       sampleTransitRoute(current.route, current.s, sample);
-      cursor.position.set(sample.x, sample.y, sample.z);
-      // 朝向口径同 playerController 路径行走：atan2(dx, dz)。
+      const line = current.route.switchS !== null && current.s >= current.route.switchS
+        ? (stationById(current.toId)?.line ?? 'ring')
+        : (stationById(current.fromId)?.line ?? 'ring');
+      options.setRideVehicle?.(line, sample.x, sample.y, sample.z, sample.tx, sample.tz);
+      // 角色站在车厢内：高度随车辆，保留上车时微小横向偏移，始终面向前方。
+      cursor.position.set(sample.x, sample.y + 0.24, sample.z);
       cursor.rotation.y = Math.atan2(sample.tx, sample.tz);
       if (current.s >= current.route.length) finishRide();
     },
     isRiding: () => ride !== null,
     cancel() {
       ride = null; // 中途下车：cursor 停在当前走线点（无落点、不记账）
+      const cursor = options.getCursorChar();
+      if (cursor) cursor.visible = true;
+      options.endRide?.();
       panelStationId = null; // 面板态一并复位，避免 state() 残留旧站
     },
     state() {

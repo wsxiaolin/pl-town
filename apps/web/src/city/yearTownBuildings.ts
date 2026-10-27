@@ -13,6 +13,7 @@ import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 import type { BuildingDefinition } from './buildingEntity';
 import type { BuildingConfig } from './data/buildings/_types';
 import type { BuildingContentLike } from './buildingContent';
+import { YEAR_TOWN_NEIGHBORHOODS, YEAR_TOWN_NEIGHBORHOOD_CONTENT } from './data/year-towns/cityNeighborhoods';
 
 const placements: Readonly<Record<string, YearTownPlacement>> = {
   ...Object.fromEntries(
@@ -68,7 +69,10 @@ const toDefinition = (config: BuildingConfig): BuildingDefinition => ({
 });
 
 /** 年份群岛建筑定义，与主城建筑共用 buildingSceneController。 */
-export const YEAR_TOWN_BUILDING_DEFS: readonly BuildingDefinition[] = YEAR_TOWN_LAYOUT_CONFIGS.map(toDefinition);
+export const YEAR_TOWN_BUILDING_DEFS: readonly BuildingDefinition[] = [
+  ...YEAR_TOWN_LAYOUT_CONFIGS.map(toDefinition),
+  ...YEAR_TOWN_NEIGHBORHOODS.map(toDefinition),
+];
 
 export function mergeBuildingContent(
   main: Readonly<Record<string, BuildingContentLike>>,
@@ -110,9 +114,12 @@ export function yearTownBuildingContent(id: string): BuildingContentLike | undef
   };
 }
 
-export const YEAR_TOWN_BUILDING_CONTENT: Readonly<Record<string, BuildingContentLike>> = Object.fromEntries(
-  Object.keys(YEAR_TOWN_BUILDING_EXTRAS).flatMap((id) => {
-    const content = yearTownBuildingContent(id);
-    return content ? [[id, content] as [string, BuildingContentLike]] : [];
-  }),
-);
+export const YEAR_TOWN_BUILDING_CONTENT: Readonly<Record<string, BuildingContentLike>> = {
+  ...Object.fromEntries(
+    Object.keys(YEAR_TOWN_BUILDING_EXTRAS).flatMap((id) => {
+      const content = yearTownBuildingContent(id);
+      return content ? [[id, content] as [string, BuildingContentLike]] : [];
+    }),
+  ),
+  ...YEAR_TOWN_NEIGHBORHOOD_CONTENT,
+};

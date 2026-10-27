@@ -39,10 +39,16 @@ export interface YearTownWiringOptions {
 }
 
 export function createYearTownWiring(options: YearTownWiringOptions) {
+  let vehicles: {
+    setRideVehicle(line: 'stargate' | 'ring', x: number, y: number, z: number, tx: number, tz: number): void;
+    endRide(): void;
+  } | null = null;
   const transitRide = createTransitRideController({
     getCursorChar: options.getCursorChar,
     getDialogs: options.getDialogs,
     clearPlayerPath: options.clearPlayerPath,
+    setRideVehicle: (...args) => vehicles?.setRideVehicle(...args),
+    endRide: () => vehicles?.endRide(),
     showToast: options.showToast,
   });
   let catalog: YearTownCatalogController | null = null;
@@ -66,6 +72,7 @@ export function createYearTownWiring(options: YearTownWiringOptions) {
 
   return {
     transitRide,
+    bindTransitVehicles(next: typeof vehicles): void { vehicles = next; },
     interactTransit(id: string): boolean {
       return transitRide.interact(id as TransitStationId);
     },

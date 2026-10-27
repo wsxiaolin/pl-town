@@ -559,6 +559,7 @@ function init() {
     interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
     onModelsLoaded: () => buildingDamageController?.applyPersisted(),
     onConstructionChanged: () => mapController?.invalidateShot(),
+    bindTransitVehicles: yearTown.bindTransitVehicles,
   });
   worldDecorations = world.worldDecorations;
   npcSystem = world.npcSystem;

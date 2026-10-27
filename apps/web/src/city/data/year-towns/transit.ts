@@ -7,7 +7,7 @@
 // 本文件保持纯 TS（不 import three / rendering）；站牌交互 ID 注册在
 // gameplay/world/sceneInteractions.ts（TRANSIT_STATION_IDS，两表一致性启动即校验）。
 import { TRANSIT_STATION_IDS, type TransitStationId } from '../../../gameplay/world/sceneInteractions';
-import { YEAR_TOWNS, type YearTownSpec } from './towns';
+import { YEAR_DISTRICTS, YEAR_TOWNS, type YearTownSpec } from './towns';
 
 // ── 通用折线数学（弧长参数化；走廊投影、梁体走线、车辆寻位共用）────────────
 
@@ -185,15 +185,15 @@ export const RING_LOOP_NODES: readonly PolylineNode[] = [
   { x: 150, z: 197 },
   { x: 150, z: 212 },
   // 起源村 → 旧港城东岸
-  { x: 132, z: 222 },
-  { x: 104, z: 244 },
-  { x: 78, z: 260 },
+  { x: 162, z: 182 },
+  { x: 130, z: 160 },
+  { x: 105, z: 160 },
   // 旧港外环：东站 → 南岸 → 西站 → 北岸 → 东站
   { x: 72, z: 282 },
   { x: 65.9, z: 294.79 }, // 回响镇站（2023）
-  { x: 72, z: 312 },
-  { x: 20, z: 326 },
-  { x: -32, z: 312 },
+  { x: 72, z: 332 },
+  { x: 20, z: 346 },
+  { x: -32, z: 332 },
   { x: -25.9, z: 294.79 }, // 盛夏镇站（2022）
   { x: -34, z: 282 },
   { x: -36, z: 252 },
@@ -210,13 +210,13 @@ export const RING_LOOP_NODES: readonly PolylineNode[] = [
   { x: -180, z: 190 },
   { x: -215, z: 208 }, // 微光镇站（2024）
   { x: -250, z: 200 },
-  { x: -274, z: 238 },
-  { x: -270, z: 270 },
+  { x: -300, z: 238 },
+  { x: -285, z: 270 },
   { x: -257.66, z: 282.66 }, // 长风镇站（2025）
-  { x: -270, z: 302 },
-  { x: -245, z: 320 },
-  { x: -185, z: 320 },
-  { x: -160, z: 302 },
+  { x: -285, z: 322 },
+  { x: -245, z: 340 },
+  { x: -185, z: 340 },
+  { x: -145, z: 322 },
   { x: -172.34, z: 282.66 }, // 星港站（2026）
   { x: -160, z: 252 },
   { x: -166, z: 218 },
@@ -250,7 +250,7 @@ const RING_STATION_BLEND_FAR = 16;
 /** 月台向岛心（或路侧）的退让距离：轨道梁贴泊位、月台在梁侧。 */
 export const STATION_PLATFORM_STANDOFF = 2.2;
 /** 月台场地半径（含栈桥，走廊场语义同桥面；设计 §5.2 泊位规则）。 */
-export const STATION_PAD_RADIUS = 2.6;
+export const STATION_PAD_RADIUS = 6.8;
 /** 月台场边缘融合宽。 */
 export const STATION_PAD_BLEND = 1.2;
 
@@ -427,8 +427,26 @@ export function buildTransitRoadGraph(): {
     [150, 203], // 起源村·环线站（村主街端点）
   ];
   const segments: [number, number, number, number][] = [];
+  const connect = (a: [number, number], b: [number, number]): void => {
+    nodes.push(b);
+    segments.push([a[0], a[1], b[0], b[1]]);
+  };
   for (let i = 0; i + 1 < nodes.length; i += 1) {
     segments.push([nodes[i]![0]!, nodes[i]![1]!, nodes[i + 1]![0]!, nodes[i + 1]![1]!]);
+  }
+  for (const district of YEAR_DISTRICTS) {
+    // 外城街网与桥网合并：从既有镇站沿真实街道接入，玩家可以步行到
+    // 普通住宅、商店、市场和两座终章地标，不需要依赖传送。
+    const station = TRANSIT_STATIONS.find((entry) => entry.townId === (district.id === 'island-oldport' ? 'island-2022' : 'island-2026'));
+    if (station) connect([station.platformX, station.platformZ], [station.x, station.z]);
+    for (const street of district.grid?.streets ?? []) {
+      const a: [number, number] = [street.x0, street.z0];
+      const b: [number, number] = [street.x1, street.z1];
+      connect(a, b);
+    }
+    for (const town of YEAR_TOWNS.filter((entry) => entry.districtId === district.id)) {
+      connect([town.x, town.z - 20], [town.x, town.z]);
+    }
   }
   return { roadNodes: nodes, roadSegments: segments };
 }

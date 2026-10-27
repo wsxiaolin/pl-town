@@ -8,9 +8,10 @@ import { createMountainTerrain } from '../rendering/terrain/mountainRanges';
 import { createRiverChenxi } from '../rendering/terrain/riverChenxi';
 import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
 import { createArchipelagoIsles } from '../rendering/terrain/archipelagoIsles';
-import { createYearTownTransit } from '../rendering/terrain/yearTownTransit';
+import { createYearTownTransit, type YearTownTransit } from '../rendering/terrain/yearTownTransit';
 import { createYearTownDecor } from '../rendering/terrain/yearTownDecor';
 import { createYearTownGround } from '../rendering/terrain/yearTownGround';
+import { createYearTownUrbanLife } from '../rendering/terrain/yearTownUrbanLife';
 import { createCityGround } from '../rendering/terrain/cityGround';
 import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -74,6 +75,7 @@ export function assembleCityWorld(options: {
   interactOrWalk: (building: BuildingEntity) => void;
   onModelsLoaded: () => void;
   onConstructionChanged: () => void;
+  bindTransitVehicles?: (vehicles: YearTownTransit) => void;
 }) {
   const { scene, resources, graphics } = options;
   const raycastBuildingGroups: THREE.Object3D[] = [];
@@ -158,6 +160,7 @@ export function assembleCityWorld(options: {
   // 跨海交通（T4a）：星门大桥 + 群岛环线 + 巡游列车（结构合并为单 mesh，
   // 列车只做矩阵级巡游更新；reduced 时停泊泊位）。
   const yearTownTransit = createYearTownTransit({ scene, reduced: options.reduced });
+  options.bindTransitVehicles?.(yearTownTransit);
   // 昼夜水色接线（review #218：晨溪河面此前从未跟随昼夜时钟，夜间保持
   // 日间亮色）：MiniCityApp 的 setWaterDaylight 经 worldDecorations 分发，
   // 这里转发给晨溪（河面 + 河口湾面）。
@@ -195,6 +198,7 @@ export function assembleCityWorld(options: {
   // 灯效全 emissive 材质，不新增真实光源（单 WebGL 上下文红线，§5）。
   // 生命周期对齐 yearTownTransit：update 挂 worldDecorations 帧链，dispose 入 terrain 清理。
   const yearTownDecor = createYearTownDecor({ scene, buildings: options.buildings });
+  const yearTownUrbanLife = createYearTownUrbanLife({ scene });
   addEchoObservatoryArea({
     scene,
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => graphics.mesh.stdMat(parameters)),
@@ -277,6 +281,7 @@ export function assembleCityWorld(options: {
         yearTownGround.dispose();
         yearTownTransit.dispose();
         yearTownDecor.dispose();
+        yearTownUrbanLife.dispose();
       },
     },
   };

@@ -31,6 +31,7 @@ interface FakeCursorPosition {
 interface FakeCursor {
   readonly position: FakeCursorPosition;
   readonly rotation: { y: number };
+  visible: boolean;
 }
 
 function makeFakeCursor(): FakeCursor {
@@ -44,17 +45,21 @@ function makeFakeCursor(): FakeCursor {
       this.z = z;
     },
   };
-  return { position, rotation: { y: 0 } };
+  return { position, rotation: { y: 0 }, visible: true };
 }
 
 /** 乘车测试台：假 cursor + 空对话框端口（startRide 直发，不开目的地面板）。 */
-function makeRideHarness(): { cursor: FakeCursor; controller: TransitRideController } {
+function makeRideHarness(): { cursor: FakeCursor; controller: TransitRideController; vehicles: { line: string; x: number; z: number }[] } {
   const cursor = makeFakeCursor();
+  cursor.visible = true;
+  const vehicles: { line: string; x: number; z: number }[] = [];
   const controller = createTransitRideController({
     getCursorChar: () => cursor as unknown as Object3D,
     getDialogs: () => null,
+    setRideVehicle: (line, x, _y, z) => { vehicles.push({ line, x, z }); },
+    endRide: () => undefined,
   });
-  return { cursor, controller };
+  return { cursor, controller, vehicles };
 }
 
 /** 帧数上限保险：全程乘车 @dt=1/60 实测 1520 帧，上限放宽到 5000。 */
@@ -82,6 +87,27 @@ test('弧长推进单调：s 逐帧严格递增且不越走线长，走完回 id
   assert.ok(frames > 0, '至少推进过一帧');
   assert.equal(controller.state().phase, 'idle', '走完后应回 idle');
   assert.equal(controller.history().length, 1, '走完应记账恰好一程');
+});
+
+test('乘车过场由车辆驱动：全程可见车辆、玩家作为乘客隐藏，混线在枢纽换车', () => {
+  const { cursor, controller, vehicles } = makeRideHarness();
+  assert.equal(controller.startRide('station-stargate', 'station-2022'), true);
+  assert.deepEqual(vehicles.map((vehicle) => vehicle.line), ['stargate'], '发车第一帧应有电车');
+  let frames = 0;
+  while (controller.isRiding()) {
+    controller.update(1 / 60);
+    frames += 1;
+    assert.ok(frames <= FRAME_CAP);
+    if (controller.isRiding()) assert.equal(cursor.visible, false, '过场期间角色应位于车厢内，不在道路上奔跑');
+    const state = controller.state();
+    const vehicle = vehicles.at(-1)!;
+    if (state.phase === 'riding') {
+      const cursorPosition = (cursor as FakeCursor).position;
+      assert.ok(Math.hypot(vehicle.x - cursorPosition.x, vehicle.z - cursorPosition.z) < 1e-9, '车辆与乘客应随同一车辆坐标移动');
+    }
+  }
+  assert.ok(vehicles.some((vehicle) => vehicle.line === 'ring'), '跨线后应切换磁悬车');
+  assert.equal(cursor.visible, true, '到站应恢复角色');
 });
 
 test('站周减速语义：泊位处因子恒 0.35（v=6.3），远离泊位（≥14u）全速 18', () => {

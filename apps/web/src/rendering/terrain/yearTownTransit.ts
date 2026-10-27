@@ -291,6 +291,9 @@ function buildMaglev(builder: FacetMeshBuilder): void {
 export type YearTownTransit = {
   object: THREE.Group;
   update(elapsedSeconds?: number): void;
+  /** 玩家乘车的专用车辆；与背景巡游车辆分离，过场期间不会被巡游更新覆盖。 */
+  setRideVehicle(line: 'stargate' | 'ring', x: number, y: number, z: number, tx: number, tz: number): void;
+  endRide(): void;
   dispose(): void;
 };
 
@@ -342,6 +345,15 @@ export function createYearTownTransit(options: { scene: THREE.Scene; reduced?: b
   object.add(maglev);
   geometries.push(maglevGeometry);
 
+  const rideTram = new THREE.Mesh(tramGeometry, trainMaterial);
+  rideTram.name = 'transit-ride-tram';
+  rideTram.visible = false;
+  object.add(rideTram);
+  const rideMaglev = new THREE.Mesh(maglevGeometry, trainMaterial);
+  rideMaglev.name = 'transit-ride-maglev';
+  rideMaglev.visible = false;
+  object.add(rideMaglev);
+
   options.scene.add(object);
 
   let lastElapsed = 0;
@@ -369,6 +381,17 @@ export function createYearTownTransit(options: { scene: THREE.Scene; reduced?: b
 
   return {
     object,
+    setRideVehicle(line, x, y, z, tx, tz) {
+      const vehicle = line === 'stargate' ? rideTram : rideMaglev;
+      rideTram.visible = line === 'stargate';
+      rideMaglev.visible = line === 'ring';
+      vehicle.position.set(x, y + (line === 'stargate' ? TRAM_TRACK_LIFT : MAGLEV_HOVER_LIFT), z);
+      vehicle.rotation.y = -Math.atan2(tz, tx);
+    },
+    endRide() {
+      rideTram.visible = false;
+      rideMaglev.visible = false;
+    },
     update(elapsedSeconds?: number): void {
       const elapsed = Math.max(0, elapsedSeconds ?? 0);
       const dt = Math.min(MAX_FRAME_DT, Math.max(0, elapsed - lastElapsed));

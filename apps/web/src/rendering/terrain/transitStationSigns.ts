@@ -146,7 +146,47 @@ export function createTransitStationSigns(options: TransitStationSignsOptions): 
     // platform − 泊位向量即朝向，local +Z 随之指向来客侧。
     object.rotation.y = Math.atan2(station.platformX - station.x, station.platformZ - station.z);
 
-    // ① 月台板：月台场(baseY)上的候车台面，玩家落点即站于此。
+    // ① 月台板与完整站房：宽檐、玻璃售票厅、独立入口和竖向钟楼。
+    addSignMesh(object, options, new THREE.BoxGeometry(8.8, 0.16, 5.8), BOARD_MATERIAL, [0, 0.084, 1.7]);
+    addSignMesh(object, options, new THREE.BoxGeometry(6.9, 2.7, 2.35), SIGN_FRAME_MATERIAL, [0, 1.48, 3.15]);
+    addSignMesh(object, options, new THREE.BoxGeometry(6.5, 0.22, 2.65), CANOPY_MATERIAL, [0, 2.94, 3.15]);
+    addSignMesh(object, options, new THREE.BoxGeometry(2.1, 2.25, 0.06), GLASS_MATERIAL, [0, 1.3, 4.36]);
+    for (const x of [-2.3, 2.3]) {
+      addSignMesh(object, options, new THREE.BoxGeometry(1.35, 1.4, 0.065), GLASS_MATERIAL, [x, 1.6, 4.36]);
+      addSignMesh(object, options, new THREE.BoxGeometry(0.09, 1.48, 0.09), PILLAR_MATERIAL, [x, 1.6, 4.4]);
+    }
+    addSignMesh(object, options, new THREE.BoxGeometry(2.7, 0.18, 1.1), CANOPY_MATERIAL, [0, 2.62, 4.7]);
+    addSignMesh(object, options, new THREE.BoxGeometry(2.45, 0.12, 0.08), LINE_SIGN_MATERIALS[station.line], [0, 2.6, 5.27]);
+    addSignMesh(object, options, new THREE.BoxGeometry(0.7, 4.6, 0.85), SIGN_FRAME_MATERIAL, [-3.25, 2.38, 3.1]);
+    addSignMesh(object, options, new THREE.ConeGeometry(0.7, 0.65, 4), LINE_SIGN_MATERIALS[station.line], [-3.25, 4.95, 3.1]).rotation.y = Math.PI / 4;
+    addSignMesh(object, options, new THREE.CylinderGeometry(0.24, 0.24, 0.08, 16), SIGN_FRAME_MATERIAL, [-3.25, 3.75, 3.55]).rotation.x = Math.PI / 2;
+    addSignMesh(object, options, new THREE.BoxGeometry(0.035, 0.18, 0.04), PILLAR_MATERIAL, [-3.25, 3.79, 3.61]);
+    addSignMesh(object, options, new THREE.BoxGeometry(0.16, 0.035, 0.04), PILLAR_MATERIAL, [-3.18, 3.75, 3.61]);
+    // 售票机、检票闸机、城市导览牌与行李车。
+    for (const x of [-1.9, -0.9]) {
+      addSignMesh(object, options, new THREE.BoxGeometry(0.58, 1.35, 0.65), PILLAR_MATERIAL, [x, 0.82, 2.02]);
+      addSignMesh(object, options, new THREE.BoxGeometry(0.4, 0.42, 0.035), LINE_SIGN_MATERIALS[station.line], [x, 1.1, 2.36]);
+    }
+    for (const x of [0.65, 1.65]) {
+      addSignMesh(object, options, new THREE.BoxGeometry(0.35, 0.92, 0.85), PILLAR_MATERIAL, [x, 0.62, 1.85]);
+      addSignMesh(object, options, new THREE.BoxGeometry(0.85, 0.08, 0.08), SIGN_FRAME_MATERIAL, [x + 0.35, 1.08, 1.85]);
+    }
+    addSignMesh(object, options, new THREE.BoxGeometry(1.35, 1.75, 0.12), SIGN_FRAME_MATERIAL, [3.85, 1.0, 2.0]);
+    addSignMesh(object, options, new THREE.BoxGeometry(1.15, 1.4, 0.04), LINE_SIGN_MATERIALS[station.line], [3.85, 1.0, 2.08]);
+    addSignMesh(object, options, new THREE.BoxGeometry(1.15, 0.18, 0.65), BENCH_MATERIAL, [-3.7, 0.58, 0.7]);
+    for (const x of [-4.0, -3.4]) addSignMesh(object, options, new THREE.CylinderGeometry(0.12, 0.12, 0.12, 10), PILLAR_MATERIAL, [x, 0.16, 0.7]).rotation.z = Math.PI / 2;
+    // 站前景观：四个花坛、树池、候车长椅和暖色路灯。
+    for (const x of [-4.5, 4.5]) {
+      for (const z of [1.4, 4.6]) {
+        addSignMesh(object, options, new THREE.BoxGeometry(0.85, 0.45, 0.85), BOARD_MATERIAL, [x, 0.29, z]);
+        addSignMesh(object, options, new THREE.IcosahedronGeometry(0.52, 1), { color: station.line === 'ring' ? 0x668e78 : 0x7f965c, roughness: 0.9 }, [x, 0.85, z]);
+      }
+      addSignMesh(object, options, new THREE.CylinderGeometry(0.06, 0.1, 3.5, 8), PILLAR_MATERIAL, [x, 1.83, 5.4]);
+      addSignMesh(object, options, new THREE.SphereGeometry(0.22, 10, 8), { color: 0xffd58a, emissive: 0xffb34c, emissiveIntensity: 1.1, roughness: 0.4 }, [x, 3.62, 5.4]);
+      addSignMesh(object, options, new THREE.BoxGeometry(1.6, 0.13, 0.55), BENCH_MATERIAL, [x, 0.65, -0.1]);
+      addSignMesh(object, options, new THREE.BoxGeometry(1.6, 0.55, 0.1), BENCH_MATERIAL, [x, 0.92, -0.37]);
+    }
+    // ② 原候车月台保留为站房前的独立登车区。
     addSignMesh(object, options, new THREE.BoxGeometry(...BOARD_SIZE), BOARD_MATERIAL, [0, BOARD_BOTTOM_GAP + BOARD_SIZE[1] / 2, 0]);
     // 站体：四柱雨棚、轨道侧挡风屏与候车长凳，让泊位读作一座小型车站。
     for (const x of [-2.2, 2.2]) {

@@ -68,7 +68,7 @@ test('deep water returns the player to the beach', () => {
 });
 
 test('south sea blocks walking while islands and the stargate bridge stay open', () => {
-  assert.equal(archipelagoWaterBlocked(80, 180), true, '南海开放水面应阻挡步行');
+  assert.equal(archipelagoWaterBlocked(80, 460), true, '南海开放水面应阻挡步行');
   assert.equal(archipelagoWaterBlocked(150, 210), false, '起源村岛面应保持可走');
   assert.equal(archipelagoWaterBlocked(121, 165.5), false, '星门步行桥走廊应保持可走');
 });

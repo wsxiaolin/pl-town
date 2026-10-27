@@ -339,8 +339,9 @@ export interface YearDistrictSpec {
 // 北侧车站直下南岸码头；西侧是避风内湾（渔港），东侧一片长滩；西南伸出
 // 一道花岗岩岬角，岬端一座灯塔小屿。山脊贴着西缘走，把内湾与城区隔开。
 //
-// 坐标系：岛心 (20, 262)，plateauR 62、beachR 72（滩环宽 10）。
-// 控制点均为「相对岛心」的偏移，半径范围 32..70。
+// 坐标系：岛心 (0, 302)，plateauR 124、beachR 138（滩环宽 14）。
+// 内城保留原作品建筑与站区，外圈以南北两条生活街和横向大街组织完整城市。
+// 下列 OLDPORT_OUTLINE 仅保留为旧小岛的形态档案，当前大城使用低幅谐波岸线。
 
 const OLDPORT_OUTLINE: IslandOutline = {
   points: [
@@ -398,25 +399,22 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
     id: 'island-oldport',
     name: '旧港城',
     label: '旧港城',
-    x: 20,
-    z: 262,
-    plateauR: 62,
-    beachR: 72,
+    x: -5,
+    z: 302,
+    plateauR: 124,
+    beachR: 130,
     topY: 1.2,
     theme: { groundColor: 0xcfc3a6, iconColor: '#cfc3a6' },
     tagline: '2019–2023 的旧港：从村口第一盏灯长成的滨海城区。',
-    outline: OLDPORT_OUTLINE,
-    satellites: [
-      // 岬端灯塔屿：岬角外 −24,58 再向外，留 8u 水道。
-      { dx: -40, dz: 64, radius: 4.5 },
-    ],
-    terrain: {
-      ridges: [
-        // 西岸山脊：贴着内湾东缘走，把城区与渔港隔开一道坡。
-        { nodes: [{ dx: -30, dz: -26 }, { dx: -26, dz: -4 }, { dx: -30, dz: 16 }, { dx: -34, dz: 36 }], height: 7.5, radius: 8 },
-        // 北岸背山：车站后面的低丘，挡住北风。
-        { nodes: [{ dx: -6, dz: -40 }, { dx: 14, dz: -43 }, { dx: 30, dz: -38 }], height: 5.2, radius: 7.5 },
+    satellites: [],
+    shape: {
+      harmonics: [
+        { freq: 3, amp: 0.035, phase: 0.8 },
+        { freq: 5, amp: 0.025, phase: 1.6 },
       ],
+    },
+    terrain: {
+      ridges: [],
       terraces: [
         { dx: 5, dz: 2, halfW: 40, halfD: 47, blend: 4.5, polygon: OLDPORT_TERRACE },
         { dx: -32, dz: 13, halfW: 7, halfD: 11, blend: 3, polygon: OLDPORT_HARBOUR_TERRACE },
@@ -427,7 +425,14 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
     grid: {
       streets: [
         // 港口大道把北岸站区、中央市集与南码头连成一条清晰城市轴。
-        { x0: 20, z0: 210, x1: 20, z1: 317, halfWidth: 3.0, kind: 'avenue', name: '港口大道' },
+        { x0: 20, z0: 172, x1: 20, z1: 400, halfWidth: 3.4, kind: 'avenue', name: '港口大道' },
+        { x0: -82, z0: 170, x1: 112, z1: 170, halfWidth: 2.6, kind: 'street', name: '北环街' },
+        { x0: -82, z0: 207, x1: 112, z1: 207, halfWidth: 2.6, kind: 'street', name: '学院街' },
+        { x0: -82, z0: 366, x1: 112, z1: 366, halfWidth: 2.6, kind: 'street', name: '南市街' },
+        { x0: -68, z0: 364, x1: 104, z1: 364, halfWidth: 2.4, kind: 'street', name: '海堤街' },
+        { x0: -68, z0: 190, x1: -68, z1: 380, halfWidth: 2.4, kind: 'street', name: '西巷' },
+        { x0: 104, z0: 190, x1: 104, z1: 380, halfWidth: 2.4, kind: 'street', name: '东堤街' },
+        { x0: -68, z0: 382, x1: -68, z1: 390, halfWidth: 1.3, kind: 'lane', name: '南市巷' },
         { x0: -18, z0: 220, x1: 62, z1: 220, halfWidth: 2.2, kind: 'street', name: '站前街' },
         { x0: -18, z0: 262, x1: 62, z1: 262, halfWidth: 2.5, kind: 'street', name: '中市街' },
         { x0: -18, z0: 309, x1: 58, z1: 309, halfWidth: 2.1, kind: 'street', name: '鱼市街' },
@@ -447,12 +452,19 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         { x: -26, z: 295, radius: 5.2, kind: 'station' },
         { x: 66, z: 295, radius: 5.2, kind: 'station' },
         { x: 20, z: 317, radius: 4.5, kind: 'water' },
+        { x: 20, z: 184, radius: 8, kind: 'market' },
+        { x: -44, z: 354, radius: 7, kind: 'market' },
+        { x: 78, z: 354, radius: 7, kind: 'market' },
+        { x: 20, z: 428, radius: 7, kind: 'water' },
       ],
       blocks: [
         { x0: -14, x1: 14, z0: 225, z1: 255, fronts: ['n', 's', 'e', 'w'], use: 'civic', courtyard: 6 },
         { x0: 28, x1: 58, z0: 225, z1: 257, fronts: ['n', 's', 'e', 'w'], use: 'commercial', courtyard: 7 },
         { x0: -14, x1: 14, z0: 270, z1: 305, fronts: ['n', 's', 'e', 'w'], use: 'works', courtyard: 6 },
         { x0: 28, x1: 58, z0: 270, z1: 305, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
+        { x0: -60, x1: 96, z0: 178, z1: 200, fronts: ['n', 's'], use: 'commercial', courtyard: 10 },
+        { x0: -60, x1: 96, z0: 382, z1: 400, fronts: ['n', 's'], use: 'residential', courtyard: 12 },
+        { x0: 14, x1: 26, z0: 409, z1: 421, fronts: ['s'], use: 'civic' },
       ],
     },
   },
@@ -467,48 +479,22 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
     id: 'island-starport',
     name: '星港城',
     label: '星港城',
-    x: -215,
-    z: 256,
-    plateauR: 56,
-    beachR: 66,
+    x: -285,
+    z: 262,
+    plateauR: 130,
+    beachR: 139,
     topY: 0.9,
     theme: { groundColor: 0xaeb8c2, iconColor: '#aeb8c2' },
     tagline: '2024–2026 的星港：磁悬、灯塔与夜航码头。',
-    outline: {
-      points: [
-        // 北岸围住微光站，东侧伸出航标长岬。
-        { dx: -34, dz: -49, bulge: 0.7 },
-        { dx: -8, dz: -57, bulge: 0.9 },
-        { dx: 18, dz: -55, bulge: 0.8 },
-        { dx: 38, dz: -47, bulge: 0.5 },
-        { dx: 49, dz: -34, bulge: 0.35 },
-        { dx: 56, dz: -18, bulge: 0.65 },
-        // 东岸外伸，包住星港站及公共街区。
-        { dx: 55, dz: 4, bulge: 0.8 },
-        { dx: 51, dz: 25, bulge: 0.5 },
-        { dx: 46, dz: 43, bulge: 0.55 },
-        { dx: 30, dz: 55, bulge: 0.5 },
-        // 南岸是连续码头岸线。
-        { dx: 8, dz: 60, bulge: 0.2 },
-        { dx: -17, dz: 59, bulge: 0.2 },
-        { dx: -39, dz: 51, bulge: 0.45 },
-        // 西岸围住长风站，中央内凹形成深水港湾。
-        { dx: -50, dz: 37, bulge: 0.35 },
-        { dx: -54, dz: 20, bulge: 0.15 },
-        { dx: -46, dz: 8, bulge: 0.12 },
-        { dx: -49, dz: -10, bulge: 0.25 },
-        { dx: -48, dz: -30, bulge: 0.55 },
+    shape: {
+      harmonics: [
+        { freq: 3, amp: 0.06, phase: 0.4 },
+        { freq: 5, amp: 0.035, phase: 1.2 },
       ],
     },
-    satellites: [
-      // 航道外的孤立礁屿，与东北长岬之间保留窄水道。
-      { dx: 63, dz: -57, radius: 4.2 },
-    ],
+    satellites: [],
     terrain: {
-      ridges: [
-        // 东北山脊沿长岬根部展开，与公共街区之间留出绿坡。
-        { nodes: [{ dx: 39, dz: -38 }, { dx: 46, dz: -20 }, { dx: 47, dz: 1 }], height: 7.5, radius: 7.5 },
-      ],
+      ridges: [],
       terraces: [
         // 港区阶地：干道两侧的四块街区 + 站前广场，压成一片平地。
         {
@@ -532,7 +518,16 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
     // 三座真实车站接入一条南北港口大道，两条横街切出三组围合街区。
     grid: {
       streets: [
-        { x0: -215, z0: 207, x1: -215, z1: 307, halfWidth: 3.4, kind: 'avenue', name: '星港大道' },
+        { x0: -320, z0: 138, x1: -320, z1: 378, halfWidth: 3.6, kind: 'avenue', name: '星港大道' },
+        { x0: -425, z0: 176, x1: -215, z1: 176, halfWidth: 2.6, kind: 'street', name: '天幕街' },
+        { x0: -425, z0: 196, x1: -257, z1: 196, halfWidth: 2.6, kind: 'street', name: '科研街西段' },
+        { x0: -215, z0: 196, x1: -140, z1: 196, halfWidth: 2.6, kind: 'street', name: '科研街东段' },
+        { x0: -425, z0: 336, x1: -215, z1: 336, halfWidth: 2.6, kind: 'street', name: '夜市街' },
+        { x0: -425, z0: 383, x1: -292, z1: 383, halfWidth: 2.4, kind: 'street', name: '远航街西段' },
+        { x0: -278, z0: 383, x1: -215, z1: 383, halfWidth: 2.4, kind: 'street', name: '远航街东段' },
+        { x0: -410, z0: 156, x1: -410, z1: 376, halfWidth: 2.4, kind: 'street', name: '西环大道' },
+        { x0: -170, z0: 156, x1: -170, z1: 218, halfWidth: 2.4, kind: 'street', name: '东环大道' },
+        { x0: -170, z0: 306, x1: -170, z1: 376, halfWidth: 2.4, kind: 'street', name: '东环大道南段' },
         { x0: -258, z0: 218, x1: -174, z1: 218, halfWidth: 2.5, kind: 'street', name: '货站街' },
         { x0: -258, z0: 257, x1: -174, z1: 257, halfWidth: 2.3, kind: 'street', name: '夜航街' },
         { x0: -258, z0: 300, x1: -174, z1: 300, halfWidth: 2.2, kind: 'street', name: '南港街' },
@@ -548,6 +543,10 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         { x: -172, z: 283, radius: 5.2, kind: 'station' },
         { x: -215, z: 240, radius: 6.5, kind: 'market' },
         { x: -215, z: 304, radius: 4.8, kind: 'water' },
+        { x: -320, z: 190, radius: 9, kind: 'market' },
+        { x: -383, z: 352, radius: 9, kind: 'market' },
+        { x: -257, z: 352, radius: 9, kind: 'market' },
+        { x: -320, z: 380, radius: 9, kind: 'water' },
       ],
       blocks: [
         { x0: -247, x1: -221, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
@@ -787,11 +786,11 @@ export function yearTownPanBounds(cityLimit: number): {
   let maxX = cityLimit;
   let minZ = -cityLimit;
   let maxZ = cityLimit;
-  for (const town of YEAR_TOWNS) {
-    minX = Math.min(minX, town.x - town.beachR - MARGIN);
-    maxX = Math.max(maxX, town.x + town.beachR + MARGIN);
-    minZ = Math.min(minZ, town.z - town.beachR - MARGIN);
-    maxZ = Math.max(maxZ, town.z + town.beachR + MARGIN);
+  for (const town of YEAR_ISLAND_SPECS) {
+    minX = Math.min(minX, town.x - town.beachR * 1.2 - MARGIN);
+    maxX = Math.max(maxX, town.x + town.beachR * 1.2 + MARGIN);
+    minZ = Math.min(minZ, town.z - town.beachR * 1.2 - MARGIN);
+    maxZ = Math.max(maxZ, town.z + town.beachR * 1.2 + MARGIN);
   }
   return { minX, maxX, minZ, maxZ };
 }
