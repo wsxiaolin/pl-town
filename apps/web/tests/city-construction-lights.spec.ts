@@ -120,8 +120,8 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     let activeLights = 0, totalLights = 0, globes = 0, illuminatedGlobes = 0, meshes = 0;
     // Lamps keep one source group each (per-plot state, labels, point-light
     // targeting), but their posts and globes are collapsed into retained
-    // InstancedMesh batches that are siblings of `city-construction`. Count
-    // the visible sources and the batch instance totals together.
+    // InstancedMesh batches under `city-construction`. Count the visible
+    // sources plus those batch instance totals.
     root?.traverseVisible((object: any) => {
       if (object.isPointLight) { totalLights++; if (object.intensity > 0) activeLights++; }
       if (object.isMesh) meshes++;
@@ -130,7 +130,9 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
         if (object.material.emissiveIntensity === 0.9) illuminatedGlobes++;
       }
     });
-    const batches = mini.scene.children.filter((child: any) => child.userData?.retainedStaticBatch === true && child.visible);
+    const batches = (root?.children ?? []).filter(
+      (child: any) => child.userData?.retainedStaticBatch === true && child.visible,
+    );
     for (const batch of batches) {
       meshes += batch.count;
       if (batch.material?.emissive?.getHex() === 0xffd9a1) {
@@ -222,8 +224,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
         const mini = (window as any)._mini;
         const root = mini.scene.getObjectByName('city-construction');
         // Placed decorations keep one source group each, but the retained batcher
-        // collapses their meshes into InstancedMesh siblings of `root`.
-        const batches = mini.scene.children.filter((child: any) => child.userData?.retainedStaticBatch === true);
+        // collapses their meshes into InstancedMesh children of `root`.
+        const batches = root.children.filter((child: any) => child.userData?.retainedStaticBatch === true);
         const geometryIds = new Set(), materialIds = new Set();
         let sourceMeshes = 0, instances = 0;
         root.traverse((object: any) => {
@@ -246,7 +248,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
         let calls = 0;
         try {
           for (const [child] of visibility) {
-            child.visible = child === root || batches.includes(child) || Boolean(child.isLight);
+            child.visible = child === root || Boolean(child.isLight);
           }
           mini.renderer.shadowMap.enabled = false;
           mini.renderer.info.autoReset = true;

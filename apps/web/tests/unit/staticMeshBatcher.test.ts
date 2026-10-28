@@ -234,3 +234,24 @@ test('excluded meshes stay out of retained batches', () => {
   assert.equal(wall.visible, false);
   assert.equal(trim.visible, false);
 });
+
+test('retained batches honour the parent option and stay out of the scene root', () => {
+  const scene = new THREE.Scene();
+  const resources = new ResourcePool();
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const container = new THREE.Group();
+  const root = new THREE.Group();
+  const first = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  const second = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  first.position.x = 1;
+  second.position.x = 2;
+  root.add(first, second);
+  container.add(root);
+  scene.add(container);
+
+  const result = batchRetainedStaticMeshes(scene, [{ key: 'root', root }], resources, { parent: container });
+
+  assert.equal(result.batches, 1);
+  assert.equal(container.children.filter((child) => child instanceof THREE.InstancedMesh).length, 1);
+  assert.equal(scene.children.filter((child) => child instanceof THREE.InstancedMesh).length, 0);
+});

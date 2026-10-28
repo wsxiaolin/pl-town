@@ -71,7 +71,9 @@ export function createCityConstructionScene(options: {
     // leave every decoration either unbatched or permanently hidden.
     try {
       const roots = [...visuals.entries()].map(([key, visual]) => ({ key, root: visual.root }));
-      decorationBatch = batchRetainedStaticMeshes(options.scene, roots, resources);
+      // Batches hang under `city-construction` so they share its lifetime and
+      // stay distinguishable from the rest of the city's retained batches.
+      decorationBatch = batchRetainedStaticMeshes(options.scene, roots, resources, { parent: root });
     } catch (error) {
       decorationBatch = previous;
       decorationBatchDirty = true;
