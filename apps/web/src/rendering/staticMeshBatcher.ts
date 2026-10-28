@@ -13,6 +13,23 @@ export type RetainedStaticMeshRoot = {
 
 export type RetainedStaticMeshBatch = StaticMeshBatchResult & {
   setVisible: (key: string, visible: boolean) => void;
+  /** Re-derives instance visibility from each root's live `visible` chain. */
+  syncRootVisibility: () => void;
+  /** Removes the generated instances and restores original mesh visibility. */
+  dispose: () => void;
+};
+
+/** Meshes kept out of retained batches because gameplay toggles them directly. */
+export type RetainedStaticMeshOptions = {
+  excludeMesh?: (mesh: THREE.Mesh) => boolean;
+  /** Destination for generated batches; defaults to the scene root. */
+  parent?: THREE.Object3D;
+  /**
+   * Leaves generated instances visible only while `key` is visible. Retained
+   * batches hide their source meshes, so a root that can be hidden at runtime
+   * would otherwise keep drawing through the batch.
+   */
+  trackRootVisibility?: boolean;
 };
 
 type BatchGroup = {
@@ -28,6 +45,14 @@ type BatchGroup = {
 
 const BATCH_CELL_SIZE = 18;
 const hiddenInstanceMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
+/** True when `root` and every ancestor up to (excluding) `stop` are visible. */
+function hasVisibleAncestor(root: THREE.Object3D | undefined, stop: THREE.Object3D): boolean {
+  for (let node: THREE.Object3D | null = root ?? null; node && node !== stop; node = node.parent) {
+    if (!node.visible) return false;
+  }
+  return true;
+}
 
 type CanonicalStaticGeometry = {
   geometry: THREE.BufferGeometry;
@@ -122,6 +147,25 @@ function canonicalizeStaticGeometry(
         scale: [radius, radius, radius],
       };
     }
+    case 'SphereGeometry': {
+      const radius = Number(parameters.radius);
+      if (!(radius > 0)) return { geometry, scale: null };
+      const widthSegments = Number(parameters.widthSegments ?? 8);
+      const heightSegments = Number(parameters.heightSegments ?? 6);
+      const phiStart = Number(parameters.phiStart ?? 0);
+      const phiLength = Number(parameters.phiLength ?? Math.PI * 2);
+      const thetaStart = Number(parameters.thetaStart ?? 0);
+      const thetaLength = Number(parameters.thetaLength ?? Math.PI);
+      return {
+        geometry: cachedCanonicalGeometry(
+          cache,
+          resources,
+          `sphere:${widthSegments}:${heightSegments}:${phiStart}:${phiLength}:${thetaStart}:${thetaLength}`,
+          () => new THREE.SphereGeometry(1, widthSegments, heightSegments, phiStart, phiLength, thetaStart, thetaLength),
+        ),
+        scale: [radius, radius, radius],
+      };
+    }
     default:
       return { geometry, scale: null };
   }
@@ -210,15 +254,20 @@ export function batchRetainedStaticMeshes(
   scene: THREE.Scene,
   roots: readonly RetainedStaticMeshRoot[],
   resources: ResourcePool,
+  options: RetainedStaticMeshOptions = {},
 ): RetainedStaticMeshBatch {
   scene.updateMatrixWorld(true);
   const groups = new Map<string, BatchGroup & { keys: string[] }>();
   const canonicalGeometryCache = new Map<string, THREE.BufferGeometry>();
+  const parent = options.parent ?? scene;
+  const rootByKey = new Map<string, THREE.Object3D>();
 
   for (const { key: rootKey, root } of roots) {
+    rootByKey.set(rootKey, root);
     root.traverse((object) => {
       if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh || object instanceof THREE.SkinnedMesh) return;
       if (Array.isArray(object.material) || object.material.transparent || object.morphTargetInfluences?.length) return;
+      if (options.excludeMesh?.(object)) return;
       const material = object.material as THREE.Material;
       // Primitive pieces share unit geometry; each original size is carried by
       // its instance matrix so generated dimensions can join the same batch.
@@ -251,7 +300,10 @@ export function batchRetainedStaticMeshes(
   }
 
   const instancesByKey = new Map<string, Array<{ batch: THREE.InstancedMesh; index: number; matrix: THREE.Matrix4 }>>();
+  const hiddenKeys = new Set<string>();
   const scaleMatrix = new THREE.Matrix4();
+  const createdBatches: THREE.InstancedMesh[] = [];
+  const hiddenMeshes: THREE.Mesh[] = [];
   let batches = 0;
   let sourceMeshes = 0;
   for (const group of groups.values()) {
@@ -268,17 +320,23 @@ export function batchRetainedStaticMeshes(
       const matrix = mesh.matrixWorld.clone();
       const scale = group.scales?.[index];
       if (scale) matrix.multiply(scaleMatrix.makeScale(scale[0], scale[1], scale[2]));
-      batch.setMatrixAt(index, matrix);
-      mesh.visible = false;
       const key = group.keys[index]!;
+      // Batch creation already respects a root that is hidden right now.
+      const hidden = options.trackRootVisibility === true
+        && !hasVisibleAncestor(rootByKey.get(key)!, parent);
+      batch.setMatrixAt(index, hidden ? hiddenInstanceMatrix : matrix);
+      mesh.visible = false;
+      hiddenMeshes.push(mesh);
       const instances = instancesByKey.get(key) ?? [];
       instances.push({ batch, index, matrix });
       instancesByKey.set(key, instances);
+      if (hidden) hiddenKeys.add(key);
     }
     batch.instanceMatrix.needsUpdate = true;
     batch.computeBoundingBox();
     batch.computeBoundingSphere();
-    scene.add(batch);
+    parent.add(batch);
+    createdBatches.push(batch);
     batches += 1;
     sourceMeshes += group.meshes.length;
   }
@@ -292,7 +350,34 @@ export function batchRetainedStaticMeshes(
         instance.batch.setMatrixAt(instance.index, visible ? instance.matrix : hiddenInstanceMatrix);
         changedBatches.add(instance.batch);
       }
+      if (visible) hiddenKeys.delete(key);
+      else hiddenKeys.add(key);
       for (const batch of changedBatches) batch.instanceMatrix.needsUpdate = true;
+    },
+    /**
+     * Re-derives instance visibility from the live `visible` chain of every
+     * root. Interior scenes hide whole roots (roof, ceiling) at runtime; without
+     * this the hidden meshes would keep drawing through the batch.
+     */
+    syncRootVisibility() {
+      if (options.trackRootVisibility !== true) return;
+      for (const [key, root] of rootByKey) {
+        if (!instancesByKey.has(key)) continue;
+        const visible = hasVisibleAncestor(root, parent);
+        if (visible === !hiddenKeys.has(key)) continue;
+        this.setVisible(key, visible);
+      }
+    },
+    dispose() {
+      for (const batch of createdBatches) {
+        batch.removeFromParent();
+        batch.dispose();
+      }
+      for (const mesh of hiddenMeshes) mesh.visible = true;
+      createdBatches.length = 0;
+      hiddenMeshes.length = 0;
+      instancesByKey.clear();
+      hiddenKeys.clear();
     },
   };
 }

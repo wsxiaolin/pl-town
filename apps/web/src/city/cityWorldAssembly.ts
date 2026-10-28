@@ -8,7 +8,7 @@ import { createMountainTerrain } from '../rendering/terrain/mountainRanges';
 import { createRiverChenxi } from '../rendering/terrain/riverChenxi';
 import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
 import { createCityGround } from '../rendering/terrain/cityGround';
-import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
+import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { updateKomorebiClockworks } from '../rendering/komorebiClockworks';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
@@ -170,9 +170,16 @@ export function assembleCityWorld(options: {
   });
   buildingSceneController.addBuildings();
   raycastBuildingGroups.push(...options.buildings.map((building) => building.group), ...options.buildingPlotTargets);
+  let echoObservatoryBatch: RetainedStaticMeshBatch | null = null;
   addEchoObservatoryArea({
     scene,
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => graphics.mesh.stdMat(parameters)),
+    // Batches stay siblings of the four groups, so obstacle bounds, interior
+    // walk bounds and the narrative raycast targets keep working unchanged.
+    batch: (roots) => {
+      echoObservatoryBatch = batchRetainedStaticMeshes(scene, roots, resources, { trackRootVisibility: true });
+      return echoObservatoryBatch;
+    },
   }).forEach((group) => options.roadNavigation.registerObstacleGroup(group));
   options.roadNavigation.cacheBuildingBoxes();
   worldDecorations.addDecorations();
@@ -238,12 +245,16 @@ export function assembleCityWorld(options: {
     buildingLabelController,
     sceneInterestPoints,
     raycastBuildingGroups,
+    /** Retained batch over the echo observatory and Linche's home/interior. */
+    echoObservatoryBatch: () => echoObservatoryBatch,
     terrain: {
       dispose() {
         mountainTerrain.dispose();
         cityGround.dispose();
         riverChenxi.dispose();
         minglanIsles.dispose();
+        echoObservatoryBatch?.dispose();
+        echoObservatoryBatch = null;
       },
     },
   };

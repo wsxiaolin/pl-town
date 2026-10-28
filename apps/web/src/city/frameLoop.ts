@@ -92,7 +92,8 @@ export function createFrameLoop(options: FrameLoopOptions) {
   function loop() {
     animationFrame = requestAnimationFrame(loop);
     const now = performance.now();
-    const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
+    const frameMs = now - options.getLastFrameTime();
+    const delta = Math.min(frameMs / 1000, 0.05);
     options.setLastFrameTime(now);
     if (renderHeld) return;
     if (!firstRenderFired) {
@@ -156,8 +157,11 @@ export function createFrameLoop(options: FrameLoopOptions) {
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);
+    const renderMs = performance.now() - renderStartedAt;
     adaptivePixelRatio ??= createAdaptivePixelRatioController({ initialRatio: renderer.getPixelRatio() });
-    const nextRatio = adaptivePixelRatio.sample(performance.now() - renderStartedAt);
+    // Frame delta carries vsync/panel cadence; pass the render cost too so a
+    // 30 Hz display (33 ms frames, 5 ms renders) never sacrifices resolution.
+    const nextRatio = adaptivePixelRatio.sample(frameMs, renderMs);
     if (nextRatio !== null) pendingPixelRatio = nextRatio;
     const mapController = options.getMapController();
     if (mapController?.isOpen()) mapController.updateMarker();

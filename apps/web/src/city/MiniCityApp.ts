@@ -618,6 +618,7 @@ function init() {
       isMobile: MOBILE,
       getScene: () => scene,
       sendLocalPosition: (cursor) => multiplayerHousing?.sendLocalPosition({ x: cursor.position.x, y: cursor.position.y, z: cursor.position.z, rotation: cursor.rotation.y }, performance.now()),
+      onInteriorVisibilityChanged: () => world.echoObservatoryBatch()?.syncRootVisibility(),
     },
     getQuestContext: () => ({ ...readQuestProgressView(multiplayerHousing), gameDay: townGameDay() }),
     awardAchievement: awardDirectAchievement,

@@ -16,6 +16,10 @@ export function createAdaptivePixelRatioController(options: AdaptivePixelRatioOp
   const fastFrameMs = options.fastFrameMs ?? 18;
   const slowFrameLimit = options.slowFrames ?? 90;
   const fastFrameLimit = options.fastFrames ?? 600;
+  // A slow display cadence alone must not sacrifice resolution: a 30 Hz panel
+  // reports 33 ms frames even when rendering only takes 5 ms. Require the
+  // render call itself to consume a meaningful share of the missed budget.
+  const slowRenderMs = slowFrameMs * 0.5;
   let ratio = maximum;
   let slowFrames = 0;
   let fastFrames = 0;
@@ -26,16 +30,17 @@ export function createAdaptivePixelRatioController(options: AdaptivePixelRatioOp
   }
 
   return {
-    sample(frameMs: number): number | null {
-      if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs > 250) {
+    sample(frameMs: number, renderMs = frameMs): number | null {
+      if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs > 250
+        || !Number.isFinite(renderMs) || renderMs < 0) {
         reset();
         return null;
       }
 
-      if (frameMs >= slowFrameMs) {
+      if (frameMs >= slowFrameMs && renderMs >= slowRenderMs) {
         slowFrames += 1;
         fastFrames = 0;
-      } else if (frameMs <= fastFrameMs) {
+      } else if (frameMs <= fastFrameMs && renderMs <= fastFrameMs) {
         fastFrames += 1;
         slowFrames = Math.max(0, slowFrames - 1);
       } else {

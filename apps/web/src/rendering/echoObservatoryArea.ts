@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
+import type { RetainedStaticMeshBatch, RetainedStaticMeshRoot } from './staticMeshBatcher';
 import type { MaterialParameters } from './meshFactory';
 
 type Vec3 = readonly [number, number, number];
 
 type MaterialOptions = MaterialParameters;
 
-type EchoObservatoryAreaOptions = {
+export type EchoObservatoryAreaOptions = {
   scene: THREE.Scene;
   makeMaterial: (options: MaterialOptions) => THREE.MeshStandardMaterial;
+  /** Optional retained batcher; omitted keeps the unbilled bulk mesh graph. */
+  batch?: (roots: readonly RetainedStaticMeshRoot[]) => RetainedStaticMeshBatch | null;
 };
 
 type Face = 'north' | 'south' | 'east' | 'west';
@@ -666,6 +669,19 @@ export function addEchoObservatoryArea(options: EchoObservatoryAreaOptions): THR
   const interior = createInteriorHome(materials);
   const sign = createSign(materials);
   options.scene.add(observatory, home, interior, sign);
+  // The scatter of primitive boxes/cylinders/spheres across these four groups is
+  // pure static scenery; collapse it into one draw per material instead of the
+  // hundreds of individual meshes. Batches become siblings, so every group keeps
+  // its name, bounds and interaction metadata for raycasts and interior nav.
+  if (options.batch) {
+    const roots: RetainedStaticMeshRoot[] = [
+      { key: 'observatory', root: observatory },
+      { key: 'home', root: home },
+      { key: 'interior', root: interior },
+      { key: 'sign', root: sign },
+    ];
+    options.batch(roots);
+  }
   // Only the two exterior structures participate in the town obstacle graph.
   // The interior is a narrative teleport room and exposes explicit bounds above.
   return [observatory, home];

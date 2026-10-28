@@ -55,6 +55,11 @@ export type EchoStoryControllerOptions = {
   isMobile: () => boolean;
   getScene: () => THREE.Scene | null;
   sendLocalPosition: (cursor: Cursor) => void;
+  /**
+   * Called after roof/ceiling meshes are hidden or restored. Retained batches
+   * draw their own copies, so they must re-read the new visibility chain.
+   */
+  onInteriorVisibilityChanged?: () => void;
 };
 
 export type EchoStoryController = ReturnType<typeof createEchoStoryController>;
@@ -151,6 +156,7 @@ export function createEchoStoryController(options: EchoStoryControllerOptions) {
         object.visible = !active;
       }
     });
+    options.onInteriorVisibilityChanged?.();
     if (changed) {
       const zoom = active ? (options.isMobile() ? 6.4 : 8.8) : Math.max(2, Math.min(15, echoExteriorCameraZoom || 7));
       options.setCameraZoom(zoom);

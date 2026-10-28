@@ -112,3 +112,67 @@ test('retained batches share unit primitives across dimensions and former spatia
   assert.deepEqual(new THREE.Vector3().setFromMatrixScale(matrix).toArray(), [3, 5, 7]);
   assert.deepEqual(new THREE.Vector3().setFromMatrixPosition(matrix).toArray(), [100, 0, 0]);
 });
+
+test('dispose removes batches and restores the original meshes', () => {
+  const scene = new THREE.Scene();
+  const resources = new ResourcePool();
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const root = new THREE.Group();
+  const first = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  const second = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  first.position.x = 1;
+  second.position.x = 2;
+  root.add(first, second);
+  scene.add(root);
+
+  const result = batchRetainedStaticMeshes(scene, [{ key: 'root', root }], resources);
+  assert.equal(first.visible, false);
+
+  result.dispose();
+
+  assert.equal(scene.children.filter((child) => child instanceof THREE.InstancedMesh).length, 0);
+  assert.equal(first.visible, true);
+  assert.equal(second.visible, true);
+});
+
+test('tracked roots hide their instances while the root itself is hidden', () => {
+  const scene = new THREE.Scene();
+  const resources = new ResourcePool();
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const roof = new THREE.Group();
+  const first = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  const second = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  first.position.x = 1;
+  second.position.x = 2;
+  roof.add(first, second);
+  const wall = new THREE.Group();
+  const third = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  const fourth = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  third.position.x = 3;
+  fourth.position.x = 4;
+  wall.add(third, fourth);
+  scene.add(roof, wall);
+
+  const result = batchRetainedStaticMeshes(scene, [
+    { key: 'roof', root: roof },
+    { key: 'wall', root: wall },
+  ], resources, { trackRootVisibility: true });
+  const matrix = new THREE.Matrix4();
+  const instanceScales = () => scene.children
+    .filter((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh)
+    .flatMap((instance) => Array.from({ length: instance.count }, (_, index) => {
+      instance.getMatrixAt(index, matrix);
+      return new THREE.Vector3().setFromMatrixScale(matrix).x;
+    }));
+  // Instance order follows traversal: roof meshes first, then wall meshes.
+  const hidden = [0, 0, 1, 1];
+  const shown = [1, 1, 1, 1];
+
+  roof.visible = false;
+  result.syncRootVisibility();
+  assert.deepEqual(instanceScales(), hidden);
+
+  roof.visible = true;
+  result.syncRootVisibility();
+  assert.deepEqual(instanceScales(), shown);
+});

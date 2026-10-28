@@ -46,3 +46,29 @@ test('long stalls reset cadence samples without lowering quality', () => {
   assert.equal(controller.sample(30), null);
   assert.equal(controller.sample(30), 1.75);
 });
+
+test('a slow display cadence alone never lowers resolution', () => {
+  const controller = createAdaptivePixelRatioController({
+    initialRatio: 2,
+    minRatio: 1,
+    slowFrames: 3,
+    fastFrames: 4,
+  });
+
+  // 30 Hz panel: 33 ms frames while the render itself costs only 5 ms.
+  for (let index = 0; index < 20; index += 1) assert.equal(controller.sample(33, 5), null);
+});
+
+test('a frame that misses budget because rendering is slow still degrades', () => {
+  const controller = createAdaptivePixelRatioController({
+    initialRatio: 2,
+    minRatio: 1,
+    slowFrames: 3,
+    fastFrames: 4,
+  });
+
+  // 20 ms of render work inside a 30 ms frame is a real miss, not panel cadence.
+  assert.equal(controller.sample(30, 20), null);
+  assert.equal(controller.sample(30, 20), null);
+  assert.equal(controller.sample(30, 20), 1.75);
+});
