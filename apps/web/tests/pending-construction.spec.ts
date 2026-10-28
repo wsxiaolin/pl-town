@@ -60,10 +60,13 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       await page.setViewportSize({ width: 844, height: 390 });
       await expect(page.locator('#landscapeRequired')).toBeHidden();
     }
+    // 年份镇建筑随世界启动常驻，不参与城筹的 pending 判定；本用例只验证
+    // 「未建成的主城建筑被隐藏」，故排除 yt-* 建筑。
     const renderedBuildingIds = () => page.evaluate(() => {
       const ids = new Set<string>();
       (window as any)._mini.scene.traverse((object: any) => {
-        if (object.isMesh && object.userData.buildingId) ids.add(object.userData.buildingId);
+        const buildingId = object.isMesh && object.userData.buildingId;
+        if (buildingId && !String(buildingId).startsWith('yt-')) ids.add(buildingId);
       });
       return [...ids].sort();
     });
@@ -174,7 +177,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     const reloadedState = page.waitForResponse('**/town-api/city/state');
     releaseReload();
     await reloadedState;
-    await expect(page.locator('.b-label-item')).toHaveCount(1);
+    // 年份群岛建筑也常驻标签；这里只数主城建筑。
+    await expect(page.locator('.b-label-item:not([data-building-id^="yt-"])')).toHaveCount(1);
     await expect(page.locator('.b-label-item[data-building-id="commons"]')).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath('pending-near.png') });
     for (let i = 0; i < 20; i++) await page.locator('#c').dispatchEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true });
@@ -185,9 +189,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
     expect(await page.evaluate(() => (window as any)._mini.interactBuilding('photostudio'))).toBe(false);
     await page.locator('#mapToggle').click({ force: true });
     await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
-    await expect(page.locator('.map-icon')).toHaveCount(1);
+    // 年份镇建筑也有地图图标；这里只数主城（pending library 必须消失）。
+    await expect(page.locator('.map-icon:not([data-building-id^="yt-"])')).toHaveCount(1);
     await page.locator('#mapSearchInput').fill('图书馆');
-    await expect(page.locator('.map-search-result')).toHaveCount(0);
+    await expect(page.locator('.map-search-result:not([data-building-id^="yt-"])')).toHaveCount(0);
     await page.locator('#mapClose').click({ force: true });
     await page.evaluate(() => (window as any)._mini.interactBuilding('commons'));
     const panel = page.locator('.city-governance-panel');

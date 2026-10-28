@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { terrainHeight } from '../data/terrain/heightfield/terrainHeight';
+import { transitGroundY } from '../data/terrain/heightfield/transitGround';
 
 type Cursor = THREE.Object3D & { visible: boolean; rotation: THREE.Euler };
 type Npc = { mesh: THREE.Object3D & { visible: boolean } };
@@ -127,9 +128,11 @@ export function createPlayerController(options: PlayerControllerOptions) {
     }
     cursor.position.x += (dx / distance) * step;
     cursor.position.z += (dz / distance) * step;
-    // y 跟随地形（方案 §6.2）：路径段两端同为 terrainHeight 采样，途中逐帧
-    // 取落点下方地面高，坡段上自然贴合（台地内恒 0，零回归）。
-    cursor.position.y = terrainHeight(cursor.position.x, cursor.position.z);
+    // y 跟随地形（方案 §6.2）：路径段两端同为权威采样器采样，途中逐帧
+    // 取落点下方地面高，坡段上自然贴合（台地内恒 0，零回归）。T4b：交
+    // 通件上盖（桥面/月台）由 transitGroundY 接管，走桥不沉海（海上段
+    // terrainHeight=natural≈0 而 deck≈2.06 的 T4a 遗留缺陷已修）。
+    cursor.position.y = transitGroundY(cursor.position.x, cursor.position.z);
     for (const npc of options.getNpcs()) {
       if (!npc.mesh.visible) continue;
       const offsetX = cursor.position.x - npc.mesh.position.x;

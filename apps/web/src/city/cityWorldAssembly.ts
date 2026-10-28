@@ -7,6 +7,11 @@ import { createCitySurfaces } from '../rendering/createCitySurfaces';
 import { createMountainTerrain } from '../rendering/terrain/mountainRanges';
 import { createRiverChenxi } from '../rendering/terrain/riverChenxi';
 import { createMinglanIsles } from '../rendering/terrain/minglanIsles';
+import { createArchipelagoIsles } from '../rendering/terrain/archipelagoIsles';
+import { createYearTownTransit, type YearTownTransit } from '../rendering/terrain/yearTownTransit';
+import { createYearTownDecor } from '../rendering/terrain/yearTownDecor';
+import { createYearTownGround } from '../rendering/terrain/yearTownGround';
+import { createYearTownUrbanLife } from '../rendering/terrain/yearTownUrbanLife';
 import { createCityGround } from '../rendering/terrain/cityGround';
 import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
@@ -18,7 +23,9 @@ import { createBuildingLabelController } from '../adapters/ui/buildingLabelContr
 import { applyStoryLockedBuildingPresentation } from './storyLockedBuildingPresentation';
 import { createNpcSystem, type Npc } from './npcSystem';
 import { NPC_PROFILES } from './data/npcs';
+import { YEAR_TOWN_NPCS } from './data/year-towns/yearTownNpcs';
 import { BUILDING_DEFS } from './data/buildings';
+import { YEAR_TOWN_BUILDING_DEFS } from './yearTownBuildings';
 import { CITY_LIMIT, NORTH_DISTRICT_AREA, PALETTE, ROAD_COORDS } from './data/cityConfig';
 import { addCityFountain } from './citySceneBootstrap';
 import type { CityGraphics } from './cityGraphics';
@@ -68,6 +75,7 @@ export function assembleCityWorld(options: {
   interactOrWalk: (building: BuildingEntity) => void;
   onModelsLoaded: () => void;
   onConstructionChanged: () => void;
+  bindTransitVehicles?: (vehicles: YearTownTransit) => void;
 }) {
   const { scene, resources, graphics } = options;
   const raycastBuildingGroups: THREE.Object3D[] = [];
@@ -88,7 +96,9 @@ export function assembleCityWorld(options: {
   });
   const npcSystem = createNpcSystem({
     scene,
-    profiles: NPC_PROFILES,
+    // 年份镇主题 NPC 与主城 NPC 同管道合流（T6R-b4）；年份镇 NPC 定点迎宾
+    // （home==work、patrolRadius 0、主城路网不可达），主城 NPC 行为不变。
+    profiles: [...NPC_PROFILES, ...YEAR_TOWN_NPCS],
     npcList: options.npcList,
     actors: {
       get cursorChar() { return options.actors.cursorChar; },
@@ -144,6 +154,13 @@ export function assembleCityWorld(options: {
   batchStaticMeshes(scene, [mountainTerrain.object, cityGround.object]);
   const riverChenxi = createRiverChenxi({ scene });
   const minglanIsles = createMinglanIsles({ scene });
+  // 南洋年份群岛（T7）：2 座大城 + 启源站岛台 + 沙线盘；南海水面扩展在 westBeach 的唯一
+  // Water 实例内完成（sceneInterestPoints 消费），这里只挂岛体。
+  const archipelagoIsles = createArchipelagoIsles({ scene });
+  // 跨海交通（T4a）：星门大桥 + 群岛环线 + 巡游列车（结构合并为单 mesh，
+  // 列车只做矩阵级巡游更新；reduced 时停泊泊位）。
+  const yearTownTransit = createYearTownTransit({ scene, reduced: options.reduced });
+  options.bindTransitVehicles?.(yearTownTransit);
   // 昼夜水色接线（review #218：晨溪河面此前从未跟随昼夜时钟，夜间保持
   // 日间亮色）：MiniCityApp 的 setWaterDaylight 经 worldDecorations 分发，
   // 这里转发给晨溪（河面 + 河口湾面）。
@@ -160,7 +177,10 @@ export function assembleCityWorld(options: {
   addCityFountain({ scene, palette: PALETTE, part: graphics.mesh.part });
   const buildingSceneController = createBuildingSceneController({
     scene,
-    definitions: BUILDING_DEFS,
+    // 年份镇合流（设计 §7.1）：115 座与 BUILDING_DEFS 同管道进同一
+    // BuildingEntity 工厂（meshFactory 造型 / labels / interaction / 地图图标）；
+    // baseY=岛台面、hasPlot:false 由 yearTownBuildings 合流层给出。
+    definitions: [...BUILDING_DEFS, ...YEAR_TOWN_BUILDING_DEFS],
     builders: graphics.buildingBuilders,
     addFacade: graphics.textures.addFacade,
     material: graphics.mesh.stdMat,
@@ -169,7 +189,16 @@ export function assembleCityWorld(options: {
     isNight: options.getIsNight,
   });
   buildingSceneController.addBuildings();
+  // 年份镇镇区铺装（T6 视觉补强）：散水按 Box3 实测，必须排在建筑建成之后；
+  // 主街轴向与生成器同源（站台月台 → 镇心），单 mesh 一次 draw。
+  const yearTownGround = createYearTownGround({ scene, buildings: options.buildings });
   raycastBuildingGroups.push(...options.buildings.map((building) => building.group), ...options.buildingPlotTargets);
+  // 年份镇主题装置 + XL 地标信标（T6，设计 §4「氛围道具」）：须在建筑建成
+  // 后装配（信标顶面按 Box3 实测、建成时 group 在 baseY−3 入场位已折算）；
+  // 灯效全 emissive 材质，不新增真实光源（单 WebGL 上下文红线，§5）。
+  // 生命周期对齐 yearTownTransit：update 挂 worldDecorations 帧链，dispose 入 terrain 清理。
+  const yearTownDecor = createYearTownDecor({ scene, buildings: options.buildings });
+  const yearTownUrbanLife = createYearTownUrbanLife({ scene });
   addEchoObservatoryArea({
     scene,
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => graphics.mesh.stdMat(parameters)),
@@ -229,6 +258,10 @@ export function assembleCityWorld(options: {
     constructionScene.update();
     riverChenxi.update(elapsed ?? 0);
     updateKomorebiClockworks(options.buildings, elapsed ?? 0, options.reduced);
+    // 跨海交通列车巡游（矩阵级更新；frameLoop 每帧调 worldDecorations.update）。
+    yearTownTransit.update(elapsed ?? 0);
+    // 年份镇装置动画与 XL 信标脉冲（旗摆/喷泉/光环；矩阵与材质级更新，无 gsap）。
+    yearTownDecor.update(elapsed ?? 0);
   };
   return {
     constructionScene: { dispose() { disposed = true; constructionScene.dispose(); } },
@@ -244,6 +277,11 @@ export function assembleCityWorld(options: {
         cityGround.dispose();
         riverChenxi.dispose();
         minglanIsles.dispose();
+        archipelagoIsles.dispose();
+        yearTownGround.dispose();
+        yearTownTransit.dispose();
+        yearTownDecor.dispose();
+        yearTownUrbanLife.dispose();
       },
     },
   };
