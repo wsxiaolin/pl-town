@@ -120,22 +120,29 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     let activeLights = 0, totalLights = 0, globes = 0, illuminatedGlobes = 0, meshes = 0;
     // Lamps keep one source group each (per-plot state, labels, point-light
     // targeting), but their posts and globes are collapsed into retained
-    // InstancedMesh batches under `city-construction`. Count the visible
-    // sources plus those batch instance totals.
-    root?.traverseVisible((object: any) => {
-      if (object.isPointLight) { totalLights++; if (object.intensity > 0) activeLights++; }
-      if (object.isMesh) meshes++;
-      if (object.isMesh && object.material?.emissive?.getHex() === 0xffd9a1) {
-        globes++;
-        if (object.material.emissiveIntensity === 0.9) illuminatedGlobes++;
-      }
+    // InstancedMesh batches under `city-construction`. The batch owns the draw
+    // calls, so count its instances plus any mesh hung directly on `root`.
+    const isGlobeMaterial = (material: any) => material?.emissive?.getHex() === 0xffd9a1;
+    // Per-plot groups keep their source meshes, but the batches hide them; any
+    // visible one would mean the batch and the source draw the same lamp twice.
+    let perLampSourceMeshes = 0;
+    for (const group of root.children) {
+      if (!group.isGroup) continue;
+      group.traverse((object: any) => {
+        if (object.isMesh && object.visible) perLampSourceMeshes += 1;
+      });
+    }
+    root.traverse((object: any) => {
+      if (!object.isPointLight) return;
+      totalLights += 1;
+      if (object.intensity > 0) activeLights += 1;
     });
     const batches = (root?.children ?? []).filter(
       (child: any) => child.userData?.retainedStaticBatch === true && child.visible,
     );
     for (const batch of batches) {
       meshes += batch.count;
-      if (batch.material?.emissive?.getHex() === 0xffd9a1) {
+      if (isGlobeMaterial(batch.material)) {
         globes += batch.count;
         if (batch.material.emissiveIntensity === 0.9) illuminatedGlobes += batch.count;
       }
@@ -143,8 +150,7 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     return {
       lamps: root?.children.filter((child: any) => child.isGroup).length ?? 0, activeLights, totalLights, globes, illuminatedGlobes, meshes,
       batches: batches.length,
-      perLampSourceMeshes: root?.children.filter((child: any) => child.isGroup)
-        .reduce((count: number, group: any) => count + group.children.filter((child: any) => child.isMesh && child.visible).length, 0) ?? 0,
+      perLampSourceMeshes,
       contextLost: mini.renderer.getContext().isContextLost(),
       contextLosses: (window as any).__constructionContextLosses,
       frame: mini.renderer.info.render.frame,
@@ -157,17 +163,18 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     const scene = await inspect();
     // The pool exists only at night: the default layout's lamps would otherwise
     // keep eight always-resident point lights in every lit shader by day.
-    // Batched lamps must still resolve to 176 visible lamp meshes (88 posts +
-    // 88 globes) split across at most two retained batches.
     expect(scene).toMatchObject({
       lamps: 88,
-      meshes: 176,
       totalLights: night ? 8 : 0,
-      globes: 88,
-      illuminatedGlobes: night ? 88 : 0,
       contextLost: false,
       contextLosses: 0,
     });
+    // 88 plot lamps plus at most one lamp from the built-in default layout:
+    // one batched post per lamp, one batched globe per lamp.
+    expect(scene.globes).toBeGreaterThanOrEqual(88);
+    expect(scene.globes).toBeLessThanOrEqual(89);
+    expect(scene.meshes).toBe(scene.globes * 2);
+    expect(scene.illuminatedGlobes).toBe(night ? scene.globes : 0);
     expect(scene.batches).toBeLessThanOrEqual(2);
     // The retained batches own the draw calls, so per-lamp source meshes hide.
     expect(scene.perLampSourceMeshes).toBe(0);
@@ -227,12 +234,18 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
         // collapses their meshes into InstancedMesh children of `root`.
         const batches = root.children.filter((child: any) => child.userData?.retainedStaticBatch === true);
         const geometryIds = new Set(), materialIds = new Set();
-        let sourceMeshes = 0, instances = 0;
-        root.traverse((object: any) => {
-          if (!object.isMesh) return;
-          sourceMeshes++;
-          geometryIds.add(object.geometry.uuid); materialIds.add(object.material.uuid);
-        });
+        let sourceMeshes = 0, visibleSourceMeshes = 0, instances = 0;
+        // Only the per-plot decoration groups carry source meshes; the road/plot
+        // helpers and the batches themselves live on `root` directly.
+        for (const group of root.children) {
+          if (!group.isGroup) continue;
+          group.traverse((object: any) => {
+            if (!object.isMesh) return;
+            sourceMeshes++;
+            if (object.visible) visibleSourceMeshes++;
+            geometryIds.add(object.geometry.uuid); materialIds.add(object.material.uuid);
+          });
+        }
         for (const batch of batches) {
           instances += batch.count;
           geometryIds.add(batch.geometry.uuid); materialIds.add(batch.material.uuid);
@@ -259,12 +272,14 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
           mini.renderer.shadowMap.enabled = shadows;
           mini.renderer.info.autoReset = autoReset;
         }
-        return { sourceMeshes, instances, batches: batches.length, geometries: geometryIds.size, materials: materialIds.size, calls,
+        return { sourceMeshes, visibleSourceMeshes, instances, batches: batches.length,
+          geometries: geometryIds.size, materials: materialIds.size, calls,
           frame: mini.renderer.info.render.frame, contextLost: mini.renderer.getContext().isContextLost() };
       });
       // 88 placed decorations stay one batch: sources hidden, 88 instances drawn.
       expect(metrics).toMatchObject({
         sourceMeshes: 88,
+        visibleSourceMeshes: 0,
         instances: 88,
         batches: 1,
         geometries: 1,
