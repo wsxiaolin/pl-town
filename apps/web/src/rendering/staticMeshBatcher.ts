@@ -46,10 +46,22 @@ type BatchGroup = {
 const BATCH_CELL_SIZE = 18;
 const hiddenInstanceMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
-/** True when `root` and every ancestor up to (excluding) `stop` are visible. */
+/**
+ * Retained batches hide their source meshes. A rebuild creates the replacement
+ * batch before disposing the previous one, so the new batch re-hides the same
+ * meshes the old batch had hidden. Tracking the current owner keeps the old
+ * batch's `dispose()` from un-hiding meshes the replacement already took over.
+ */
+const retainedMeshOwner = new WeakMap<THREE.Mesh, object>();
+
+/**
+ * True when `root` and every ancestor up to (excluding) `stop` are visible.
+ * A source mesh hidden by a retained batch is ignored: that visibility belongs
+ * to the batch, so a replacement batch must not read it as a hidden root.
+ */
 function hasVisibleAncestor(root: THREE.Object3D | undefined, stop: THREE.Object3D): boolean {
   for (let node: THREE.Object3D | null = root ?? null; node && node !== stop; node = node.parent) {
-    if (!node.visible) return false;
+    if (!node.visible && !retainedMeshOwner.has(node as THREE.Mesh)) return false;
   }
   return true;
 }
@@ -261,6 +273,7 @@ export function batchRetainedStaticMeshes(
   const canonicalGeometryCache = new Map<string, THREE.BufferGeometry>();
   const parent = options.parent ?? scene;
   const rootByKey = new Map<string, THREE.Object3D>();
+  const owner = {};
 
   for (const { key: rootKey, root } of roots) {
     rootByKey.set(rootKey, root);
@@ -326,6 +339,7 @@ export function batchRetainedStaticMeshes(
         && !hasVisibleAncestor(rootByKey.get(key)!, parent);
       batch.setMatrixAt(index, hidden ? hiddenInstanceMatrix : matrix);
       mesh.visible = false;
+      retainedMeshOwner.set(mesh, owner);
       hiddenMeshes.push(mesh);
       const instances = instancesByKey.get(key) ?? [];
       instances.push({ batch, index, matrix });
@@ -373,7 +387,12 @@ export function batchRetainedStaticMeshes(
         batch.removeFromParent();
         batch.dispose();
       }
-      for (const mesh of hiddenMeshes) mesh.visible = true;
+      for (const mesh of hiddenMeshes) {
+        // A replacement batch may already own this mesh; leave it hidden then.
+        if (retainedMeshOwner.get(mesh) !== owner) continue;
+        retainedMeshOwner.delete(mesh);
+        mesh.visible = true;
+      }
       createdBatches.length = 0;
       hiddenMeshes.length = 0;
       instancesByKey.clear();

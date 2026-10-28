@@ -206,7 +206,14 @@ export function assembleCityWorld(options: {
     // Batches stay siblings of the four groups, so obstacle bounds, interior
     // walk bounds and the narrative raycast targets keep working unchanged.
     batch: (roots) => {
-      echoObservatoryBatch = batchRetainedStaticMeshes(scene, roots, resources, { trackRootVisibility: true });
+      echoObservatoryBatch = batchRetainedStaticMeshes(scene, roots, resources, {
+        trackRootVisibility: true,
+        // 室内屋顶、天花板与 cabin 遮挡体由 echoStoryController.setInteriorView
+        // 逐网格切换 visible，必须保持未合批，否则批次实例会在室内视角继续绘制。
+        excludeMesh: (mesh) => mesh.userData.echoInteriorRoof === true
+          || mesh.userData.echoInteriorCeiling === true
+          || mesh.userData.echoCabinCameraOccluder === true,
+      });
       return echoObservatoryBatch;
     },
   }).forEach((group) => options.roadNavigation.registerObstacleGroup(group));

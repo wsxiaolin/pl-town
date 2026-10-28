@@ -72,3 +72,31 @@ test('a frame that misses budget because rendering is slow still degrades', () =
   assert.equal(controller.sample(30, 20), null);
   assert.equal(controller.sample(30, 20), 1.75);
 });
+
+test('a GPU-bound frame degrades even when the render call returns early', () => {
+  const controller = createAdaptivePixelRatioController({
+    initialRatio: 2,
+    minRatio: 1,
+    slowFrames: 3,
+    fastFrames: 4,
+  });
+
+  // 60 Hz panel (16 ms cadence) that starts missing vsync: the GPU is behind,
+  // so frames present at 33-50 ms while renderer.render() still returns in 3 ms.
+  for (let index = 0; index < 10; index += 1) assert.equal(controller.sample(16, 3), null);
+  assert.equal(controller.sample(33, 3), null);
+  assert.equal(controller.sample(33, 3), null);
+  assert.equal(controller.sample(50, 3), 1.75);
+});
+
+test('a render call that alone exceeds the frame budget degrades', () => {
+  const controller = createAdaptivePixelRatioController({
+    initialRatio: 2,
+    minRatio: 1,
+    slowFrames: 2,
+    fastFrames: 4,
+  });
+
+  assert.equal(controller.sample(20, 26), null);
+  assert.equal(controller.sample(20, 26), 1.75);
+});

@@ -176,3 +176,61 @@ test('tracked roots hide their instances while the root itself is hidden', () =>
   result.syncRootVisibility();
   assert.deepEqual(instanceScales(), shown);
 });
+
+test('disposing a replaced batch keeps the meshes the replacement took over hidden', () => {
+  const scene = new THREE.Scene();
+  const resources = new ResourcePool();
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const root = new THREE.Group();
+  const meshes = [1, 2, 3].map((x) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+    mesh.position.x = x;
+    root.add(mesh);
+    return mesh;
+  });
+  scene.add(root);
+  const roots = [{ key: 'root', root }];
+
+  // Rebuild order mirrors cityConstructionScene.rebuildDecorationBatch: the
+  // replacement batch is built first, the previous one is disposed afterwards.
+  const first = batchRetainedStaticMeshes(scene, roots, resources);
+  const second = batchRetainedStaticMeshes(scene, roots, resources);
+  first.dispose();
+
+  for (const mesh of meshes) assert.equal(mesh.visible, false);
+  assert.equal(scene.children.filter((child) => child instanceof THREE.InstancedMesh).length, 1);
+
+  second.dispose();
+  for (const mesh of meshes) assert.equal(mesh.visible, true);
+  assert.equal(scene.children.filter((child) => child instanceof THREE.InstancedMesh).length, 0);
+});
+
+test('excluded meshes stay out of retained batches', () => {
+  const scene = new THREE.Scene();
+  const resources = new ResourcePool();
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const root = new THREE.Group();
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  roof.userData.echoInteriorRoof = true;
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  ceiling.position.x = 1;
+  ceiling.userData.echoInteriorCeiling = true;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  wall.position.x = 2;
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  trim.position.x = 3;
+  root.add(roof, ceiling, wall, trim);
+  scene.add(root);
+
+  const result = batchRetainedStaticMeshes(scene, [{ key: 'interior', root }], resources, {
+    excludeMesh: (mesh) => mesh.userData.echoInteriorRoof === true
+      || mesh.userData.echoInteriorCeiling === true,
+  });
+
+  assert.equal(result.sourceMeshes, 2);
+  assert.equal(result.batches, 1);
+  assert.equal(roof.visible, true);
+  assert.equal(ceiling.visible, true);
+  assert.equal(wall.visible, false);
+  assert.equal(trim.visible, false);
+});
