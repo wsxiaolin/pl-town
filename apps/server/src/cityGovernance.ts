@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto';
 import { db, getPlayerProgress } from './db.js';
+import { NODE_ENV } from './config.js';
 import { CITY_CONSTRUCTION_CONFIG } from './data/cityConstructionConfig.js';
 import { HttpBodyError } from './httpBody.js';
 import type { PlayerProgress, User } from './types.js';
+
+// 仅本地开发预览用：CITY_DEV_UNLOCK_ALL=1 时把全部建设项目视为已建成。
+// 生产环境即使误设开关也保持关闭，避免绕过建造玩法。
+const DEV_UNLOCK_ALL = NODE_ENV !== 'production' && process.env.CITY_DEV_UNLOCK_ALL === '1';
 
 export const cityConfigJson = JSON.stringify(CITY_CONSTRUCTION_CONFIG);
 export const cityConfigETag = `"${createHash('sha256').update(cityConfigJson).digest('hex')}"`;
@@ -11,6 +16,10 @@ export type CityState = {
   projects: Array<{ id: string; funded: number; built: boolean; votes: number }>;
   decorations: Array<{ plotId: string; decorationId: string; ownerId: string; ownerNickname: string }>;
 };
+function cityProjectCost(projectId: string): number {
+  return CITY_CONSTRUCTION_CONFIG.projects.find((entry) => entry.id === projectId)?.cost ?? 0;
+}
+
 export function getCityState(): CityState {
   const meta = db.prepare('SELECT epoch, revision, config_version AS configVersion FROM city_meta WHERE id = 1').get() as Pick<CityState, 'epoch' | 'revision' | 'configVersion'>;
   const projects = db.prepare(`SELECT id, funded, built,
@@ -23,9 +32,16 @@ export function getCityState(): CityState {
     LEFT JOIN users ON users.id = decorations.owner_id
     ORDER BY decorations.plot_id
   `).all() as CityState['decorations'];
-  return { ...meta, projects: projects.map((entry) => ({ ...entry, built: Boolean(entry.built) })), decorations };
+  return {
+    ...meta,
+    projects: projects.map((entry) => (DEV_UNLOCK_ALL
+      ? { ...entry, built: true, funded: Math.max(entry.funded, cityProjectCost(entry.id)) }
+      : { ...entry, built: Boolean(entry.built) })),
+    decorations,
+  };
 }
 export function isCityBuildingBuilt(buildingId: string): boolean {
+  if (DEV_UNLOCK_ALL) return true;
   const project = CITY_CONSTRUCTION_CONFIG.projects.find((entry) => entry.buildingId === buildingId);
   if (!project) return true;
   return Boolean((db.prepare('SELECT built FROM city_projects WHERE id = ?').get(project.id) as { built: number } | undefined)?.built);

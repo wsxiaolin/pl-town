@@ -1,8 +1,17 @@
 export { WORLD_ACHIEVEMENTS } from '../progression/worldAchievements';
 
-export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'cat-cafe-ice-wall', 'origin-orange-tree', 'longjing-well', 'west-beach', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door'] as const;
+export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'cat-cafe-ice-wall', 'origin-orange-tree', 'longjing-well', 'west-beach', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door',
+  // 年份群岛车站站牌（T4 跨海交通，设计 §5.2）：泊位坐标与线路数据唯一
+  // 事实源在 city/data/year-towns/transit.ts（单测锁两表一致）；此处仅注册
+  // 交互路由 ID——点站牌走 interactWithInterestPointController 既有路由。
+  'station-stargate', 'station-2019-bridge', 'station-2019-ring', 'station-2020', 'station-2021', 'station-2022', 'station-2023', 'station-2024', 'station-2025', 'station-2026'] as const;
 
 export type SceneInterestPointId = (typeof SCENE_INTEREST_POINT_IDS)[number];
+
+/** 年份群岛车站站牌 ID（SCENE_INTEREST_POINT_IDS 的交通子集）。 */
+export const TRANSIT_STATION_IDS = ['station-stargate', 'station-2019-bridge', 'station-2019-ring', 'station-2020', 'station-2021', 'station-2022', 'station-2023', 'station-2024', 'station-2025', 'station-2026'] as const;
+
+export type TransitStationId = (typeof TRANSIT_STATION_IDS)[number];
 
 export const WORLD_ITEM_IDS = {
   orange: 'mandarin',

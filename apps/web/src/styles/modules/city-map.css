@@ -178,6 +178,116 @@
   color: #4A2300;
   filter: sepia(1) saturate(2.4) brightness(0.55);
 }
+
+/* ===== T3a 海图页镇标记（群岛海图第 3 页）=====
+   建筑图标的镇级变体：海图页比例异于城图（span 190 vs 48），镇标取大一档
+   的纯色圆盘——背景色由 JS 内联注入镇主题色（towns.ts theme.iconColor），
+   CSS 只管墨线描边/悬停/选中态，与建筑图标在同一图纸语言内。 */
+.map-town-icon {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: all;
+  cursor: pointer;
+  /* 镇图标是海图上的镇级交互锚点（T3a），压在建筑 .map-icon 圆点之上：
+     镇心即大街起点，密集建筑标记常与图标重叠，若不抬层级，镇图标中心
+     的点击会被后渲染的建筑标记截走、tip 误开为建筑详情（T8 补验实证）。 */
+  z-index: 3;
+  /* 与 .map-icon 同族但大一档：海图跨 380 世界单位，小圆点会看不清。 */
+  width: clamp(14px, 6.5cqi, 34px);
+  height: clamp(14px, 6.5cqi, 34px);
+  border-radius: 50%;
+  border: 2px solid rgba(74, 52, 22, 0.62);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+  padding: 0;
+}
+.map-town-icon[hidden] { display: none; }
+.map-town-icon:hover {
+  transform: translate(-50%, -50%) scale(1.15);
+  border-color: var(--blue);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+.map-town-icon.is-selected {
+  z-index: 4;
+  border-color: #FF5A1F;
+  box-shadow:
+    0 0 0 clamp(2px, 0.75cqi, 5px) rgba(255,255,255,0.95),
+    0 0 0 clamp(4px, 1.3cqi, 9px) rgba(255,90,31,0.55),
+    0 4px 14px rgba(84,32,0,0.55);
+  transform: translate(-50%, -50%) scale(1.5);
+}
+/* ===== T6R-b5 海图页镇名标签（设计 §5.3「8 镇名标注」）=====
+   与 .map-compass 同族图纸语言（奶油底 + 墨棕描边胶囊）：JS 按 towns.ts
+   label 注入「年份·镇名」文本，锚点百分比与 .map-town-icon 同源（镇心
+   投影，勿偏移出岛）。纯读图标注——pointer-events 关闭，点击/悬停/选中
+   交互仍由图标按钮承担。落位在图标正下方（图标直径一半 + 3px 间隙）；
+   东西两端的近页缘镇（--w/--e，admin 世界图 world-marker-label--left
+   同款先例）翻转对齐，防胶囊溢出 .map-image-wrap 的 overflow: hidden。 */
+.map-town-label {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, calc(clamp(14px, 6.5cqi, 34px) / 2 + 3px));
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: clamp(8.5px, 2.2cqi, 11.5px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #4E3B1F;
+  background: rgba(255, 253, 245, 0.88);
+  border: 1px solid rgba(107, 82, 48, 0.45);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.map-town-label--e {
+  transform: translate(-100%, calc(clamp(14px, 6.5cqi, 34px) / 2 + 3px));
+}
+.map-town-label--w {
+  transform: translate(0, calc(clamp(14px, 6.5cqi, 34px) / 2 + 3px));
+}
+/* ===== T4a2 海图页交通层（跨海交通线路/站圆点）=====
+   与 .map-town-icon 同一图纸语言（墨线描边 + 百分比落位）：线路用 SVG
+   折线铺满图纸（viewBox 0 0 100 100 = 百分比坐标，页纸 1/1 无变形），
+   星门线实线（电车）、环线长虚线（磁悬浮）以线型区分；站圆点是镇标记
+   的小一档变体（奶油底 + 蓝墨描边，比 8 镇标低半级不抢主次）。乘车
+   交互（T4b）接线前站圆点只读图。 */
+.map-transit-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.map-transit-lines polyline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.map-transit-lines .map-transit-stargate {
+  stroke: rgba(59, 88, 120, 0.82);
+  /* viewBox 0 0 100 100 = 图纸百分比坐标；线宽/虚线段按图纸比例走
+     （页纸方形无变形，与镇标记的 cqi 缩放同思路）。 */
+  stroke-width: 0.5;
+}
+.map-transit-lines .map-transit-ring {
+  stroke: rgba(59, 88, 120, 0.66);
+  stroke-width: 0.5;
+  stroke-dasharray: 1.8 1.4;
+}
+.map-transit-station {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  /* 镇标记同族小一档：海图跨 380 世界单位，泊位圆点要可见但不盖镇标。 */
+  width: clamp(8px, 3.4cqi, 18px);
+  height: clamp(8px, 3.4cqi, 18px);
+  border-radius: 50%;
+  background: rgba(255, 253, 245, 0.96);
+  border: 2px solid rgba(59, 88, 120, 0.88);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+  pointer-events: none;
+}
 .map-close {
   position: absolute;
   top: 12px; right: 14px;

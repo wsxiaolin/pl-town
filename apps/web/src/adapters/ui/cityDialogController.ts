@@ -1,22 +1,8 @@
 import type { NpcQuestAction, QuestTransition } from '../../gameplay/quests/types';
+import type { BuildingContentLike, LegacyDialogueNode, LegacyDialogueOption } from '../../city/buildingContent';
+import { READ_BODY_ACTION_PREFIX } from './yearTownPanelController';
 
-export interface LegacyDialogueOption {
-  text: string;
-  next: number | null;
-  onPick?: () => void;
-  action?: string;
-  nextByVisitor?: {
-    includes: readonly string[];
-    maxLength?: number;
-    next: number;
-  };
-}
-
-export interface LegacyDialogueNode {
-  speaker?: string;
-  text: string;
-  options: readonly LegacyDialogueOption[];
-}
+export type { BuildingContentLike, LegacyDialogueNode, LegacyDialogueOption } from '../../city/buildingContent';
 
 export interface NpcEntityLike {
   profile: {
@@ -29,14 +15,6 @@ export interface NpcEntityLike {
     dialog: readonly LegacyDialogueNode[];
   };
   mesh: { rotation: { y: number }; position: { x: number; z: number } };
-}
-
-export interface BuildingContentLike {
-  name: string;
-  slogan: string;
-  dialog: readonly string[];
-  dialogTree?: readonly LegacyDialogueNode[];
-  dialogAvatar?: readonly [number, number];
 }
 
 export interface BuildingLike {
@@ -491,6 +469,19 @@ export function createCityDialogController(options: CityDialogControllerOptions)
         paragraph.style.animationDelay = `${0.35 + index * 0.22}s`;
         return paragraph;
       }));
+      if (content.readBody) {
+        // T6R-b2：作品铭牌的「阅读正文」入口——纯数据标记触发，动作经组合根
+        // 路由到 yearTownPanelController（read-body:{buildingId}）。
+        const read = document.createElement('button');
+        read.type = 'button';
+        read.className = 'modal-read';
+        read.textContent = content.readBodyLabel ?? '阅读正文';
+        read.addEventListener('click', () => {
+          controller.closeBuilding();
+          options.onDialogueAction?.(`${READ_BODY_ACTION_PREFIX}${building.id}`, 'city-dialog');
+        }, { signal: options.signal });
+        body.appendChild(read);
+      }
       getElement<HTMLDivElement>(document, 'modalOverlay').classList.add('open');
     },
     closeBuilding() {

@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+# 公开仓库少于 10 stars 时仍需手动触发；此配置不覆盖平台限制。
+# https://docs.coderabbit.ai/management/plans#rate-limits
+language: zh-CN
+reviews:
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches:
+      - ".*"

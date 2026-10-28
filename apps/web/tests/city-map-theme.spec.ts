@@ -35,7 +35,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
     await expect(overlay).toHaveClass(/show/);
     await expect(map).toBeVisible();
     await search.fill('图书馆');
-    await expect(page.locator('.map-search-result')).toHaveCount(1);
+    await expect(page.locator('.map-search-result:not([data-building-id^="yt-"])')).toHaveCount(1);
     await expect(search).toBeFocused();
     const selected = await search.getAttribute('aria-activedescendant');
     let previousShot = await map.getAttribute('src');
@@ -55,7 +55,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
       await expect(search).toHaveValue('图书馆');
       await expect(search).toBeFocused();
       await expect(search).toHaveAttribute('aria-activedescendant', selected!);
-      await expect(page.locator('.map-search-result')).toHaveCount(1);
+      await expect(page.locator('.map-search-result:not([data-building-id^="yt-"])')).toHaveCount(1);
       expect(await page.evaluate(() => {
         const renderer = (window as unknown as CityWindow)._mini.renderer as WebGLRenderer;
         return renderer.getContext().isContextLost();

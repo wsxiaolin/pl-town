@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { getNpcType } from './data/npcTypes';
 import type { NpcType } from './data/npcTypes';
-import type { LegacyDialogueNode } from '../adapters/ui/cityDialogController';
+import type { LegacyDialogueNode } from './buildingContent';
 import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 
 export type NpcProfile = {

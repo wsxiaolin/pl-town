@@ -55,7 +55,18 @@ export function createBuildingSceneController(options: {
           if (right) { right.position.x = parameters.width / 2 + offset; right.rotation.y = Math.PI / 2; }
         }
       }
-      building.group.position.y = -3;
+      const baseY = definition.baseY ?? 0;
+      building.group.userData.baseY = baseY;
+      building.group.position.y = baseY - 3;
+      building.group.rotation.y = definition.rotY ?? 0;
+      // 体量缩放（年份群岛减少疏离感）：以建筑自身为基准放大，x/z/baseY 不变。
+      const scale = definition.scale ?? 1;
+      if (scale !== 1) {
+        building.group.scale.setScalar(scale);
+        // labelY 与交互半径随体量同步，避免标签穿进屋顶或点不到。
+        building.labelY = (building.labelY ?? 6) * scale;
+        if (building.interactionRadius !== undefined) building.interactionRadius *= scale;
+      }
       options.scene.add(building.group);
       options.addBuilding(building);
       if (definition.hasPlot !== false) addPlot(definition);

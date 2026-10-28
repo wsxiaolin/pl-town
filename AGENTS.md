@@ -122,10 +122,10 @@ CI 走 `.github/workflows/test.yml`：类型检查 / 构建 / 单元（domain）
 
 ## AI 自动化工作流
 
-仓库包含两个移植自 `NetLogo-Mobile/plweb2` 的 AI 自动化工作流，均使用 OpenCode CLI（`opencode-ai`）与 `skills` 工具（`npx skills update` 读取根目录 `skills-lock.json`）。两者在 CI 中独立运行，不依赖本地开发环境。
+仓库通过根目录 `.coderabbit.yaml` 配置 CodeRabbit PR 审查；公开仓库少于 10 stars 时仍须手动触发，配置不能解除平台限制，详见 `docs/code-review.md`。另外保留两个移植自 `NetLogo-Mobile/plweb2` 的 AI 自动化工作流，均使用 OpenCode CLI（`opencode-ai`）与 `skills` 工具（`npx skills update` 读取根目录 `skills-lock.json`）。两者在 CI 中独立运行，不依赖本地开发环境。
 
 - **Auto-Fix（`.github/workflows/autofix.yml`）**：当 Issue 被打上 `autofix` 标签时触发。AI 代理按本指南修改代码、运行校验（`npm run typecheck` / `build` / `test:domain` / `test:server`，必要时 `test:web`），生成根目录 `conclusion.md`，随后由工作流自动创建 `autofix/issue-<n>-<run_id>` 分支、提交并以 `Resolves #<n>` 打开 PR。代理本身不得执行 `git commit` / `git push` / 创建 PR，这些由工作流统一完成。
-- **AI PR Reviewer（`.github/workflows/auto-review.yml`）**：PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。BOT 自身失败时工作流仍标记通过，仅在 PR 评论中说明「自动审查失败」。审查报告含 blocker 时先发评论，再将 required check 标为失败。判定解析由 `scripts/review-verdict.sh` 完成（依赖 bash 的 `pipefail`，非 POSIX sh），fixture 测试位于 `apps/web/tests/unit/reviewVerdict.test.ts`，经 `npm run test:unit -w @minicity/web` 从 `apps/web` 目录运行。审查报告正文使用简体中文，代码标识符、路径与既定技术术语保留英文；`REVIEW_VERDICT` 判定行保持英文标记，供解析脚本使用。
+- **AI PR Reviewer（`.github/workflows/auto-review.yml`，默认暂停）**：仅当仓库 Actions 变量 `ENABLE_OPENCODE_REVIEW` 为 `true` 时运行，否则 job 跳过并不执行 blocker 门禁。恢复后，PR 创建或更新（`opened` / `synchronize`）时触发。AI 代理读取 `git diff` 与历史，按本指南审查代码质量并下发评论；审查是只读的，不修改代码。BOT 自身失败时工作流仍标记通过，仅在 PR 评论中说明「自动审查失败」。审查报告含 blocker 时先发评论，再将 required check 标为失败。判定解析由 `scripts/review-verdict.sh` 完成（依赖 bash 的 `pipefail`，非 POSIX sh），fixture 测试位于 `apps/web/tests/unit/reviewVerdict.test.ts`，经 `npm run test:unit -w @minicity/web` 从 `apps/web` 目录运行。审查报告正文使用简体中文，代码标识符、路径与既定技术术语保留英文；`REVIEW_VERDICT` 判定行保持英文标记，供解析脚本使用。
 - **Dependabot Auto-Merge（`.github/workflows/dependabot-auto-merge.yml`）**：Dependabot 开启或更新依赖 PR 时触发，为其启用 GitHub 原生 auto-merge（squash）。安全修复与常规版本更新一律适用；真正的合并仍以全部 required check 通过为前提，CI 失败时 GitHub 会自动取消 auto-merge。前置条件：仓库设置中已开启 "Allow auto-merge"。
 
 `skills-lock.json` 声明了 `plweb-skill`（Physics Lab 社区 API 文档，来自 `NetLogo-Mobile/plweb-skill`）和 `code-review-skill`（来自 `awesome-skills/code-review-skill`）两个只读技能，为上述代理提供上下文。AI PR Reviewer 按 `opencode/big-pickle`、`opencode/deepseek-v4-flash-free`、`opencode/hy3-free` 的顺序尝试模型，统一使用 `variant high`；如需更换模型，应同步修改对应工作流，并保持只读技能的来源不变。
@@ -179,6 +179,23 @@ AI 对事实、接口、依赖版本、运行参数、平台规则或外部项�
 ## 前端迁移验证
 
 涉及领域规则或模块边界时，至少运行 `npm run check:source-size`、`npm run typecheck`、`npm run test:domain` 和 `npm run build`。只有修改浏览器交互、布局、WebGL 或端到端流程时才运行 `npm run test:web`；如果环境无法启动 Chromium，应在交付说明中明确记录。
+
+## 城市布局：建筑坐标必须手写
+
+年份群岛与任何新增城区的**建筑坐标一律手写**，禁止用脚本/算法批量生成或批量分配位置。
+
+这不是风格偏好，是质量要求。算法撒点（按序号轮转、按扇区弧线排布、按网格批量填充、贪心找空位）产出的是「摆件」，不是城市：建筑之间没有街廓关系，没有临街面，没有留白与密度节奏，看起来就像把件东西随手丢在地上。
+
+具体要求：
+
+- **一栋一栋写**。在 `yearTownMemorials.ts` 的 `layout` 字段中直接给出 `x`/`z`，每栋都要能说出「为什么在这里」——临哪条街、面向哪一侧、和左右邻居是什么关系、为什么留出那块空地。
+- **先有街，再有房**。街网（`IslandStreetGrid`）、广场、码头、站前广场先在 `towns.ts` 里定稿，建筑沿街成排、形成连续街墙；街区内部留院落，不做整块铺满。
+- **城市形态要有原型**。开工前先明确这座城属于哪一类（方格网 / 有机生长 / 港口城市），整座城按同一套形态逻辑推进，不要混搭成四不像。
+- **地形与海岸先落位**。山丘（`IslandHill`）与城区阶地（`IslandTerrace`）先定，建筑落在阶地上，不压山体、不悬在水上。
+- **交通是城市的一部分**。铁轨/高架从岛外接入**真实车站建筑**（站房 + 站台 + 站前广场），不要用一个绕圈的轨道代替车站。
+- **禁止**为实现上述内容而新增「坐标生成器」「临街位分配器」「批量排布脚本」。生成器只允许做一件事：把已经手写好的数据固化成配置（当前 `generate_town_buildings.mjs` 即此定位）。
+
+验收方式：拉远到全图视野看一次，应当能一眼认出街道走向、街区轮廓、哪个区域密、哪里是空地；近景应能看到连续街墙与临街面。认不出来就是没做好，重做。
 
 ## 3D 渲染：远镜头下的 z-fighting
 

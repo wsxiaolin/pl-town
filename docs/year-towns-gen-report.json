@@ -1,0 +1,86 @@
+{
+  "generator": "scripts/generate_town_buildings.mjs",
+  "node": "node22",
+  "dataBaseline": {
+    "mode": "offline-rebuild"
+  },
+  "towns": [
+    {
+      "year": 2019,
+      "town": "2019·起源村",
+      "facilities": 2,
+      "hasArchive": false,
+      "placementScale": 1
+    },
+    {
+      "year": 2020,
+      "town": "2020·启明镇",
+      "facilities": 10,
+      "hasArchive": true,
+      "placementScale": 1
+    },
+    {
+      "year": 2021,
+      "town": "2021·潮声镇",
+      "facilities": 16,
+      "hasArchive": true,
+      "placementScale": 1
+    },
+    {
+      "year": 2022,
+      "town": "2022·盛夏镇",
+      "facilities": 20,
+      "hasArchive": true,
+      "placementScale": 1
+    },
+    {
+      "year": 2023,
+      "town": "2023·回响镇",
+      "facilities": 18,
+      "hasArchive": true,
+      "placementScale": 1
+    },
+    {
+      "year": 2024,
+      "town": "2024·微光镇",
+      "facilities": 16,
+      "hasArchive": true,
+      "placementScale": 1
+    },
+    {
+      "year": 2025,
+      "town": "2025·长风镇",
+      "facilities": 12,
+      "hasArchive": true,
+      "placementScale": 1
+    },
+    {
+      "year": 2026,
+      "town": "2026·星港",
+      "facilities": 12,
+      "hasArchive": true,
+      "placementScale": 1
+    }
+  ],
+  "totals": {
+    "buildings": 115,
+    "facilities": 106,
+    "archives": 7,
+    "landmarks": 2,
+    "families": {
+      "law": 7,
+      "lab": 8,
+      "guild": 17,
+      "academy": 6,
+      "observatory": 5,
+      "memorial": 9,
+      "gathering": 18,
+      "tavern": 8,
+      "narrative": 7,
+      "press": 12,
+      "market": 4,
+      "dwelling": 5
+    },
+    "generatedFiles": 6
+  }
+}
