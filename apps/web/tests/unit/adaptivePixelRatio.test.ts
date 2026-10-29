@@ -100,3 +100,23 @@ test('a render call that alone exceeds the frame budget degrades', () => {
   assert.equal(controller.sample(20, 26), null);
   assert.equal(controller.sample(20, 26), 1.75);
 });
+
+test('a sustained GPU slowdown is not learned as the display cadence', () => {
+  const controller = createAdaptivePixelRatioController({
+    initialRatio: 1.5,
+    minRatio: 1,
+    slowFrames: 3,
+    fastFrames: 4,
+  });
+
+  // 60 Hz panel rendering in 3 ms, then the GPU falls behind and frames creep
+  // up to 33 ms while renderer.render() still returns immediately. The longer
+  // intervals must keep counting as slow instead of redefining the baseline.
+  for (let index = 0; index < 10; index += 1) assert.equal(controller.sample(16, 3), null);
+  assert.equal(controller.sample(33, 3), null);
+  assert.equal(controller.sample(33, 3), null);
+  assert.equal(controller.sample(33, 3), 1.25);
+  assert.equal(controller.sample(33, 3), null);
+  assert.equal(controller.sample(33, 3), null);
+  assert.equal(controller.sample(33, 3), 1);
+});
