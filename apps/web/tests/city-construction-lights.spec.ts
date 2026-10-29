@@ -118,16 +118,39 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     const mini = (window as any)._mini;
     const root = mini.scene.getObjectByName('city-construction');
     let activeLights = 0, totalLights = 0, globes = 0, illuminatedGlobes = 0, meshes = 0;
-    root?.traverseVisible((object: any) => {
-      if (object.isPointLight) { totalLights++; if (object.intensity > 0) activeLights++; }
-      if (object.isMesh) meshes++;
-      if (object.isMesh && object.material?.emissive?.getHex() === 0xffd9a1) {
-        globes++;
-        if (object.material.emissiveIntensity === 0.9) illuminatedGlobes++;
-      }
+    // Lamps keep one source group each (per-plot state, labels, point-light
+    // targeting), but their posts and globes are collapsed into retained
+    // InstancedMesh batches under `city-construction`. The batch owns the draw
+    // calls, so count its instances plus any mesh hung directly on `root`.
+    const isGlobeMaterial = (material: any) => material?.emissive?.getHex() === 0xffd9a1;
+    // Per-plot groups keep their source meshes, but the batches hide them; any
+    // visible one would mean the batch and the source draw the same lamp twice.
+    let perLampSourceMeshes = 0;
+    for (const group of root.children) {
+      if (!group.isGroup) continue;
+      group.traverse((object: any) => {
+        if (object.isMesh && object.visible) perLampSourceMeshes += 1;
+      });
+    }
+    root.traverse((object: any) => {
+      if (!object.isPointLight) return;
+      totalLights += 1;
+      if (object.intensity > 0) activeLights += 1;
     });
+    const batches = (root?.children ?? []).filter(
+      (child: any) => child.userData?.retainedStaticBatch === true && child.visible,
+    );
+    for (const batch of batches) {
+      meshes += batch.count;
+      if (isGlobeMaterial(batch.material)) {
+        globes += batch.count;
+        if (batch.material.emissiveIntensity === 0.9) illuminatedGlobes += batch.count;
+      }
+    }
     return {
       lamps: root?.children.filter((child: any) => child.isGroup).length ?? 0, activeLights, totalLights, globes, illuminatedGlobes, meshes,
+      batches: batches.length,
+      perLampSourceMeshes,
       contextLost: mini.renderer.getContext().isContextLost(),
       contextLosses: (window as any).__constructionContextLosses,
       frame: mini.renderer.info.render.frame,
@@ -140,7 +163,21 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     const scene = await inspect();
     // The pool exists only at night: the default layout's lamps would otherwise
     // keep eight always-resident point lights in every lit shader by day.
-    expect(scene).toMatchObject({ lamps: 88, meshes: 176, totalLights: night ? 8 : 0, globes: 88, illuminatedGlobes: night ? 88 : 0, contextLost: false, contextLosses: 0 });
+    expect(scene).toMatchObject({
+      lamps: 88,
+      totalLights: night ? 8 : 0,
+      contextLost: false,
+      contextLosses: 0,
+    });
+    // 88 plot lamps plus at most one lamp from the built-in default layout:
+    // one batched post per lamp, one batched globe per lamp.
+    expect(scene.globes).toBeGreaterThanOrEqual(88);
+    expect(scene.globes).toBeLessThanOrEqual(89);
+    expect(scene.meshes).toBe(scene.globes * 2);
+    expect(scene.illuminatedGlobes).toBe(night ? scene.globes : 0);
+    expect(scene.batches).toBeLessThanOrEqual(2);
+    // The retained batches own the draw calls, so per-lamp source meshes hide.
+    expect(scene.perLampSourceMeshes).toBe(0);
     // Verify the renderer keeps producing frames across dusk/day transitions.
     await expect.poll(async () => (await inspect()).frame).toBeGreaterThan(scene.frame);
     expect((await inspect()).contextLost).toBe(false);
@@ -193,12 +230,26 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
       const metrics = await page.evaluate(() => {
         const mini = (window as any)._mini;
         const root = mini.scene.getObjectByName('city-construction');
+        // Placed decorations keep one source group each, but the retained batcher
+        // collapses their meshes into InstancedMesh children of `root`.
+        const batches = root.children.filter((child: any) => child.userData?.retainedStaticBatch === true);
         const geometryIds = new Set(), materialIds = new Set();
-        let meshes = 0;
-        root.traverse((object: any) => {
-          if (!object.isMesh) return;
-          meshes++; geometryIds.add(object.geometry.uuid); materialIds.add(object.material.uuid);
-        });
+        let sourceMeshes = 0, visibleSourceMeshes = 0, instances = 0;
+        // Only the per-plot decoration groups carry source meshes; the road/plot
+        // helpers and the batches themselves live on `root` directly.
+        for (const group of root.children) {
+          if (!group.isGroup) continue;
+          group.traverse((object: any) => {
+            if (!object.isMesh) return;
+            sourceMeshes++;
+            if (object.visible) visibleSourceMeshes++;
+            geometryIds.add(object.geometry.uuid); materialIds.add(object.material.uuid);
+          });
+        }
+        for (const batch of batches) {
+          instances += batch.count;
+          geometryIds.add(batch.geometry.uuid); materialIds.add(batch.material.uuid);
+        }
         // Render just the construction geometry with the existing renderer: no
         // extra WebGL context, and a far camera that includes the entire area.
         const visibility = mini.scene.children.map((child: any) => [child, child.visible]);
@@ -209,7 +260,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
         camera.zoom = 1; camera.position.set(0, 80, 0); camera.lookAt(0, 0, 0); camera.updateProjectionMatrix();
         let calls = 0;
         try {
-          for (const [child] of visibility) child.visible = child === root || Boolean(child.isLight);
+          for (const [child] of visibility) {
+            child.visible = child === root || Boolean(child.isLight);
+          }
           mini.renderer.shadowMap.enabled = false;
           mini.renderer.info.autoReset = true;
           mini.renderer.render(mini.scene, camera);
@@ -219,13 +272,23 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
           mini.renderer.shadowMap.enabled = shadows;
           mini.renderer.info.autoReset = autoReset;
         }
-        return { meshes, geometries: geometryIds.size, materials: materialIds.size, calls,
+        return { sourceMeshes, visibleSourceMeshes, instances, batches: batches.length,
+          geometries: geometryIds.size, materials: materialIds.size, calls,
           frame: mini.renderer.info.render.frame, contextLost: mini.renderer.getContext().isContextLost() };
       });
-      expect(metrics).toMatchObject({ meshes: 88, geometries: 1, materials: 1, contextLost: false });
-      // One call per decoration, plus the renderer's optional scene background pass.
-      expect(metrics.calls).toBeGreaterThanOrEqual(88);
-      expect(metrics.calls).toBeLessThanOrEqual(89);
+      // 88 placed decorations stay one batch: sources hidden, 88 instances drawn.
+      expect(metrics).toMatchObject({
+        sourceMeshes: 88,
+        visibleSourceMeshes: 0,
+        instances: 88,
+        batches: 1,
+        geometries: 1,
+        materials: 1,
+        contextLost: false,
+      });
+      // A single instanced draw call (plus the optional scene background pass).
+      expect(metrics.calls).toBeGreaterThanOrEqual(1);
+      expect(metrics.calls).toBeLessThanOrEqual(2);
       if (kind === 'oak') {
         const overview = await page.evaluate(() => {
           const mini = (window as any)._mini;

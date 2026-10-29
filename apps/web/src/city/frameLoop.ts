@@ -4,6 +4,8 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
+import { createAdaptivePixelRatioController } from '../rendering/adaptivePixelRatio';
+import { createLabelUpdateGate } from '../rendering/labelUpdateCadence';
 
 type NpcEntity = Npc;
 
@@ -69,25 +71,32 @@ export function createFrameLoop(options: FrameLoopOptions) {
   // never sees the shader-compilation freeze. Held ticks still advance
   // lastFrameTime, so the delta stays smooth on release (it is clamped anyway).
   let renderHeld = false;
+  let adaptivePixelRatio: ReturnType<typeof createAdaptivePixelRatioController> | null = null;
+  let pendingPixelRatio: number | null = null;
+  const shouldUpdateLabels = createLabelUpdateGate();
 
-  function updateLabels() {
-    const firstPerson = options.getFirstPersonController?.() ?? null;
+  function projectLabels(camera: THREE.Camera, firstPersonActive: boolean) {
     updateCityLabels({
-      camera: options.getCamera(),
+      camera,
       buildings: options.getBuildings(),
       residences: options.getResidences(),
       isStoryLocked: options.isStoryLockedBuilding,
       worldPosition: options.getLabelWorldPosition(),
-      firstPersonActive: firstPerson?.isActive() ?? false,
+      firstPersonActive,
     });
   }
 
-    let firstRenderFired = false;
+  function updateLabels() {
+    projectLabels(options.getCamera(), options.getFirstPersonController?.()?.isActive() ?? false);
+  }
+
+  let firstRenderFired = false;
 
   function loop() {
     animationFrame = requestAnimationFrame(loop);
     const now = performance.now();
-    const delta = Math.min((now - options.getLastFrameTime()) / 1000, 0.05);
+    const frameMs = now - options.getLastFrameTime();
+    const delta = Math.min(frameMs / 1000, 0.05);
     options.setLastFrameTime(now);
     if (renderHeld) return;
     if (!firstRenderFired) {
@@ -123,19 +132,41 @@ export function createFrameLoop(options: FrameLoopOptions) {
       if (distanceSquared <= 6 ** 2) void options.getSceneInterestPointController()?.interact('west-beach');
       else options.getSceneInterestPointController()?.armBeachEncounter();
     }
-    updateLabels();
     const renderer = options.getRenderer();
     // 原神启动页全屏期间：跳过城市渲染（overlay 不透明盖满画布，城市那
     // 一遍是纯浪费，软渲设备省下一半帧成本），只渲染 overlay 场景。
     const genshin = options.getGenshinLaunchOverlay?.();
     if (genshin?.isActive()) {
+      adaptivePixelRatio?.reset();
       genshin.render(renderer);
       return;
     }
-    if (options.isFullscreenCinematicVisible?.()) return;
+    if (options.isFullscreenCinematicVisible?.() || document.visibilityState !== 'visible') {
+      adaptivePixelRatio?.reset();
+      return;
+    }
+    const labelCamera = options.getCamera();
+    const firstPersonActive = firstPerson?.isActive() ?? false;
+    if (shouldUpdateLabels(now, {
+      camera: labelCamera,
+      firstPersonActive,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    })) projectLabels(labelCamera, firstPersonActive);
+    if (pendingPixelRatio !== null) {
+      renderer.setPixelRatio(pendingPixelRatio);
+      pendingPixelRatio = null;
+    }
+    const renderStartedAt = performance.now();
     renderer.render(options.getScene(), options.getCamera());
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);
+    const renderMs = performance.now() - renderStartedAt;
+    adaptivePixelRatio ??= createAdaptivePixelRatioController({ initialRatio: renderer.getPixelRatio() });
+    // Frame delta carries vsync/panel cadence; pass the render cost too so a
+    // 30 Hz display (33 ms frames, 5 ms renders) never sacrifices resolution.
+    const nextRatio = adaptivePixelRatio.sample(frameMs, renderMs);
+    if (nextRatio !== null) pendingPixelRatio = nextRatio;
     const mapController = options.getMapController();
     if (mapController?.isOpen()) mapController.updateMarker();
   }

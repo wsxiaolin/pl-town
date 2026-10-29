@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import waterNormalsUrl from '../assets/textures/waternormals.jpg';
+import { createReflectionRefreshGate } from './reflectionRenderCadence';
 
 export type AnimatedWaterConfig = {
   sunDirection?: THREE.Vector3;
@@ -233,6 +234,12 @@ export function createAnimatedWaterSurface(
   });
   water.renderOrder = config.renderOrder ?? 3;
   water.castShadow = false;
+  const renderReflection = water.onBeforeRender;
+  const shouldRefreshReflection = createReflectionRefreshGate();
+  water.onBeforeRender = (renderer, scene, camera, renderedGeometry, renderedMaterial, group) => {
+    if (!shouldRefreshReflection(performance.now(), camera)) return;
+    renderReflection(renderer, scene, camera, renderedGeometry, renderedMaterial, group);
+  };
   const material = water.material as THREE.ShaderMaterial;
   if (config.size !== undefined) material.uniforms['size']!.value = config.size;
   if ((config.alpha ?? 1) < 1) material.transparent = true;

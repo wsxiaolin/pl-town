@@ -13,7 +13,7 @@ import { createYearTownDecor } from '../rendering/terrain/yearTownDecor';
 import { createYearTownGround } from '../rendering/terrain/yearTownGround';
 import { createYearTownUrbanLife } from '../rendering/terrain/yearTownUrbanLife';
 import { createCityGround } from '../rendering/terrain/cityGround';
-import { batchStaticMeshes } from '../rendering/staticMeshBatcher';
+import { batchRetainedStaticMeshes, batchStaticMeshes, type RetainedStaticMeshBatch } from '../rendering/staticMeshBatcher';
 import { addRealBuildingModels } from '../rendering/realBuildingModels';
 import { updateKomorebiClockworks } from '../rendering/komorebiClockworks';
 import { addEchoObservatoryArea } from '../rendering/echoObservatoryArea';
@@ -199,9 +199,23 @@ export function assembleCityWorld(options: {
   // 生命周期对齐 yearTownTransit：update 挂 worldDecorations 帧链，dispose 入 terrain 清理。
   const yearTownDecor = createYearTownDecor({ scene, buildings: options.buildings });
   const yearTownUrbanLife = createYearTownUrbanLife({ scene });
+  let echoObservatoryBatch: RetainedStaticMeshBatch | null = null;
   addEchoObservatoryArea({
     scene,
     makeMaterial: (parameters) => resources.material({ kind: 'echo-observatory', ...parameters }, () => graphics.mesh.stdMat(parameters)),
+    // Batches stay siblings of the four groups, so obstacle bounds, interior
+    // walk bounds and the narrative raycast targets keep working unchanged.
+    batch: (roots) => {
+      echoObservatoryBatch = batchRetainedStaticMeshes(scene, roots, resources, {
+        trackRootVisibility: true,
+        // 室内屋顶、天花板与 cabin 遮挡体由 echoStoryController.setInteriorView
+        // 逐网格切换 visible，必须保持未合批，否则批次实例会在室内视角继续绘制。
+        excludeMesh: (mesh) => mesh.userData.echoInteriorRoof === true
+          || mesh.userData.echoInteriorCeiling === true
+          || mesh.userData.echoCabinCameraOccluder === true,
+      });
+      return echoObservatoryBatch;
+    },
   }).forEach((group) => options.roadNavigation.registerObstacleGroup(group));
   options.roadNavigation.cacheBuildingBoxes();
   worldDecorations.addDecorations();
@@ -271,6 +285,8 @@ export function assembleCityWorld(options: {
     buildingLabelController,
     sceneInterestPoints,
     raycastBuildingGroups,
+    /** Retained batch over the echo observatory and Linche's home/interior. */
+    echoObservatoryBatch: () => echoObservatoryBatch,
     terrain: {
       dispose() {
         mountainTerrain.dispose();
@@ -282,6 +298,8 @@ export function assembleCityWorld(options: {
         yearTownTransit.dispose();
         yearTownDecor.dispose();
         yearTownUrbanLife.dispose();
+        echoObservatoryBatch?.dispose();
+        echoObservatoryBatch = null;
       },
     },
   };

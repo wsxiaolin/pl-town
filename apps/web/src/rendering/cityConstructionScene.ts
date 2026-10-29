@@ -7,6 +7,7 @@ import { collectDefaultDecorations } from '../city/cityConstructionLayout';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { ResourcePool } from '../core/ResourcePool';
 import { createConstructionDecorations } from './constructionDecorations';
+import { batchRetainedStaticMeshes, type RetainedStaticMeshBatch } from './staticMeshBatcher';
 import type { MeshHelpers } from './meshFactory';
 
 type Kind = 'oak' | 'pine' | 'cherry' | 'lamp' | 'bench' | 'flowers';
@@ -31,10 +32,12 @@ export function createCityConstructionScene(options: {
   root.name = 'city-construction';
   options.scene.add(root);
   const hidden = new Map<BuildingEntity, { children: THREE.Object3D[]; labelY?: number; body?: THREE.Mesh }>();
-  // Governance snapshots add, remove and replace individual plots. The retained
-  // static batcher fixes instance capacity at creation and exposes only visibility
-  // toggles, so keep per-plot groups while sharing resources until scene disposal.
+  // Governance snapshots add, remove and replace individual plots. Retained
+  // batches are rebuilt only when the set of visuals changes, so steady frames
+  // draw each decoration kind once while per-plot groups keep their state.
   const visuals = new Map<string, Visual>();
+  let decorationBatch: RetainedStaticMeshBatch | null = null;
+  let decorationBatchDirty = true;
   const detachedPlots = new Map<THREE.Object3D, THREE.Object3D>();
   const resources = new ResourcePool();
   const makeDecoration = createConstructionDecorations(resources, options.makeMaterial);
@@ -53,8 +56,30 @@ export function createCityConstructionScene(options: {
   let night = options.getIsNight();
 
   function release(visual: Visual) {
+    // Retained batches keep source meshes hidden; restoring visibility here
+    // keeps a detail mesh renderable for the frame between detach and rebuild.
+    visual.root.traverse((object) => { if (object instanceof THREE.Mesh) object.visible = true; });
     // Geometry/materials are shared across plots and live until scene disposal.
     visual.root.removeFromParent();
+  }
+
+  function rebuildDecorationBatch() {
+    if (!decorationBatchDirty || disposed) return;
+    decorationBatchDirty = false;
+    const previous = decorationBatch;
+    // Build the replacement before disposing the old one: a throw here must not
+    // leave every decoration either unbatched or permanently hidden.
+    try {
+      const roots = [...visuals.entries()].map(([key, visual]) => ({ key, root: visual.root }));
+      // Batches hang under `city-construction` so they share its lifetime and
+      // stay distinguishable from the rest of the city's retained batches.
+      decorationBatch = batchRetainedStaticMeshes(options.scene, roots, resources, { parent: root });
+    } catch (error) {
+      decorationBatch = previous;
+      decorationBatchDirty = true;
+      throw error;
+    }
+    previous?.dispose();
   }
 
   function makeVisual(item: Item): Visual {
@@ -208,7 +233,7 @@ export function createCityConstructionScene(options: {
       }
       const wanted = new Set(items.map((item) => item.key));
       for (const [key, visual] of visuals) {
-        if (!wanted.has(key)) { release(visual); visuals.delete(key); }
+        if (!wanted.has(key)) { release(visual); visuals.delete(key); decorationBatchDirty = true; }
       }
       for (const item of items) {
         if (!Number.isFinite(item.x) || !Number.isFinite(item.z)) continue;
@@ -217,7 +242,9 @@ export function createCityConstructionScene(options: {
         if (existing?.signature === JSON.stringify(item)) continue;
         if (existing) release(existing);
         visuals.set(item.key, makeVisual(item));
+        decorationBatchDirty = true;
       }
+      rebuildDecorationBatch();
     }
     updateLighting();
     if (changed) {
@@ -239,6 +266,8 @@ export function createCityConstructionScene(options: {
       if (disposed) return;
       disposed = true;
       unsubscribe();
+      decorationBatch?.dispose();
+      decorationBatch = null;
       visuals.forEach(release);
       visuals.clear();
       lights.forEach((light) => light.dispose());

@@ -247,7 +247,11 @@ test('weather debug API updates the visible weather state', async ({ page }) => 
 test('server weather messages update the visible weather state', async ({ page }) => {
   stubNewsstandWebSocket(page, 'weather-network-tester', 'rain');
   await waitForCityReady(page, 'weather-network-tester');
-  await expect.poll(() => page.locator('body').getAttribute('data-weather')).toBe('rain');
+  // The weather applied from the hello/world.weather frames lands on the boot
+  // gate release; under soft-GL CI the release can trail the ready signal, so
+  // give it the same 15s budget as the sky/fog assertion below instead of the
+  // 5s default poll timeout.
+  await expect.poll(() => page.locator('body').getAttribute('data-weather'), { timeout: 15_000 }).toBe('rain');
   await expect(page.locator('#weatherOverlay')).toBeVisible();
   // Rain ramps in on the frame loop: the sky swaps to the overcast color and
   // the fog pulls in to the rain distance (lerp endpoint far=215).
