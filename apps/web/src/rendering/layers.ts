@@ -4,7 +4,7 @@ export const SURFACE_Y = Object.freeze({
   northDistrict: 0.026,
   plaza: 0.036,
   landscape: 0.04,
-  cityGroundDetail: 0.052,
+  cityGroundDetail: 0.054,
   buildingPlot: 0.036,
   road: 0.065,
   roadSurface: 0.10,

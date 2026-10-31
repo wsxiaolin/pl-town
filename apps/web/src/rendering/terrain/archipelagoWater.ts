@@ -72,10 +72,11 @@ type SheetSpec = {
   minZ: number;
   maxZ: number;
   columns: number;
+  rowStep?: number;
 };
 
 function buildSheet(spec: SheetSpec): THREE.BufferGeometry {
-  const rows = Math.round((spec.maxZ - spec.minZ) / ROW_STEP);
+  const rows = Math.round((spec.maxZ - spec.minZ) / (spec.rowStep ?? ROW_STEP));
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -130,6 +131,7 @@ export function createArchipelagoWaterGeometry(): THREE.BufferGeometry {
       minZ: SOUTH_BAND_MIN_Z,
       maxZ: SOUTH_SEA.bandZMax,
       columns: 28,
+      rowStep: 1,
     }),
     // 南带西瓣：回响镇以西、西南陆缘凸起以南的过渡水域（z 150..168，
     // 168 行与东瓣共享 x=−73.8 拼接点，行距同 2u → 顶点重合、水密）。
