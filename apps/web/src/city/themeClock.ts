@@ -66,9 +66,9 @@ export function createThemeClock(options: ThemeClockOptions) {
       options.setIsNight(night);
       document.body.classList.toggle('night', night);
       document.body.classList.toggle('day', !night);
-      applyTheme(night, false);
-      // 首次同步只是把启动占位状态对齐到当前时刻：地图水合指纹已经使用同步
-      // 后的昼夜，此时清库会白白丢掉上一会话的夜间图纸。只有运行期切换才失效。
+      // 首次同步只是把启动占位状态对齐到当前时刻，立即落位（不做 0.72s 渐变），
+      // 避免预加载在过渡中途截出半程画面；此后运行期切换才走渐变并失效地图。
+      applyTheme(night, !syncedOnce);
       if (syncedOnce) setTimeout(() => options.invalidateMapShot(), 1000);
       if (night) {
         const s = options.getStats();
