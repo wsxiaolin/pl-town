@@ -456,7 +456,7 @@ function openNpcDialog(npc: Npc) {
 }
 
 function init() {
-  graphics.weather.set(graphics.weather.get());
+  themeClock.resetSession(); graphics.weather.set(graphics.weather.get());
   renderer = createCityWebRenderer();
   cameraController = createCameraController({
     getCamera: () => camera,
@@ -648,6 +648,7 @@ function init() {
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isBuildingUnavailable: availability.isBuildingUnavailable,
+    getIsNight: () => isNight,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     movePlayerTo: (target) => playerController?.moveTo(target),

@@ -4,6 +4,7 @@ import {
   RENDER_SETTINGS_KEY,
   type RenderSettings,
 } from '../../rendering/createRenderer';
+import { clampResolutionForViewport } from '../../rendering/renderResolutionPolicy';
 
 type RenderPresetName = 'saving' | 'balanced' | 'high' | 'ultra';
 
@@ -49,14 +50,16 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
     window.innerWidth,
     window.innerHeight,
   );
+  // 移动端可调上限经视口钳制（与启动渲染档、自适应起点同一口径），桌面为设备上限。
+  const maxSelectable = clampResolutionForViewport(resolutionLimit, window.innerWidth);
   const normalizedMaxAnisotropy = Math.max(1, maxAnisotropy);
   const supportedAnisotropy = selectSupportedAnisotropy(16, normalizedMaxAnisotropy);
   const settings = readRenderSettings();
 
   resolution.min = '0.5';
-  resolution.max = String(resolutionLimit);
+  resolution.max = String(maxSelectable);
   resolution.step = '0.25';
-  resolution.value = String(Math.min(settings.resolution, resolutionLimit));
+  resolution.value = String(Math.min(settings.resolution, maxSelectable));
   antialias.checked = settings.antialias;
   anisotropy.value = String(selectSupportedAnisotropy(settings.anisotropy, normalizedMaxAnisotropy));
   shadows.checked = settings.shadows;
@@ -71,17 +74,20 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
   panel.querySelector<HTMLElement>('#renderDeviceDpr')!.textContent = `${formatMetric(window.devicePixelRatio || 1)}x`;
   panel.querySelector<HTMLElement>('#renderDeviceTexture')!.textContent = `${maxTextureSize}px`;
   panel.querySelector<HTMLElement>('#renderDeviceAnisotropy')!.textContent = `${supportedAnisotropy}x`;
-  panel.querySelector<HTMLElement>('#renderResolutionMaxLabel')!.textContent = `${formatMetric(resolutionLimit)}x 设备上限`;
+  panel.querySelector<HTMLElement>('#renderResolutionMaxLabel')!.textContent = `${formatMetric(maxSelectable)}x 可用上限`;
   panel.querySelector<HTMLElement>('#renderDeviceHint')!.textContent = getCapabilityHint(
     resolutionLimit,
     supportedAnisotropy,
   );
 
+  // 移动端预设天花板：手机上「极致」=设备上限会建议到 4x（16 倍像素量），
+  // 是明确的陷阱档。预设建议值一律先过视口钳制。
+  const presetCeiling = maxSelectable;
   const presets: Record<RenderPresetName, Omit<RenderSettings, 'exposure'>> = {
-    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false, textureRendering: false, waterRendering: false },
-    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: false },
-    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: true },
-    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true, waterRendering: true },
+    saving: { resolution: Math.min(0.75, presetCeiling), antialias: false, anisotropy: 1, shadows: false, textureRendering: false, waterRendering: false },
+    balanced: { resolution: Math.min(1.5, presetCeiling), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: false },
+    high: { resolution: Math.min(2.5, presetCeiling), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: true },
+    ultra: { resolution: presetCeiling, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true, waterRendering: true },
   };
 
   const currentValues = (): Omit<RenderSettings, 'exposure'> => ({
