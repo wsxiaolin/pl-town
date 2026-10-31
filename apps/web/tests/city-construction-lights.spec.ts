@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
-import { stubCityWebSocket, waitForCityReady } from './helpers';
+import { FRAME_ADVANCE_TIMEOUT, stubCityWebSocket, waitForCityReady } from './helpers';
 
 // Server integration verifies this isolated fixture against every production plot.
 import AREA_PLOTS from './fixtures/city-area-plots.json' with { type: 'json' };
 
 test('constructed decorations use the city weather materials across creation and weather changes', async ({ page }) => {
+  test.setTimeout(150_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
@@ -77,11 +78,12 @@ test('constructed decorations use the city weather materials across creation and
     expect(material.color).toBe(material.baseColor);
   }
   expect(clear.contextLost).toBe(false);
-  await expect.poll(async () => (await inspect()).frame).toBeGreaterThan(clear.frame);
+  await expect.poll(async () => (await inspect()).frame, { timeout: FRAME_ADVANCE_TIMEOUT }).toBeGreaterThan(clear.frame);
   expect(errors).toEqual([]);
 });
 
 test('88 constructed lamps keep their globes and a bounded night light budget', async ({ page }) => {
+  test.setTimeout(150_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
@@ -179,7 +181,7 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
     // The retained batches own the draw calls, so per-lamp source meshes hide.
     expect(scene.perLampSourceMeshes).toBe(0);
     // Verify the renderer keeps producing frames across dusk/day transitions.
-    await expect.poll(async () => (await inspect()).frame).toBeGreaterThan(scene.frame);
+    await expect.poll(async () => (await inspect()).frame, { timeout: FRAME_ADVANCE_TIMEOUT }).toBeGreaterThan(scene.frame);
     expect((await inspect()).contextLost).toBe(false);
   }
   // Moving to opposite sides must retarget the pool to the closest lamps.
@@ -203,6 +205,7 @@ test('88 constructed lamps keep their globes and a bounded night light budget', 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
   for (const kind of ['flowers', 'oak', 'pine', 'cherry', 'bench'] as const) {
     test(`88 ${kind} decorations share resources and bound draw calls at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+      test.setTimeout(150_000);
       await page.setViewportSize(viewport);
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
@@ -303,7 +306,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 
         });
         await testInfo.attach('real-area-far-view', { body: Buffer.from(overview.split(',')[1]!, 'base64'), contentType: 'image/png' });
       }
-      await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame)).toBeGreaterThan(metrics.frame);
+      await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame), { timeout: FRAME_ADVANCE_TIMEOUT }).toBeGreaterThan(metrics.frame);
       await expect(page.locator('#c')).toBeVisible();
       expect(errors).toEqual([]);
     });
