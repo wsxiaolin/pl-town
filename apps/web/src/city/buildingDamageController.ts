@@ -74,12 +74,17 @@ export function createBuildingDamageController(options: BuildingDamageController
   }
 
   function applyPersisted(): void {
+    let availabilityChanged = false;
     allBuildings().forEach(item => {
+      const wasDestroyed = isBuildingDestroyed(item);
       if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
+      if (isBuildingDestroyed(item) !== wasDestroyed) availabilityChanged = true;
     });
-    // Model loading also replays this state during construction broadcasts;
-    // only explicit damage/repair should request a fresh visible map image.
-    options.invalidateMap('availability');
+    // Replaying the saved state (initial boot, model reload after construction)
+    // usually leaves availability as it already was. Only a real availability
+    // change should invalidate the atlas: clearing on every replay would wipe
+    // the just-hydrated cross-session cache during startup.
+    if (availabilityChanged) options.invalidateMap('availability');
   }
 
   return {

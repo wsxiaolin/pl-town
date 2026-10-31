@@ -90,7 +90,10 @@ test('residence visual batches follow destroy, restore, and persisted state', ()
   assert.deepEqual(recoveredVisibility, [['residence:test', false]]);
 });
 
-function damageFixture(savedIds: string[] = []) {
+function damageFixture(
+  savedIds: string[] = [],
+  invalidateMap: (reason: 'availability' | 'scene') => void = () => undefined,
+) {
   const values = new Map<string, string>();
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
@@ -106,12 +109,22 @@ function damageFixture(savedIds: string[] = []) {
   const controller = createBuildingDamageController({
     getBuildings: () => buildings,
     getResidences: () => [],
-    invalidateMap: () => undefined,
+    invalidateMap,
     refreshResidenceLabels: () => undefined,
     storage,
   });
   return { storage, controller, research: buildings[0]!, commons: buildings[1]! };
 }
+
+test('applyPersisted only invalidates the map when availability actually changes', () => {
+  const invalidations: Array<'availability' | 'scene'> = [];
+  const { controller } = damageFixture(['research'], (reason) => invalidations.push(reason));
+
+  controller.applyPersisted();
+  assert.deepEqual(invalidations, ['availability'], 'the first replay applies saved damage');
+  controller.applyPersisted();
+  assert.deepEqual(invalidations, ['availability'], 'a no-op replay must preserve the atlas cache');
+});
 
 function hideForConstruction(building: DamageableBuilding): () => void {
   building.group.userData.constructionPending = true;

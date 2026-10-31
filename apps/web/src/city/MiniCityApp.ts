@@ -573,6 +573,7 @@ function init() {
     getCamera: () => camera,
     getBuildingContent: (buildingId) => BUILDING_CONTENT[buildingId],
     isBuildingUnavailable: availability.isBuildingUnavailable,
+    getIsNight: () => isNight,
     getBuildingRoadEntry: (position) => roadNavigation.buildingRoadEntry(position),
     setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
     movePlayerTo: (target) => playerController?.moveTo(target),
