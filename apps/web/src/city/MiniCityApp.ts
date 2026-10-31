@@ -456,7 +456,7 @@ function openNpcDialog(npc: Npc) {
 }
 
 function init() {
-  graphics.weather.set(graphics.weather.get());
+  themeClock.resetSession(); graphics.weather.set(graphics.weather.get());
   renderer = createCityWebRenderer();
   cameraController = createCameraController({
     getCamera: () => camera,

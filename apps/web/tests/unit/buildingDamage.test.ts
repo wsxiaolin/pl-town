@@ -116,14 +116,23 @@ function damageFixture(
   return { storage, controller, research: buildings[0]!, commons: buildings[1]! };
 }
 
-test('applyPersisted only invalidates the map when availability actually changes', () => {
+test('applyPersisted preserves the atlas cache when replay reaches the saved state', () => {
   const invalidations: Array<'availability' | 'scene'> = [];
   const { controller } = damageFixture(['research'], (reason) => invalidations.push(reason));
 
   controller.applyPersisted();
-  assert.deepEqual(invalidations, ['availability'], 'the first replay applies saved damage');
   controller.applyPersisted();
-  assert.deepEqual(invalidations, ['availability'], 'a no-op replay must preserve the atlas cache');
+  assert.deepEqual(invalidations, [], 'replaying saved damage is not an availability change');
+});
+
+test('applyPersisted invalidates the map when replay cannot reach the saved state', () => {
+  const invalidations: Array<'availability' | 'scene'> = [];
+  const { controller, research } = damageFixture(['research'], (reason) => invalidations.push(reason));
+  const completeConstruction = hideForConstruction(research);
+
+  controller.applyPersisted();
+  assert.deepEqual(invalidations, ['availability']);
+  completeConstruction();
 });
 
 function hideForConstruction(building: DamageableBuilding): () => void {
