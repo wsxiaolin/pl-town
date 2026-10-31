@@ -366,7 +366,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2023-pilot', name:'老引水', role:'回响镇 · 南码头引水员', core:false, spawnChance:1,
     behavior:'field', workHours:[5,15],
-    head:0xC99973, body:0x4A5A4A, home:[72,300], work:[72,300], patrolRadius:0,
+    head:0xC99973, body:0x4A5A4A, home:[15,412], work:[15,412], patrolRadius:0,
     dialog:[
       { text:'「从东滩街一直往南，过了海堤就是南码头。船要进港，都得听我引——这片水道底下暗礁的脾气，我闭着眼都数得出来。」', options:[
         { text:'引水难吗？', next:1 },
@@ -553,7 +553,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2026-stallkeeper', name:'炭火老周', role:'星港 · 夜市摊主', core:false, spawnChance:1,
     behavior:'field', workHours:[17,2],
-    head:0xC68642, body:0x6A4A3A, home:[-182,289], work:[-182,289], patrolRadius:0,
+    head:0xC68642, body:0x6A4A3A, home:[-241,332], work:[-241,332], patrolRadius:0,
     dialog:[
       { text:'「夜市往南，灯最密的那条街谷。我的摊子在最深处——炭火不旺的地方，客人反而不请自来。」', options:[
         { text:'卖什么？', next:1 },
@@ -572,7 +572,7 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   {
     id:'yt2026-raconteur', name:'说书柳先生', role:'星港 · 夜市说书人', core:false, spawnChance:1,
     behavior:'field', workHours:[19,1],
-    head:0xE8C4A0, body:0x3A4A5A, home:[-174,273], work:[-174,273], patrolRadius:0,
+    head:0xE8C4A0, body:0x3A4A5A, home:[-352,341], work:[-352,341], patrolRadius:0,
     dialog:[
       { text:'「今晚开讲得早——你来得巧，正说到环线通车那一段。找个位置站好，故事不要钱，掌声随缘。」', options:[
         { text:'讲的什么？', next:1 },

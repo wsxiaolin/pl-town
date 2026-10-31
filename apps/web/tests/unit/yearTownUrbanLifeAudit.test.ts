@@ -27,9 +27,11 @@ test('生活道具不落在车站月台内', () => {
   const conflicts: string[] = [];
   for (const prop of YEAR_TOWN_URBAN_LIFE) {
     for (const station of TRANSIT_STATIONS) {
-      const distance = Math.hypot(prop.x - station.x, prop.z - station.z);
+      // 月台场的中心是 platformX/Z（轨道泊位 x/z 与月台中心相差 2.2u，
+      // CodeRabbit：按泊位中心查会漏掉月台场内的道具）。
+      const distance = Math.hypot(prop.x - station.platformX, prop.z - station.platformZ);
       if (distance < 7.5) {
-        conflicts.push(`${prop.kind} (${prop.x},${prop.z}) 距车站 ${station.id} ${distance.toFixed(2)}u，侵入月台`);
+        conflicts.push(`${prop.kind} (${prop.x},${prop.z}) 距车站 ${station.id} 月台 ${distance.toFixed(2)}u，侵入月台`);
       }
     }
   }

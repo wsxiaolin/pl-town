@@ -68,7 +68,7 @@ export const URBAN_LIFE_STARPORT: readonly UrbanLifeSpec[] = [
   { districtId: 'island-starport', kind: 'stall', x: -293, z: 333.2, tint: 0x5376b3 },
   { districtId: 'island-starport', kind: 'stall', x: -281, z: 333.2, tint: 0x9c6a9a },
   { districtId: 'island-starport', kind: 'stall', x: -271, z: 333.2, tint: 0x46958e },
-  { districtId: 'island-starport', kind: 'stall', x: -249, z: 333.2, tint: 0xc07f57 },
+  { districtId: 'island-starport', kind: 'stall', x: -243, z: 333.2, tint: 0xc07f57 },
   { districtId: 'island-starport', kind: 'stall', x: -227, z: 333.2, tint: 0x6d86b8 },
   { districtId: 'island-starport', kind: 'stall', x: -210, z: 333.2, tint: 0x8f7050 },
   { districtId: 'island-starport', kind: 'stall', x: -193, z: 333.2, tint: 0x5a9d9a },

@@ -79,7 +79,7 @@
 ```bash
 cd apps/web
 npx tsc -p tsconfig.test-run.json
-node run-unit-tests.mjs --only=yearTownPlacementAudit,yearTownBlockAudit,yearTownTransitAudit,yearTownNeighborhoodAudit,yearTownNpcAudit
+node run-unit-tests.mjs --only=yearTownPlacementAudit,yearTownBlockAudit,yearTownTransitAudit,yearTownNeighborhoodAudit,yearTownNpcAudit,yearTownUrbanLifeAudit
 ```
 
 全绿后由主 agent 跑生成器（`node scripts/generate_town_buildings.mjs`，离线模式）刷新镜像，再全量 `typecheck/build/test:domain/test:server` + CI 八分片 + 真机视检。

@@ -78,9 +78,10 @@ export function createYearTownUrbanLife(options: { scene: THREE.Scene }): { obje
       c('water', palette.water, 1.1, 1.35, 0.16, 0, 2.25, 0);
       emit('water', 0xa4d4da, new THREE.CylinderGeometry(0.08, 0.18, 1.3, 8), 0, 2.95, 0);
     }
+    // 坐标约定：oldport 条目存最终世界坐标（历史草案偏移已在数据层归一化）；
+    // starport 条目存草案坐标，渲染时按既定偏移映射（x−70, z+6）。
     const x = spec.x + (spec.districtId === 'island-starport' ? -70 : 0);
-    const z = spec.z + (spec.districtId === 'island-starport' ? 6 : 40)
-      - (spec.districtId === 'island-oldport' && spec.z >= 333 ? 38 : 0);
+    const z = spec.z + (spec.districtId === 'island-starport' ? 6 : 0);
     g.position.set(x, terrainHeight(x, z), z);
     g.rotation.y = spec.rotY ?? 0;
     g.updateMatrixWorld(true);
