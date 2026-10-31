@@ -12,6 +12,10 @@
 html, body {
   width: 100%; height: 100%;
   overflow: hidden;
+  /* Pinch/double-tap page zoom deforms the app chrome; pan-x/pan-y keeps
+     scrolling working while the browser-level zoom gestures stay off. The
+     canvas opts out entirely via its own touch-action: none. */
+  touch-action: pan-x pan-y;
   font-family: -apple-system, 'Inter', 'Helvetica Neue', Arial, sans-serif;
   background: #F9F8F6;
 }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { FRAME_ADVANCE_TIMEOUT } from './helpers';
 
 // CPU-only runners boot the city through a software-GL shader precompile that
 // can eat a minute before `is-ready` even fires — the default 60s test timeout
@@ -59,8 +60,11 @@ test('the top-bar toggle enters first person: perspective camera, hidden avatar,
 
   await page.locator('#walkToggle').click({ force: true });
 
-  await expect(page.locator('body')).toHaveClass(/first-person-active/);
-  await expect(page.locator('#fpsCrosshair')).toHaveCSS('opacity', '1');
+  // The crosshair fades in via an opacity transition after the class flip;
+  // a stalled soft-GL main thread can hold opacity at 0 past the 5 s default
+  // (hard-fail on #267's shard 4). Both assertions ride the same entry path.
+  await expect(page.locator('body')).toHaveClass(/first-person-active/, { timeout: FRAME_ADVANCE_TIMEOUT });
+  await expect(page.locator('#fpsCrosshair')).toHaveCSS('opacity', '1', { timeout: FRAME_ADVANCE_TIMEOUT });
   const entered = await page.evaluate(() => {
     const mini = (window as any)._mini;
     const camera = mini.firstPerson?.getActiveCamera?.() as { isPerspectiveCamera?: boolean } | null;
