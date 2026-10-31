@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LANPING_RANGE } from '../../src/city/data/terrain/range-lanping';
-import { CHENXI_RIVER, CHENXI_SEA_LEVEL, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../src/city/data/terrain/river-chenxi';
+import { CHENXI_RIVER, CHENXI_MOUTH_LEVEL, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../src/city/data/terrain/river-chenxi';
 import { MINGLAN_ISLES } from '../../src/city/data/terrain/sea-minglan';
 import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
@@ -205,11 +205,12 @@ test('晨溪连续水面共享地形采样、海内沉没、北步道保持干�
   }
 });
 
-test('晨溪河口与海面共用同一水位', () => {
+test('晨溪河口低于海面并保持水位间距', () => {
   const mouth = RIVER_SAMPLES[RIVER_SAMPLES.length - 1]!;
-  assert.equal(CHENXI_SEA_LEVEL, SURFACE_Y.water, '河口数据与渲染水面层标高漂移');
-  assert.ok(Math.abs(mouth.waterY - CHENXI_SEA_LEVEL) < 1e-9, `河口水位 ${mouth.waterY} 未对齐海面 ${CHENXI_SEA_LEVEL}`);
-  assert.ok(Math.abs(riverWaterYAt(mouth.x, mouth.z)! - CHENXI_SEA_LEVEL) < 1e-9, '河口采样水位未对齐海面');
+  assert.equal(SURFACE_Y.water, 0.06);
+  assert.ok(SURFACE_Y.water - CHENXI_MOUTH_LEVEL >= 0.004, '河口需低于海面以避免近共面闪烁');
+  assert.equal(mouth.waterY, CHENXI_MOUTH_LEVEL);
+  assert.equal(riverWaterYAt(mouth.x, mouth.z), CHENXI_MOUTH_LEVEL);
 });
 
 test('明澜岛屿/岬角与西海滩既有道具保持 ≥12 间距', () => {
