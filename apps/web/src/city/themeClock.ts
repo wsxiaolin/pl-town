@@ -56,6 +56,7 @@ export function createThemeClock(options: ThemeClockOptions) {
       : new THREE.Color(night ? palette.NIGHT_BG : palette.DAY_BG);
   }
 
+  let syncedOnce = false;
   function syncTimeAndTheme() {
     const gameClock = townGameHour();
     options.setGameClock(gameClock);
@@ -66,13 +67,16 @@ export function createThemeClock(options: ThemeClockOptions) {
       document.body.classList.toggle('night', night);
       document.body.classList.toggle('day', !night);
       applyTheme(night, false);
-      setTimeout(() => options.invalidateMapShot(), 1000);
+      // 首次同步只是把启动占位状态对齐到当前时刻：地图水合指纹已经使用同步
+      // 后的昼夜，此时清库会白白丢掉上一会话的夜间图纸。只有运行期切换才失效。
+      if (syncedOnce) setTimeout(() => options.invalidateMapShot(), 1000);
       if (night) {
         const s = options.getStats();
         s.nightToggles = (s.nightToggles || 0) + 1;
         options.saveStats(s);
       }
     }
+    syncedOnce = true;
     const el = document.getElementById('communityTime');
     if (el) {
       const h = Math.floor(gameClock), m = Math.floor((gameClock - h) * 60);
