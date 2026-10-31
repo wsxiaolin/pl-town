@@ -1,7 +1,8 @@
-// 年份镇主题 NPC（T6R-b4）：每镇 2–3 名迎宾/守镇角色（2019 起源村 1 名），
-// 数据模式复用 city/data/npcs.ts 的 NpcProfile，在 cityWorldAssembly 与
-// NPC_PROFILES 同管道合流（behavior:'field'、home==work、patrolRadius:0 →
-// 定点迎宾；ROAD_COORDS 主城路网不可达 → 永不漂移，主城 NPC 行为不变）。
+// 年份镇主题 NPC（T6R-b4，wave3c 扩编至 28 名）：每镇 3–4 名迎宾/守镇角色
+// （2019 起源村 3 名），数据模式复用 city/data/npcs.ts 的 NpcProfile，在
+// cityWorldAssembly 与 NPC_PROFILES 同管道合流（behavior:'field'、home==work、
+// patrolRadius:0 → 定点迎宾；ROAD_COORDS 主城路网不可达 → 永不漂移，主城
+// NPC 行为不变）。
 //
 // 落位契约（yearTownDecor.ts 头注）：迎宾带/大街两侧，勿占大街对景视廊
 // 与站泊位。坐标随 districtLayout 的运行时建筑布局生成（以所属地标为锚、
@@ -12,7 +13,7 @@
 // （意象化引用，不逐字抄正文；正文由年份镇建筑面板承载）。
 import type { NpcProfile } from '../../npcSystem';
 
-/** 年份镇 NPC 档案（20 名：2019×3，2020/2024/2025/2026×2，2021/2022/2023×3）。 */
+/** 年份镇 NPC 档案（28 名：2019×3，2021/2022/2023/2026×4，2020/2024/2025×3）。 */
 export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
   // ── 2019 起源村 ×3：《管理条例》(2019) → 碑上公约；「高频」装置集合 → 心跳滴答；
   //    南湾泊口 → 摆渡人；千作总目塔 → 塔下计数人 ──
@@ -73,7 +74,8 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2020 启明镇 ×2：养成计划/致新用户 → 学堂向导；恒星的一生 → 观星人 ──
+  // ── 2020 启明镇 ×3：养成计划/致新用户 → 学堂向导；恒星的一生 → 观星人；
+  //    议事厅与站前市集 → 市集管事 ──
   {
     id:'yt2020-guide', name:'晨星向导', role:'启明镇 · 晨星学堂向导', core:false, spawnChance:1,
     behavior:'field', workHours:[8,18],
@@ -110,7 +112,27 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2021 潮声镇 ×3：真·第一聊天室 → 守墙人；三代 → 潮汐记录；四代 → 拾贝人 ──
+  {
+    id:'yt2020-marketwarden', name:'市集管事', role:'启明镇 · 站前市集管事', core:false, spawnChance:1,
+    behavior:'field', workHours:[7,19],
+    head:0xD8B49A, body:0x7A6A55, home:[14,247], work:[14,247], patrolRadius:0,
+    dialog:[
+      { text:'「逛市集？先说好——启明镇的摊子不宰客。这座城是从城门和市政厅长起来的，规矩立得早。」', options:[
+        { text:'有什么好货？', next:1 },
+        { text:'你在管什么？', next:2 },
+        { text:'（随便看看）', next:null },
+      ]},
+      { text:'「早上的鱼、午后的炭、傍晚的糖画，各有时辰。要是拿不准主意，去对街议事厅问一句——那儿的提案板上，连『市集该开到几点』都表决过。」', options:[
+        { text:'真什么都表决？', next:2 },
+        { text:'那就去见识下。', next:null },
+      ]},
+      { text:'「什么都表决。当年『新人要不要发入门手册』就是在这儿吵出来的——后来手册人手一册，新来的再没迷过路。你看，管市集和管城市，是同一门手艺。」', options:[
+        { text:'受教了。', next:null },
+      ]},
+    ],
+  },
+  // ── 2021 潮声镇 ×4：真·第一聊天室 → 守墙人；三代 → 潮汐记录；四代 → 拾贝人；
+  //    鱼市街早市 → 鱼市摊主 ──
   {
     id:'yt2021-wallkeeper', name:'守墙人', role:'潮声镇 · 初代守墙人', core:false, spawnChance:1,
     behavior:'field', workHours:[7,23],
@@ -168,7 +190,27 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2022 盛夏镇 ×3：《管理条例》(新) → 文书；特殊功能大全 → 收藏家；HTML艺术字 → 招牌匠 ──
+  {
+    id:'yt2021-fishmonger', name:'鱼市阿香', role:'潮声镇 · 鱼市摊主', core:false, spawnChance:1,
+    behavior:'field', workHours:[4,12],
+    head:0xE3B7A0, body:0x8A6A55, home:[33,257.5], work:[33,257.5], patrolRadius:0,
+    dialog:[
+      { text:'「赶早的吧？头一网带鱼刚卸，还带着海腥气。晚一步，就只剩别人挑剩的了。」', options:[
+        { text:'来一尾。', next:1 },
+        { text:'每天这么早？', next:2 },
+        { text:'（改天再来）', next:null },
+      ]},
+      { text:'「四点起，五点开市，日头一高就收摊。鱼跟留言一个脾气——都得趁鲜。潮水什么时候涨，鱼什么时候到，比镇公所的钟还准。」', options:[
+        { text:'你也看潮汐表？', next:2 },
+        { text:'听着就新鲜。', next:null },
+      ]},
+      { text:'「不用表。守墙人看墙上的潮，我看水里的潮——都是一代一代传下来的读法。你要真想懂这座镇，先学会等。」', options:[
+        { text:'那我等着。', next:null },
+      ]},
+    ],
+  },
+  // ── 2022 盛夏镇 ×4：《管理条例》(新) → 文书；特殊功能大全 → 收藏家；
+  //    HTML艺术字 → 招牌匠；西馆区 → 馆区司钥 ──
   {
     id:'yt2022-clerk', name:'条例文书', role:'盛夏镇 · 条例文书', core:false, spawnChance:1,
     behavior:'field', workHours:[9,17],
@@ -230,7 +272,27 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2023 回响镇 ×3：科特维酒馆 → 当班酒保；关于我 → 讲故事的人；金月店 → 月饼师傅 ──
+  {
+    id:'yt2022-westcurator', name:'馆区司钥', role:'盛夏镇 · 西馆区管理员', core:false, spawnChance:1,
+    behavior:'field', workHours:[9,18],
+    head:0xC8B89A, body:0x5A6A6A, home:[-33.5,291], work:[-33.5,291], patrolRadius:0,
+    dialog:[
+      { text:'「往西走是西馆区——律法厅、书院、纪念堂都在那一带，庄重得很。我管开馆锁门，也管提醒来客：那一带说话要轻。」', options:[
+        { text:'为什么都要轻？', next:1 },
+        { text:'带我去看看。', next:2 },
+        { text:'（往别处去）', next:null },
+      ]},
+      { text:'「馆里存的东西不怕吵，怕的是敷衍。条文、讲义、名录，都是有人一笔一笔立起来的。脚步放轻，是替写字的人把桌子扶稳。」', options:[
+        { text:'说得郑重。', next:2 },
+        { text:'明白了。', next:null },
+      ]},
+      { text:'「从这往西，过了灯市街就是。傍晚灯柱一亮，整条路像被谁描过一遍——那年立馆的人说，学问也得有个体面的门脸。」', options:[
+        { text:'这就去。', next:null },
+      ]},
+    ],
+  },
+  // ── 2023 回响镇 ×4：科特维酒馆 → 当班酒保；关于我 → 讲故事的人；
+  //    金月店 → 月饼师傅；南码头 → 引水员 ──
   {
     id:'yt2023-barkeep', name:'当班酒保', role:'回响镇 · 科特维酒馆当班酒保', core:false, spawnChance:1,
     behavior:'field', workHours:[18,2],
@@ -301,7 +363,27 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2024 微光镇 ×2：鸽子协会聊天室 → 鸽咖饲养员；死人微活四处游荡 → 夜灯巡夜人 ──
+  {
+    id:'yt2023-pilot', name:'老引水', role:'回响镇 · 南码头引水员', core:false, spawnChance:1,
+    behavior:'field', workHours:[5,15],
+    head:0xC99973, body:0x4A5A4A, home:[72,300], work:[72,300], patrolRadius:0,
+    dialog:[
+      { text:'「从东滩街一直往南，过了海堤就是南码头。船要进港，都得听我引——这片水道底下暗礁的脾气，我闭着眼都数得出来。」', options:[
+        { text:'引水难吗？', next:1 },
+        { text:'南码头什么样？', next:2 },
+        { text:'（不打扰了）', next:null },
+      ]},
+      { text:'「难的不是水，是人。夜里回来的船，船上的人都攥着一年的心事。我把他们一个个引到泊位上，看他们踩上码头那一下——肩膀松了，就到家了。」', options:[
+        { text:'都在等家。', next:2 },
+        { text:'真责任重大。', next:null },
+      ]},
+      { text:'「回响镇嘛，回响回响——喊一嗓子，得有人应。码头上的灯就是应答：你在海上喊，它在岸上亮。干这行三十年，我就信这个。」', options:[
+        { text:'（望向码头的灯）', next:null },
+      ]},
+    ],
+  },
+  // ── 2024 微光镇 ×3：鸽子协会聊天室 → 鸽咖饲养员；死人微活四处游荡 →
+  //    夜灯巡夜人；实验园区 → 门卫 ──
   {
     id:'yt2024-keeper', name:'鸽咖饲养员', role:'微光镇 · 鸽咖饲养员', core:false, spawnChance:1,
     behavior:'field', workHours:[8,20],
@@ -343,7 +425,27 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2025 长风镇 ×2：年度作品公示 → 公展评审员；别看作者名称 → 无名店主 ──
+  {
+    id:'yt2024-gatekeeper', name:'门卫老纪', role:'微光镇 · 实验园区门卫', core:false, spawnChance:1,
+    behavior:'field', workHours:[6,18],
+    head:0xC8A888, body:0x5A6A55, home:[-196,221.5], work:[-196,221.5], patrolRadius:0,
+    dialog:[
+      { text:'「站住——登记？哈哈，逗你的。实验园区南门，白天随便进，晚上别乱闯：玻璃房里通宵亮着，人家在做实验。」', options:[
+        { text:'园里在做啥？', next:1 },
+        { text:'看门无聊吗？', next:2 },
+        { text:'（进园看看）', next:null },
+      ]},
+      { text:'「试对话的、试格子的、试样式的，一间屋一个题目。东西坏得多、成得少——但门卫的活儿就是等。等他们半夜出来，我给他们留门。」', options:[
+        { text:'留门算功劳吗？', next:2 },
+        { text:'真有耐心。', next:null },
+      ]},
+      { text:'「算。去年有间玻璃房连亮了四十天，出来那天小伙子跟我说『成了』——我什么都没干，就门留了四十天。微光镇的道理：灯不灭，就有人接着走。」', options:[
+        { text:'借你吉言。', next:null },
+      ]},
+    ],
+  },
+  // ── 2025 长风镇 ×3：年度作品公示 → 公展评审员；别看作者名称 → 无名店主；
+  //    港区泊位 → 调度员 ──
   {
     id:'yt2025-inspector', name:'公展评审员', role:'长风镇 · 年度公展评审员', core:false, spawnChance:1,
     behavior:'field', workHours:[9,17],
@@ -385,7 +487,27 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
     ],
   },
-  // ── 2026 星港 ×2：API事件纪念碑 → 守碑员；物实之辉周刊 → 排字工 ──
+  {
+    id:'yt2025-dispatcher', name:'调度阿汀', role:'长风镇 · 港区调度员', core:false, spawnChance:1,
+    behavior:'field', workHours:[8,20],
+    head:0xE0B890, body:0x4A5A7A, home:[-258,275], work:[-258,275], patrolRadius:0,
+    dialog:[
+      { text:'「西边泊位后场归我排班。哪条船几点进、几点装、几点走，板上一笔一笔写着——长风镇的风大，排班得比风还稳。」', options:[
+        { text:'今天什么班？', next:1 },
+        { text:'风也会捣乱？', next:2 },
+        { text:'（看排班板）', next:null },
+      ]},
+      { text:'「会。旗子一歪我就知道要变天——所以你看到泊位后场那面风旗了吗？它比天气预报诚实。旗子往哪倒，船就往哪让。」', options:[
+        { text:'船也听旗的？', next:2 },
+        { text:'真厉害。', next:null },
+      ]},
+      { text:'「不听旗的船，都停在礁石上了。这行干久了就明白：跑得快不算本事，回得来才算。跟你们写东西的一个道理——发得快不算，留得住才算。」', options:[
+        { text:'（记下了）', next:null },
+      ]},
+    ],
+  },
+  // ── 2026 星港 ×4：API事件纪念碑 → 守碑员；物实之辉周刊 → 排字工；
+  //    夜市街 → 摊主与说书人 ──
   {
     id:'yt2026-monumentkeeper', name:'守碑员', role:'星港 · 守碑员', core:false, spawnChance:1,
     behavior:'field', workHours:[0,24],
@@ -425,6 +547,44 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       ]},
       { text:'「（他从油墨未干的纸堆里抽出一份，塞给你。）拿好，头版还热着。下周五出下一期——星港的规矩，说到就到。」', options:[
         { text:'下周五见。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'yt2026-stallkeeper', name:'炭火老周', role:'星港 · 夜市摊主', core:false, spawnChance:1,
+    behavior:'field', workHours:[17,2],
+    head:0xC68642, body:0x6A4A3A, home:[-182,289], work:[-182,289], patrolRadius:0,
+    dialog:[
+      { text:'「夜市往南，灯最密的那条街谷。我的摊子在最深处——炭火不旺的地方，客人反而不请自来。」', options:[
+        { text:'卖什么？', next:1 },
+        { text:'为什么开在最里面？', next:2 },
+        { text:'（晚上再来）', next:null },
+      ]},
+      { text:'「烤串、烤饼、烤年糕，一句话：万物皆可炭。白天备料，傍晚生火，后半夜收摊——星港的夜比白天长，夜市就是这条街的心跳。」', options:[
+        { text:'心跳跳到几点？', next:2 },
+        { text:'听饿了。', next:null },
+      ]},
+      { text:'「跳到最后一炉炭灭。末班车走之前，我给夜班的人留一串免费的——他们守这座城的灯，我守他们的胃。街谷里那两道灯串，就是我挂的，让晚归的人远远看见：还开着。」', options:[
+        { text:'（晚上一定来）', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'yt2026-raconteur', name:'说书柳先生', role:'星港 · 夜市说书人', core:false, spawnChance:1,
+    behavior:'field', workHours:[19,1],
+    head:0xE8C4A0, body:0x3A4A5A, home:[-174,273], work:[-174,273], patrolRadius:0,
+    dialog:[
+      { text:'「今晚开讲得早——你来得巧，正说到环线通车那一段。找个位置站好，故事不要钱，掌声随缘。」', options:[
+        { text:'讲的什么？', next:1 },
+        { text:'（坐下听）', next:2 },
+        { text:'（赶时间）', next:null },
+      ]},
+      { text:'「讲这座城。从第一盏灯讲到磁悬列车，从两栋屋讲到夜市的千百个摊位。别处的说书人讲才子佳人，我讲灯——每一年，这座城都添了一种新的灯。」', options:[
+        { text:'最喜欢哪一盏？', next:2 },
+        { text:'明天还有吗？', next:null },
+      ]},
+      { text:'「最南边那座终章塔顶上，有一盏至今没亮的。他们说，那是留给明年的。我讲到这里就收场——后面的故事，得等下一年的人来讲。」', options:[
+        { text:'（望向塔顶的灯）', next:null },
       ]},
     ],
   },

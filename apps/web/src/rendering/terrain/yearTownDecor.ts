@@ -64,6 +64,74 @@ const URBAN_DECOR: readonly UrbanDecor[] = [
   { kind: 'windflag', x: -248.2, z: 243, tint: 0x2a3038 },
   { kind: 'windflag', x: -247, z: 303.5, tint: 0x3b6fe0 },
   { kind: 'lighthouse', x: -152, z: 199 },
+  // ── wave3c 氛围扩编（docs/year-towns-urban-redesign.md §4）：按镇身份补件，
+  //    全部坐标经落位预检（距建筑足印 ≥2u、让车道中线、避月台 r6.8 与环线梁）。
+  // 起源村（只补 2 件）：村东两屋之间的长椅与村西进村灯柱。
+  { kind: 'bench', x: 156.5, z: 217.5, rotY: -Math.PI / 2 },
+  { kind: 'lanternpost', x: 143, z: 205.5 },
+  // 2020 启明（城门市政）：站前街×港口大道转角旗杆对、议事厅对街告示板、
+  // 西门广场（启明站泊位外）灯串。
+  { kind: 'flagpole', x: 25.5, z: 215.5, tint: 0xc9553f },
+  { kind: 'flagpole', x: 14, z: 215.5, tint: 0xe8d5a8 },
+  { kind: 'board', x: 26.5, z: 229, rotY: Math.PI / 2 },
+  { kind: 'stringlights', x: -24.5, z: 238.5 },
+  // 2021 观澜（鱼市工坊）：鱼市街北沿街遮阳篷列（陶土/海青/帆布三色）、
+  // B7 工坊院心灯串、中市街东口广告牌。
+  { kind: 'awning', x: -48, z: 305.7, tint: 0xa85e3f },
+  { kind: 'awning', x: -38, z: 305.7, tint: 0x5f7fa8 },
+  { kind: 'awning', x: -12, z: 305.7, tint: 0xc2a25a },
+  { kind: 'awning', x: 12, z: 305.7, tint: 0xa85e3f },
+  { kind: 'awning', x: 30, z: 305.7, tint: 0x5f7fa8 },
+  { kind: 'awning', x: 54, z: 305.7, tint: 0xc2a25a },
+  { kind: 'stringlights', x: 2.5, z: 285.5 },
+  { kind: 'billboard', x: 26.5, z: 266, rotY: -Math.PI / 2 },
+  // 2022 明理（学理纪念）：西馆广场四角灯柱、纪念族（碑廊/纪念堂）之间
+  // 告示板、灯市街北墙霓虹招牌（艺术字长廊氛围）。
+  { kind: 'lanternpost', x: -44, z: 346.2 },
+  { kind: 'lanternpost', x: -36.8, z: 356.5 },
+  { kind: 'lanternpost', x: -44, z: 360.5 },
+  { kind: 'lanternpost', x: -52, z: 356 },
+  { kind: 'board', x: -29, z: 350, rotY: Math.PI / 2 },
+  { kind: 'neonsign', x: -55, z: 332.6, tint: 0xff8e5a },
+  { kind: 'neonsign', x: 25, z: 332.6, tint: 0x58cdff },
+  { kind: 'neonsign', x: 50.5, z: 332.6, tint: 0xff8e5a },
+  // 2023 归港（安居海堤）：海堤街/南市街双街林荫道长椅与棕榈相间、
+  // 南大里南缘补植、南码头滨水广场北缘灯串。
+  { kind: 'bench', x: -30, z: 360 },
+  { kind: 'palm', x: -14, z: 360 },
+  { kind: 'bench', x: 2, z: 360, rotY: Math.PI },
+  { kind: 'palm', x: 27, z: 360 },
+  { kind: 'bench', x: 46, z: 360 },
+  { kind: 'palm', x: 60, z: 360.5 },
+  { kind: 'palm', x: 13, z: 371 },
+  { kind: 'bench', x: -38, z: 370, rotY: Math.PI },
+  { kind: 'stringlights', x: 20, z: 421.5 },
+  // 2024 曙光（科研）：科研街北缘天线对、微光站前广场东发光地台、
+  // 泊位后场风旗。
+  { kind: 'antenna', x: -348, z: 192.2, tint: 0x9ecbff },
+  { kind: 'antenna', x: -306, z: 192.2, tint: 0x9ecbff },
+  { kind: 'glowpad', x: -203, z: 214 },
+  { kind: 'windflag', x: -375, z: 231, tint: 0x3b6fe0 },
+  // 2025 潮声（港区）：南港街北缘风旗对、西工坊内庭告示板、大道门面霓虹。
+  { kind: 'windflag', x: -280, z: 296.5, tint: 0x3b6fe0 },
+  { kind: 'windflag', x: -330, z: 296.6, tint: 0x3b6fe0 },
+  { kind: 'board', x: -284.5, z: 278.5, rotY: Math.PI / 2 },
+  { kind: 'neonsign', x: -325.5, z: 312, tint: 0x58c8e8, rotY: Math.PI / 2 },
+  // 2026 星火（夜市）：夜市街谷霓虹长廊 + 两道跨街灯串 + 摊位列遮阳篷 +
+  // 西入口广告牌。
+  { kind: 'neonsign', x: -330, z: 330, tint: 0xff6f9c, rotY: Math.PI / 2 },
+  { kind: 'neonsign', x: -300, z: 330, tint: 0xffd35e, rotY: Math.PI / 2 },
+  { kind: 'neonsign', x: -254, z: 330, tint: 0x7ce0c3, rotY: Math.PI / 2 },
+  { kind: 'neonsign', x: -232, z: 330, tint: 0xff6f9c, rotY: Math.PI / 2 },
+  { kind: 'neonsign', x: -206, z: 330, tint: 0xffd35e, rotY: Math.PI / 2 },
+  { kind: 'stringlights', x: -276.5, z: 330, rotY: Math.PI / 2 },
+  { kind: 'stringlights', x: -222, z: 331, rotY: Math.PI / 2 },
+  { kind: 'awning', x: -283, z: 331.3, tint: 0x7ce0c3 },
+  { kind: 'awning', x: -242.5, z: 331.5, tint: 0xffd35e },
+  { kind: 'awning', x: -216, z: 331.5, tint: 0x7ce0c3 },
+  { kind: 'awning', x: -302, z: 328.4, tint: 0xffd35e, rotY: Math.PI },
+  { kind: 'awning', x: -195, z: 328.4, tint: 0x7ce0c3, rotY: Math.PI },
+  { kind: 'billboard', x: -337, z: 331, rotY: Math.PI / 2 },
 ];
 
 export type YearTownDecorUpdate = (elapsed: number) => void;

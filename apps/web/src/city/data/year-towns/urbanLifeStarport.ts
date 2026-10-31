@@ -34,4 +34,60 @@ export const URBAN_LIFE_STARPORT: readonly UrbanLifeSpec[] = [
   { districtId: 'island-starport', kind: 'tree', x: -204, z: 369 }, { districtId: 'island-starport', kind: 'tree', x: -184, z: 369 },
   { districtId: 'island-starport', kind: 'kiosk', x: -205, z: 171 }, { districtId: 'island-starport', kind: 'kiosk', x: -232, z: 326 },
   { districtId: 'island-starport', kind: 'bench', x: -234, z: 367, rotY: Math.PI }, { districtId: 'island-starport', kind: 'bench', x: -199, z: 367, rotY: Math.PI },
+  // ── wave 3 城市重造填充（docs/year-towns-urban-redesign.md §4）─────────────
+  // 星港大道路灯（x -324.5/-315.5 交错成列）。
+  { districtId: 'island-starport', kind: 'lamp', x: -254.5, z: 150 }, { districtId: 'island-starport', kind: 'lamp', x: -245.5, z: 195 },
+  { districtId: 'island-starport', kind: 'lamp', x: -254.5, z: 240 }, { districtId: 'island-starport', kind: 'lamp', x: -245.5, z: 274 },
+  { districtId: 'island-starport', kind: 'lamp', x: -254.5, z: 312 }, { districtId: 'island-starport', kind: 'lamp', x: -245.5, z: 338 },
+  { districtId: 'island-starport', kind: 'lamp', x: -254.5, z: 362 },
+  // 夜航街 / 南港街路灯成列。
+  { districtId: 'island-starport', kind: 'lamp', x: -229.5, z: 247.4 }, { districtId: 'island-starport', kind: 'lamp', x: -186, z: 247.4 },
+  { districtId: 'island-starport', kind: 'lamp', x: -147, z: 247.4 }, { districtId: 'island-starport', kind: 'lamp', x: -279, z: 254.6 },
+  { districtId: 'island-starport', kind: 'lamp', x: -192, z: 254.6 },
+  { districtId: 'island-starport', kind: 'lamp', x: -241, z: 297.2 }, { districtId: 'island-starport', kind: 'lamp', x: -213, z: 297.2 },
+  { districtId: 'island-starport', kind: 'lamp', x: -166, z: 297.2 },
+  // 市场广场 A（星港大道广场）内环摊位。
+  { districtId: 'island-starport', kind: 'stall', x: -256, z: 179.5, tint: 0x4d86a8 },
+  { districtId: 'island-starport', kind: 'stall', x: -244, z: 179.5, tint: 0x8a6bab },
+  { districtId: 'island-starport', kind: 'stall', x: -256, z: 188.5, tint: 0x3f9d8a },
+  { districtId: 'island-starport', kind: 'stall', x: -248, z: 188.5, tint: 0xc98a5a },
+  { districtId: 'island-starport', kind: 'parasol', x: -250, z: 178, tint: 0x6f9fc9 },
+  { districtId: 'island-starport', kind: 'planter', x: -256.5, z: 184 },
+  { districtId: 'island-starport', kind: 'crate', x: -252, z: 190.5 },
+  // 市场广场 B（西南广场）内环摊位。
+  { districtId: 'island-starport', kind: 'stall', x: -306, z: 349.5, tint: 0x5a7db5 },
+  { districtId: 'island-starport', kind: 'stall', x: -310, z: 351.5, tint: 0xb5768f },
+  { districtId: 'island-starport', kind: 'parasol', x: -307, z: 354, tint: 0x86a06b },
+  // 市场广场 C（东南广场）内环摊位。
+  { districtId: 'island-starport', kind: 'stall', x: -193, z: 342, tint: 0x7a6fae },
+  { districtId: 'island-starport', kind: 'stall', x: -181, z: 342, tint: 0x4f9d7f },
+  { districtId: 'island-starport', kind: 'stall', x: -193, z: 350, tint: 0xd09a5c },
+  { districtId: 'island-starport', kind: 'parasol', x: -187, z: 339.5, tint: 0xa583b5 },
+  { districtId: 'island-starport', kind: 'bench', x: -181, z: 350, rotY: Math.PI },
+  // 夜市街（final z=336）街谷北缘摊位列——星港的灵魂，密度最高。
+  { districtId: 'island-starport', kind: 'stall', x: -293, z: 333.2, tint: 0x5376b3 },
+  { districtId: 'island-starport', kind: 'stall', x: -281, z: 333.2, tint: 0x9c6a9a },
+  { districtId: 'island-starport', kind: 'stall', x: -271, z: 333.2, tint: 0x46958e },
+  { districtId: 'island-starport', kind: 'stall', x: -249, z: 333.2, tint: 0xc07f57 },
+  { districtId: 'island-starport', kind: 'stall', x: -227, z: 333.2, tint: 0x6d86b8 },
+  { districtId: 'island-starport', kind: 'stall', x: -210, z: 333.2, tint: 0x8f7050 },
+  { districtId: 'island-starport', kind: 'stall', x: -193, z: 333.2, tint: 0x5a9d9a },
+  { districtId: 'island-starport', kind: 'parasol', x: -287, z: 333.2, tint: 0x7d92c4 },
+  { districtId: 'island-starport', kind: 'crate', x: -239, z: 333.2 },
+  // 夜市街南缘摊位列（避开磁悬环线 (-285,322)→(-245,340) 斜穿段）。
+  { districtId: 'island-starport', kind: 'stall', x: -280, z: 326.8, tint: 0x7d6fa8 },
+  { districtId: 'island-starport', kind: 'stall', x: -258, z: 326.8, tint: 0x3e8f7a },
+  { districtId: 'island-starport', kind: 'stall', x: -206, z: 326.8, tint: 0xba8756 },
+  { districtId: 'island-starport', kind: 'stall', x: -161, z: 326.8, tint: 0x5f87bb },
+  { districtId: 'island-starport', kind: 'parasol', x: -250, z: 326.8, tint: 0x8a7fbf },
+  // 西泊位后场（S6/S7）货箱组。
+  { districtId: 'island-starport', kind: 'crate', x: -316, z: 237 }, { districtId: 'island-starport', kind: 'crate', x: -295, z: 234 },
+  { districtId: 'island-starport', kind: 'crate', x: -288, z: 237.5 }, { districtId: 'island-starport', kind: 'crate', x: -279, z: 236.5 },
+  { districtId: 'island-starport', kind: 'crate', x: -271, z: 237 }, { districtId: 'island-starport', kind: 'crate', x: -259, z: 238 },
+  // 街廓角树 / 滨水树与长椅 / 夜市亭 / 南港花坛。
+  { districtId: 'island-starport', kind: 'tree', x: -222, z: 364 }, { districtId: 'island-starport', kind: 'tree', x: -320, z: 264 },
+  { districtId: 'island-starport', kind: 'tree', x: -176, z: 230 },
+  { districtId: 'island-starport', kind: 'bench', x: -208, z: 366, rotY: 0 }, { districtId: 'island-starport', kind: 'bench', x: -189, z: 243, rotY: 0 },
+  { districtId: 'island-starport', kind: 'kiosk', x: -174, z: 328 },
+  { districtId: 'island-starport', kind: 'planter', x: -300, z: 312 },
 ];
