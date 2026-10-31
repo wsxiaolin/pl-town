@@ -74,20 +74,14 @@ export function createBuildingDamageController(options: BuildingDamageController
   }
 
   function applyPersisted(): void {
-    let availabilityChanged = false;
     allBuildings().forEach(item => {
-      const persistedDestroyed = destroyedIds.has(item.id);
-      if (persistedDestroyed && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
-      // Compare with the saved target, not the pre-replay state: model reloads
-      // temporarily reset presentation to default before replaying damage, which
-      // must not read as an availability change that wipes the atlas cache.
-      if (isBuildingDestroyed(item) !== persistedDestroyed) availabilityChanged = true;
+      if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
     });
-    // Replaying the saved state (initial boot, model reload after construction)
-    // reaches the same availability it already had. Only a genuine mismatch
-    // should invalidate the atlas, otherwise startup discards the cache it just
-    // hydrated.
-    if (availabilityChanged) options.invalidateMap('availability');
+    // A replay can finish construction or swap in freshly loaded meshes after the
+    // map already captured the undamaged scene, so the map must reconcile. The
+    // map controller owns the captured fingerprint and only clears shots/cache
+    // when availability actually drifted from what it observed.
+    options.invalidateMap('availability');
   }
 
   return {

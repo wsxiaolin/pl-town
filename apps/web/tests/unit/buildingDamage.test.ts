@@ -90,10 +90,7 @@ test('residence visual batches follow destroy, restore, and persisted state', ()
   assert.deepEqual(recoveredVisibility, [['residence:test', false]]);
 });
 
-function damageFixture(
-  savedIds: string[] = [],
-  invalidateMap: (reason: 'availability' | 'scene') => void = () => undefined,
-) {
+function damageFixture(savedIds: string[] = []) {
   const values = new Map<string, string>();
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
@@ -109,31 +106,12 @@ function damageFixture(
   const controller = createBuildingDamageController({
     getBuildings: () => buildings,
     getResidences: () => [],
-    invalidateMap,
+    invalidateMap: () => undefined,
     refreshResidenceLabels: () => undefined,
     storage,
   });
   return { storage, controller, research: buildings[0]!, commons: buildings[1]! };
 }
-
-test('applyPersisted preserves the atlas cache when replay reaches the saved state', () => {
-  const invalidations: Array<'availability' | 'scene'> = [];
-  const { controller } = damageFixture(['research'], (reason) => invalidations.push(reason));
-
-  controller.applyPersisted();
-  controller.applyPersisted();
-  assert.deepEqual(invalidations, [], 'replaying saved damage is not an availability change');
-});
-
-test('applyPersisted invalidates the map when replay cannot reach the saved state', () => {
-  const invalidations: Array<'availability' | 'scene'> = [];
-  const { controller, research } = damageFixture(['research'], (reason) => invalidations.push(reason));
-  const completeConstruction = hideForConstruction(research);
-
-  controller.applyPersisted();
-  assert.deepEqual(invalidations, ['availability']);
-  completeConstruction();
-});
 
 function hideForConstruction(building: DamageableBuilding): () => void {
   building.group.userData.constructionPending = true;

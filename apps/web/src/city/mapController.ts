@@ -151,9 +151,12 @@ export function createMapController(options: MapControllerOptions) {
   // 跨会话图纸缓存（空间换时间）：三次「弃置 WebGL 上下文 + 全景渲染 + PNG
   // 编码」的重活，刷新后不必重付——持久化到 IndexedDB，下次进入先水合再补抓。
   const shotStore = createAtlasShotStore();
-  // 失效纪元：每次 invalidateShot 自增。异步水合发起时记下当时的纪元，
+  // 失效纪元：每次真正清空图纸时自增。异步水合发起时记下当时的纪元，
   // 写回前必须相等——否则「load 进行中发生失效」会把旧图写进新状态。
   let atlasEpoch = 0;
+  // 当前已捕获/已水合图纸对应的指纹。可用性回放时据此判断地图观察到的
+  // 状态是否真的变了：一致就保留图纸与持久缓存，不一致才清空重抓。
+  let shotsFingerprint: string | null = null;
   let shotsPreloaded = false;
   let shotsPreloadSettled = false;
   let destroyed = false;
@@ -277,6 +280,7 @@ export function createMapController(options: MapControllerOptions) {
       shotRenderer.clippingPlanes = region.clipPlanes;
       shotRenderer.render(scene, shotCamera);
       shotData[region.id] = shotRenderer.domElement.toDataURL('image/png');
+      shotsFingerprint = atlasFingerprint();
       persistAtlasShots();
     } catch {
       // Software GL (SwiftShader) can refuse the extra capture context, and
@@ -318,6 +322,8 @@ export function createMapController(options: MapControllerOptions) {
           if (open && id === activeRegion.id) hydratedActivePage = true;
         }
       }
+      // 已接受的图纸与本会话当前指纹一致，记住它，供可用性回放比对。
+      if (ATLAS_REGION_IDS.some((id) => Boolean(shotData[id]))) shotsFingerprint = hydrateFingerprint;
       // 补齐的正是当前打开且缺图的页：刷新显示，否则纸面要等到下一次
       // updateImage 才有图。
       if (hydratedActivePage) updateImage();
@@ -817,16 +823,25 @@ export function createMapController(options: MapControllerOptions) {
   }
 
   function invalidateShot(reason: 'availability' | 'theme' | 'scene' = 'availability'): void {
-    // Theme flips and scene edits invalidate EVERY atlas page — the stale
-    // capture must never resurface when the player crosses the district.
-    shotData.main = null;
-    shotData.north = null;
-    shotData.archipelago = null;
-    // 跨会话缓存同清：本会话内的场景/主题漂移意味着持久化图纸已过期，
-    // 留着会让下次启动水合到旧画面（下次抓取成功后会重新写入）。
-    // 纪元自增同时封堵「异步水合在失效后才写回」的竞态。
-    atlasEpoch += 1;
-    shotStore.clear();
+    const hasShots = ATLAS_REGION_IDS.some((id) => Boolean(shotData[id]));
+    // 可用性回放（启动、模型重载、施工结束）不盲目清库：若当前没有内存图纸，
+    // 或已观察图纸的指纹与当前状态一致，就保留图纸与跨会话缓存；只有指纹
+    // 真的漂移（地图截到的是另一种可用性状态）才重抓。
+    const availabilityStillCurrent = reason === 'availability'
+      && (!hasShots || shotsFingerprint === atlasFingerprint());
+    if (!availabilityStillCurrent) {
+      // Theme flips and scene edits invalidate EVERY atlas page — the stale
+      // capture must never resurface when the player crosses the district.
+      shotData.main = null;
+      shotData.north = null;
+      shotData.archipelago = null;
+      // 跨会话缓存同清：本会话内的场景/主题漂移意味着持久化图纸已过期，
+      // 留着会让下次启动水合到旧画面（下次抓取成功后会重新写入）。
+      // 纪元自增同时封堵「异步水合在失效后才写回」的竞态。
+      atlasEpoch += 1;
+      shotsFingerprint = null;
+      shotStore.clear();
+    }
     if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {
       // Availability changes update live controls without taking a new snapshot
