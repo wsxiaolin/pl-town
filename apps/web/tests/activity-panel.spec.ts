@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForCityReady } from './helpers';
+import { FRAME_ADVANCE_TIMEOUT, waitForCityReady } from './helpers';
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -44,6 +44,10 @@ for (const viewport of viewports) {
             copyClipped: copy.scrollHeight > copy.clientHeight + 1,
           };
         }),
+        // Shell geometry settles only after the open transition advances a
+        // frame; a stalled soft-GL main thread blew the 5 s poll default
+        // (flaky shard 1 on #268's run).
+        { timeout: FRAME_ADVANCE_TIMEOUT },
       )
       .toEqual({ copyClearsRail: true, shellInside: true, copyClipped: false });
 

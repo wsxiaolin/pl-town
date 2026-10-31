@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { CityConfig, CityState } from '../src/city/cityGovernanceClient';
-import { waitForCityReady } from './helpers';
+import { FRAME_ADVANCE_TIMEOUT, waitForCityReady } from './helpers';
 
 test('authenticated building rejections display localized toasts and keep the resident connected', async ({ page }) => {
   const errors: string[] = [];
@@ -70,7 +70,9 @@ test('authenticated building rejections display localized toasts and keep the re
     await test.step(message, async () => {
       await page.evaluate((value) => (window as unknown as { __rejectBuilding: (message: string) => void }).__rejectBuilding(value), message);
       await expect(page.locator('#utText')).toHaveText(expected);
-      await expect(page.locator('#unlockToast')).toHaveClass(/show/);
+      // The toast class flip waits on main-thread headroom; soft-GL runners
+      // can blow the 5 s default (flaky on #268's shard 8).
+      await expect(page.locator('#unlockToast')).toHaveClass(/show/, { timeout: FRAME_ADVANCE_TIMEOUT });
       await expect(connection).toHaveClass(/connected/);
       await expect(page.locator('#loginOverlay')).not.toBeVisible();
       expect(await page.evaluate(() => localStorage.getItem('minicityServerToken'))).toBe('building-error-token');
