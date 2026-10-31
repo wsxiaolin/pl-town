@@ -6,6 +6,7 @@ import {
   FIREWORK_DESIGN_JSON_MAX_BYTES,
   FIREWORK_DESIGN_MAX_PER_USER,
   FIREWORK_SAVE_PRICE,
+  normalizeStoredFireworkDesign,
   serializeFireworkDesign,
   type FireworkDesign,
 } from './fireworks.js';
@@ -44,11 +45,34 @@ type DesignRow = {
   author_nickname?: string | null;
 };
 
+const FALLBACK_DESIGN: FireworkDesign = {
+  v: 2,
+  height: 52,
+  shape: 'peony',
+  colors: { primary: '#ffd76e', secondary: '#ff5f8a', trail: '#ffe9b0' },
+  breakCharge: 29,
+  sparkle: 35,
+  caliber: 150,
+  liftCharge: 68,
+  launchAngle: 0,
+  starCount: 300,
+  starSize: 9,
+  burnTime: 3,
+  trail: 'comet',
+};
+
 function parseDesignRow(row: DesignRow): FireworkDesignRecord {
+  let stored: unknown = null;
+  try {
+    stored = JSON.parse(row.data_json);
+  } catch {
+    stored = null;
+  }
   return {
     id: row.id,
     name: row.name,
-    design: JSON.parse(row.data_json) as FireworkDesign,
+    // v1 旧数据在这里升级为 v2；单行损坏时退回默认设计，避免整份清单失败。
+    design: normalizeStoredFireworkDesign(stored) ?? FALLBACK_DESIGN,
     authorId: row.user_id,
     authorNickname: row.author_nickname ?? '神秘居民',
     createdAt: row.created_at,
@@ -56,11 +80,7 @@ function parseDesignRow(row: DesignRow): FireworkDesignRecord {
   };
 }
 
-const recordView = (row: DesignRow): FireworkDesignRecord => {
-  const view = parseDesignRow(row);
-  // 契约边界：库里只可能有通过 sanitizeFireworkDesign 的行；损坏行不出库。
-  return view;
-};
+const recordView = (row: DesignRow): FireworkDesignRecord => parseDesignRow(row);
 
 /**
  * 保存（新建或更新）一份烟花设计并收取 FIREWORK_SAVE_PRICE 金币。

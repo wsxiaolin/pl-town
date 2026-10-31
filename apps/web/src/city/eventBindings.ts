@@ -30,6 +30,8 @@ export type EventBindingsOptions = {
   closeModal: () => void;
   closeNpcDialog: () => void;
   getLoginController: () => { login: () => void; showLogin: () => void; signResidentCard: () => void } | null;  isMovementOnlyMode?: () => boolean;
+  /** 影院式运镜（观景秀 / 影视城）期间锁死手动缩放，避免用户滚轮打乱演出取景。 */
+  isZoomLocked?: () => boolean;
 };
 
 export function createEventBindings(options: EventBindingsOptions) {
@@ -67,7 +69,7 @@ export function createEventBindings(options: EventBindingsOptions) {
 
     canvas.addEventListener('wheel', e => {
       e.preventDefault();
-      if (options.isMovementOnlyMode?.()) return;
+      if (options.isMovementOnlyMode?.() || options.isZoomLocked?.()) return;
       const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
       const zoom = options.clamp(options.getCameraZoom() * factor, options.getConfig().cameraZoomMin, options.getConfig().cameraZoomMax);
       options.setCameraZoom(zoom);
@@ -82,11 +84,11 @@ export function createEventBindings(options: EventBindingsOptions) {
       return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     };
     canvas.addEventListener('touchstart', e => {
-      if (options.isMovementOnlyMode?.()) return;
+      if (options.isMovementOnlyMode?.() || options.isZoomLocked?.()) return;
       if (e.touches.length === 2) pinchDist = pinchDistance(e.touches);
     }, { passive: true, signal });
     canvas.addEventListener('touchmove', e => {
-      if (options.isMovementOnlyMode?.()) return;
+      if (options.isMovementOnlyMode?.() || options.isZoomLocked?.()) return;
       if (e.touches.length === 2) {
         e.preventDefault();
         const d = pinchDistance(e.touches);

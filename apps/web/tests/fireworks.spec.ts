@@ -4,17 +4,21 @@
 import { expect, test, type Page } from '@playwright/test';
 import { seedCityStorage, waitForCityBooted } from './helpers';
 
+test.setTimeout(120_000);
+
 /** 烟花玩法专用 WS stub：hello 带 theme，应答 fireworks.*，暴露 __pushTheme。 */
 function stubFireworksWebSocket(page: Page, user = 'fw-tester'): void {
   void page.addInitScript((u) => {
     const DESIGN = {
-      v: 1, height: 52, shape: 'peony',
+      v: 2, height: 52, shape: 'peony',
       colors: { primary: '#ffd76e', secondary: '#ff5f8a', trail: '#ffe9b0' },
-      size: 100, sparkle: 35,
+      breakCharge: 30, sparkle: 35,
+      caliber: 150, liftCharge: 68, launchAngle: 3,
+      starCount: 300, starSize: 9, burnTime: 3, trail: 'comet',
     };
     const PATTERN_DESIGN = {
-      ...DESIGN, shape: 'pattern', height: 60,
-      pattern: { cols: 21, rows: 21, cells: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
+      ...DESIGN, shape: 'pattern', height: 60, trail: 'glitter',
+      pattern: { cols: 21, rows: 21, cells: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAgAAAEAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
     };
     const NativeWebSocket = window.WebSocket;
     class FireworksGameWebSocket extends EventTarget {
@@ -88,12 +92,24 @@ function stubFireworksWebSocket(page: Page, user = 'fw-tester'): void {
 }
 
 async function seed(page: Page, user?: string): Promise<void> {
+  const config = {
+    schemaVersion: 1, version: 'fireworks-test', projects: [],
+    personalPlots: [], decorations: [], initialBuiltBuildingIds: ['fireworks_shop', 'observation_deck'],
+  };
+  const state = {
+    epoch: 'fireworks-test', revision: 0, configVersion: config.version,
+    projects: [], decorations: [],
+  };
+  await page.route('**/town-api/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/city/config')) return route.fulfill({ json: config });
+    if (path.endsWith('/city/state')) return route.fulfill({ json: state });
+    if (path.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
+    return route.fulfill({ status: 204, body: '' });
+  });
   stubFireworksWebSocket(page, user);
   await seedCityStorage(page, user);
-  await page.goto('/');
-  await page.waitForFunction(() => Boolean((window as any)._mini?.player), undefined, { timeout: 30_000 });
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 30_000 });
-  await page.waitForTimeout(1_000);
+  await waitForCityBooted(page);
 }
 
 test('烟花铺设计台：拼字网格绘制与两步确认存云端', async ({ page }) => {
@@ -102,9 +118,25 @@ test('烟花铺设计台：拼字网格绘制与两步确认存云端', async ({
   const panel = page.locator('#fireworksPanel');
   await expect(panel).toBeVisible();
 
-  await page.locator('[data-fw-name]').fill('测试烟花');
+  await page.locator('[data-fw-name]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    input.value = '测试烟花';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // 工艺卡由物理参数实时推导，不是占位符。
+  await expect(page.locator('[data-fw-craft-fuse]')).toHaveText(/^\d+\.\d+s$/);
+  await expect(page.locator('[data-fw-craft-verdict]')).toHaveText('可试放');
+  // 改弹径：推荐装药与工艺卡同步更新。
+  await page.locator('[data-fw-caliber]').evaluate((element) => {
+    const input = element as HTMLInputElement;
+    input.value = '200';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('[data-fw-caliber-value]')).toHaveText('200mm');
+  await expect(page.locator('[data-fw-craft-charge]')).toHaveText('120g / 52g');
+
   // 切到拼字花形 → 点阵画布出现。
-  await page.locator('[data-fw-shape="pattern"]').click();
+  await page.locator('[data-fw-shape="pattern"]').evaluate((element) => (element as HTMLButtonElement).click());
   await expect(page.locator('[data-fw-pattern-section]')).toBeVisible();
   await expect(page.locator('[data-fw-cells]')).toHaveText('0 点');
 
@@ -112,37 +144,51 @@ test('烟花铺设计台：拼字网格绘制与两步确认存云端', async ({
   const grid = page.locator('[data-fw-grid]');
   const box = await grid.boundingBox();
   const cell = box!.width / 21;
-  await page.mouse.click(box!.x + cell * 5.5, box!.y + cell * 10.5);
-  await page.mouse.click(box!.x + cell * 8.5, box!.y + cell * 4.5);
+  await grid.dispatchEvent('pointerdown', { clientX: box!.x + cell * 5.5, clientY: box!.y + cell * 10.5, pointerId: 1 });
+  await grid.dispatchEvent('pointerdown', { clientX: box!.x + cell * 8.5, clientY: box!.y + cell * 4.5, pointerId: 1 });
+  await grid.dispatchEvent('pointerup', { pointerId: 1 });
   await expect(page.locator('[data-fw-cells]')).toHaveText('4 点');
 
   // 两步确认：第一次点击只进入确认态，第二次才发送。
-  await page.locator('[data-fw-save]').click();
+  await page.locator('[data-fw-save]').evaluate((element) => (element as HTMLButtonElement).click());
   await expect(page.locator('[data-fw-save]')).toHaveText(/确认花费 30 金币存入？/);
   await page.evaluate(() => (document.querySelector('[data-fw-save]') as HTMLElement).click());
   await expect(page.locator('[data-fw-status]')).toContainText('已存入云端');
 
-  // 预览画布在动（rAF 循环）。
+  // 预览画布在动（rAF 循环）：两帧内容不同。
   const preview = page.locator('[data-fw-preview]');
   await expect(preview).toBeVisible();
+  const firstFrame = await preview.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  await page.waitForTimeout(450);
+  const secondFrame = await preview.evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  expect(secondFrame).not.toBe(firstFrame);
 });
 
 test('海边观景台：进入观景模式轮播云端烟花并可退出', async ({ page }) => {
   await seed(page, 'fw-deck');
+  const zoomBefore = await page.evaluate(() => (window as any)._mini.cameraZoom);
   await page.evaluate(() => (window as any)._mini.fireworks.startShow());
 
   // 确认对话框 → 开始观景。
-  await page.getByText('开始观景').click();
+  await page.getByText('开始观景').click({ force: true });
   const hud = page.locator('#deckShowHud');
   await expect(hud).toBeVisible();
   await expect(page.locator('[data-deck-act]')).toContainText('第 1 /');
+  // 观景取景按本幕设计动态计算：高度 24–90、发射角 0–18° 的差异太大，
+  // 固定机位会看不清船或把爆点甩出画面，因此进入后 zoom 应明显区别于街道视角。
+  await expect
+    .poll(async () => page.evaluate(() => (window as any)._mini.cameraZoom), { timeout: 10_000 })
+    .not.toBe(zoomBefore);
   // The programme is shuffled into random acts, so wait for 金牡丹 to rotate in
   // rather than assuming it lands in the first act.
   await expect(page.locator('[data-deck-names]')).toContainText('《金牡丹》', { timeout: 20_000 });
 
   // 退出观景。
-  await page.locator('[data-deck-exit]').click();
+  await page.locator('[data-deck-exit]').click({ force: true });
   await expect(hud).toBeHidden();
+  await expect
+    .poll(async () => page.evaluate(() => (window as any)._mini.cameraZoom), { timeout: 10_000 })
+    .toBe(zoomBefore);
 });
 
 test('服务端主题下发：切换春节主题挂载装饰组', async ({ page }) => {

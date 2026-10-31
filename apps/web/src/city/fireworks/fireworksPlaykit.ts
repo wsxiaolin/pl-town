@@ -111,7 +111,12 @@ export function createFireworksPlaykit(deps: FireworksPlaykitDeps): FireworksPla
     signal: deps.signal,
     dialogs: deps.getDialogs,
     getCameraSnapshot: () => deps.view.snapshot(),
-    focusCamera: (x, z, zoom) => deps.camera?.focus(x, z, { zoom, duration: 1.4 }),
+    getAspect: () => {
+      const width = deps.document.defaultView?.innerWidth ?? 1;
+      const height = deps.document.defaultView?.innerHeight ?? 1;
+      return height > 0 ? width / height : 1.6;
+    },
+    focusCamera: (x, z, zoom, duration = 1.4) => deps.camera?.focus(x, z, { zoom, duration }),
     stopCamera: () => deps.camera?.stop(),
     restoreCamera: (snapshot) => deps.view.restoreSnapshot(snapshot),
     setCinematicActive: (isActive) => {

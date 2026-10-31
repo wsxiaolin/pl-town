@@ -3,7 +3,7 @@
 // 升起；一轮放完后重新拉取清单（新存入的烟花会进节目单）并继续循环。
 // 相机走 cameraController.focus + view 快照恢复，输入由 cinematic 锁定
 // （与物实影视城飞跃体验同一套机制）。
-import { OBSERVATION_DECK_VIEW, FIREWORK_LAUNCH_ZONE } from './fireworksConstants';
+import { frameShowAct, SHOW_TARGET_Y_JITTER, type ShowFraming } from './showFraming';
 import type { FireworksClient, FireworkRecordView } from './fireworksClient';
 import type { FireworksEngine } from '../../rendering/fireworksEngine';
 import type { CityDialogController } from '../../adapters/ui/cityDialogController';
@@ -12,6 +12,9 @@ export type CameraSnapshot = { x: number; z: number; zoom: number };
 
 const ACT_GAP_MS = 4_600;
 const LAUNCH_STAGGER_MS = 520;
+/** 换幕前先把镜头移到本幕取景，再点火——爆裂出现时画面已经到位。 */
+const ACT_LEAD_IN_MS = 1_050;
+const FOCUS_DURATION_S = 0.9;
 
 export function createObservationDeckShow(options: {
   engine: FireworksEngine;
@@ -20,7 +23,9 @@ export function createObservationDeckShow(options: {
   signal: AbortSignal;
   dialogs: () => CityDialogController | null;
   getCameraSnapshot: () => CameraSnapshot;
-  focusCamera: (x: number, z: number, zoom: number) => void;
+  /** 视口宽/高，用于按幕计算取景。 */
+  getAspect: () => number;
+  focusCamera: (x: number, z: number, zoom: number, duration?: number) => void;
   stopCamera: () => void;
   restoreCamera: (snapshot: CameraSnapshot) => void;
   setCinematicActive: (active: boolean) => void;
@@ -42,25 +47,21 @@ export function createObservationDeckShow(options: {
     if (element) element.hidden = !visible;
   }
 
-  function launchOrigin(index: number): { x: number; z: number } {
-    // 同幕的多支烟花横向铺开，避免爆裂云完全重叠。
-    const t = index / 3;
-    return {
-      x: FIREWORK_LAUNCH_ZONE.minX + (FIREWORK_LAUNCH_ZONE.maxX - FIREWORK_LAUNCH_ZONE.minX) * (0.2 + 0.6 * Math.random() - t * 0.1),
-      z: FIREWORK_LAUNCH_ZONE.minZ + (FIREWORK_LAUNCH_ZONE.maxZ - FIREWORK_LAUNCH_ZONE.minZ) * (0.25 + 0.5 * Math.random()),
-    };
-  }
-
   function playAct(): void {
     const act = roundActs[actIndex % roundActs.length];
     if (!act) { stop('节目单空了'); return; }
+    const index = actIndex % roundActs.length;
+    // 按本幕真实设计取景：高度 24–90、发射角 0–18° 的差异太大，固定机位
+    // 要么看不清船，要么把高斜射的爆点甩出画面（见 showFraming 模块注释）。
+    const framing: ShowFraming = frameShowAct(act.map((record) => record.design), actIndex, options.getAspect());
+    options.focusCamera(framing.targetX, framing.targetZ, framing.zoom, FOCUS_DURATION_S);
     act.forEach((record, memberIndex) => {
-      options.engine.launch(record.design, launchOrigin(memberIndex), {
-        delay: memberIndex * LAUNCH_STAGGER_MS / 1000,
-        targetYJitter: 3,
+      const origin = framing.origins[memberIndex]!;
+      options.engine.launch(record.design, { x: origin.x, z: origin.z }, {
+        delay: (ACT_LEAD_IN_MS + memberIndex * LAUNCH_STAGGER_MS) / 1000,
+        targetYJitter: SHOW_TARGET_Y_JITTER,
       });
     });
-    const index = actIndex % roundActs.length;
     if (actLabel()) actLabel()!.textContent = `第 ${index + 1} / ${roundActs.length} 幕`;
     if (namesLabel()) {
       namesLabel()!.textContent = act
@@ -73,7 +74,7 @@ export function createObservationDeckShow(options: {
       if (!active) return;
       if (isRoundEnd) void nextRound();
       else playAct();
-    }, ACT_GAP_MS + LAUNCH_STAGGER_MS * (act.length - 1));
+    }, ACT_LEAD_IN_MS + ACT_GAP_MS + LAUNCH_STAGGER_MS * (act.length - 1));
   }
 
   async function nextRound(): Promise<void> {
@@ -97,7 +98,6 @@ export function createObservationDeckShow(options: {
     options.clearPlayerPath();
     options.setCinematicActive(true);
     setHudVisible(true);
-    options.focusCamera(OBSERVATION_DECK_VIEW.targetX, OBSERVATION_DECK_VIEW.targetZ, OBSERVATION_DECK_VIEW.zoom);
     void (async () => {
       try {
         const library = await options.client.list();

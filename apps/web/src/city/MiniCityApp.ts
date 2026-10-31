@@ -427,6 +427,8 @@ const eventBindings = createEventBindings({
   closeNpcDialog: () => cityDialogs?.closeNpc(),
   getLoginController: () => loginController,
   isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
+  // 观景秀按幕重算取景：演出期间禁止滚轮/捏合改 zoom，否则会立刻跑偏。
+  isZoomLocked: () => view.isCinematic(),
 });
 
 let UNLOCK_TIERS = createUnlockTiers(
