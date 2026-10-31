@@ -25,6 +25,8 @@ export type MapControllerOptions = {
   getCamera: () => THREE.Camera | null;
   getBuildingContent: (buildingId: string) => MapContent | undefined;
   isBuildingUnavailable: (building: BuildingEntity) => boolean;
+  /** 当前昼夜状态：图纸内容随昼夜换装（背景/材质/灯光），必须入缓存指纹。 */
+  getIsNight: () => boolean;
   getBuildingRoadEntry: (position: THREE.Vector3) => { x: number; z: number } | null;
   setCameraTarget: (x: number, z: number, instant: boolean) => void;
   movePlayerTo: (target: THREE.Vector3) => void;
@@ -168,8 +170,9 @@ export function createMapController(options: MapControllerOptions) {
   let activeSearchIndex = -1;
   let confirmedBuildingId: string | null = null;
 
-  /** 缓存指纹：构建身份 + 节日主题 + 建筑可用性普查。跨会话的任何场景/
-   *  主题漂移都会改变指纹，过期图纸永远水合不进来；运行期失效则直接清库。 */
+  /** 缓存指纹：构建身份 + 节日主题 + 昼夜 + 建筑可用性普查。跨会话的任何
+   *  场景/主题/昼夜漂移都会改变指纹，过期图纸永远水合不进来；运行期失效则
+   *  直接清库。 */
   function atlasFingerprint(): string {
     const buildings = options.getBuildings();
     let available = 0;
@@ -177,13 +180,14 @@ export function createMapController(options: MapControllerOptions) {
       if (!options.isBuildingUnavailable(building)) available += 1;
     }
     const theme = options.document.body?.dataset.cityTheme ?? 'default';
+    const daylight = options.getIsNight() ? 'night' : 'day';
     // 逐建筑「ID+可用性」入指纹：两栋建筑互换损坏状态时总数与可用数都不变，
     // 但废墟几何/材质已变，旧图纸必须失配重抓。
     const availabilityDigest = buildings
       .map((building) => `${building.id}:${options.isBuildingUnavailable(building) ? 0 : 1}`)
       .sort()
       .join(',');
-    return `${currentBuildId()}:${theme}:${buildings.length}:${available}:${availabilityDigest}`;
+    return `${currentBuildId()}:${theme}:${daylight}:${buildings.length}:${available}:${availabilityDigest}`;
   }
 
   function persistAtlasShots(): void {
@@ -302,8 +306,10 @@ export function createMapController(options: MapControllerOptions) {
     // 写回前校验失效纪元与 dataURL 形态——load 期间发生的失效不允许把
     // 过期图纸带进新状态。
     const hydrateEpoch = atlasEpoch;
-    void shotStore.load(atlasFingerprint()).then((shots) => {
-      if (destroyed || hydrateEpoch !== atlasEpoch) return;
+    const hydrateFingerprint = atlasFingerprint();
+    void shotStore.load(hydrateFingerprint).then((shots) => {
+      // 纪元兜住已发生的失效；指纹兜住未触发失效但场景身份已漂移的情况。
+      if (destroyed || hydrateEpoch !== atlasEpoch || hydrateFingerprint !== atlasFingerprint()) return;
       let hydratedActivePage = false;
       for (const id of ATLAS_REGION_IDS) {
         const shot = shots[id];
