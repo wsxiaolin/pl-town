@@ -149,6 +149,9 @@ export function createMapController(options: MapControllerOptions) {
   // 跨会话图纸缓存（空间换时间）：三次「弃置 WebGL 上下文 + 全景渲染 + PNG
   // 编码」的重活，刷新后不必重付——持久化到 IndexedDB，下次进入先水合再补抓。
   const shotStore = createAtlasShotStore();
+  // 失效纪元：每次 invalidateShot 自增。异步水合发起时记下当时的纪元，
+  // 写回前必须相等——否则「load 进行中发生失效」会把旧图写进新状态。
+  let atlasEpoch = 0;
   let shotsPreloaded = false;
   let shotsPreloadSettled = false;
   let destroyed = false;
@@ -174,7 +177,13 @@ export function createMapController(options: MapControllerOptions) {
       if (!options.isBuildingUnavailable(building)) available += 1;
     }
     const theme = options.document.body?.dataset.cityTheme ?? 'default';
-    return `${currentBuildId()}:${theme}:${buildings.length}:${available}`;
+    // 逐建筑「ID+可用性」入指纹：两栋建筑互换损坏状态时总数与可用数都不变，
+    // 但废墟几何/材质已变，旧图纸必须失配重抓。
+    const availabilityDigest = buildings
+      .map((building) => `${building.id}:${options.isBuildingUnavailable(building) ? 0 : 1}`)
+      .sort()
+      .join(',');
+    return `${currentBuildId()}:${theme}:${buildings.length}:${available}:${availabilityDigest}`;
   }
 
   function persistAtlasShots(): void {
@@ -290,11 +299,22 @@ export function createMapController(options: MapControllerOptions) {
     if (shotsPreloaded || destroyed) return;
     // 先水合上一会话的图纸（指纹一致才接受）：地图首开即刻有图，不用等
     // 空闲抓取落地。随后的空闲抓取照常执行并回写缓存，保持既有测试时序。
+    // 写回前校验失效纪元与 dataURL 形态——load 期间发生的失效不允许把
+    // 过期图纸带进新状态。
+    const hydrateEpoch = atlasEpoch;
     void shotStore.load(atlasFingerprint()).then((shots) => {
-      if (destroyed) return;
+      if (destroyed || hydrateEpoch !== atlasEpoch) return;
+      let hydratedActivePage = false;
       for (const id of ATLAS_REGION_IDS) {
-        if (!shotData[id] && shots[id]) shotData[id] = shots[id]!;
+        const shot = shots[id];
+        if (!shotData[id] && shot && shot.startsWith('data:image/png;base64,')) {
+          shotData[id] = shot;
+          if (open && id === activeRegion.id) hydratedActivePage = true;
+        }
       }
+      // 补齐的正是当前打开且缺图的页：刷新显示，否则纸面要等到下一次
+      // updateImage 才有图。
+      if (hydratedActivePage) updateImage();
     }).catch(() => { /* cache is best-effort */ });
     const capture = () => {
       // Only latch the one-shot flag once the city scene actually exists: if
@@ -798,6 +818,8 @@ export function createMapController(options: MapControllerOptions) {
     shotData.archipelago = null;
     // 跨会话缓存同清：本会话内的场景/主题漂移意味着持久化图纸已过期，
     // 留着会让下次启动水合到旧画面（下次抓取成功后会重新写入）。
+    // 纪元自增同时封堵「异步水合在失效后才写回」的竞态。
+    atlasEpoch += 1;
     shotStore.clear();
     if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {

@@ -20,7 +20,7 @@ export {
   clampResolutionForViewport,
   isMobileViewport,
 } from './renderResolutionPolicy';
-import { MOBILE_VIEWPORT_MAX_WIDTH } from './renderResolutionPolicy';
+import { MOBILE_VIEWPORT_MAX_WIDTH, clampResolutionForViewport } from './renderResolutionPolicy';
 
 const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   resolution: matchMedia(`(max-width: ${MOBILE_VIEWPORT_MAX_WIDTH}px)`).matches ? 1.5 : 2,
@@ -71,7 +71,9 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
     window.innerWidth,
     window.innerHeight,
   );
-  renderer.setPixelRatio(Math.min(settings.resolution, resolutionLimit));
+  // 启动即钳：移动端保存的高历史档位（如 3.75x）不允许首帧就以 16 倍像素
+  // 量渲染——桌面档位原样通过，与设置面板滑杆上限、自适应起点同一口径。
+  renderer.setPixelRatio(clampResolutionForViewport(Math.min(settings.resolution, resolutionLimit), window.innerWidth));
   // Thousands of static shadow casters made the shadow pass more expensive
   // than the main render and could reset the GPU context on integrated GPUs.
   renderer.shadowMap.enabled = settings.shadows;
