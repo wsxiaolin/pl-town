@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ResourcePool } from '../core/ResourcePool';
-import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, ROAD_COORDS, WEST_BEACH } from './data/cityConfig';
+import { CAMERA_OFFSET, CITY_CONFIG, CITY_LIMIT, ECHO_OBSERVATORY_AREA } from './data/cityConfig';
 import { BUILDING_DEFS, BUILDING_CONTENT } from './data/buildings';
 import { MUSIC_HALL_LYRICS } from './data/musicHallLyrics';
 import { MEMORIAL_ROSTER } from './data/memorialRoster';
@@ -17,7 +17,6 @@ import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
 import { calcLevel, formatDate, formatTime, getStats, getUserId, saveStats, startTimeTracking } from './progression/legacyStats';
-import { createRoadNavigationSystem, buildMeadowTrailGraph } from './navigation/roadNavigation';
 import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 import type { Npc } from './npcSystem';
 import type { SceneInterestPointId } from '../rendering/sceneInterestPoints';
@@ -47,17 +46,13 @@ import { createInteractionPointer } from './interactionPointer';
 import { showUnlockToast } from './toast';
 import { createInteractionTracker } from './interactionTracker';
 import { createSceneAnimations } from './sceneAnimations';
-import { createFrameLoop } from './frameLoop';
-import { createBurnCityEffect } from './burnCityEffect';
-import { createWildMushroomRestaurant } from './wildMushroomRestaurant';
-import { createPaintingAiStudio } from './paintingAiStudio';
+import { createCityRuntimeInfraWiring } from './cityRuntimeInfraWiring';
+import { createCityExperienceWiring } from './cityExperienceWiring';
 import { createPaintingAiCanvasController } from '../adapters/ui/paintingAiCanvasController';
 import { installDebugApi } from './debugApi';
 import { isDevPortalRequested, resolvePlayerSpeed } from './devPortal';
-import { createBuildingInteraction } from './buildingInteraction';
-import { createEventBindings } from './eventBindings';
-import { createFilmCityExperienceController } from './filmCity/filmCityExperienceController';
-import { createGenshinInstituteController, scheduleGenshinIdlePrefetch } from './genshin/genshinInstituteController';
+import { createCityEventBindingsWiring } from './cityEventBindingsWiring';
+import { scheduleGenshinIdlePrefetch } from './genshin/genshinInstituteController';
 import { isCatDeathCGVisible } from '../adapters/ui/iceKing/catDeathCGController';
 import { createIceKingFeatureExperience } from './iceKing/createIceKingFeatureExperience';
 import { createIceKingBuildingFeature } from './iceKing/createIceKingBuildingFeature';
@@ -265,7 +260,7 @@ let yearTownPanel: YearTownPanelController | undefined; // 面板在 init 内就
 const yearTown = createYearTownWiring({ document, getSignal: () => lifecycle.signal, cityLimit: CITY_LIMIT, getPanel: () => yearTownPanel,
   getCursorChar: () => cursorChar, getDialogs: () => cityDialogs, getMap: () => mapController, clearPlayerPath: () => view.clearPlayerPath(), showToast: showUnlockToast });
 
-const frameLoop = createFrameLoop({
+const { frameLoop, roadNavigation, burnCityEffect } = createCityRuntimeInfraWiring({
   onFirstRender: () => entranceGate.flush(),
   getRenderer: () => renderer,
   getScene: () => scene,
@@ -283,7 +278,6 @@ const frameLoop = createFrameLoop({
   getWorldDecorations: () => worldDecorations,
   getMapController: () => mapController,
   getNavigationTargetMarker: () => navigationTargetMarker,
-  getBurnOverlay: () => burnCityEffect,
   getGenshinLaunchOverlay: () => genshinInstitute.getOverlay(),
   isFullscreenCinematicVisible: isCatDeathCGVisible,
   getCursorChar: () => cursorChar,
@@ -297,45 +291,19 @@ const frameLoop = createFrameLoop({
   setLastFrameTime: (value) => { lastFrameTime = value; },
   npcYieldToPlayer: (npc) => npcSystem.npcYieldToPlayer(npc),
   isStoryLockedBuilding: availability.isStoryLocked,
-});
-
-const roadNavigation = createRoadNavigationSystem({
-  roadCoords: ROAD_COORDS,
-  echoObservatoryArea: ECHO_OBSERVATORY_AREA,
-  northDistrictArea: NORTH_DISTRICT_AREA,
-  meadowTrail: buildMeadowTrailGraph(),
-  westBeach: WEST_BEACH,
-  cityLimit: CITY_LIMIT,
-  // T3a 年份群岛：3 座岛缘锚点外扩 WORLD_BOUNDS，玩家在岛上不被钳回主城。
   yearTownAnchors: yearTown.anchors,
-  // T4a2 跨海交通：星门大桥 B 链（S4 挂接）+ 起源村枢纽街，走线唯一
-  // 事实源 transit.ts（buildTransitRoadGraph 直出节点/边表）。
   transit: yearTown.transit,
-  getBuildings: () => buildings,
-});
-
-const burnCityEffect = createBurnCityEffect({
-  getScene: () => scene,
-  getRenderer: () => renderer,
-  cityLimit: CITY_LIMIT,
   reduced: REDUCED,
 });
 
-const wildMushroomRestaurant = createWildMushroomRestaurant({
+const {
+  wildMushroomRestaurant, paintingAiStudio, filmCityExperience, genshinInstitute, buildingInteraction,
+} = createCityExperienceWiring({
   getDialogs: () => cityDialogs,
   burnCity: (onDone) => burnCityEffect.trigger(onDone),
   awardAchievement: awardDirectAchievement,
-});
-
-const paintingAiStudio = createPaintingAiStudio({
-  getDialogs: () => cityDialogs,
-  openCanvas: (handlers) => paintingAiCanvas?.open(handlers),
-  closeCanvas: () => paintingAiCanvas?.close(),
-  showToast: showUnlockToast,
-});
-
-const filmCityExperience = createFilmCityExperienceController({
-  dialogs: () => cityDialogs,
+  openPaintingCanvas: (handlers) => paintingAiCanvas?.open(handlers),
+  closePaintingCanvas: () => paintingAiCanvas?.close(),
   getCurrency: () => multiplayerHousing?.progression.getProgress().currency ?? 0,
   purchase: () => multiplayerHousing?.progression.purchaseFilmCityExperience() ?? Promise.resolve(false),
   getCameraSnapshot: () => view.snapshot(),
@@ -347,23 +315,11 @@ const filmCityExperience = createFilmCityExperienceController({
     movementInputController?.setLocked(active);
   },
   clearPlayerPath: () => view.clearPlayerPath(),
-  showToast: showUnlockToast,
-});
-
-// 原神研究院：启动页 chunk 在城市空闲时仅预下载（模块零副作用，不建场景），
-// 重代码（场景/shader/每帧渲染）在选择「好想玩原神！」后才运行。
-const genshinInstitute = createGenshinInstituteController({
-  dialogs: () => cityDialogs,
   getRenderer: () => renderer,
-  showToast: showUnlockToast,
   reduced: REDUCED,
-});
-
-const buildingInteraction = createBuildingInteraction({
   openGovernancePanel: openCityGovernancePanel,
   isBuildingUnavailable: availability.isBuildingUnavailable,
   getMultiplayerHousing: () => multiplayerHousing,
-  getCityDialogs: () => cityDialogs,
   getStoryRouter: () => stories?.router,
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
@@ -373,14 +329,10 @@ const buildingInteraction = createBuildingInteraction({
   getMutualAidController: () => mutualAidController,
   getLibrarySearchController: () => librarySearchController,
   trackInteraction: (buildingId) => interactionTracker.trackInteraction(buildingId),
-  getWildMushroomRestaurant: () => wildMushroomRestaurant,
-  getPaintingAiStudio: () => paintingAiStudio,
-  getFilmCityController: () => filmCityExperience,
-  getGenshinInstituteController: () => genshinInstitute,
   interactWithFeature: buildingFeatureRegistry.interact,
 });
 
-const eventBindings = createEventBindings({
+const { eventBindings } = createCityEventBindingsWiring({
   getCanvas: () => document.getElementById('c') as HTMLElement,
   getSignal: () => lifecycle.signal,
   getRenderer: () => renderer,
@@ -397,7 +349,6 @@ const eventBindings = createEventBindings({
   updateCameraProjection: (zoom) => view.updateProjection(zoom),
   getConfig: () => CONFIG,
   onYouClick: () => npcSystem.onYouClick(),
-  closeRenderSettings: () => eventBindings.closeRenderSettings(),
   getStatsPanelController: () => statsPanelController,
   getCommunityPanels: () => communityPanels,
   getMapController: () => mapController,
