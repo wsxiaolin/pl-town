@@ -76,14 +76,17 @@ export function createBuildingDamageController(options: BuildingDamageController
   function applyPersisted(): void {
     let availabilityChanged = false;
     allBuildings().forEach(item => {
-      const wasDestroyed = isBuildingDestroyed(item);
-      if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
-      if (isBuildingDestroyed(item) !== wasDestroyed) availabilityChanged = true;
+      const persistedDestroyed = destroyedIds.has(item.id);
+      if (persistedDestroyed && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
+      // Compare with the saved target, not the pre-replay state: model reloads
+      // temporarily reset presentation to default before replaying damage, which
+      // must not read as an availability change that wipes the atlas cache.
+      if (isBuildingDestroyed(item) !== persistedDestroyed) availabilityChanged = true;
     });
     // Replaying the saved state (initial boot, model reload after construction)
-    // usually leaves availability as it already was. Only a real availability
-    // change should invalidate the atlas: clearing on every replay would wipe
-    // the just-hydrated cross-session cache during startup.
+    // reaches the same availability it already had. Only a genuine mismatch
+    // should invalidate the atlas, otherwise startup discards the cache it just
+    // hydrated.
     if (availabilityChanged) options.invalidateMap('availability');
   }
 

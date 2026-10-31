@@ -85,5 +85,11 @@ export function createThemeClock(options: ThemeClockOptions) {
     options.updateNpcSchedules();
   }
 
-  return { applyTheme, restoreSky, syncTimeAndTheme };
+  /** 新会话启动时复位首次同步标记：每个会话的第一次同步都按「对齐启动状态」
+   *  处理，不触发地图缓存失效。 */
+  function resetSession(): void {
+    syncedOnce = false;
+  }
+
+  return { applyTheme, restoreSky, syncTimeAndTheme, resetSession };
 }
