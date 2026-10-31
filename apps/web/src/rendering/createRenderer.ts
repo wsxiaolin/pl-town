@@ -14,10 +14,17 @@ import { RENDER_SETTINGS_KEY } from '../core/storageKeys';
 
 export { RENDER_SETTINGS_KEY };
 export const MAX_RENDER_RESOLUTION = 4;
+export {
+  MOBILE_VIEWPORT_MAX_WIDTH,
+  MOBILE_RESOLUTION_CEILING,
+  clampResolutionForViewport,
+  isMobileViewport,
+} from './renderResolutionPolicy';
+import { MOBILE_VIEWPORT_MAX_WIDTH } from './renderResolutionPolicy';
 
 const DEFAULT_RENDER_SETTINGS: RenderSettings = {
-  resolution: matchMedia('(max-width: 680px)').matches ? 1.5 : 2,
-  antialias: !matchMedia('(max-width: 680px)').matches,
+  resolution: matchMedia(`(max-width: ${MOBILE_VIEWPORT_MAX_WIDTH}px)`).matches ? 1.5 : 2,
+  antialias: !matchMedia(`(max-width: ${MOBILE_VIEWPORT_MAX_WIDTH}px)`).matches,
   anisotropy: 16,
   shadows: false,
   exposure: 1.18,

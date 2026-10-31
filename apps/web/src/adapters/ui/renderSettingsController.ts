@@ -4,6 +4,7 @@ import {
   RENDER_SETTINGS_KEY,
   type RenderSettings,
 } from '../../rendering/createRenderer';
+import { clampResolutionForViewport } from '../../rendering/renderResolutionPolicy';
 
 type RenderPresetName = 'saving' | 'balanced' | 'high' | 'ultra';
 
@@ -77,11 +78,15 @@ export function setupRenderSettingsController(options: RenderSettingsControllerO
     supportedAnisotropy,
   );
 
+  // 移动端预设天花板：手机上「极致」=设备上限会建议到 4x（16 倍像素量），
+  // 是明确的陷阱档。预设建议值一律先过视口钳制；滑杆上限仍是设备上限，
+  // 高级用户可手动突破。
+  const presetCeiling = clampResolutionForViewport(resolutionLimit, window.innerWidth);
   const presets: Record<RenderPresetName, Omit<RenderSettings, 'exposure'>> = {
-    saving: { resolution: Math.min(0.75, resolutionLimit), antialias: false, anisotropy: 1, shadows: false, textureRendering: false, waterRendering: false },
-    balanced: { resolution: Math.min(1.5, resolutionLimit), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: false },
-    high: { resolution: Math.min(2.5, resolutionLimit), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: true },
-    ultra: { resolution: resolutionLimit, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true, waterRendering: true },
+    saving: { resolution: Math.min(0.75, presetCeiling), antialias: false, anisotropy: 1, shadows: false, textureRendering: false, waterRendering: false },
+    balanced: { resolution: Math.min(1.5, presetCeiling), antialias: false, anisotropy: selectSupportedAnisotropy(4, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: false },
+    high: { resolution: Math.min(2.5, presetCeiling), antialias: true, anisotropy: selectSupportedAnisotropy(8, normalizedMaxAnisotropy), shadows: false, textureRendering: true, waterRendering: true },
+    ultra: { resolution: presetCeiling, antialias: true, anisotropy: supportedAnisotropy, shadows: true, textureRendering: true, waterRendering: true },
   };
 
   const currentValues = (): Omit<RenderSettings, 'exposure'> => ({

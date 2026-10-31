@@ -18,6 +18,7 @@ export type GpuInfo = {
 };
 
 import { RENDER_SETTINGS_KEY } from '../core/storageKeys';
+import { MOBILE_VIEWPORT_MAX_WIDTH } from './renderResolutionPolicy';
 
 const GPU_INFO_KEY = 'minicityGpuInfo';
 
@@ -121,7 +122,7 @@ function applyGpuSuggestedRenderSettingsInner(info: GpuInfo): void {
   // keeps the light boot free of any 41 MB texture re-read — review r3#1).
   // Resolution stays viewport-aware: the mobile cap from DEFAULT_RENDER_
   // SETTINGS wins over the tier, so phones don't get the desktop pixel count.
-  const mobile = matchMedia('(max-width: 680px)').matches;
+  const mobile = matchMedia(`(max-width: ${MOBILE_VIEWPORT_MAX_WIDTH}px)`).matches;
   const hiRes = mobile ? 1.5 : 2;
   const presets: Record<GpuTier, Partial<Record<'resolution' | 'antialias' | 'shadows', number | boolean>>> = {
     discrete: { resolution: hiRes, antialias: true, shadows: false },

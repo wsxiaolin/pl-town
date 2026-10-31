@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { BuildingEntity } from './buildingEntity';
+import { currentBuildId } from './bootGate';
+import { ATLAS_REGION_IDS, createAtlasShotStore } from './mapShotCache';
 import { terrainHeight } from './data/terrain/heightfield/terrainHeight';
 import type { YearTownMarker } from './data/year-towns/towns';
 import { TRANSIT_MAP_OVERLAY } from './data/year-towns/transit';
@@ -144,6 +146,9 @@ export function createMapController(options: MapControllerOptions) {
   let open = false;
   let activeRegion: MapRegion = MAP_REGIONS.main;
   const shotData: Record<MapRegionId, string | null> = { main: null, north: null, archipelago: null };
+  // 跨会话图纸缓存（空间换时间）：三次「弃置 WebGL 上下文 + 全景渲染 + PNG
+  // 编码」的重活，刷新后不必重付——持久化到 IndexedDB，下次进入先水合再补抓。
+  const shotStore = createAtlasShotStore();
   let shotsPreloaded = false;
   let shotsPreloadSettled = false;
   let destroyed = false;
@@ -159,6 +164,26 @@ export function createMapController(options: MapControllerOptions) {
   let searchResults: MapSearchResult[] = [];
   let activeSearchIndex = -1;
   let confirmedBuildingId: string | null = null;
+
+  /** 缓存指纹：构建身份 + 节日主题 + 建筑可用性普查。跨会话的任何场景/
+   *  主题漂移都会改变指纹，过期图纸永远水合不进来；运行期失效则直接清库。 */
+  function atlasFingerprint(): string {
+    const buildings = options.getBuildings();
+    let available = 0;
+    for (const building of buildings) {
+      if (!options.isBuildingUnavailable(building)) available += 1;
+    }
+    const theme = options.document.body?.dataset.cityTheme ?? 'default';
+    return `${currentBuildId()}:${theme}:${buildings.length}:${available}`;
+  }
+
+  function persistAtlasShots(): void {
+    const shots: Partial<Record<MapRegionId, string>> = {};
+    for (const id of ATLAS_REGION_IDS) {
+      if (shotData[id]) shots[id] = shotData[id]!;
+    }
+    shotStore.save(atlasFingerprint(), shots);
+  }
 
   function toggle(): void {
     open = !open;
@@ -239,6 +264,7 @@ export function createMapController(options: MapControllerOptions) {
       shotRenderer.clippingPlanes = region.clipPlanes;
       shotRenderer.render(scene, shotCamera);
       shotData[region.id] = shotRenderer.domElement.toDataURL('image/png');
+      persistAtlasShots();
     } catch {
       // Software GL (SwiftShader) can refuse the extra capture context, and
       // toDataURL can fail on a lost context. Leave the page uncached so the
@@ -262,6 +288,14 @@ export function createMapController(options: MapControllerOptions) {
    *  the on-demand capture when the map next opens, exactly like before. */
   function preloadShots(): void {
     if (shotsPreloaded || destroyed) return;
+    // 先水合上一会话的图纸（指纹一致才接受）：地图首开即刻有图，不用等
+    // 空闲抓取落地。随后的空闲抓取照常执行并回写缓存，保持既有测试时序。
+    void shotStore.load(atlasFingerprint()).then((shots) => {
+      if (destroyed) return;
+      for (const id of ATLAS_REGION_IDS) {
+        if (!shotData[id] && shots[id]) shotData[id] = shots[id]!;
+      }
+    }).catch(() => { /* cache is best-effort */ });
     const capture = () => {
       // Only latch the one-shot flag once the city scene actually exists: if
       // the idle callback / fallback timer fires during boot before the scene
@@ -762,6 +796,9 @@ export function createMapController(options: MapControllerOptions) {
     shotData.main = null;
     shotData.north = null;
     shotData.archipelago = null;
+    // 跨会话缓存同清：本会话内的场景/主题漂移意味着持久化图纸已过期，
+    // 留着会让下次启动水合到旧画面（下次抓取成功后会重新写入）。
+    shotStore.clear();
     if (tipBuilding && options.isBuildingUnavailable(tipBuilding)) closeTip();
     if (open) {
       // Availability changes update live controls without taking a new snapshot
