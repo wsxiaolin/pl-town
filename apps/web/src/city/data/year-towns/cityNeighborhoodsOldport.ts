@@ -1,0 +1,33 @@
+// 旧港城外城/村舍建筑（从 cityNeighborhoods.ts 按岛拆分；落位手写唯一事实源）。
+import { N, home, civic, shop, type NeighborhoodBuilding } from './cityNeighborhoodsKit';
+
+export const NB_2022_DRAFTS: readonly NeighborhoodBuilding[] = [
+  home('yt-op-n01', 'island-2022', '北堤一号院', -52, 184, N),
+  home('yt-op-n02', 'island-2022', '北堤二号院', -39, 184, N),
+  home('yt-op-n03', 'island-2022', '潮声托儿所', -2, 174, N, 'academy'),
+  shop('yt-op-n04', 'island-2022', '北街面包房', 48, 210, N, 'tavern'),
+  shop('yt-op-n05', 'island-2022', '海港杂货铺', 61, 210, N, 'market'),
+  home('yt-op-n06', 'island-2022', '信风旅舍', 77, 184, N, 'pagoda'),
+  home('yt-op-n07', 'island-2022', '东堤公寓', 92, 224, N, 'tower'),
+  civic('yt-op-n08', 'island-2022', '旧港市民医院', -51, 236, 0, 'academy', '医院服务整座旧港。诊室面向学院街，后院留着供病人散步的树荫；夜里急诊入口的灯始终亮着。'),
+  civic('yt-op-n09', 'island-2022', '南城消防站', -24, 236, 0, 'factory', '车库门朝北街打开，值班室随时能望见港口大道。它负责老城木屋、市场棚顶和码头仓库的平安。'),
+  shop('yt-op-n10', 'island-2022', '晨光菜市', 49, 236, 0, 'market'),
+  civic('yt-op-n11', 'island-2022', '旧港公共浴室', 54, 236, 0, 'bistro', '公共浴室是街坊交换消息的地方。热水房、长椅和更衣室围绕着一个小院，远来者也能在这里洗去旅途风尘。'),
+  civic('yt-op-n12', 'island-2022', '港务档案馆', 82, 236, 0, 'library', '这里保存潮位表、船只登记册与旧城地图。它不陈列作品，只记录一座城市如何每天运转。'),
+  home('yt-op-s01', 'island-2022', '南堤长屋一', -57, 392, N),
+  home('yt-op-s02', 'island-2022', '南堤长屋二', -27, 392, N),
+  shop('yt-op-s03', 'island-2022', '海风鱼铺', -12, 352, N, 'restaurant'),
+  shop('yt-op-s04', 'island-2022', '晚钟茶馆', 4, 352, N, 'tavern'),
+  shop('yt-op-s05', 'island-2022', '旧港修鞋铺', 37, 352, N, 'kiosk'),
+  home('yt-op-s06', 'island-2022', '紫荆里公寓', 52, 352, N, 'tower'),
+  home('yt-op-s07', 'island-2022', '南堤长屋三', 68, 392, N),
+  home('yt-op-s08', 'island-2022', '灯塔看守宿舍', 88, 352, N, 'pagoda'),
+  civic('yt-op-s09', 'island-2022', '南港小学', -53, 404, 0, 'school', '操场朝南，上课铃能一直传到海堤。孩子们从历史街区走来，也把新的城市故事带回自己的家。'),
+  shop('yt-op-s10', 'island-2022', '海盐咖啡屋', -34, 404, 0, 'bistro'),
+  civic('yt-op-s11', 'island-2022', '南市社区礼堂', -17, 404, 0, 'pavilion', '礼堂用于居民议事、节日演出和雨天集市。城市的大小事务在这里被讨论，散会后门口总有人多聊一会儿。'),
+  shop('yt-op-s12', 'island-2022', '南港洗衣房', 2, 404, 0, 'kiosk'),
+  civic('yt-op-s13', 'island-2022', '绳结与修船工坊', 30, 404, 0, 'factory', '工匠在门前修桨、补帆、打绳结。港口的体力活和手艺在这里延续，作品与城市生活共用同一片海岸。'),
+  shop('yt-op-s14', 'island-2022', '夜市唱片行', 48, 404, 0, 'market'),
+  home('yt-op-s15', 'island-2022', '望海旅店', 58, 394, 0, 'pagoda'),
+  civic('yt-op-end', 'island-2022', '旧港岁月终章馆', 20, 417, N, 'planetarium', '旅程在城南海潮前抵达终章。馆内把八个年份连成一条时间长廊，最后一扇门面向灯火依旧的城区：纪念的终点不是封存，而是回到仍在继续的日常。'),
+];
