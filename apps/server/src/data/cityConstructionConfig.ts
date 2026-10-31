@@ -72,7 +72,13 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // （原神研究院彩蛋，北城作品街坊）。目录重生成后自动追加为治理项目；
   // painting_ai 与 north_genshin_institute 保持待建不赠礼。既有项目定义与
   // initialBuiltBuildingIds 零改动。
-  version: '2026-10-10.festival-painting.1',
+  // 2026-10-31.chatruins.1: S001 支线剧情「聊天室世代史·会沉的城」场景
+  // 建筑 chatruins（第一聊天室遗迹，(-26,-40) 半埋遗迹，老城区坡地）。
+  // 按用户参数（不再新增众筹）：剧情场景建筑走 2026-10-04 赠礼补全政策
+  // 直接建成（cityGovernanceMigration.DEFAULT_COMPLETED_BUILDING_IDS），
+  // 不设众筹项目，个人解锁=建成即可访问。目录重生成后自动追加为治理
+  // 项目；既有项目定义与 initialBuiltBuildingIds 零改动。
+  version: '2026-10-31.chatruins.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))

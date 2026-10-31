@@ -620,7 +620,6 @@ function init() {
   stories = createStoryOrchestration({
     echo: {
       consumeItem: (itemId, quantity) => { void multiplayerHousing?.progression.consumeItem(itemId, quantity); },
-      setStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
       getCursor: () => cursorChar ? { position: cursorChar.position, rotation: cursorChar.rotation, visible: cursorChar.visible } : null,
       clearPlayerPath: () => view.clearPlayerPath(),
       setCameraTarget: (x, z, instant) => view.setTarget(x, z, instant),
@@ -637,6 +636,8 @@ function init() {
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
+    setActiveStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
+    chatRuins: { claimReward: (rewardId) => multiplayerHousing?.progression.claimReward(rewardId) ?? false, getPlayerPosition: () => cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : null, getDialogs: () => cityDialogs },
   });
   stories.setupEcho(scene);
   mapController = createMapController({
@@ -834,7 +835,7 @@ function init() {
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     interactWithTransit: (id) => yearTown.interactTransit(id),
-    interactWithStory: (id) => cityDialogs ? stories.echo.interactInterestPoint(id, cityDialogs) : false,
+    interactWithStory: (id) => !cityDialogs ? false : stories.echo.interactInterestPoint(id, cityDialogs) || stories.chatRuins.interactInterestPoint(id, cityDialogs),
     interactWithFeature: (id) => iceKingFeature?.iceWall.interact(id) ?? false,
     setWellPhase: (phase) => iceHooks.setWellPhase(phase),
     setBeachEncounterPhase: (phase) => iceHooks.setBeachEncounterPhase(phase),

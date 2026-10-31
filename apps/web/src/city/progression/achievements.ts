@@ -29,6 +29,12 @@ export const ACHIEVEMENTS: readonly AchievementMeta[] = [
   { id:'yesterday_witness',name:'见证者',desc:'把三十年前未说出口的故事接住' },
   { id:'yesterday_silence',name:'沉默是金',desc:'选择让故事停留在沉默里' },
   { id:'yesterday_true_dawn',name:'昨日之歌',desc:'完成昨日之歌的尾声' },
+  // S001 会沉的城：主成就 s001_sunken_city 兼作跨案旗标 s001_completed
+  // （S028 迎新处的 laxy 瓦 隐藏对话由该成就解锁——achievement.unlocked 消费）。
+  { id:'s001_relic_key',   name:'会沉的城', desc:'读到了全城最早的那块门禁' },
+  { id:'s001_archaeologist',name:'考古学家', desc:'挖穿 26532 层沉积，抵达开国那天' },
+  { id:'s001_iou_holder',  name:'两支持欠条', desc:'在涂鸦墙留下自己的字，接下 2024 年的那笔债' },
+  { id:'s001_sunken_city', name:'不散的人', desc:'「孩子们……都长大啦。」' },
   { id:'murder_wanderer',name:'闲逛者',desc:'跟着莫得一起在城里散步' },
   { id:'murder_watcher',name:'视奸者',desc:'听莫得说他观察着每个人的一举一动' },
   { id:'murder_chain',name:'再串大四',desc:'和莫得对上了黑洞区的暗号' },

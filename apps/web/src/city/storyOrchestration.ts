@@ -5,6 +5,7 @@ import { createEchoSuspendedController, type EchoStoryHandle } from './echo/echo
 import { createYesterdaySongController } from './yesterday/yesterdaySongController';
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
+import { createChatRuinsStoryController } from './chatRuins/chatRuinsStoryController';
 import { createStoryEntryGate } from './storyEntryGate';
 import { createStoryRouter } from './storyRouting';
 import { showUnlockToast } from './toast';
@@ -32,11 +33,19 @@ function createTrackedSideStory(
 }
 
 export function createStoryOrchestration(options: {
-  echo: Omit<EchoStoryControllerOptions, 'setActiveActors' | 'awardAchievement' | 'showToast' | 'getQuestContext' | 'updateNpcSchedules'>;
+  echo: Omit<EchoStoryControllerOptions, 'setStoryPoints' | 'setActiveActors' | 'awardAchievement' | 'showToast' | 'getQuestContext' | 'updateNpcSchedules'>;
   getQuestContext: EchoStoryControllerOptions['getQuestContext'];
   awardAchievement: (id: string, name: string) => void;
   showToast?: (message: string) => void;
   updateNpcSchedules: () => void;
+  /** S001 会沉的城端口（涂鸦欠条领取/玩家位置/对话框惰性引用）。 */
+  chatRuins?: {
+    claimReward?: (rewardId: string) => boolean | Promise<boolean>;
+    getPlayerPosition?: () => { x: number; z: number } | null;
+    getDialogs?: () => CityDialogController | null;
+  };
+  /** 场景 story 兴趣点激活集合统一出口（echo 与 S001 并集后下发）。 */
+  setActiveStoryPoints: (ids: readonly string[]) => void;
 }) {
   let echoActiveActors = new Set<string>();
   let yesterdayActiveActors = new Set<string>();
@@ -49,10 +58,18 @@ export function createStoryOrchestration(options: {
     options.updateNpcSchedules();
   }
 
+  // 场景 story 兴趣点（echo 与 S001 各自上报，并集后统一下发渲染层）。
+  let echoStoryPoints: ReadonlySet<string> = new Set();
+  let chatRuinsStoryPoints: ReadonlySet<string> = new Set();
+  function mergeStoryPoints() {
+    options.setActiveStoryPoints([...echoStoryPoints, ...chatRuinsStoryPoints]);
+  }
+
   // 「回声」槽位：暂停期间由占位控制器顶上（剧情内容不进包）。开关翻转后
   // esbuild 保留动态加载分支——真控制器按需加载并替换占位，同时补跑启动序列。
   const echoOptions: EchoStoryControllerOptions = {
     ...options.echo,
+    setStoryPoints: (ids) => { echoStoryPoints = new Set(ids); mergeStoryPoints(); },
     getQuestContext: options.getQuestContext,
     awardAchievement: options.awardAchievement,
     showToast: options.showToast,
@@ -108,12 +125,26 @@ export function createStoryOrchestration(options: {
     ...shared,
     onActorsChanged: (ids) => { overcoatActiveActors = ids; mergeActiveStoryActorIds(); },
   });
+  // S001 会沉的城（2026-10-31）：静态挂载（laxy 瓦/墓碑先生是常驻 NPC，
+  // 不走 actor 显隐合并）。兴趣点上报与 echo 并集下发；接近触发由控制器
+  // 内部 800ms 轮询驱动（start() 启动）。
+  const chatRuins = createChatRuinsStoryController({
+    ...shared,
+    claimReward: options.chatRuins?.claimReward,
+    getPlayerPosition: options.chatRuins?.getPlayerPosition,
+    getDialogs: options.chatRuins?.getDialogs,
+    setStoryPoints: (ids) => { chatRuinsStoryPoints = new Set(ids); mergeStoryPoints(); },
+  });
+  chatRuins.announceGuide();
+  chatRuins.syncActiveActors();
+  chatRuins.start();
 
   const listControllers = () => [
     ['echo', echo.current],
     ['yesterday', yesterday],
     ['magi', magi],
     ['overcoat', overcoat],
+    ['chatruins', chatRuins],
   ] as const;
 
   const gate = createStoryEntryGate(listControllers);
@@ -133,6 +164,7 @@ export function createStoryOrchestration(options: {
     yesterday,
     magi,
     overcoat,
+    chatRuins,
     router,
     getActiveStoryActorIds: () => activeStoryActorIds,
     announceGuide() {
@@ -154,6 +186,7 @@ export function createStoryOrchestration(options: {
       yesterday.dispose();
       magi.dispose();
       overcoat.dispose();
+      chatRuins.dispose();
     },
   };
 }

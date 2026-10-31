@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
-import type { SceneInterestPointId } from '../gameplay/world/sceneInteractions';
+import { CHATRUINS_STORY_POINT_IDS, type SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 export type { SceneInterestPointId };
 import { createWestBeach } from './westBeach';
 import { createCatCafeIceWall } from './iceKing/catCafeIceWall';
 import { createTransitStationSigns } from './terrain/transitStationSigns';
+import { createChatRuinsInterestPoints } from '../city/chatRuins/chatRuinsInterestPoints';
 
 export interface SceneInterestPointEntity {
   id: SceneInterestPointId;
@@ -19,7 +20,7 @@ interface SceneInterestPointOptionsInput {
   waterRendering: boolean;
 }
 
-interface SceneInterestPointOptions extends SceneInterestPointOptionsInput {
+export interface SceneInterestPointOptions extends SceneInterestPointOptionsInput {
   materialFor: (parameters: Record<string, unknown>) => THREE.MeshStandardMaterial;
 }
 
@@ -382,13 +383,18 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
   // 非 autoTrigger → 自动进基础拾取集），interactionPointer 的 3.5 距离判定
   // 直接可用，tag 语义同 tag()。
   const stationSigns = createTransitStationSigns(options);
-  const list = [createCatCafeNote(options), catCafeIceWall, createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options), ...stationSigns.entities];
+  // S001 会沉的城（2026-10-31）：遗迹发掘点①-⑤与涂鸦墙。底座常显（叙事
+  // 前提「遗迹一直在那里」），marker/hitbox 走 storyActivationVisual 按层激活；
+  // update 驱动地基石夜间微光。story 集合与 echo 共用 setActiveStoryPoints。
+  const chatRuins = createChatRuinsInterestPoints(options);
+  const list = [createCatCafeNote(options), catCafeIceWall, createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options), ...stationSigns.entities, ...chatRuins.entities];
   const entities = new Map(list.map((entity) => [entity.id, entity]));
-  const storyEntities = ECHO_STORY_POINT_IDS
-    .map((id) => entities.get(id))
+  const STORY_POINT_IDS: readonly string[] = [...ECHO_STORY_POINT_IDS, ...CHATRUINS_STORY_POINT_IDS];
+  const storyEntities = STORY_POINT_IDS
+    .map((id) => entities.get(id as SceneInterestPointId))
     .filter((entity): entity is SceneInterestPointEntity => Boolean(entity));
   const baseRaycastTargets = list
-    .filter((entity) => !entity.object.userData.autoTrigger && !ECHO_STORY_POINT_IDS.includes(entity.id as (typeof ECHO_STORY_POINT_IDS)[number]))
+    .filter((entity) => !entity.object.userData.autoTrigger && !STORY_POINT_IDS.includes(entity.id))
     .map((entity) => entity.object);
   const storyRaycastTargets = storyEntities.map((entity) => {
     const targets: THREE.Object3D[] = [];
@@ -421,6 +427,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
     obstacleRoots: [catCafeIceWall.object],
     update(elapsedSeconds) {
       westBeach.update(elapsedSeconds);
+      chatRuins.update(elapsedSeconds);
       for (const object of orangeFruits) {
         const index = object.userData.orangeFruitIndex as number;
         const baseY = object.userData.orangeFruitBaseY as number;
@@ -486,6 +493,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       // 站牌摘除场景节点（生命周期对齐 yearTownTransit；几何/材质由
       // ResourcePool 与下方材质缓存既有路径释放）。
       stationSigns.dispose();
+      chatRuins.dispose();
       materialCache.forEach((material) => material.dispose());
       materialCache.clear();
     },
