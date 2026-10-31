@@ -8,8 +8,8 @@
 // - farGround 西缘：x ≥ w_edge(z) = −150 + (0.4+12·ss)·(1+sin(z/31))（ss 为
 //   岚屏岭南缘→+60 的 smoothStep，z ≥ −50 后恒 1）；x < −150 恒为海。
 // - 南海水面（唯一 Water 实例的扩展几何）：
-//   · 南带：x∈[−150,130]，z ∈ [z_edge(x)−12（贴陆缘下沉带）, 320]；
-//   · 西臂：x∈[−290, w_edge(z)+2]，z∈[40,320]（东缘沿西陆缘内收 2u，
+//   · 南带：x∈[bandXMin,bandXMax]，z ∈ [z_edge(x)−12（贴陆缘下沉带）, bandZMax]；
+//   · 西臂：x∈[armXMin, w_edge(z)+2]，z∈[armZMin,armZMax]（东缘沿西陆缘内收 2u，
 //     藏在近缘下沉的陆地之下；z ≤ 112 段与西海条带西缘 sX(z)−96 取小
 //     对接，不重叠）；
 //   · 镇落位全在恒海区（z_min>180 或 x_max<−150），水面/岛体与 farGround

@@ -9,7 +9,7 @@ export const SURFACE_Y = Object.freeze({
   road: 0.065,
   roadSurface: 0.10,
   roadMarking: 0.11,
-  water: 0.105,
+  water: 0.05,
   navigationTarget: 0.145,
 });
 

@@ -13,9 +13,9 @@
 // 观感差异；浅水渐变仍专属西海滩（surf strip 不动）。
 //
 // 区域公式与 city/data/terrain/sea-archipelago.ts 同源（waterGuard 数据）：
-// - 南带：x∈[−150,130]，z ∈ [南陆缘−12, 320]；北缘 z<168 时沿南陆缘
+// - 南带：x∈[配置 bandXMin,bandXMax]，z ∈ [南陆缘−12, 配置 bandZMax]；北缘 z<168 时沿南陆缘
 //   两侧分东西两瓣（陆缘凸起处留陆地），z≥168 合并为整带；
-// - 西臂：x∈[−290, 西陆缘+2]，z∈[40,310]；z≤112 段东缘与西海条带
+// - 西臂：x∈[配置 armXMin, 西陆缘+2]，z∈[配置 armZMin,armZMax]；z≤112 段东缘与西海条带
 //   西缘 (shorelineX−96) 对接并 ≤4u 搭叠（max 保证永不留缝）。
 import * as THREE from 'three';
 import { shorelineX } from '../../city/data/cityConfig';
@@ -28,14 +28,22 @@ const STRIP_OVERLAP = 4;
 /** 南带北缘的南陆缘贴边（下沉带内收，水面从淹住的下沉海岸开始）。 */
 const ARC_SIN_CLAMP = 1;
 
-/** 南带东瓣西缘（z<168 时沿南陆缘东侧；z≥168 整带西缘 −150）。 */
+const SOUTH_BAND_MIN_Z = Math.min(
+  134,
+  ...Array.from({ length: 64 }, (_, index) => {
+    const x = THREE.MathUtils.lerp(SOUTH_SEA.bandXMin, SOUTH_SEA.bandXMax, index / 63);
+    return southLandEdgeZ(x) - SOUTH_SEA_COAST_TUCK;
+  }),
+);
+
+/** 南带东瓣西缘（z<168 时沿南陆缘东侧；z≥168 整带西缘配置边界）。 */
 function bandEastLobeWestX(z: number): number {
   if (z >= 168) return SOUTH_SEA.bandXMin;
   const t = Math.min(ARC_SIN_CLAMP, Math.max(-ARC_SIN_CLAMP, (150 - z) / 18));
   return 47 * Math.asin(t);
 }
 
-/** 南带东瓣东缘（z<168 时沿南陆缘西侧回落，clip 到 130）。 */
+/** 南带东瓣东缘（z<168 时沿南陆缘西侧回落，clip 到配置边界）。 */
 function bandEastLobeEastX(z: number): number {
   if (z >= 168) return SOUTH_SEA.bandXMax;
   const t = Math.min(ARC_SIN_CLAMP, Math.max(-ARC_SIN_CLAMP, (150 - z) / 18));
@@ -107,7 +115,7 @@ function buildSheet(spec: SheetSpec): THREE.BufferGeometry {
  */
 export function createArchipelagoWaterGeometry(): THREE.BufferGeometry {
   const sheets: THREE.BufferGeometry[] = [
-    // 西臂：星港/长风/微光一带的西外海（z 40..310）。
+    // 西臂：星港/长风/微光一带的西外海，范围由共享配置定义。
     buildSheet({
       innerX: () => SOUTH_SEA.armXMin,
       outerX: westArmEastX,
@@ -115,11 +123,11 @@ export function createArchipelagoWaterGeometry(): THREE.BufferGeometry {
       maxZ: SOUTH_SEA.armZMax,
       columns: 12,
     }),
-    // 南带东瓣：起源村/启明/潮声/盛夏一带（z 134..320，北缘沿南陆缘）。
+    // 南带东瓣：起源村/启明/潮声/盛夏一带，北缘沿南陆缘。
     buildSheet({
       innerX: bandEastLobeWestX,
       outerX: bandEastLobeEastX,
-      minZ: 134,
+      minZ: SOUTH_BAND_MIN_Z,
       maxZ: SOUTH_SEA.bandZMax,
       columns: 28,
     }),
