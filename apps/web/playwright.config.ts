@@ -36,6 +36,13 @@ export default defineConfig({
   // this via PLAYWRIGHT_WORKERS / matrix sharding for throughput.
   workers: Number(process.env.PLAYWRIGHT_WORKERS) || 1,
   timeout: 60_000,
+  // Web assertions ride the main thread, and under SwiftShader one stalled
+  // frame can hold a class/CSS-transition/geometry flip for many seconds —
+  // the 5 s default produced rotating hard-fails across shards (late votes,
+  // toasts, crosshair fade, newspaper reader). 20 s absorbs those stalls
+  // while genuine regressions still fail fast; frame-advance-heavy spots
+  // budget their own wider FRAME_ADVANCE_TIMEOUT instead.
+  expect: { timeout: 20_000 },
   // Surface shard env vars set by `playwright test --shard=x/y` / CI matrix.
   shard: process.env.PLAYWRIGHT_SHARD
     ? {

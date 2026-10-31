@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { RENDER_SETTINGS, seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
+import { FRAME_ADVANCE_TIMEOUT, RENDER_SETTINGS, seedCityStorage, stubCityWebSocket, stubNewsstandWebSocket, stubWorldCatalogWebSocket, waitForCityBooted, waitForCityReady } from './helpers';
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -1149,7 +1149,11 @@ test('newsstand opens the newspaper catalog and reads a multi-page issue', async
   await expect(reader).toHaveClass(/open/);
   await expect(page.locator('#newspaperMeta')).toContainText('星辉周刊 2023.7.23');
   await expect(page.locator('#newspaperStage .np-issue-title')).toHaveText('星辉周刊 2023.7.23');
-  await expect(page.locator('#newspaperStage .np-motto')).toBeVisible();
+  // The reader fades in via a visibility CSS transition; a stalled soft-GL
+  // main thread can hold visibility:hidden (inherited by .np-motto) far past
+  // the 5 s default (shard 8 hard-fail on #268's run). Text/class assertions
+  // above do not require visibility, so this is the first visibility gate.
+  await expect(page.locator('#newspaperStage .np-motto')).toBeVisible({ timeout: FRAME_ADVANCE_TIMEOUT });
   await expect(page.locator('#newspaperStage .np-body')).toContainText('精知优选');
   // 单板块版面整版通栏，不出现半栏 + 右侧空白
   await expect(page.locator('#newspaperStage .np-body .np-col-full')).toHaveCount(1);
