@@ -593,8 +593,8 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     id: "chatruins",
     label: "第一聊天室遗迹",
     num: "60",
-    x: -26,
-    z: -40,
+    x: -33,
+    z: -47.5,
     storyLocked: false
   }
 ]

@@ -138,17 +138,17 @@ export const ECHO_OBSERVATORY_AREA = Object.freeze({
  *  自北向南 = 自上而下五层地层，⑤为中央地基石；涂鸦墙在西侧。 */
 export const CHATRUINS_AREA = Object.freeze({
   /** 遗迹中心（地基石⑤）。 */
-  foundation: Object.freeze([-26, -40] as const),
+  foundation: Object.freeze([-33, -47.5] as const),
   /** 发掘点①-⑤（自上而下）。 */
   digPoints: Object.freeze([
-    [-24.2, -38.4], [-27.8, -38.4], [-24.2, -41.6], [-27.8, -41.6], [-26, -40],
+    [-31.2, -45.9], [-34.8, -45.9], [-31.2, -49.1], [-34.8, -49.1], [-33, -47.5],
   ] as readonly Coord2[]),
   /** 涂鸦墙（西侧矮墙）。 */
-  wall: Object.freeze([-28.9, -40] as const),
+  wall: Object.freeze([-30.1, -47.5] as const),
   /** laxy 瓦 站位（遗迹入口北侧）。 */
-  laxy: Object.freeze([-25.2, -37.2] as const),
+  laxy: Object.freeze([-32.2, -44.7] as const),
   /** 墓碑先生 站位（地基石西南侧）。 */
-  tombstone: Object.freeze([-27.1, -41] as const),
+  tombstone: Object.freeze([-34.1, -48.5] as const),
 });
 
 /** 星语北城：主城北侧的扩建城区（黑洞热门作品 Top100 城市化）。

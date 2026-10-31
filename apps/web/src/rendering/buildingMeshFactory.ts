@@ -9,6 +9,7 @@ import { createNorthDistrictBuilders, buildMartStore } from './northDistrictBuil
 import { buildKomorebiWorkshop } from './komorebiClockworks';
 import { buildFireworksShop } from './fireworksShopBuilding';
 import { buildObservationDeck } from './observationDeckBuilding';
+import { buildChatRuins } from './chatRuinsBuildingMesh';
 import { buildGenshinInstitute } from './genshinInstitute';
 import { buildSchoolCampus } from './schoolCampusBuilding';
 import { RENDER_ORDER } from './layers';
@@ -875,6 +876,7 @@ export function createBuildingMeshFactory(options: BuildingMeshFactoryOptions) {
     fireworks_shop: (cfg: BuildingDefinition) => buildFireworksShop({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     observation_deck: (cfg: BuildingDefinition) => buildObservationDeck({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
     genshin_institute: (cfg: BuildingDefinition) => buildGenshinInstitute({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
+    chatruins: (cfg: BuildingDefinition) => buildChatRuins({ platformHeight: PLH, makeMaterial: stdMat, makeMesh: mk, addPart: part }, cfg),
   };
 
   return { builders };
