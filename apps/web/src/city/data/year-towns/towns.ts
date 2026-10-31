@@ -440,9 +440,13 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         // 两条袋形院巷从滨水侧开口，在街廓边缘止步，院心保持完整。
         { x0: -18, z0: 287, x1: -15, z1: 287, halfWidth: 1.1, kind: 'lane', name: '秤砣巷' },
         { x0: 58, z0: 287, x1: 62, z1: 287, halfWidth: 1.1, kind: 'lane', name: '缆绳巷' },
-        // 滨水步道：沿内湾东缘，接渔港阶地
-        { x0: -20, z0: 225, x1: -18, z1: 260, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
-        { x0: -18, z0: 260, x1: -16, z1: 306, halfWidth: 1.5, kind: 'promenade', name: '南岸步道' },
+        // 滨水步道：沿内湾东缘接渔港阶地；在启明/回响两座站房处向东绕行
+        // （红队复核：原直线距站房中心 0.4u/-0.2u，步道从楼里过）。
+        { x0: -19, z0: 225, x1: -14, z1: 236, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
+        { x0: -14, z0: 236, x1: -18, z1: 252, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
+        { x0: -18, z0: 252, x1: -18, z1: 260, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
+        { x0: -18, z0: 260, x1: -13, z1: 284, halfWidth: 1.5, kind: 'promenade', name: '南岸步道' },
+        { x0: -13, z0: 284, x1: -16, z1: 306, halfWidth: 1.5, kind: 'promenade', name: '南岸步道' },
         // 斜街：市区东南角通往东滩
         { x0: 62, z0: 262, x1: 68, z1: 294, halfWidth: 1.8, kind: 'street', name: '东滩街' },
       ],

@@ -12,9 +12,10 @@
 // （意象化引用，不逐字抄正文；正文由年份镇建筑面板承载）。
 import type { NpcProfile } from '../../npcSystem';
 
-/** 年份镇 NPC 档案（18 名：2019×1，2020/2024/2025/2026×2，2021/2022/2023×3）。 */
+/** 年份镇 NPC 档案（20 名：2019×3，2020/2024/2025/2026×2，2021/2022/2023×3）。 */
 export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
-  // ── 2019 起源村 ×1：《管理条例》(2019) → 碑上公约；「高频」装置集合 → 心跳滴答 ──
+  // ── 2019 起源村 ×3：《管理条例》(2019) → 碑上公约；「高频」装置集合 → 心跳滴答；
+  //    南湾泊口 → 摆渡人；千作总目塔 → 塔下计数人 ──
   {
     id:'yt2019-lamplighter', name:'守灯人', role:'起源村 · 村口守灯人', core:false, spawnChance:1,
     behavior:'field', workHours:[0,24],
@@ -32,6 +33,43 @@ export const YEAR_TOWN_NPCS: readonly NpcProfile[] = [
       { text:'「我在守那台老装置。它一断一开、一断一开地滴答了这么多年——村子最原始的心跳。你听，现在还在跳。」', options:[
         { text:'听到了。', next:null },
         { text:'祝村子长长久久。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'yt2019-ferryman', name:'渡爷', role:'起源村 · 南湾摆渡人', core:false, spawnChance:1,
+    behavior:'field', workHours:[6,20],
+    head:0xD8BBA0, body:0x6A7A6A, home:[150,223], work:[150,223], patrolRadius:0,
+    dialog:[
+      { text:'「顺着这条栈道走到头就是泊口。坐我的船？先说好——渡免费，故事管够。」', options:[
+        { text:'去哪儿都行？', next:1 },
+        { text:'（沿栈道看看）', next:null },
+      ]},
+      { text:'「当年村里没有桥，进出全靠我这条船。南湾的鱼、窑上的砖、碑上的石头，都是一桨一桨运进来的。后来修了桥，船就闲下来了——闲着，也天天擦。」', options:[
+        { text:'还出海吗？', next:2 },
+        { text:'船真老。', next:null },
+      ]},
+      { text:'「出。哪年村里添了新屋、立了新碑，我就载着村里的后生绕岛一圈——让他们看看，自己住的地方从水上看是什么样。要看吗？潮平的时候最好看。」', options:[
+        { text:'要看的。', next:null },
+        { text:'下次一定。', next:null },
+      ]},
+    ],
+  },
+  {
+    id:'yt2019-tallyman', name:'数塔人', role:'起源村 · 塔下计数人', core:false, spawnChance:1,
+    behavior:'field', workHours:[9,18],
+    head:0xE0C8B0, body:0x8A7A5A, home:[142.5,197.5], work:[142.5,197.5], patrolRadius:0,
+    dialog:[
+      { text:'「嘘——别踩乱我的石子。塔里立着历年的册子，我在塔底下数：今年，村里又添了几件做成了的事。」', options:[
+        { text:'怎么个数法？', next:1 },
+        { text:'（不打扰了）', next:null },
+      ]},
+      { text:'「一颗石子是一件。日子好的一年，石子多得袋子装不下；日子难的一年，就三两颗。但你猜怎么着——没有哪年是一颗都没有的。一年一年数下来，村子就是这么长大的。」', options:[
+        { text:'今年几颗了？', next:2 },
+        { text:'数得真细。', next:null },
+      ]},
+      { text:'「今天刚数到一颗新的。谁做的不重要——重要的是又一颗。塔上的册子记名姓，我这里只记『又』字。」', options:[
+        { text:'（看了看那袋石子）', next:null },
       ]},
     ],
   },

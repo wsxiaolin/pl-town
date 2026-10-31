@@ -25,11 +25,19 @@ type UrbanDecor = { kind: PropKind; x: number; z: number; rotY?: number; tint?: 
 
 /** 城市装饰逐件手写：主街成列、院落成组、滨水节点有明确用途。 */
 const URBAN_DECOR: readonly UrbanDecor[] = [
-  // 起源村：村街中央火塘、进站旗杆与两栋屋之间的公告板。
+  // 起源村：村街中央火塘、进站旗杆与两栋屋之间的公告板；
+  // 升格段：围火凳（朝火塘）、湾头灯笼对、村东/村西棕榈与湾头村旗。
   { kind: 'bonfire', x: 150, z: 211 },
   { kind: 'flagpole', x: 146.5, z: 204.5, tint: 0xe8a838 },
   { kind: 'flagpole', x: 153.5, z: 204.5, tint: 0xe8d5a8 },
   { kind: 'board', x: 150, z: 216, rotY: Math.PI / 2 },
+  { kind: 'bench', x: 146.5, z: 212.5, rotY: Math.atan2(3.5, -1.5) },
+  { kind: 'bench', x: 153.5, z: 212.5, rotY: Math.atan2(-3.5, -1.5) },
+  { kind: 'lanternpost', x: 146.5, z: 221.5 },
+  { kind: 'lanternpost', x: 153.5, z: 221.5 },
+  { kind: 'palm', x: 164.5, z: 216 },
+  { kind: 'palm', x: 133.5, z: 213.5 },
+  { kind: 'flagpole', x: 147, z: 223.5, tint: 0xe8a838 },
   // 旧港港口大道灯列与中央市集。
   { kind: 'streetlamp', x: 15.5, z: 268 }, { kind: 'streetlamp', x: 24.5, z: 268, flip: true },
   { kind: 'streetlamp', x: 15.5, z: 280 }, { kind: 'streetlamp', x: 24.5, z: 280, flip: true },

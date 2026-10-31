@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { YEAR_TOWN_NEIGHBORHOODS } from '../../src/city/data/year-towns/cityNeighborhoods';
 import { YEAR_TOWN_BUILDING_DEFS, YEAR_TOWN_BUILDING_CONTENT } from '../../src/city/yearTownBuildings';
-import { YEAR_DISTRICTS, islandRadiusScaleAt, type IslandStreet } from '../../src/city/data/year-towns/towns';
+import { YEAR_ISLAND_SPECS, islandRadiusScaleAt, type IslandStreet } from '../../src/city/data/year-towns/towns';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 import { YEAR_TOWN_URBAN_LIFE } from '../../src/city/data/year-towns/urbanLife';
 
@@ -35,7 +35,12 @@ function distanceToStreet(x: number, z: number, street: IslandStreet): number {
 test('年份外城建筑坐标独立且全部落在平整台面并留岸线退距', () => {
   const occupied = new Set<string>();
   for (const building of YEAR_TOWN_NEIGHBORHOODS) {
-    const district = YEAR_DISTRICTS.find((entry) => entry.id === (building.townId === 'island-2022' ? 'island-oldport' : 'island-starport'))!;
+    // 岛解析（非断言，仅扩展新 townId 的覆盖面）：island-2022/2026 映射到
+    // 各自大城，island-2019 是独立台面岛（只在 YEAR_ISLAND_SPECS 中）。
+    const islandId = building.townId === 'island-2022'
+      ? 'island-oldport'
+      : building.townId === 'island-2026' ? 'island-starport' : building.townId;
+    const district = YEAR_ISLAND_SPECS.find((entry) => entry.id === islandId)!;
     const key = `${building.x},${building.z}`;
     assert.ok(!occupied.has(key), `${building.id} 与其他建筑共用中心 ${key}`);
     occupied.add(key);
