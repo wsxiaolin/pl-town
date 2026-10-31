@@ -13,10 +13,3 @@ export const FIREWORK_LAUNCH_ZONE = Object.freeze({
   /** 船只/浮筒所在的吃水高度。 */
   waterY: 0.18,
 });
-
-export const OBSERVATION_DECK_VIEW = Object.freeze({
-  /** 观景模式相机注视点（燃放海域中心偏西）。 */
-  targetX: -58, targetZ: -12,
-  /** 观景模式正交半高（越大视野越宽）。 */
-  zoom: 13.5,
-});

@@ -535,35 +535,65 @@
           <span class="fw-label">烟花名</span>
           <input type="text" class="fw-name" data-fw-name maxlength="20" placeholder="给这支烟花起个名字" />
         </label>
-        <div class="fw-field">
-          <span class="fw-label">花形</span>
-          <div class="fw-shapes" data-fw-shapes></div>
-        </div>
-        <div class="fw-sliders">
-          <label class="fw-slider">高度 <input type="range" data-fw-height min="24" max="90" step="1" value="52" /> <output data-fw-height-value>52</output></label>
-          <label class="fw-slider">大小 <input type="range" data-fw-size min="60" max="160" step="5" value="100" /> <output data-fw-size-value>100%</output></label>
-          <label class="fw-slider">闪烁 <input type="range" data-fw-sparkle min="0" max="100" step="5" value="35" /> <output data-fw-sparkle-value>35</output></label>
-        </div>
-        <div class="fw-colors">
-          <label class="fw-color">主色 <input type="color" data-fw-primary value="#ffd76e" /></label>
-          <label class="fw-color">次色 <input type="color" data-fw-secondary value="#ff5f8a" /></label>
-          <label class="fw-color">余焰 <input type="color" data-fw-trail value="#ffe9b0" /></label>
-        </div>
-        <div class="fw-pattern" data-fw-pattern-section hidden>
-          <div class="fw-pattern-tools">
-            <button type="button" class="fw-tool active" data-fw-tool="draw">画</button>
-            <button type="button" class="fw-tool" data-fw-tool="erase">擦</button>
-            <label class="fw-symmetry"><input type="checkbox" data-fw-symmetry checked /> 左右对称</label>
-            <button type="button" class="fw-tool" data-fw-clear>清空</button>
-            <span class="fw-cells" data-fw-cells>0 点</span>
+        <section class="fw-block">
+          <div class="fw-block-head"><span>01 弹体与发射</span><em>卷筒 · 装发射药</em></div>
+          <div class="fw-sliders">
+            <label class="fw-slider">弹径 <input type="range" data-fw-caliber min="50" max="300" step="5" value="150" /> <output data-fw-caliber-value>150mm</output></label>
+            <label class="fw-slider">发射药 <input type="range" data-fw-lift min="10" max="300" step="1" value="68" /> <output data-fw-lift-value>68g</output></label>
+            <label class="fw-slider">开爆高 <input type="range" data-fw-height min="24" max="90" step="1" value="52" /> <output data-fw-height-value>52</output></label>
+            <label class="fw-slider">发射角 <input type="range" data-fw-angle min="0" max="18" step="1" value="3" /> <output data-fw-angle-value>3°</output></label>
           </div>
-          <canvas class="fw-grid" data-fw-grid width="420" height="420"></canvas>
-          <p class="fw-pattern-hint">在网格上一格一格画出烟花要在夜空拼出的图案（拼字请亲手画，别指望打字）</p>
-        </div>
+        </section>
+        <section class="fw-block">
+          <div class="fw-block-head"><span>02 星体与开爆</span><em>装星 · 定引信</em></div>
+          <div class="fw-sliders">
+            <label class="fw-slider">开爆药 <input type="range" data-fw-break min="5" max="200" step="1" value="29" /> <output data-fw-break-value>29g</output></label>
+            <label class="fw-slider">星数 <input type="range" data-fw-stars min="40" max="600" step="10" value="300" /> <output data-fw-stars-value>300</output></label>
+            <label class="fw-slider">星体 <input type="range" data-fw-starsize min="4" max="18" step="1" value="9" /> <output data-fw-starsize-value>9mm</output></label>
+            <label class="fw-slider">燃烧 <input type="range" data-fw-burn min="1" max="6" step="1" value="3" /> <output data-fw-burn-value>3s</output></label>
+            <label class="fw-slider">闪烁 <input type="range" data-fw-sparkle min="0" max="100" step="5" value="35" /> <output data-fw-sparkle-value>35</output></label>
+            <label class="fw-slider">尾迹 <select data-fw-trail><option value="none">无尾</option><option value="comet" selected>彗尾</option><option value="glitter">碎金</option></select></label>
+          </div>
+        </section>
+        <section class="fw-block">
+          <div class="fw-block-head"><span>03 颜色与花形</span><em>配色 · 开花</em></div>
+          <div class="fw-colors">
+            <label class="fw-color">主色 <input type="color" data-fw-primary value="#ffd76e" /></label>
+            <label class="fw-color">次色 <input type="color" data-fw-secondary value="#ff5f8a" /></label>
+            <label class="fw-color">余焰 <input type="color" data-fw-trail-color value="#ffe9b0" /></label>
+          </div>
+          <div class="fw-field">
+            <div class="fw-shapes" data-fw-shapes></div>
+          </div>
+          <div class="fw-pattern" data-fw-pattern-section hidden>
+            <div class="fw-pattern-tools">
+              <button type="button" class="fw-tool active" data-fw-tool="draw">画</button>
+              <button type="button" class="fw-tool" data-fw-tool="erase">擦</button>
+              <label class="fw-symmetry"><input type="checkbox" data-fw-symmetry checked /> 左右对称</label>
+              <button type="button" class="fw-tool" data-fw-clear>清空</button>
+              <span class="fw-cells" data-fw-cells>0 点</span>
+            </div>
+            <canvas class="fw-grid" data-fw-grid width="420" height="420"></canvas>
+            <p class="fw-pattern-hint">在网格上一格一格画出烟花要在夜空拼出的图案（拼字请亲手画，别指望打字）</p>
+          </div>
+        </section>
       </section>
       <section class="fw-right">
+        <div class="fw-block-head"><span>04 试放</span><em>预览 · 工艺校验</em></div>
         <div class="fw-preview-wrap">
-          <canvas class="fw-preview" data-fw-preview width="260" height="300"></canvas>
+          <canvas class="fw-preview" data-fw-preview width="300" height="340"></canvas>
+        </div>
+        <div class="fw-craft">
+          <div class="fw-craft-head"><span>工艺卡</span><em data-fw-craft-verdict>可试放</em></div>
+          <dl class="fw-craft-grid">
+            <div><dt>引信</dt><dd data-fw-craft-fuse>—</dd></div>
+            <div><dt>实际开爆</dt><dd data-fw-craft-height>—</dd></div>
+            <div><dt>开爆半径</dt><dd data-fw-craft-radius>—</dd></div>
+            <div><dt>星体</dt><dd data-fw-craft-stars>—</dd></div>
+            <div><dt>燃烧</dt><dd data-fw-craft-burn>—</dd></div>
+            <div><dt>推荐装药</dt><dd data-fw-craft-charge>—</dd></div>
+          </dl>
+          <p class="fw-craft-warn" data-fw-craft-warn></p>
         </div>
         <button type="button" class="fw-save" data-fw-save>存入云端 · 30 金币</button>
         <p class="fw-status" data-fw-status></p>

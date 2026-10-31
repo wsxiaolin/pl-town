@@ -5,8 +5,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(880px, 94vw);
-  max-height: min(640px, 92vh);
+  width: min(920px, 94vw);
+  max-height: min(720px, 94vh);
   overflow: auto;
   background: #fffdf6;
   color: #3a3226;
@@ -40,9 +40,36 @@
 
 .fireworks-panel .fw-body {
   display: grid;
-  grid-template-columns: 1.25fr 1fr;
+  grid-template-columns: 1.22fr 1fr;
   gap: 18px;
   padding: 14px 16px 18px;
+}
+
+.fireworks-panel .fw-block {
+  border-top: 1px dashed #e2d5b6;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.fireworks-panel .fw-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #6a5a3a;
+  letter-spacing: 0.08em;
+}
+.fireworks-panel .fw-block-head span { font-weight: 700; }
+.fireworks-panel .fw-block-head em { font-style: normal; color: #a09478; font-size: 11px; }
+.fireworks-panel .fw-slider select {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid #d8c9a5;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
 }
 
 .fireworks-panel .fw-field { display: block; margin-bottom: 10px; }
@@ -138,7 +165,42 @@
   justify-content: center;
   overflow: hidden;
 }
-.fireworks-panel .fw-preview { width: 100%; max-width: 260px; display: block; }
+.fireworks-panel .fw-preview { width: 100%; max-width: 300px; display: block; }
+
+.fireworks-panel .fw-craft {
+  border: 1px solid #e2d5b6;
+  border-radius: 8px;
+  background: #f9f3e4;
+  padding: 8px 10px;
+}
+.fireworks-panel .fw-craft-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: #6a5a3a;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.fireworks-panel .fw-craft-head em { font-style: normal; font-size: 11px; color: #4f7a4a; }
+.fireworks-panel .fw-craft-head em.warn { color: #a63028; }
+.fireworks-panel .fw-craft-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 12px;
+  margin: 6px 0 0;
+}
+.fireworks-panel .fw-craft-grid div { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; }
+.fireworks-panel .fw-craft-grid dt { color: #8a7a5a; }
+.fireworks-panel .fw-craft-grid dd { margin: 0; color: #3a3226; font-variant-numeric: tabular-nums; }
+.fireworks-panel .fw-craft-warn {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #a05a28;
+  min-height: 0;
+}
+.fireworks-panel .fw-craft-warn:empty { display: none; }
 .fireworks-panel .fw-save {
   padding: 10px;
   border: 1px solid #a63028;
