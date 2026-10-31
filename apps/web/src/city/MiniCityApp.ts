@@ -11,6 +11,8 @@ import { LocalStorageQuestJournalRepository } from '../adapters/storage/LocalSto
 import { QuestRuntime } from '../gameplay/quests/QuestRuntime';
 import { createCityDialogController, type CityDialogController, type NpcEntityLike } from '../adapters/ui/cityDialogController';
 import { createMultiplayerHousingController } from '../adapters/ui/multiplayerHousingController';
+import { createCityThemeWiring } from './cityThemeWiring';
+import { createCityInteractionWiring } from './cityInteractionWiring';
 import type { BuildingEntity, ResidenceEntity } from './buildingEntity';
 import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
@@ -41,7 +43,6 @@ import { createOnboardingTutorialController } from '../adapters/ui/onboardingTut
 import { createStatsPanelController } from '../adapters/ui/statsPanelController';
 import { townGameDay, townGameHour } from '../gameplay/time/townClock';
 import { ACHIEVEMENTS, createUnlockTiers } from './progression/achievements';
-import { createThemeClock } from './themeClock';
 import { createInteractionPointer } from './interactionPointer';
 import { showUnlockToast } from './toast';
 import { createInteractionTracker } from './interactionTracker';
@@ -72,7 +73,6 @@ import { createCityGraphics } from './cityGraphics';
 import { createCityViewControls } from './cityViewControls';
 import { createNpcDistrictFilter } from './npcDistrictFilter';
 import { createIceKingCityHooks } from './iceKingCityHooks';
-import { createCityThemeSync } from './cityThemeSync';
 import { createFireworksPlaykit, fireworksDebug, fireworksHandlers, type FireworksPlaykit } from './fireworks/fireworksPlaykit';
 import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
@@ -195,7 +195,7 @@ const districtFilter = createNpcDistrictFilter({
   showToast: showUnlockToast,
 });
 
-const themeClock = createThemeClock({
+const { themeClock, themeSync } = createCityThemeWiring({
   getSkyTextures: () => proceduralTextures.backgrounds,
   getScene: () => scene,
   getPalette: () => P,
@@ -211,11 +211,6 @@ const themeClock = createThemeClock({
   updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
   getStats,
   saveStats,
-});
-
-const themeSync = createCityThemeSync({
-  applyClock: (night, instant) => themeClock.applyTheme(night, instant),
-  syncClock: () => themeClock.syncTimeAndTheme(),
   setWaterDaylight: (daylight, instant) => {
     sceneInterestPoints?.setWaterDaylight(daylight, instant);
     worldDecorations?.setWaterDaylight(daylight, instant);
@@ -223,7 +218,9 @@ const themeSync = createCityThemeSync({
   refreshWeatherVisual: () => weatherEffect?.set(graphics.weather.get()),
 });
 
-const interactionPointer = createInteractionPointer({
+const {
+  interactionPointer, firstPersonInteract, interactionTracker, openNpcDialog,
+} = createCityInteractionWiring({
   getCamera: () => camera,
   getRaycaster: () => raycaster,
   getMouse2D: () => mouse2D,
@@ -238,11 +235,9 @@ const interactionPointer = createInteractionPointer({
   getConfig: () => CONFIG,
   isBuildingUnavailable: availability.isBuildingUnavailable,
   isResidenceUnavailable: availability.isResidenceUnavailable,
-  findRaycastBuilding,
   raycastUserData: (object, key) => multiplayerHousing.raycastUserData(object, key),
   npcForRaycast: () => npcSystem.npcForRaycast(),
   nearestNpcTo: (position, radius) => npcSystem.nearestNpcTo(position, radius),
-  openNpcDialog,
   openResidence: (residenceId) => multiplayerHousing.openResidence(residenceId),
   onYouClick: () => npcSystem.onYouClick(),
   movePlayerTo: (target) => playerController?.moveTo(target),
@@ -252,25 +247,16 @@ const interactionPointer = createInteractionPointer({
   interactWithSceneInterestPoint: () => undefined,
   interactWithInterestPointController: (id) => sceneInterestPointController?.interact(id),
   getSpecialInterior: () => iceKingFeature?.sanctum.isActive() ? iceKingFeature.sanctum : null,
-});
-
-const firstPersonInteract = createFirstPersonInteract({
-  getActiveCamera: () => (firstPersonController?.getActiveCamera() ?? null) as THREE.Camera | null,
-  raycaster, getRaycastGroups: () => raycastBuildingGroups, findBuilding: findRaycastBuilding, exit: () => firstPersonController?.exit(),
-  showToast: showUnlockToast, interactOrWalk: (building) => interactionPointer.interactOrWalk(building),
-});
-
-const interactionTracker = createInteractionTracker({
   getStats,
   saveStats,
   updateWelcome: () => {},
   getProgressionController: () => progressionController,
   getQuestRuntime: () => questRuntime,
-  getEchoStoryController: () => stories?.echo,
-  getCamera: () => camera,
   getQuestEventSequence: () => questEventSequence,
   incrementQuestEventSequence: () => { questEventSequence++; },
-  getCursorChar: () => cursorChar,
+  getActiveFpCamera: () => (firstPersonController?.getActiveCamera() ?? null) as THREE.Camera | null,
+  exitFirstPerson: () => firstPersonController?.exit(),
+  getStoryRouter: () => stories?.router,
 });
 
 const sceneAnimations = createSceneAnimations({ getBuildings: () => buildings, reduced: REDUCED });
@@ -441,18 +427,6 @@ let UNLOCK_TIERS = createUnlockTiers(
 function awardDirectAchievement(id: string, name: string) {
   if (multiplayerHousing?.progression.getProgress().achievements.includes(id)) return;
   if (multiplayerHousing?.progression.unlockAchievement(id)) showUnlockToast(`Achievement unlocked: ${name}`);
-}
-function findRaycastBuilding(hits: readonly THREE.Intersection[]) {
-  return findBuildingFromRaycastHits({ hits, buildings, readUserData: (object, key) => multiplayerHousing.raycastUserData(object, key), isUnavailable: availability.isBuildingUnavailable });
-}
-function openNpcDialog(npc: Npc) {
-  routeNpcDialog(
-    stories.router,
-    cityDialogs,
-    npc.profile.id,
-    () => cityDialogs?.openNpc(npc as NpcEntityLike, cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : undefined),
-    () => interactionTracker.recordNpcInteraction(npc.profile.id),
-  );
 }
 
 function init() {
