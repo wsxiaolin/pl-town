@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LANPING_RANGE } from '../../src/city/data/terrain/range-lanping';
-import { CHENXI_RIVER, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../src/city/data/terrain/river-chenxi';
+import { CHENXI_RIVER, CHENXI_MOUTH_LEVEL, ESTUARY_PROFILE, ESTUARY_BBOX } from '../../src/city/data/terrain/river-chenxi';
 import { MINGLAN_ISLES } from '../../src/city/data/terrain/sea-minglan';
 import { CITYSIDE_MEADOW } from '../../src/city/data/terrain/ground-cityside';
 import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
@@ -15,6 +15,7 @@ import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
 import { TRAIL_NAV_NODES, SOUTH_TRAIL_NODES, NORTH_TRAIL_NODES, TRAIL_SLOT_HALF, worldReliefAt } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHeight';
 import { RIVER_SAMPLES, riverWaterYAt, riverWaterRows } from '../../src/city/data/terrain/heightfield/riverField';
+import { SURFACE_Y } from '../../src/rendering/layers';
 
 // 世界地形配置的数值审计（v5，2026-10-04）：把 range-lanping.ts /
 // sea-minglan.ts 头注释里逐条核对的 keep-out 约束固化成回归测试——
@@ -202,6 +203,14 @@ test('晨溪连续水面共享地形采样、海内沉没、北步道保持干�
       assert.ok(Number.isFinite(terrainHeight(x, z)));
     }
   }
+});
+
+test('晨溪河口低于海面并保持水位间距', () => {
+  const mouth = RIVER_SAMPLES[RIVER_SAMPLES.length - 1]!;
+  assert.equal(SURFACE_Y.water, 0.06);
+  assert.ok(SURFACE_Y.water - CHENXI_MOUTH_LEVEL >= 0.004, '河口需低于海面以避免近共面闪烁');
+  assert.equal(mouth.waterY, CHENXI_MOUTH_LEVEL);
+  assert.equal(riverWaterYAt(mouth.x, mouth.z), CHENXI_MOUTH_LEVEL);
 });
 
 test('明澜岛屿/岬角与西海滩既有道具保持 ≥12 间距', () => {

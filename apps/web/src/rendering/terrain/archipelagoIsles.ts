@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { YEAR_ISLAND_SPECS, islandRadiusScaleAt, type YearDistrictSpec } from '../../city/data/year-towns/towns';
 import { islandSurfaceYAt, ISLAND_SKIRT_BOTTOM, ISLAND_SKIRT_W } from '../../city/data/terrain/heightfield/islandField';
+import { SURFACE_Y } from '../layers';
 
 // 南洋年份群岛渲染：2 座大城 + 启源站，共 3 座 flat-top 岛台（台面平台 + 滩坡 + 水下裙）+ 沙线盘。
 // 配置契约见 city/data/year-towns/towns.ts 与设计文档 §3/§6.2；
@@ -22,7 +23,7 @@ import { islandSurfaceYAt, ISLAND_SKIRT_BOTTOM, ISLAND_SKIRT_W } from '../../cit
 
 const SAND_RIM_Y = 0.085;
 const SAND_RIM_MARGIN = 1.5;
-const WATER_LINE_Y = 0.06;
+const WATER_LINE_Y = SURFACE_Y.water;
 
 // 分带阈值（绝对高度）。
 const WET_ROCK_MAX_Y = 0.02;
