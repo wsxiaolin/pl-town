@@ -5,6 +5,7 @@ import { terrainHeight } from '../../src/city/data/terrain/heightfield/terrainHe
 import { islandSurfaceYAt } from '../../src/city/data/terrain/heightfield/islandField';
 import { YEAR_DISTRICTS } from '../../src/city/data/year-towns/towns';
 import { YEAR_TOWN_MEMORIALS } from '../../src/city/data/year-towns/yearTownMemorials';
+import { YEAR_TOWN_NEIGHBORHOODS } from '../../src/city/data/year-towns/cityNeighborhoods';
 
 // 地基高度单一事实源：建筑 baseY 必须与 terrainHeight 同采样器一致，
 // 防止岛缘 / 枢纽过渡带的高度聚合变化让建筑地基与玩家落点漂移。
@@ -79,6 +80,23 @@ test('年份城市建筑避开道路、广场且中心不重复', () => {
       const distance = Math.hypot(layout.x - plaza.x, layout.z - plaza.z);
       if (distance < plaza.radius + footprint - 0.05) {
         conflicts.push(`${memorial.key} 距广场中心 ${distance.toFixed(2)}，建筑侵入广场`);
+      }
+    }
+  }
+  assert.deepEqual(conflicts, [], conflicts.join('\n'));
+});
+
+// 纪念设施与外城生活建筑的交叉净距：两者坐标分属不同目录、审计此前互不
+// 检查，重排布局时容易视觉穿模（2023 归港镇落位时发现的规则缺口）。7u 为
+// 城市设计总纲 §3 规则 7 的既定值。
+test('纪念设施与外城生活建筑保持 7u 交叉净距', () => {
+  const conflicts: string[] = [];
+  for (const memorial of YEAR_TOWN_MEMORIALS) {
+    if (!memorial.layout) continue;
+    for (const neighbor of YEAR_TOWN_NEIGHBORHOODS) {
+      const distance = Math.hypot(memorial.layout.x - neighbor.x, memorial.layout.z - neighbor.z);
+      if (distance < 7) {
+        conflicts.push(`${memorial.key} (${memorial.layout.x},${memorial.layout.z}) 距外城 ${neighbor.id} (${neighbor.x},${neighbor.z}) ${distance.toFixed(2)}u，小于 7u`);
       }
     }
   }

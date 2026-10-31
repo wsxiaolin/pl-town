@@ -436,6 +436,7 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         { x0: -18, z0: 220, x1: 62, z1: 220, halfWidth: 2.2, kind: 'street', name: '站前街' },
         { x0: -18, z0: 262, x1: 62, z1: 262, halfWidth: 2.5, kind: 'street', name: '中市街' },
         { x0: -18, z0: 309, x1: 58, z1: 309, halfWidth: 2.1, kind: 'street', name: '鱼市街' },
+        { x0: -68, z0: 336, x1: 104, z1: 336, halfWidth: 2.3, kind: 'street', name: '灯市街' },
         // 两条袋形院巷从滨水侧开口，在街廓边缘止步，院心保持完整。
         { x0: -18, z0: 287, x1: -15, z1: 287, halfWidth: 1.1, kind: 'lane', name: '秤砣巷' },
         { x0: 58, z0: 287, x1: 62, z1: 287, halfWidth: 1.1, kind: 'lane', name: '缆绳巷' },

@@ -1,5 +1,14 @@
 // 年份 2022 纪念设施（从 yearTownMemorials.ts 按年拆分；布局手写唯一事实源）。
 // key/workId/facility/family/note/noteKind 为既定事实不可改；layout 可按城市规划重排。
+//
+// 2022 明理镇城市重造落位（docs/year-towns-urban-redesign.md §2，「学理与纪念」）：
+// 20 座设施全部落旧港城四个登记街廓——
+//   B9  东滩里   [74,98]×[268,303]   3 座宅里（residential 尺度；环线斜撑 (105,160)→(72,282)
+//       与东站台段斜穿廓内西北角，北楼东移至 x=90 面东堤街，西列 z≥285 面东滩街）；
+//   B10 灯市厢西 [-62,13]×[314.5,330] 7 座（北排临鱼市街、西列临西巷、南排临灯市街走廊）；
+//   B11 灯市厢东 [28,98]×[314.5,330] 6 座（北排临鱼市街、西角面港口大道水广场、东南角临灯市街）；
+//   B12 西馆区   [-62,-26]×[341.5,358] 4 座 civic 庄重族（plot 5.5，环灯市市集广场留白围合）。
+// B10/B11 南排与 B12 北排隔灯市街走廊（z≈330..341.5）对望成街谷；海堤街以南不落。
 import type { YearTownMemorial } from '../_types';
 
 export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
@@ -7,7 +16,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-01',
     workId: '620665aad58bcf00016aeb8b',
-    layout: { x: -11, z: 273, plot: 5.5, facing: 'n' },
+    layout: { x: -57, z: 344.5, plot: 5.5, facing: 'n' },
     facility: '新律法厅',
     family: 'law',
     note: '律法碑廊的续篇。厅内条文更细，把从前靠默契的部分也写了进去。',
@@ -15,7 +24,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-02',
     workId: '61ef8eea8af0a60001d993a0',
-    layout: { x: -5, z: 273, plot: 4.6, facing: 'n' },
+    layout: { x: 2, z: 317, plot: 4.6, facing: 'n' },
     facility: '功能陈列馆',
     family: 'lab',
     note: '把散落各处的隐藏功能集中陈列。它更像一本说明书，进馆的人多半带着问题。',
@@ -23,7 +32,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-03',
     workId: '61ef8a128af0a60001d99267',
-    layout: { x: 1, z: 273, plot: 4.6, facing: 'n' },
+    layout: { x: -48, z: 327.5, plot: 4.6, facing: 's' },
     facility: '艺术字长廊',
     family: 'lab',
     note: '长廊两侧挂着同一句话的不同写法。走到底才明白，内容没变，语气全变了。',
@@ -31,7 +40,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-04',
     workId: '6282fdecf1766800018dad23',
-    layout: { x: 7, z: 273, plot: 3.8, facing: 'n' },
+    layout: { x: 10, z: 317, plot: 4.6, facing: 'n' },
     facility: '路标广场',
     family: 'guild',
     note: '广场中央立着指向各镇的木牌。它纪念的是城市第一次有了「方向」这件事。',
@@ -39,7 +48,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-05',
     workId: '62dd08a637fde000013cae5e',
-    layout: { x: 12, z: 273, plot: 3.8, facing: 'n' },
+    layout: { x: -6, z: 317, plot: 4.6, facing: 'n' },
     facility: '律动舞台',
     family: 'gathering',
     note: '一座会跟着节拍轻晃的露天舞台。夏天傍晚，镇上的人常聚在这里。',
@@ -47,7 +56,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-06',
     workId: '626c9bc50948e50001d9e45f',
-    layout: { x: 11, z: 280, plot: 3.8, facing: 'e' },
+    layout: { x: 34, z: 317, plot: 4.6, facing: 'n' },
     facility: '封禁告示亭',
     family: 'law',
     note: '亭内张贴过最严厉的一次处断。它留下的不是名单，而是关于边界的一次公开说明。',
@@ -55,7 +64,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-07',
     workId: '62d412bd57ab5800018bc03f',
-    layout: { x: 11, z: 287, plot: 3.8, facing: 'e' },
+    layout: { x: 90, z: 272, plot: 4.2, facing: 'e' },
     facility: '荒岛连载楼',
     family: 'narrative',
     note: '一部长篇的居所。楼层越高，故事走得越远；写到第六章时，楼已经修到了顶。',
@@ -63,7 +72,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-08',
     workId: '62f1d55dafedf1000165551b',
-    layout: { x: 11, z: 294, plot: 3.8, facing: 'e' },
+    layout: { x: -14, z: 317, plot: 4.6, facing: 'n' },
     facility: '解忧杂货铺',
     family: 'tavern',
     note: '铺子收的不是钱，是问题。写下来投进柜台，多数都会在几天后收到一封回信。',
@@ -71,7 +80,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-09',
     workId: '62ea8af8afedf10001634fb0',
-    layout: { x: 11, z: 301, plot: 3.8, facing: 'e' },
+    layout: { x: -57, z: 355, plot: 5.5, facing: 'e' },
     facility: '坚持者纪念堂',
     family: 'memorial',
     note: '为那些几乎要放弃的人而建。堂内没有说明牌，只有一段被反复重读的话。',
@@ -79,7 +88,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-10',
     workId: '63909e6247585a979cbd31a0',
-    layout: { x: 5, z: 302, plot: 3.8, facing: 's' },
+    layout: { x: 43, z: 317, plot: 4.6, facing: 'n' },
     facility: '讨论角',
     family: 'gathering',
     note: '一个人提出问题，镇上留下回声的地方。后来争议散尽，石桌还留在原地。',
@@ -87,7 +96,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-11',
     workId: '630da53f442f8c0001dde3e1',
-    layout: { x: -1, z: 302, plot: 3.2, facing: 's' },
+    layout: { x: 85, z: 317, plot: 4.6, facing: 'n' },
     facility: '结局陈列馆',
     family: 'narrative',
     note: '馆内依次陈列社区可能走向的结局。最后一间空着，留给尚未发生的那个。',
@@ -95,7 +104,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-12',
     workId: '6302f66823f7f0000130d33a',
-    layout: { x: -7, z: 302, plot: 3.2, facing: 's' },
+    layout: { x: -29, z: 344.5, plot: 5.5, facing: 'n' },
     facility: '投稿要求碑',
     family: 'law',
     note: '碑面是一份可核对的要求清单。它让「什么样的作品可以进实验区」不再靠人揣度。',
@@ -103,7 +112,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-13',
     workId: '62144cf131d9a6000148553a',
-    layout: { x: -12, z: 302, plot: 3.2, facing: 's' },
+    layout: { x: 52, z: 317, plot: 4.6, facing: 'n' },
     facility: '年资查验所',
     family: 'guild',
     note: '一处只需回答「你来了多久」的小屋。答案被刻在门外的柱子上，越久越靠内侧。',
@@ -111,7 +120,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-14',
     workId: '630cbdeede06940001b31cda',
-    layout: { x: -11, z: 295, plot: 3.2, facing: 'w' },
+    layout: { x: -57, z: 319.5, plot: 4.6, facing: 'w' },
     facility: '值守哨所',
     family: 'law',
     note: '哨所提醒的是一件朴素的事：维持秩序的人也需要被尊重。',
@@ -119,7 +128,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-15',
     workId: '629b5e5708920800019721b0',
-    layout: { x: -11, z: 288, plot: 3.2, facing: 'w' },
+    layout: { x: -57, z: 327.5, plot: 4.6, facing: 'w' },
     facility: '评选公告亭',
     family: 'press',
     note: '亭中发布过关于「精选候选」的第一份公告。从此评选有了可查的流程。',
@@ -127,7 +136,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-16',
     workId: '621b045831d9a6000148d5ff',
-    layout: { x: -11, z: 281, plot: 3.2, facing: 'w' },
+    layout: { x: -29, z: 355, plot: 5.5, facing: 'w' },
     facility: '告别站',
     family: 'memorial',
     note: '为离开的人留下的站台。没有列车会停靠，但每年仍有人来这里说一句话。',
@@ -135,7 +144,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-17',
     workId: '639f1085f10a6c581e8b72df',
-    layout: { x: -4, z: 283, plot: 3.2, facing: 's' },
+    layout: { x: 79, z: 285, plot: 4.2, facing: 'w' },
     facility: '会员餐厅',
     family: 'tavern',
     note: '一间讲究规矩的餐厅：入座需邀请，点单需口令。它把「稀缺」做成了可体验的日常。',
@@ -143,7 +152,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-18',
     workId: '61da85635fe7e8000106542d',
-    layout: { x: 4, z: 283, plot: 3.2, facing: 's' },
+    layout: { x: 30, z: 323.5, plot: 4.6, facing: 'w' },
     facility: '文明陈列馆',
     family: 'narrative',
     note: '馆内陈列一座古文明的兴衰。策展人最用心的一段，写的是它留下什么，而非它毁于什么。',
@@ -151,7 +160,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-19',
     workId: '62a345d108920800019806f2',
-    layout: { x: -4, z: 292, plot: 3.2, facing: 'n' },
+    layout: { x: 79, z: 297, plot: 4.2, facing: 'w' },
     facility: '虫洞观测站',
     family: 'observatory',
     note: '观测站并不真的通往别处，但它让人第一次认真想象「从这里穿过去」会到哪里。',
@@ -159,7 +168,7 @@ export const YEAR_TOWN_MEMORIALS_2022: readonly YearTownMemorial[] = [
   {
     key: 'yt-w2022-20',
     workId: '627d01305a9b86000155b5da',
-    layout: { x: 4, z: 292, plot: 3.2, facing: 'n' },
+    layout: { x: 85, z: 327.5, plot: 4.6, facing: 's' },
     facility: '怪谈档案馆',
     family: 'narrative',
     note: '档案按规则编号存放。借阅者须先接受一条规则：读完之后，要假装从未来过。',
