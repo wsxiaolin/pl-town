@@ -29,6 +29,10 @@ const BUILDING_IDS = [
   'fireworks_shop', 'observation_deck',
   'painting_ai',
   'north_genshin_institute',
+  // S001 第一聊天室遗迹（2026-10-31.chatruins.1）：剧情场景建筑，赠礼补全
+  // 直接建成（见 cityGovernanceMigration DEFAULT_COMPLETED_BUILDING_IDS），
+  // 不设众筹项目；玩家个人可访问。
+  'chatruins',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
@@ -167,6 +171,9 @@ export const DAILY_REWARDS = Object.freeze({
 
 export const ONE_TIME_REWARDS = Object.freeze({
   tirpitz_beach: { itemId: 'tirpitz_card', quantity: 1 },
+  // S001 会沉的城：涂鸦墙提交成功即得「两支持欠条」（道具卡文本在客户端
+  // ITEM_DETAILS 逐字照录；物品不在任何交易/合成目录，天然不可交易）。
+  s001_iou: { itemId: 'iou_two_supports', quantity: 1 },
 });
 
 export const REPEATABLE_REWARDS = Object.freeze({
