@@ -1,4 +1,6 @@
 import type { StoryDefinition } from "../../../stories/types";
+import lintelImage from "../../../../assets/cg/chatruins/lintel.jpg";
+import endingImage from "../../../../assets/cg/chatruins/ending.jpg";
 
 /**
  * 支线剧情 S001 · 聊天室世代史：会沉的城，不散的人
@@ -127,6 +129,8 @@ export const CHATRUINS_STORY: StoryDefinition = {
       id: "lintel",
       title: "第一聊天室遗迹",
       role: null,
+      presentation: "cg",
+      image: lintelImage,
       guide: {
         title: "会沉的城",
         objective: "读一读遗迹门楣上的木牌",
@@ -145,7 +149,8 @@ export const CHATRUINS_STORY: StoryDefinition = {
       id: "lintel-read",
       title: "第一聊天室遗迹",
       role: null,
-      presentation: "document",
+      presentation: "cg",
+      image: lintelImage,
       text: "地层最上面一层刻着一行小字：「两周一代，比月亮还守时。」\n\n是谁刻的，已经考不出来了。挥手的身影还在等你。",
       choices: [
         {
@@ -195,6 +200,7 @@ export const CHATRUINS_STORY: StoryDefinition = {
       id: "wall-archaeology",
       title: "laxy 瓦",
       role: "考古向导",
+      presentation: "cg",
       text: CHATRUINS_WALL_REACTIONS.archaeology,
       choices: [
         {
@@ -210,6 +216,7 @@ export const CHATRUINS_STORY: StoryDefinition = {
       id: "wall-variant",
       title: "laxy 瓦",
       role: "考古向导",
+      presentation: "cg",
       text: CHATRUINS_WALL_REACTIONS.variant,
       choices: [
         {
@@ -225,6 +232,7 @@ export const CHATRUINS_STORY: StoryDefinition = {
       id: "wall-free",
       title: "laxy 瓦",
       role: "考古向导",
+      presentation: "cg",
       text: CHATRUINS_WALL_REACTIONS.free,
       choices: [
         {
@@ -275,7 +283,8 @@ export const CHATRUINS_STORY: StoryDefinition = {
       id: "ending-settle",
       title: "会沉的城",
       role: "完",
-      presentation: "blackout",
+      presentation: "cg",
+      image: endingImage,
       terminal: true,
       guide: null,
       text: CHATRUINS_ENDING_TEXT,
@@ -346,7 +355,7 @@ function buildDigNodes(): Record<string, import("../../../stories/types").StoryN
       id: revealId,
       title: `发掘点${ordinal}`,
       role: null,
-      presentation: "document",
+      presentation: "cg",
       text: `「${layer.relic}」\n\n${layer.narration}${scaleLine}`,
       choices: [
         {
@@ -362,6 +371,7 @@ function buildDigNodes(): Record<string, import("../../../stories/types").StoryN
       id: noteId,
       title: "laxy 瓦",
       role: "考古向导",
+      presentation: "cg",
       text: CHATRUINS_LAYER_NOTES[index]!,
       choices: [
         {
