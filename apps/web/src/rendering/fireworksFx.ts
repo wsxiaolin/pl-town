@@ -71,6 +71,32 @@ export function createFireworksFx(scene: THREE.Scene) {
   const ringGeometry = new THREE.RingGeometry(0.86, 1, 40);
   const transients: Transient[] = [];
 
+  // 爆闪不只画一个精灵，还给场景一盏短命点光：船甲板、烟火和水面会被
+  // 真实照亮，画面从「贴图发光」变成「夜空里有光源」。三盏固定复用，
+  // 避免每次开爆都增删灯光。
+  const lightPool = [0, 1, 2].map(() => {
+    const light = new THREE.PointLight(0xffffff, 0, 160, 2);
+    light.castShadow = false;
+    scene.add(light);
+    return light;
+  });
+  const lightAge = [0, 0, 0];
+  const lightLife = [0, 0, 0];
+  const lightPeak = [0, 0, 0];
+  let lightCursor = 0;
+
+  function triggerLight(position: { x: number; y: number; z: number }, color: THREE.Color, radius: number): void {
+    const index = lightCursor;
+    lightCursor = (lightCursor + 1) % lightPool.length;
+    const light = lightPool[index]!;
+    light.position.set(position.x, position.y + 1.5, position.z);
+    light.color.copy(color);
+    lightPeak[index] = 5 + radius * 0.28;
+    light.intensity = lightPeak[index]!;
+    lightAge[index] = 0;
+    lightLife[index] = 0.34 + Math.min(0.35, radius * 0.02);
+  }
+
   // ── 烟雾 Points 环形缓冲 ────────────────────────────────
   const smokePositions = new Float32Array(SMOKE_CAPACITY * 3);
   const smokeColors = new Float32Array(SMOKE_CAPACITY * 3);
@@ -145,6 +171,7 @@ export function createFireworksFx(scene: THREE.Scene) {
   }
 
   function flash(position: { x: number; y: number; z: number }, color: THREE.Color, radius: number): void {
+    triggerLight(position, color, radius);
     const material = new THREE.SpriteMaterial({
       map: texture,
       color,
@@ -200,6 +227,13 @@ export function createFireworksFx(scene: THREE.Scene) {
   }
 
   function update(dt: number): void {
+    for (let i = 0; i < lightPool.length; i += 1) {
+      const light = lightPool[i]!;
+      if (lightAge[i]! >= lightLife[i]!) { light.intensity = 0; continue; }
+      lightAge[i]! += dt;
+      const t = Math.min(1, lightAge[i]! / Math.max(0.001, lightLife[i]!));
+      light.intensity = lightPeak[i]! * (1 - t) ** 2;
+    }
     for (let i = transients.length - 1; i >= 0; i -= 1) {
       const item = transients[i]!;
       item.age += dt;
@@ -255,6 +289,10 @@ export function createFireworksFx(scene: THREE.Scene) {
     smokeMaterial.dispose();
     ringGeometry.dispose();
     texture.dispose();
+    for (const light of lightPool) {
+      scene.remove(light);
+      light.dispose();
+    }
   }
 
   return { flash, shockwave, waterGlow, muzzle, spawnSmoke, setPixelScale, update, dispose };

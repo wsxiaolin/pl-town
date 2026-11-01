@@ -59,6 +59,16 @@ const FALLBACK_DESIGN: FireworkDesign = {
   starSize: 9,
   burnTime: 3,
   trail: 'comet',
+  craft: {
+    formula: 'kp-gold',
+    additive: 'none',
+    additivePercent: 0,
+    casing: 'paper-sphere',
+    burst: 'black-powder',
+    ignition: 'time-fuse',
+    mortarBore: 154,
+    fuseOffset: 0,
+  },
 };
 
 function parseDesignRow(row: DesignRow): FireworkDesignRecord {

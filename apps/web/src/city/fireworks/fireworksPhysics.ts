@@ -10,6 +10,7 @@ import {
   type FireworkDesign,
   type Vec3,
 } from './fireworksDesign';
+import { chemistryEffect, chemistryReport, defaultCraft, type ChemistryReport } from './fireworksChemistry';
 
 export const FIREWORK_GRAVITY = 9.8;
 export const SHELL_START_Y = 1.2;
@@ -50,6 +51,11 @@ export type CraftReport = {
   shellMassKg: number;
   liftRatio: number;
   breakRatio: number;
+  /** 星体药、采购与安装清单。 */
+  chemistry: ChemistryReport;
+  starMassG: number;
+  totalPyroMassG: number;
+  muzzleVelocity: number;
   warnings: string[];
 };
 
@@ -68,9 +74,11 @@ export function planShell(design: FireworkDesign, heading = 0, startY = SHELL_ST
   const targetRise = design.height - startY;
   const disc = vy * vy - 2 * FIREWORK_GRAVITY * targetRise;
   const reachable = disc >= 0;
-  const fuseTime = reachable
+  const idealFuse = reachable
     ? (vy - Math.sqrt(disc)) / FIREWORK_GRAVITY
     : vy / FIREWORK_GRAVITY;
+  // 真实弹体的引信可微调：正偏移让弹体越过设计点再爆，负偏移提前开爆。
+  const fuseTime = Math.max(0.35, idealFuse + (design.craft?.fuseOffset ?? 0));
   const burstHeight = startY + vy * fuseTime - 0.5 * FIREWORK_GRAVITY * fuseTime * fuseTime;
   return {
     startY,
@@ -102,7 +110,8 @@ export function burstRadius(design: FireworkDesign): number {
   const caliberScale = Math.pow(design.caliber / 150, 0.35);
   const chargeScale = Math.sqrt(design.breakCharge / reference);
   const patternScale = design.shape === 'pattern' ? PATTERN_RADIUS_SCALE : 1;
-  return BASE_BURST_RADIUS * caliberScale * chargeScale * patternScale;
+  const chemistry = chemistryEffect(design.craft ?? defaultCraft(design.caliber));
+  return BASE_BURST_RADIUS * caliberScale * chargeScale * patternScale * chemistry.burstRadiusScale;
 }
 
 /** 工艺卡：把设计参数翻译成居民能理解的物理结果与风险提示。 */
@@ -112,8 +121,13 @@ export function craftReport(design: FireworkDesign): CraftReport {
   const recommendedBreak = recommendedBreakCharge(design.caliber);
   const liftRatio = design.liftCharge / recommendedLift;
   const breakRatio = design.breakCharge / recommendedBreak;
-  const shellMassKg = 0.9 * Math.pow(design.caliber / 100, 3);
-  const warnings: string[] = [];
+  const chemistry = chemistryReport({ ...design, ...(design.craft ?? defaultCraft(design.caliber)) });
+  // 弹体质量 = 纸壳 + 星体 + 开爆药；不再只按弹径拍一个立方数。
+  const paperMassKg = 0.22 * Math.pow(design.caliber / 100, 3);
+  const shellMassKg = paperMassKg + chemistry.starMassG / 1000 + design.breakCharge / 1000;
+  const totalPyroMassG = Math.round(chemistry.starMassG + design.liftCharge + design.breakCharge);
+  const muzzleVelocity = Math.hypot(plan.vy, plan.vx, plan.vz);
+  const warnings: string[] = [...chemistry.warnings];
   if (!plan.reachable) {
     warnings.push(`装药不足：最高只能到 ${plan.burstHeight.toFixed(1)}，低于设计的 ${design.height}`);
   } else if (liftRatio < 0.9) {
@@ -129,6 +143,7 @@ export function craftReport(design: FireworkDesign): CraftReport {
   }
   if (design.launchAngle >= 10) warnings.push(`发射角偏大：开爆点水平偏移约 ${Math.hypot(plan.driftX, plan.driftZ).toFixed(1)}`);
   if (design.shape === 'pattern' && design.starCount > 480) warnings.push('拼字星数偏多，字迹会糊成一团');
+  if (Math.abs(plan.burstHeight - design.height) > 8) warnings.push(`引信微调后实际开爆 ${plan.burstHeight.toFixed(1)}，偏离设计高度 ${design.height}`);
   return {
     plan,
     radius: burstRadius(design),
@@ -137,6 +152,10 @@ export function craftReport(design: FireworkDesign): CraftReport {
     shellMassKg,
     liftRatio,
     breakRatio,
+    chemistry,
+    starMassG: chemistry.starMassG,
+    totalPyroMassG,
+    muzzleVelocity,
     warnings,
   };
 }
@@ -211,7 +230,10 @@ export function sampleStar(seed: BurstSeed, age: number, elapsed: number): StarS
     motion = integrateStar(seed, age);
   }
   let alpha = alphaFor(localAge, life);
-  if (seed.flicker) alpha *= 0.55 + 0.45 * Math.abs(Math.sin(elapsed * 17 + seed.flickerPhase));
+  if (seed.flicker) {
+    const wave = Math.abs(Math.sin(elapsed * (seed.flickerRate ?? 17) + seed.flickerPhase));
+    alpha *= 1 - (seed.flickerDepth ?? 0.45) * (1 - wave);
+  }
   const shrink = 0.8 + 0.2 * Math.min(1, Math.max(0, (life - localAge) / Math.max(0.001, life)) + 0.25);
   return {
     x: motion.x,

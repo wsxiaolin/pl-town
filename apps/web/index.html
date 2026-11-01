@@ -556,7 +556,20 @@
           </div>
         </section>
         <section class="fw-block">
-          <div class="fw-block-head"><span>03 颜色与花形</span><em>配色 · 开花</em></div>
+          <div class="fw-block-head"><span>03 星体药与壳体</span><em>配药 · 装壳 · 定引信</em></div>
+          <div class="fw-sliders">
+            <label class="fw-slider">配方 <select data-fw-formula></select></label>
+            <label class="fw-slider">添加物 <select data-fw-additive></select></label>
+            <label class="fw-slider">添加量 <input type="range" data-fw-additive-pct min="0" max="15" step="1" value="0" /> <output data-fw-additive-pct-value>0%</output></label>
+            <label class="fw-slider">壳体 <select data-fw-casing></select></label>
+            <label class="fw-slider">开爆药 <select data-fw-burst></select></label>
+            <label class="fw-slider">炮筒 <input type="range" data-fw-bore min="52" max="350" step="1" value="154" /> <output data-fw-bore-value>154mm</output></label>
+            <label class="fw-slider">引信 <input type="range" data-fw-fuse-offset min="-0.8" max="0.8" step="0.1" value="0" /> <output data-fw-fuse-offset-value>0.0s</output></label>
+            <label class="fw-slider">点火 <select data-fw-ignition></select></label>
+          </div>
+        </section>
+        <section class="fw-block">
+          <div class="fw-block-head"><span>04 颜色与花形</span><em>配色 · 开花</em></div>
           <div class="fw-colors">
             <label class="fw-color">主色 <input type="color" data-fw-primary value="#ffd76e" /></label>
             <label class="fw-color">次色 <input type="color" data-fw-secondary value="#ff5f8a" /></label>
@@ -579,7 +592,7 @@
         </section>
       </section>
       <section class="fw-right">
-        <div class="fw-block-head"><span>04 试放</span><em>预览 · 工艺校验</em></div>
+        <div class="fw-block-head"><span>05 试放与安装</span><em>预览 · 工艺校验</em></div>
         <div class="fw-preview-wrap">
           <canvas class="fw-preview" data-fw-preview width="300" height="340"></canvas>
         </div>
@@ -592,8 +605,20 @@
             <div><dt>星体</dt><dd data-fw-craft-stars>—</dd></div>
             <div><dt>燃烧</dt><dd data-fw-craft-burn>—</dd></div>
             <div><dt>推荐装药</dt><dd data-fw-craft-charge>—</dd></div>
+            <div><dt>星体药</dt><dd data-fw-craft-starmass>—</dd></div>
+            <div><dt>总药量</dt><dd data-fw-craft-totalmass>—</dd></div>
           </dl>
           <p class="fw-craft-warn" data-fw-craft-warn></p>
+        </div>
+        <div class="fw-craft fw-recipe-card">
+          <div class="fw-craft-head"><span>星体药配方</span><em>质量分数 · 用量</em></div>
+          <ul class="fw-recipe-list" data-fw-recipe></ul>
+        </div>
+        <div class="fw-craft fw-recipe-card">
+          <div class="fw-craft-head"><span>采购与安装</span><em data-fw-install-bore>—</em></div>
+          <ul class="fw-shopping-list" data-fw-shopping></ul>
+          <ol class="fw-install-list" data-fw-install></ol>
+          <p class="fw-pattern-hint">游戏内工艺示意；现实制作烟花需持证场地、防静电与专业设备。</p>
         </div>
         <button type="button" class="fw-save" data-fw-save>存入云端 · 30 金币</button>
         <p class="fw-status" data-fw-status></p>

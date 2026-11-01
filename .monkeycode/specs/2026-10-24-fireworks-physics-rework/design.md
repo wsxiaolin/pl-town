@@ -38,6 +38,20 @@ graph TD
 - `sampleStar(seed, age, elapsed)`：解析式求解带线性阻力、重力、海风与十字分裂的星体位置、透明度、尺寸。
 - `recommendedLift(caliber)` / `recommendedBreak(caliber)`：设计器推荐装药。
 
+### fireworksChemistry.ts
+
+把「视觉参数」再往下推一层到真实工艺：星体药配方、添加物、壳体、开爆药与点火方式。
+模块保持纯函数，设计台 2D 预览、3D 引擎与服务端校验共用同一组枚举。
+
+- `FORMULAS`：金/长尾/锶红/钡绿/铜蓝/铝白/镁铝频闪/龙蛋八种参考配方，包含原料质量分数、燃速、烟量、碎金与颜色倾向。
+- `ADDITIVE_INFO`：钛粉、镁铝合金、铝粉、木炭、铁粉、硼粉、铜盐的推荐添加量与效果。
+- `CASING_INFO` / `BURST_INFO`：纸球壳、纸筒壳、多层球，以及黑火药/闪光药/哨音药的装药比例与爆闪、烟量、冲击波系数。
+- `chemistryReport(design)`：输出星体药与开爆药的实际克数、聚合采购清单、炮筒/埋深/安全距离/点火线安装步骤。
+- `chemistryEffect(craft)`：把配方转成引擎可消费的燃速、色温、烟量、碎星、频闪、壳体形状与二次开爆延迟。
+- `recommendInstallation(design)`：按弹径、壳体与开爆药推导炮筒内径、筒长、间隙、埋深与安全距离。
+
+现实制作提示只作为游戏内工艺说明；闪光药等敏感配方在 UI 中始终显示持证场地与小剂量警告。
+
 ### fireworksEngine.ts
 
 - 升空壳：解析弹道 + 壳模型 + 拖尾 + 引信。
@@ -92,11 +106,23 @@ type FireworkDesign = {
   starSize: number;      // 4–18 mm
   burnTime: number;      // 1–6 s
   trail: 'none' | 'comet' | 'glitter';
+  craft: FireworkCraft; // 星体药/壳体/开爆药/点火/安装参数；旧 v2 缺失时补默认值
   pattern?: FireworkPattern;
+};
+
+type FireworkCraft = {
+  formula: StarFormula;          // 8 种参考星体药配方
+  additive: FireworkAdditive;    // none/titanium/magnalium/aluminum/charcoal/iron/boron/copper
+  additivePercent: number;       // 0–15%
+  casing: ShellCasing;           // paper-sphere / paper-canister / multi-break
+  burst: BurstComposition;       // black-powder / flash-powder / whistle
+  ignition: FireworkIgnition;    // time-fuse / electric-match
+  mortarBore: number;            // 52–350 mm，且 >= caliber + 2
+  fuseOffset: number;            // -0.8–0.8 s
 };
 ```
 
-v1 转换：`breakCharge = round(recommendedBreak(150) * size / 100)`，其余新字段取默认值（150 mm / 推荐发射药 / 0° / 300 星 / 9 mm / 3 s / comet）。
+v1 转换：`breakCharge = clamp(round(recommendedBreak(150) * (size / 100)²), 5, 200)`（开爆半径与开爆药的平方根成正比，平方换算才能保留旧半径），其余新字段取默认值（150 mm / 推荐发射药 / 0° / 300 星 / 9 mm / 3 s / comet）。
 
 ## Correctness Properties
 
@@ -105,6 +131,8 @@ v1 转换：`breakCharge = round(recommendedBreak(150) * size / 100)`，其余�
 3. 所有随机量来自可重置的种子随机，预览与引擎分布一致。
 4. 旧 v1 设计经客户端或服务端转换后，再次保存得到合法 v2 设计。
 5. 所有调用 `dispose()` 后，场景中不残留烟花对象与自建材质。
+6. 星体药配方各原料质量分数之和为 100%（添加物按比例缩放基础配方后再追加）。
+7. 旧 v2 设计缺少 `craft` 时，客户端与服务端都补齐同一套默认工艺，不因缺字段失效。
 
 ## Error Handling
 
@@ -115,7 +143,7 @@ v1 转换：`breakCharge = round(recommendedBreak(150) * size / 100)`，其余�
 
 ## Test Strategy
 
-- 单元：`fireworksPhysics.test.ts` 覆盖弹道、开爆半径、星体数量/寿命、v1 转换。
+- 单元：`fireworksPhysics.test.ts` 覆盖弹道、开爆半径、星体数量/寿命、v1 转换；`fireworksChemistry.test.ts` 覆盖配方配比、添加物/壳体效果与默认工艺。
 - 服务端：扩展 `tests/fireworks.mjs`，覆盖 v2 保存、v1 迁移、非法参数。
 - 浏览器：扩展 `tests/fireworks.spec.ts`，覆盖新滑杆、工艺卡、拼字保存与观景模式；
   观景用例额外断言进入/退出时相机 `zoom` 随按幕取景变化并恢复。

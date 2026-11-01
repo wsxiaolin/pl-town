@@ -106,7 +106,8 @@ test('crossette parents split into four independently moving child stars', () =>
   const design = { ...defaultFireworkDesign(), shape: 'crossette' as const, starCount: 120 };
   seedBurstMath(20261007);
   const seeds = buildBurstSeeds(design, burstRadius(design));
-  assert.equal(seeds.length, 120);
+  // 配方添加物会额外补入短命碎星，十字蕊本体仍是前 120 颗。
+  assert.ok(seeds.length >= 120);
 
   const family = seeds.slice(0, 4);
   assert.deepEqual(family.map((seed) => seed.splitChild), [0, 1, 2, 3]);

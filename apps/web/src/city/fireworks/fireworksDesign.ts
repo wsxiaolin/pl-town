@@ -3,6 +3,18 @@
 // 字段、区间、编码必须同步修改；形状→粒子分布的数学同时供 3D 引擎
 // （rendering/fireworksEngine.ts）与设计器 2D 预览共用。
 import { CAMERA_OFFSET_BILLBOARD_NORMAL } from './fireworksConstants';
+import {
+  ADDITIVES,
+  BURST_COMPOSITIONS,
+  CRAFT_LIMITS,
+  FORMULAS,
+  IGNITIONS,
+  SHELL_CASINGS,
+  defaultCraft,
+  normalizeCraft,
+  chemistryEffect,
+  type FireworkCraft,
+} from './fireworksChemistry';
 
 export const FIREWORK_SAVE_PRICE = 30;
 export const FIREWORK_DESIGN_MAX_PER_USER = 24;
@@ -60,6 +72,8 @@ export type FireworkDesign = {
   burnTime: number;
   /** 星体尾迹类型。 */
   trail: FireworkTrail;
+  /** 星体药、壳体、开爆药、点火与安装参数；缺失时按默认工艺补齐。 */
+  craft: FireworkCraft;
   pattern?: FireworkPattern;
 };
 
@@ -130,6 +144,7 @@ export const defaultFireworkDesign = (): FireworkDesign => ({
   starSize: 9,
   burnTime: 3,
   trail: 'comet',
+  craft: defaultCraft(150),
 });
 
 function parsePattern(input: unknown): FireworkPattern | null {
@@ -179,6 +194,7 @@ function upgradeLegacyDesign(raw: Record<string, unknown>): FireworkDesign | nul
     starSize: 9,
     burnTime: 3,
     trail: 'comet',
+    craft: defaultCraft(caliber),
   };
   if (pattern) design.pattern = pattern;
   return design;
@@ -217,6 +233,7 @@ export function normalizeFireworkDesign(input: unknown): FireworkDesign | null {
     starSize: raw.starSize,
     burnTime: raw.burnTime,
     trail: raw.trail as FireworkTrail,
+    craft: normalizeCraft(raw.craft, raw.caliber),
   };
   if (raw.shape === 'pattern') {
     const pattern = parsePattern(raw.pattern);
@@ -240,6 +257,16 @@ export function validateFireworkDesign(design: FireworkDesign): string | null {
   if (!Number.isInteger(design.starSize) || design.starSize < 4 || design.starSize > 18) return '星体尺寸需在 4–18 毫米之间';
   if (!Number.isInteger(design.burnTime) || design.burnTime < 1 || design.burnTime > 6) return '燃烧时间需在 1–6 秒之间';
   if (!FIREWORK_TRAILS.includes(design.trail)) return '尾迹类型不合法';
+  const craft = design.craft;
+  if (!craft || !(craft.formula in FORMULAS)) return '星体药配方不合法';
+  if (!ADDITIVES.includes(craft.additive)) return '添加物不合法';
+  if (!Number.isInteger(craft.additivePercent) || craft.additivePercent < CRAFT_LIMITS.additivePercentMin || craft.additivePercent > CRAFT_LIMITS.additivePercentMax) return '添加物比例需在 0–15% 之间';
+  if (!SHELL_CASINGS.includes(craft.casing)) return '壳体类型不合法';
+  if (!BURST_COMPOSITIONS.includes(craft.burst)) return '开爆药类型不合法';
+  if (!IGNITIONS.includes(craft.ignition)) return '点火方式不合法';
+  if (!Number.isInteger(craft.mortarBore) || craft.mortarBore < CRAFT_LIMITS.mortarBoreMin || craft.mortarBore > CRAFT_LIMITS.mortarBoreMax) return '炮筒内径需在 52–350 毫米之间';
+  if (craft.mortarBore < design.caliber + 2) return '炮筒内径必须比弹径大至少 2 毫米';
+  if (typeof craft.fuseOffset !== 'number' || !Number.isFinite(craft.fuseOffset) || craft.fuseOffset < CRAFT_LIMITS.fuseOffsetMin || craft.fuseOffset > CRAFT_LIMITS.fuseOffsetMax) return '引信微调需在 -0.8–0.8 秒之间';
   if (!Number.isInteger(design.sparkle) || design.sparkle < 0 || design.sparkle > 100) return '闪烁需在 0–100 之间';
   if (design.shape === 'pattern') {
     if (!design.pattern) return '拼字烟花需要点阵图案';
@@ -277,6 +304,12 @@ export type BurstSeed = {
   flicker: boolean;
   /** 闪烁相位（确定性随机）。 */
   flickerPhase: number;
+  /** 闪烁频率（rad/s），频闪药更高。 */
+  flickerRate?: number;
+  /** 闪烁深度 0..1；越大越像频闪。 */
+  flickerDepth?: number;
+  /** 添加物炸出的微小碎星（更短命、更小）。 */
+  spark?: boolean;
   /** 尾迹类型（由设计继承）。 */
   trail: FireworkTrail;
   /** 生命比例到达时四分裂（十字蕊）。 */
@@ -384,35 +417,48 @@ function tuningFor(design: FireworkDesign): ShapeTuning {
 export function buildBurstSeeds(design: FireworkDesign, radius: number): BurstSeed[] {
   const seeds: BurstSeed[] = [];
   const tuning = tuningFor(design);
-  const sizeScale = Math.max(0.3, design.starSize / 9);
-  const sparkleOn = design.sparkle >= 15;
+  const effect = chemistryEffect(design.craft ?? defaultCraft(design.caliber));
+  const sizeScale = Math.max(0.3, design.starSize / 9) * (0.92 + effect.heat * 0.08);
+  const sparkleOn = design.sparkle >= 15 || effect.strobe;
 
   const pushStar = (vx: number, vy: number, vz: number, opts?: {
     life?: number; drag?: number; gravity?: number; size?: number; colorMix?: number;
-    flicker?: boolean; splitAt?: number; splitV?: Vec3; splitChild?: number;
+    flicker?: boolean; flickerRate?: number; flickerDepth?: number; trail?: FireworkTrail;
+    splitAt?: number; splitV?: Vec3; splitChild?: number; spark?: boolean;
   }): BurstSeed => {
-    const flicker = sparkleOn && rand() < design.sparkle / 100;
+    const flicker = opts?.flicker ?? (sparkleOn && rand() < Math.min(1, design.sparkle / 100 + effect.glitter * 0.35));
     const seed: BurstSeed = {
       vx, vy, vz,
-      life: Math.max(0.5, (opts?.life ?? design.burnTime * tuning.life) * (0.9 + rand() * 0.2)),
+      life: Math.max(0.35, (opts?.life ?? design.burnTime * tuning.life / effect.burnRate) * (0.9 + rand() * 0.2)),
       drag: opts?.drag ?? tuning.drag,
       gravity: opts?.gravity ?? tuning.gravity,
       size: (opts?.size ?? tuning.size) * sizeScale * (0.8 + rand() * 0.4),
       colorMix: opts?.colorMix ?? Math.max(0, Math.min(1, rand())),
       flicker,
       flickerPhase: rand() * Math.PI * 2,
-      trail: design.trail,
+      flickerRate: opts?.flickerRate ?? (effect.strobe ? 30 : 17),
+      flickerDepth: opts?.flickerDepth ?? (effect.strobe ? 0.9 : 0.45),
+      trail: opts?.trail ?? design.trail,
       splitAt: opts?.splitAt,
       splitV: opts?.splitV,
       splitChild: opts?.splitChild,
+      spark: opts?.spark,
     };
     seeds.push(seed);
     return seed;
   };
 
+  const burstDirection = (): Vec3 => {
+    if (effect.burstShape !== 'canister') return sphereDir();
+    // 纸筒壳：径向更密、纵向略收，形成柱状花而不是完美球。
+    const angle = rand() * Math.PI * 2;
+    const radial = 0.65 + rand() * 0.35;
+    const vertical = (rand() * 2 - 1) * 0.55;
+    return normalize({ x: Math.cos(angle) * radial, y: vertical, z: Math.sin(angle) * radial });
+  };
   const sphereBurst = (count: number): void => {
     for (let i = 0; i < count; i += 1) {
-      const d = sphereDir();
+      const d = burstDirection();
       const y = d.y + tuning.yBias;
       const len = Math.hypot(d.x, y, d.z) || 1;
       const speed = radius * tuning.drag * (1 - tuning.speedVar / 2 + rand() * tuning.speedVar);
@@ -529,6 +575,27 @@ export function buildBurstSeeds(design: FireworkDesign, radius: number): BurstSe
         }
       }
       break;
+    }
+  }
+
+  // 添加物碎星：钛/镁铝/铁/硼在高温下炸成更小、更短命的白色或橙色微星。
+  const sparkCount = Math.round(design.starCount * effect.crackle * 0.45);
+  if (sparkCount > 0) {
+    for (let i = 0; i < sparkCount; i += 1) {
+      const d = sphereDir();
+      const speed = radius * tuning.drag * (1.05 + rand() * 0.55);
+      pushStar(d.x * speed, d.y * speed, d.z * speed, {
+        life: 0.28 + rand() * 0.5,
+        drag: 1.9,
+        gravity: 0.75,
+        size: 0.32 + rand() * 0.22,
+        colorMix: effect.colorHint === '#ffd166' ? 0 : rand() * 0.35,
+        flicker: true,
+        flickerRate: 34,
+        flickerDepth: 0.85,
+        trail: effect.glitter > 0.55 ? 'glitter' : 'none',
+        spark: true,
+      });
     }
   }
   return seeds;

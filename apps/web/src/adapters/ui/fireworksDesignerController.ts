@@ -11,6 +11,13 @@ import {
 import {
   craftReport, planShell, sampleStar, shellPosition, type CraftReport, type ShellPlan,
 } from '../../city/fireworks/fireworksPhysics';
+import {
+  ADDITIVE_INFO, ADDITIVE_LABELS, ADDITIVES, BURST_COMPOSITION_LABELS, BURST_COMPOSITIONS,
+  FORMULAS, IGNITION_LABELS, IGNITIONS, SHELL_CASING_LABELS, SHELL_CASINGS,
+  STAR_FORMULA_LABELS, STAR_FORMULAS, recommendedMortarBore,
+  type BurstComposition, type FireworkAdditive, type FireworkCraft,
+  type FireworkIgnition, type ShellCasing, type StarFormula,
+} from '../../city/fireworks/fireworksChemistry';
 import type { FireworksClient, FireworkRecordView } from '../../city/fireworks/fireworksClient';
 
 const GRID_COLS = PATTERN_COLS;
@@ -89,8 +96,41 @@ export function createFireworksDesignerController(options: {
   const craftStars = panel.querySelector('[data-fw-craft-stars]') as HTMLElement;
   const craftBurn = panel.querySelector('[data-fw-craft-burn]') as HTMLElement;
   const craftCharge = panel.querySelector('[data-fw-craft-charge]') as HTMLElement;
+  const craftStarMass = panel.querySelector('[data-fw-craft-starmass]') as HTMLElement;
+  const craftTotalMass = panel.querySelector('[data-fw-craft-totalmass]') as HTMLElement;
   const craftWarn = panel.querySelector('[data-fw-craft-warn]') as HTMLElement;
   const craftVerdict = panel.querySelector('[data-fw-craft-verdict]') as HTMLElement;
+  const formulaInput = panel.querySelector('[data-fw-formula]') as HTMLSelectElement;
+  const additiveInput = panel.querySelector('[data-fw-additive]') as HTMLSelectElement;
+  const additivePctInput = panel.querySelector('[data-fw-additive-pct]') as HTMLInputElement;
+  const casingInput = panel.querySelector('[data-fw-casing]') as HTMLSelectElement;
+  const burstInput = panel.querySelector('[data-fw-burst]') as HTMLSelectElement;
+  const boreInput = panel.querySelector('[data-fw-bore]') as HTMLInputElement;
+  const fuseOffsetInput = panel.querySelector('[data-fw-fuse-offset]') as HTMLInputElement;
+  const ignitionInput = panel.querySelector('[data-fw-ignition]') as HTMLSelectElement;
+  const recipeList = panel.querySelector('[data-fw-recipe]') as HTMLElement;
+  const shoppingList = panel.querySelector('[data-fw-shopping]') as HTMLElement;
+  const installList = panel.querySelector('[data-fw-install]') as HTMLElement;
+  const installBore = panel.querySelector('[data-fw-install-bore]') as HTMLElement;
+
+  function fillSelect(select: HTMLSelectElement, entries: ReadonlyArray<readonly [string, string]>): void {
+    select.replaceChildren();
+    for (const [value, label] of entries) {
+      const option = doc.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      select.appendChild(option);
+    }
+  }
+
+  function renderChemistrySelects(): void {
+    fillSelect(formulaInput, STAR_FORMULAS.map((id) => [id, STAR_FORMULA_LABELS[id]] as const));
+    fillSelect(additiveInput, ADDITIVES.map((id) => [id, ADDITIVE_LABELS[id]] as const));
+    fillSelect(casingInput, SHELL_CASINGS.map((id) => [id, SHELL_CASING_LABELS[id]] as const));
+    fillSelect(burstInput, BURST_COMPOSITIONS.map((id) => [id, BURST_COMPOSITION_LABELS[id]] as const));
+    fillSelect(ignitionInput, IGNITIONS.map((id) => [id, IGNITION_LABELS[id]] as const));
+  }
+  renderChemistrySelects();
 
   // ── 状态同步 ─────────────────────────────────────────────
   function syncDesignFromInputs(): void {
@@ -98,6 +138,24 @@ export function createFireworksDesignerController(options: {
     const caliberChanged = nextCaliber !== design.caliber;
     const liftWasRecommended = design.liftCharge === recommendedLiftCharge(design.caliber);
     const breakWasRecommended = design.breakCharge === recommendedBreakCharge(design.caliber);
+    const oldCraft = design.craft;
+    const nextCasing = casingInput.value as ShellCasing;
+    const casingChanged = nextCasing !== oldCraft.casing;
+    const boreWasRecommended = oldCraft.mortarBore === recommendedMortarBore(design.caliber, oldCraft.casing);
+    const additive = additiveInput.value as FireworkAdditive;
+    const craft: FireworkCraft = {
+      formula: formulaInput.value as StarFormula,
+      additive,
+      additivePercent: additive === 'none' ? 0 : Number(additivePctInput.value),
+      casing: nextCasing,
+      burst: burstInput.value as BurstComposition,
+      ignition: ignitionInput.value as FireworkIgnition,
+      mortarBore: Number(boreInput.value),
+      fuseOffset: Number(fuseOffsetInput.value),
+    };
+    if (caliberChanged && boreWasRecommended) craft.mortarBore = recommendedMortarBore(nextCaliber, nextCasing);
+    if (casingChanged && boreWasRecommended) craft.mortarBore = recommendedMortarBore(nextCaliber, nextCasing);
+    if (craft.mortarBore !== Number(boreInput.value)) boreInput.value = String(craft.mortarBore);
     design = {
       ...design,
       caliber: nextCaliber,
@@ -110,6 +168,7 @@ export function createFireworksDesignerController(options: {
       burnTime: Number(burnInput.value),
       sparkle: Number(sparkleInput.value),
       trail: trailInput.value as FireworkTrail,
+      craft,
       colors: {
         primary: primaryInput.value,
         secondary: secondaryInput.value,
@@ -125,6 +184,8 @@ export function createFireworksDesignerController(options: {
       design = { ...design, breakCharge: recommendedBreakCharge(nextCaliber) };
       breakInput.value = String(design.breakCharge);
     }
+    if (additive === 'none' && Number(additivePctInput.value) !== 0) additivePctInput.value = '0';
+    additivePctInput.disabled = additive === 'none';
     (panel.querySelector('[data-fw-caliber-value]') as HTMLElement).textContent = `${design.caliber}mm`;
     (panel.querySelector('[data-fw-lift-value]') as HTMLElement).textContent = `${design.liftCharge}g`;
     (panel.querySelector('[data-fw-height-value]') as HTMLElement).textContent = `${design.height}`;
@@ -134,6 +195,9 @@ export function createFireworksDesignerController(options: {
     (panel.querySelector('[data-fw-starsize-value]') as HTMLElement).textContent = `${design.starSize}mm`;
     (panel.querySelector('[data-fw-burn-value]') as HTMLElement).textContent = `${design.burnTime}s`;
     (panel.querySelector('[data-fw-sparkle-value]') as HTMLElement).textContent = `${design.sparkle}`;
+    (panel.querySelector('[data-fw-additive-pct-value]') as HTMLElement).textContent = `${design.craft.additivePercent}%`;
+    (panel.querySelector('[data-fw-bore-value]') as HTMLElement).textContent = `${design.craft.mortarBore}mm`;
+    (panel.querySelector('[data-fw-fuse-offset-value]') as HTMLElement).textContent = `${design.craft.fuseOffset.toFixed(1)}s`;
     rebuildPreview();
   }
 
@@ -231,6 +295,43 @@ export function createFireworksDesignerController(options: {
     renderCraft(report);
   }
 
+  function renderRecipeLines(target: HTMLElement, lines: ReadonlyArray<{ name: string; percent: number; grams: number; note?: string }>): void {
+    target.replaceChildren();
+    for (const line of lines) {
+      const item = doc.createElement('li');
+      const name = doc.createElement('span');
+      name.textContent = line.name;
+      if (line.note) name.title = line.note;
+      const amount = doc.createElement('span');
+      amount.textContent = `${line.percent}% · ${Math.round(line.grams)}g`;
+      item.append(name, amount);
+      target.appendChild(item);
+    }
+  }
+
+  function renderChemistry(report: CraftReport): void {
+    renderRecipeLines(recipeList, report.chemistry.starRecipe);
+    shoppingList.replaceChildren();
+    for (const line of report.chemistry.shopping) {
+      const item = doc.createElement('li');
+      const name = doc.createElement('span');
+      name.textContent = line.name;
+      name.title = line.use;
+      const amount = doc.createElement('span');
+      amount.textContent = line.grams != null ? `${line.grams}g` : `${line.count ?? 1} 件`;
+      item.append(name, amount);
+      shoppingList.appendChild(item);
+    }
+    installList.replaceChildren();
+    for (const step of report.chemistry.installation.steps) {
+      const item = doc.createElement('li');
+      item.textContent = step;
+      installList.appendChild(item);
+    }
+    const plan = report.chemistry.installation;
+    installBore.textContent = `${plan.boreMm}mm 筒 · ${plan.tubeLengthMm}mm 长`;
+  }
+
   function renderCraft(report: CraftReport): void {
     craftFuse.textContent = `${report.plan.fuseTime.toFixed(1)}s`;
     craftHeight.textContent = `${report.plan.burstHeight.toFixed(1)}m`;
@@ -238,9 +339,12 @@ export function createFireworksDesignerController(options: {
     craftStars.textContent = `${design.starCount}`;
     craftBurn.textContent = `${design.burnTime}s`;
     craftCharge.textContent = `${report.recommendedLift}g / ${report.recommendedBreak}g`;
+    craftStarMass.textContent = `${report.starMassG}g`;
+    craftTotalMass.textContent = `${report.totalPyroMassG}g`;
     craftWarn.textContent = report.warnings.join('　');
     craftVerdict.textContent = report.warnings.length > 0 ? '需调整' : '可试放';
     craftVerdict.classList.toggle('warn', report.warnings.length > 0);
+    renderChemistry(report);
   }
 
   let lastPreviewFrame = 0;
@@ -414,6 +518,14 @@ export function createFireworksDesignerController(options: {
     burnInput.value = String(design.burnTime);
     sparkleInput.value = String(design.sparkle);
     trailInput.value = design.trail;
+    formulaInput.value = design.craft.formula;
+    additiveInput.value = design.craft.additive;
+    additivePctInput.value = String(design.craft.additivePercent);
+    casingInput.value = design.craft.casing;
+    burstInput.value = design.craft.burst;
+    boreInput.value = String(design.craft.mortarBore);
+    fuseOffsetInput.value = String(design.craft.fuseOffset);
+    ignitionInput.value = design.craft.ignition;
     primaryInput.value = design.colors.primary;
     secondaryInput.value = design.colors.secondary;
     trailColorInput.value = design.colors.trail;
@@ -525,10 +637,18 @@ export function createFireworksDesignerController(options: {
   for (const input of [
     caliberInput, liftInput, heightInput, angleInput, breakInput, starsInput,
     starSizeInput, burnInput, sparkleInput, primaryInput, secondaryInput, trailColorInput,
+    additivePctInput, boreInput, fuseOffsetInput,
   ]) {
     input.addEventListener('input', () => { syncDesignFromInputs(); drawGrid(); }, { signal: options.signal });
   }
-  trailInput.addEventListener('change', () => { syncDesignFromInputs(); }, { signal: options.signal });
+  for (const select of [trailInput, formulaInput, casingInput, burstInput, ignitionInput]) {
+    select.addEventListener('change', () => { syncDesignFromInputs(); }, { signal: options.signal });
+  }
+  additiveInput.addEventListener('change', () => {
+    const additive = additiveInput.value as FireworkAdditive;
+    additivePctInput.value = String(additive === 'none' ? 0 : ADDITIVE_INFO[additive].recommendedPercent);
+    syncDesignFromInputs();
+  }, { signal: options.signal });
   (panel.querySelector('[data-fw-symmetry]') as HTMLInputElement).addEventListener('change', (event) => {
     symmetry = (event.target as HTMLInputElement).checked;
   }, { signal: options.signal });

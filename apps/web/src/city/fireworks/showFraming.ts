@@ -20,7 +20,9 @@ import {
 } from './fireworksPhysics';
 import type { FireworkDesign } from './fireworksDesign';
 import {
+  FIREWORK_BARGES,
   buildFireworkMortars,
+  type FireworkBargePose,
   type FireworkMortar,
 } from './fireworksMortars';
 
@@ -109,6 +111,20 @@ export function planShowOrigins(
   });
 }
 
+/** 炮口所在船：同一艘船的三根炮管 z 只差 0.55，必须按船去重。 */
+function nearestBarge(mortar: FireworkMortar): FireworkBargePose {
+  let best = FIREWORK_BARGES[0]!;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const barge of FIREWORK_BARGES) {
+    const distance = (barge.x - mortar.x) ** 2 + (barge.z - mortar.z) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = barge;
+    }
+  }
+  return best;
+}
+
 /**
  * 画面里必须出现的采样点：本幕实际用到的炮口与船体、升空段端点、爆裂云外沿。
  * 升空段是两点间的直线（正交投影下仍留在端点凸包内），故只取爆点即可。
@@ -119,13 +135,19 @@ function collectAnchors(designs: readonly FireworkDesign[], origins: readonly Sh
   for (const origin of origins) {
     anchors.push({ x: origin.mortar.x, y: origin.mortar.y - 1.1, z: origin.mortar.z });
     anchors.push({ x: origin.mortar.x, y: origin.mortar.y + 2.6, z: origin.mortar.z });
-    // 甲板四角：船体本身也要在画面里，取样略大于 4.8×2.7 的甲板。
-    const bargeKey = `${origin.mortar.x.toFixed(1)}:${origin.mortar.z.toFixed(1)}`;
+    // 甲板四角按船体位姿（含 yaw）展开，而不是以炮口为中心；炮口在船体
+    // 局部 x=-1.48，直接绕炮口取样会让船尾 1.3 个世界单位落在锚点外。
+    const barge = nearestBarge(origin.mortar);
+    const bargeKey = `${barge.x}:${barge.z}`;
     if (!usedBarges.has(bargeKey)) {
       usedBarges.add(bargeKey);
+      const cos = Math.cos(barge.yaw);
+      const sin = Math.sin(barge.yaw);
       for (const [dx, dz] of BARGE_CORNERS) {
-        anchors.push({ x: origin.mortar.x + dx, y: 0.16, z: origin.mortar.z + dz });
-        anchors.push({ x: origin.mortar.x + dx, y: origin.mortar.y + 2.2, z: origin.mortar.z + dz });
+        const wx = barge.x + dx * cos + dz * sin;
+        const wz = barge.z - dx * sin + dz * cos;
+        anchors.push({ x: wx, y: 0.16, z: wz });
+        anchors.push({ x: wx, y: origin.mortar.y + 2.2, z: wz });
       }
     }
   }

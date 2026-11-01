@@ -23,6 +23,7 @@ import {
   shellPosition,
   type ShellPlan,
 } from '../city/fireworks/fireworksPhysics';
+import { chemistryEffect, defaultCraft } from '../city/fireworks/fireworksChemistry';
 import { createFireworksBarges } from './fireworksBarge';
 import { createFireworksFx, type FireworksFx } from './fireworksFx';
 
@@ -99,6 +100,7 @@ type Shell = {
   age: number;
   group: THREE.Group;
   trailTimer: number;
+  smokeTimer: number;
   onBurst?: () => void;
   done: boolean;
 };
@@ -213,17 +215,25 @@ export function createFireworksEngine(options: FireworksEngineOptions) {
     bursts.splice(index, 1);
   }
 
-  function createBurst(design: FireworkDesign, center: { x: number; y: number; z: number }): void {
-    const radius = burstRadius(design);
-    // 固定种子：设计器预览与观景引擎得到同一套星体分布。
-    seedBurstMath(20261007);
+  function createBurst(
+    design: FireworkDesign,
+    center: { x: number; y: number; z: number },
+    opts?: { seed?: number; radiusScale?: number; allowSecondary?: boolean },
+  ): void {
+    const effect = chemistryEffect(design.craft ?? defaultCraft(design.caliber));
+    const radius = burstRadius(design) * (opts?.radiusScale ?? 1);
+    // 固定种子：设计器预览与观景引擎得到同一套星体分布；多层球用另一枚
+    // 种子生成第二层，避免两层星体完全重合。
+    seedBurstMath(opts?.seed ?? 20261007);
     const seeds = buildBurstSeeds(design, radius);
     if (seeds.length === 0) return;
     if (bursts.length >= MAX_BURSTS) removeBurst(0);
 
     const count = seeds.length;
-    const primary = colorOf(design.colors.primary);
-    const secondary = colorOf(design.colors.secondary);
+    // 配方颜色只轻微参与调色，保留用户选的主/次色，同时让锶红/钡绿/铜蓝
+    // 等发色剂在画面上有可解释的偏色。
+    const primary = mix(colorOf(design.colors.primary), colorOf(effect.colorHint), 0.18);
+    const secondary = mix(colorOf(design.colors.secondary), colorOf(effect.colorHint), 0.1);
     const trailColor = colorOf(design.colors.trail);
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
@@ -275,10 +285,26 @@ export function createFireworksEngine(options: FireworksEngineOptions) {
       trail: design.trail,
     });
 
-    fx.flash(center, new THREE.Color(design.colors.primary), radius);
-    fx.shockwave(center, new THREE.Color(design.colors.trail), radius);
-    fx.spawnSmoke(center.x, center.y, center.z, 18, radius);
-    fx.waterGlow(center, new THREE.Color(design.colors.trail), radius);
+    const flashColor = new THREE.Color(primary.r, primary.g, primary.b);
+    const trailThree = new THREE.Color(trailColor.r, trailColor.g, trailColor.b);
+    fx.flash(center, flashColor, radius * (0.75 + effect.flashScale * 0.3));
+    fx.shockwave(center, trailThree, radius * (0.7 + effect.shockScale * 0.4));
+    fx.spawnSmoke(center.x, center.y, center.z, Math.round(18 * (0.55 + effect.smoke)), radius);
+    fx.waterGlow(center, trailThree, radius);
+
+    // 多层球：主爆后延迟第二层，位置略低，形成两层花。
+    if (effect.secondaryDelay > 0 && opts?.allowSecondary !== false) {
+      const delay = effect.secondaryDelay * 1000;
+      const timer = window.setTimeout(() => {
+        pendingTimers.delete(timer);
+        createBurst(design, { x: center.x, y: center.y - 2.2, z: center.z }, {
+          seed: 20261008,
+          radiusScale: 0.55,
+          allowSecondary: false,
+        });
+      }, delay);
+      pendingTimers.add(timer);
+    }
   }
 
   function updateBurst(burst: Burst, dt: number, elapsed: number): void {
@@ -297,7 +323,9 @@ export function createFireworksEngine(options: FireworksEngineOptions) {
       positions[i * 3 + 2] = burst.center.z + sample.z;
       alphas[i] = sample.alpha;
       sizes[i] = sample.size;
-      const tint = mix(burst.primary, burst.secondary, seed.colorMix);
+      const tint = seed.spark
+        ? mix(mix(burst.primary, burst.trailColor, 0.55), { r: 1, g: 1, b: 1 }, 0.45)
+        : mix(burst.primary, burst.secondary, seed.colorMix);
       const heat = 1 + Math.exp(-age * 3.2) * 0.55;
       colors[i * 3] = tint.r * heat;
       colors[i * 3 + 1] = tint.g * heat;
@@ -360,6 +388,7 @@ export function createFireworksEngine(options: FireworksEngineOptions) {
         age: 0,
         group,
         trailTimer: 0,
+        smokeTimer: 0,
         onBurst: opts?.onBurst,
         done: false,
       });
@@ -398,6 +427,16 @@ export function createFireworksEngine(options: FireworksEngineOptions) {
         shell.trailTimer = 0.026;
         spawnTrail(position.x + (Math.random() - 0.5) * 0.08, position.y, position.z + (Math.random() - 0.5) * 0.08,
           colorOf(shell.design.colors.trail), 0.5, Math.max(0.12, shell.design.caliber / 900), 0.8);
+        // 导火索端头的白热火星：比彗尾更短、更亮。
+        if (Math.random() < 0.45) {
+          spawnTrail(position.x, position.y + 0.12, position.z, colorOf('#fff2c0'),
+            0.14 + Math.random() * 0.1, Math.max(0.05, shell.design.caliber / 2200), 1);
+        }
+      }
+      shell.smokeTimer -= step;
+      if (shell.smokeTimer <= 0) {
+        shell.smokeTimer = 0.11;
+        fx.spawnSmoke(position.x, position.y, position.z, 1, 0.32);
       }
       if (shell.age >= shell.plan.fuseTime) {
         shell.done = true;

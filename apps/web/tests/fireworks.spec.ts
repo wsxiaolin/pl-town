@@ -134,6 +134,14 @@ test('烟花铺设计台：拼字网格绘制与两步确认存云端', async ({
   });
   await expect(page.locator('[data-fw-caliber-value]')).toHaveText('200mm');
   await expect(page.locator('[data-fw-craft-charge]')).toHaveText('120g / 52g');
+  // 真实配方卡：原料配比、采购清单与安装步骤都有内容，而不是装饰性占位。
+  await expect(page.locator('[data-fw-recipe] li')).not.toHaveCount(0);
+  await expect(page.locator('[data-fw-recipe]')).toContainText('硝酸钾');
+  await expect(page.locator('[data-fw-shopping]')).toContainText('纸球壳');
+  await expect(page.locator('[data-fw-install] li')).toHaveCount(5);
+  await page.locator('[data-fw-additive]').selectOption('titanium');
+  await expect(page.locator('[data-fw-additive-pct-value]')).toHaveText('8%');
+  await expect(page.locator('[data-fw-recipe]')).toContainText('钛粉');
 
   // 切到拼字花形 → 点阵画布出现。
   await page.locator('[data-fw-shape="pattern"]').evaluate((element) => (element as HTMLButtonElement).click());

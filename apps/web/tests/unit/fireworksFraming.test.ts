@@ -9,7 +9,7 @@ import {
   BASE_BURST_RADIUS,
 } from '../../src/city/fireworks/fireworksPhysics';
 import { defaultFireworkDesign, type FireworkDesign } from '../../src/city/fireworks/fireworksDesign';
-import { buildFireworkMortars, FIREWORK_BARGES } from '../../src/city/fireworks/fireworksMortars';
+import { buildFireworkMortars, FIREWORK_BARGES, type FireworkBargePose, type FireworkMortar } from '../../src/city/fireworks/fireworksMortars';
 import { frameShowAct, planShowOrigins, SHOW_TARGET_Y_JITTER } from '../../src/city/fireworks/showFraming';
 
 /** 把世界点投到「固定偏移正交相机」的归一化屏幕坐标（与 scene 一致）。 */
@@ -38,6 +38,14 @@ function normalize(a: { x: number; y: number; z: number }) {
   return { x: a.x / length, y: a.y / length, z: a.z / length };
 }
 
+function nearestBarge(mortar: FireworkMortar): FireworkBargePose {
+  return FIREWORK_BARGES.reduce((best, barge) => {
+    const bestDistance = (best.x - mortar.x) ** 2 + (best.z - mortar.z) ** 2;
+    const distance = (barge.x - mortar.x) ** 2 + (barge.z - mortar.z) ** 2;
+    return distance < bestDistance ? barge : best;
+  }, FIREWORK_BARGES[0]!);
+}
+
 function screenBounds(designs: FireworkDesign[], aspect: number) {
   const framing = frameShowAct(designs, 3, aspect);
   const project = projector(framing.targetX, framing.targetZ, framing.zoom, aspect);
@@ -47,9 +55,24 @@ function screenBounds(designs: FireworkDesign[], aspect: number) {
     x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
     y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
   };
+  const usedBarges = new Set<string>();
   framing.origins.forEach((origin, index) => {
     add(origin.mortar.x, origin.mortar.y - 1.1, origin.mortar.z);
     add(origin.mortar.x, origin.mortar.y + 2.6, origin.mortar.z);
+    // 船体锚点必须按船体位姿采样：取景按船去重，测试也要覆盖完整甲板。
+    const barge = nearestBarge(origin.mortar);
+    const key = `${barge.x}:${barge.z}`;
+    if (!usedBarges.has(key)) {
+      usedBarges.add(key);
+      const cos = Math.cos(barge.yaw);
+      const sin = Math.sin(barge.yaw);
+      for (const [dx, dz] of [[-2.6, -1.6], [2.6, -1.6], [-2.6, 1.6], [2.6, 1.6]] as const) {
+        const wx = barge.x + dx * cos + dz * sin;
+        const wz = barge.z - dx * sin + dz * cos;
+        add(wx, 0.16, wz);
+        add(wx, origin.mortar.y + 2.2, wz);
+      }
+    }
     const radius = Math.max(BASE_BURST_RADIUS * 0.6, burstRadius(designs[index]!));
     const burst = shellPosition(origin.plan, origin.mortar, origin.plan.fuseTime);
     for (const [ax, ay, az] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) {

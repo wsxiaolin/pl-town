@@ -26,6 +26,37 @@ export type FireworkShape = (typeof FIREWORK_SHAPES)[number];
 export const FIREWORK_TRAILS = ['none', 'comet', 'glitter'] as const;
 export type FireworkTrail = (typeof FIREWORK_TRAILS)[number];
 
+export const STAR_FORMULAS = [
+  'kp-gold', 'kp-streamer', 'strontium-red', 'barium-green',
+  'copper-blue', 'aluminum-white', 'mgal-strobe', 'dragon-egg',
+] as const;
+export type StarFormula = (typeof STAR_FORMULAS)[number];
+
+export const FIREWORK_ADDITIVES = [
+  'none', 'titanium', 'magnalium', 'aluminum', 'charcoal', 'iron', 'boron', 'copper',
+] as const;
+export type FireworkAdditive = (typeof FIREWORK_ADDITIVES)[number];
+
+export const SHELL_CASINGS = ['paper-sphere', 'paper-canister', 'multi-break'] as const;
+export type ShellCasing = (typeof SHELL_CASINGS)[number];
+
+export const BURST_COMPOSITIONS = ['black-powder', 'flash-powder', 'whistle'] as const;
+export type BurstComposition = (typeof BURST_COMPOSITIONS)[number];
+
+export const IGNITIONS = ['time-fuse', 'electric-match'] as const;
+export type FireworkIgnition = (typeof IGNITIONS)[number];
+
+export type FireworkCraft = {
+  formula: StarFormula;
+  additive: FireworkAdditive;
+  additivePercent: number;
+  casing: ShellCasing;
+  burst: BurstComposition;
+  ignition: FireworkIgnition;
+  mortarBore: number;
+  fuseOffset: number;
+};
+
 /** 点阵拼字位图：cells 为 base64 打包位（行优先，每字节低 bit 在前）。 */
 export type FireworkPattern = { cols: number; rows: number; cells: string };
 
@@ -53,6 +84,8 @@ export type FireworkDesign = {
   burnTime: number;
   /** 星体尾迹类型。 */
   trail: FireworkTrail;
+  /** 星体药、壳体、开爆药、点火与安装参数；缺失时按默认工艺补齐。 */
+  craft: FireworkCraft;
   pattern?: FireworkPattern;
 };
 
@@ -72,6 +105,43 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const isHexColor = (value: unknown): value is string => typeof value === 'string' && HEX.test(value);
 const isInt = (value: unknown, min: number, max: number): value is number =>
   Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+
+function defaultCraft(caliber: number): FireworkCraft {
+  return {
+    formula: 'kp-gold',
+    additive: 'none',
+    additivePercent: 0,
+    casing: 'paper-sphere',
+    burst: 'black-powder',
+    ignition: 'time-fuse',
+    mortarBore: Math.max(52, Math.round(caliber + 4)),
+    fuseOffset: 0,
+  };
+}
+
+function sanitizeCraft(input: unknown, caliber: number): FireworkCraft | null {
+  if (input == null) return defaultCraft(caliber);
+  if (typeof input !== 'object' || Array.isArray(input)) return null;
+  const raw = input as Record<string, unknown>;
+  if (typeof raw.formula !== 'string' || !(STAR_FORMULAS as readonly string[]).includes(raw.formula)) return null;
+  if (typeof raw.additive !== 'string' || !(FIREWORK_ADDITIVES as readonly string[]).includes(raw.additive)) return null;
+  if (!isInt(raw.additivePercent, 0, 15)) return null;
+  if (typeof raw.casing !== 'string' || !(SHELL_CASINGS as readonly string[]).includes(raw.casing)) return null;
+  if (typeof raw.burst !== 'string' || !(BURST_COMPOSITIONS as readonly string[]).includes(raw.burst)) return null;
+  if (typeof raw.ignition !== 'string' || !(IGNITIONS as readonly string[]).includes(raw.ignition)) return null;
+  if (!isInt(raw.mortarBore, 52, 350) || raw.mortarBore < caliber + 2) return null;
+  if (typeof raw.fuseOffset !== 'number' || !Number.isFinite(raw.fuseOffset) || raw.fuseOffset < -0.8 || raw.fuseOffset > 0.8) return null;
+  return {
+    formula: raw.formula as StarFormula,
+    additive: raw.additive as FireworkAdditive,
+    additivePercent: raw.additivePercent,
+    casing: raw.casing as ShellCasing,
+    burst: raw.burst as BurstComposition,
+    ignition: raw.ignition as FireworkIgnition,
+    mortarBore: raw.mortarBore,
+    fuseOffset: Math.round(raw.fuseOffset * 100) / 100,
+  };
+}
 
 function popCountBitString(bytes: Uint8Array, totalBits: number): number {
   let count = 0;
@@ -148,6 +218,7 @@ function upgradeLegacyDesign(raw: Record<string, unknown>): FireworkDesign | nul
     starSize: 9,
     burnTime: 3,
     trail: 'comet',
+    craft: defaultCraft(caliber),
   };
 }
 
@@ -167,6 +238,8 @@ export function sanitizeFireworkDesign(input: unknown): FireworkDesign | null {
   if (!isInt(raw.starSize, 4, 18)) return null;
   if (!isInt(raw.burnTime, 1, 6)) return null;
   if (typeof raw.trail !== 'string' || !(FIREWORK_TRAILS as readonly string[]).includes(raw.trail)) return null;
+  const craft = sanitizeCraft(raw.craft, raw.caliber);
+  if (!craft) return null;
   return {
     v: 2,
     ...common,
@@ -178,6 +251,7 @@ export function sanitizeFireworkDesign(input: unknown): FireworkDesign | null {
     starSize: raw.starSize,
     burnTime: raw.burnTime,
     trail: raw.trail as FireworkTrail,
+    craft,
   };
 }
 
