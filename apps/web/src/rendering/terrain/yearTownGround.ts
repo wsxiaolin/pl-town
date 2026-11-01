@@ -340,6 +340,37 @@ function addPlots(surface: Surface, town: YearTownSpec, buildings: readonly Buil
   }
 }
 
+/**
+ * 起源村（island-2019）村心段（升格提案 G 组）：村心绿坪、井台与南湾栈道。
+ * 与该岛 grid 街网/村心广场互补——广场是到达面，绿坪是停留面，栈道把村心
+ * 引到南湾泊口。坐标为经台面/净距验证的提案手写值；全部落在岛台面内，
+ * 不做石墙豁口/跳板（越墙段在提案评审中被否决）。
+ */
+function addOriginVillageGround(surface: Surface, town: YearTownSpec): void {
+  const base = town.topY;
+  const grass = tint(0x9cb87e);
+  const grassEdge = tint(0x7e9a62);
+  const stone = tint(0xb5b2ac);
+  const stoneDark = tint(0x8f8d86);
+  const boardwalk = tint(0xb08a5e);
+  const boardwalkCap = tint(0x8f6b46);
+
+  // G1 村心绿坪：公告板以南的草坪圆盘，南缘接南湾栈道起点。
+  pushDisc(surface, 150, 215, 3.4, base + L.villageGreen, grass, 40);
+  pushRing(surface, 150, 215, 3.4, 3.65, base + L.villageGreen, grassEdge, 40);
+
+  // G2 井台：石檐一圈 + 抹边小圆台（顶外倾成唇檐）+ 井口水面。
+  pushRing(surface, 143.5, 214.5, 1.15, 1.95, base + L.villageGreen, stoneDark, 28);
+  pushWallRing(surface, 143.5, 214.5, 0.55, 1.4, 1.2, base + L.villageGreen + 0.14, base + L.villageGreen, stone, 28);
+  pushDisc(surface, 143.5, 214.5, 0.55, base + L.villageGreen + 0.13, tint(0x33404a), 16);
+
+  // 南湾栈道：村心南侧 → 泊口的两段木板道 + 泊口平台（木色沿用码头铺装）。
+  pushSegmentStrip(surface, 150, 219.5, 151.5, 222.5, 0.55, L.sidewalk, boardwalk);
+  pushSegmentStrip(surface, 151.5, 222.5, 153, 225, 0.55, L.sidewalk, boardwalk);
+  pushDisc(surface, 153, 225, 1.05, terrainHeight(153, 225) + L.sidewalk, boardwalk, 20);
+  pushDisc(surface, 153, 225, 0.72, terrainHeight(153, 225) + L.sidewalk + 0.006, boardwalkCap, 20);
+}
+
 function addSeawall(surface: Surface, town: Pick<YearTownSpec, 'x' | 'z' | 'topY' | 'plateauR'>): void {
   const base = town.topY;
   const stone = tint(0xb9b0a0);
@@ -379,6 +410,8 @@ export function createYearTownGround(options: { scene: THREE.Scene; buildings: r
   for (const district of YEAR_DISTRICTS) addDistrictGround(surface, district);
   for (const island of YEAR_ISLAND_SPECS) addStreetGrid(surface, island);
   for (const town of YEAR_TOWNS) addPlots(surface, town, options.buildings);
+  const originVillage = YEAR_TOWNS.find((town) => town.id === 'island-2019');
+  if (originVillage) addOriginVillageGround(surface, originVillage);
   for (const island of YEAR_ISLAND_SPECS) addOutlineSeawall(surface, island);
 
   const geometry = new THREE.BufferGeometry();

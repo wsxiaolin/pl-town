@@ -1,0 +1,145 @@
+// 年份 2021 纪念设施（从 yearTownMemorials.ts 按年拆分；布局手写唯一事实源）。
+// key/workId/facility/family/note/noteKind 为既定事实不可改；layout 可按城市规划重排。
+//
+// 2021 观澜镇＝「鱼市与工坊」，落位旧港城中市厢（§2）：
+// - B5 [-62,-22]×[268,283] 鱼市西排·北段：小体量密排临中市街（正面 'n'）；
+//   磁悬环线（(−34,282)→(−36,252) 段）斜穿廓内东侧，西组三座 + 东组两座跨线成排，
+//   并让开外城医院/消防站（-51,-36, z276）的 7u 净距圈。
+// - B6 [-62,-22]×[291,303] 鱼市西排·南段：北排面向 B5/B6 之间的冷巷（'n'），
+//   南排正面鱼市街（'s'）；东缘让开站前广场 (-26,295) 半径圈。
+// - B7 [-8,13]×[268,303] 中央工坊：四翼围 courtyard 6（院心 (2.5,285.5) 内不放建筑），
+//   大体量正面朝外：北提案广场、东逻辑书院、南样式工坊、西星海会客厅（观澜面海）。
+// - B8 [27,58]×[268,303] 东宅：三翼亲和体量，西翼导览站正对港口大道（进镇第一站）。
+import type { YearTownMemorial } from '../_types';
+
+export const YEAR_TOWN_MEMORIALS_2021: readonly YearTownMemorial[] = [
+  // ── 潮声镇（2021）：人来人往的一年 ──────────────────────────────────────
+  {
+    key: 'yt-w2021-01',
+    workId: '611e318ccb286c0001737c13',
+    layout: { x: 42.5, z: 270.5, plot: 5, facing: 'n' },
+    facility: '初代会客厅',
+    family: 'gathering',
+    note: '镇上最早的一间会客厅。当年整座城的闲谈都从这里开始，桌子至今没有撤走。',
+  },
+  {
+    key: 'yt-w2021-02',
+    workId: '6143623b861960000160475f',
+    layout: { x: -59.5, z: 270.5, plot: 4.6, facing: 'n' },
+    facility: '第三代会客厅',
+    family: 'gathering',
+    note: '会客厅第三次搬到这里。墙面记着历次搬迁的年份，是潮声镇最常被问路的地方。',
+  },
+  {
+    key: 'yt-w2021-03',
+    workId: '6155d913861960000162a4fe',
+    layout: { x: -52, z: 269, plot: 4.6, facing: 'n' },
+    facility: '第四代会客厅',
+    family: 'gathering',
+    note: '会客厅的第四个家。它比前几代更宽敞，也第一次专门留出了问答的角落。',
+  },
+  {
+    key: 'yt-w2021-04',
+    workId: '6119f0a8cb286c000172a7ef',
+    layout: { x: -44.5, z: 270.5, plot: 3.8, facing: 'n' },
+    facility: '循环乐坊',
+    family: 'gathering',
+    note: '乐坊只放一首歌，且永远从头开始。居民把它当作潮声镇的门铃——听见就知道自己到镇上了。',
+  },
+  {
+    key: 'yt-w2021-05',
+    workId: '6130ebc15fd38c0001bcea68',
+    layout: { x: -29, z: 270.5, plot: 4.2, facing: 'n' },
+    facility: '第二代会客厅',
+    family: 'gathering',
+    note: '第二代会客厅，屋顶修得比初代低。据说是为了让路人抬头时正好看见檐下的留言板。',
+  },
+  {
+    key: 'yt-w2021-06',
+    workId: '60da78eefdb33a0001226d07',
+    layout: { x: 9.5, z: 285.5, plot: 5, facing: 'e' },
+    facility: '逻辑书院',
+    family: 'academy',
+    note: '书院按章逐节讲授逻辑电路，从最基础的门一路讲到乘法器。目录就刻在门厅的墙上。',
+  },
+  {
+    key: 'yt-w2021-07',
+    workId: '6072a5cbf6fe9b0001d81703',
+    layout: { x: 29.5, z: 285.5, plot: 4.6, facing: 'w' },
+    facility: '新居民导览站',
+    family: 'academy',
+    note: '进镇第一站。这里不卖东西，只告诉初来者哪条路安全、哪些话说不得、遇事该找谁。',
+  },
+  {
+    key: 'yt-w2021-08',
+    workId: '61c1cbaf0a9ec000018f92d8',
+    layout: { x: -22.7, z: 269, plot: 3.8, facing: 'n' },
+    facility: '重建会客厅',
+    family: 'gathering',
+    note: '会客厅曾在一次故障中垮掉，这一座是照着原样重建的。门楣上留着那年的修补痕迹。',
+  },
+  {
+    key: 'yt-w2021-09',
+    workId: '60935a73b4e3240001734913',
+    layout: { x: 2.5, z: 300.5, plot: 5.2, facing: 's' },
+    facility: '样式工坊',
+    family: 'lab',
+    note: '工坊教人给文字上色、加粗、留白。镇上许多招牌的字体，都是从这里的第一张样张抄来的。',
+  },
+  {
+    key: 'yt-w2021-10',
+    workId: '617bfffb0cf0bd0001200e9b',
+    layout: { x: -4.5, z: 285.5, plot: 5.5, facing: 'w' },
+    facility: '星海会客厅',
+    family: 'gathering',
+    note: '会客厅的穹顶画着星海，夜里会缓缓流动。它证明了聊天的地方也可以是一处风景。',
+  },
+  {
+    key: 'yt-w2021-11',
+    workId: '617ea92d0cf0bd000120656a',
+    layout: { x: 2.5, z: 270.5, plot: 5.5, facing: 'n' },
+    facility: '提案广场',
+    family: 'guild',
+    note: '一座为讨论「下一版城市长什么样」而设的广场。提案写在石板上，谁都可以走近添一笔。',
+  },
+  {
+    key: 'yt-w2021-12',
+    workId: '61697cc6753eb80001f7af9a',
+    layout: { x: -37, z: 292, plot: 4.2, facing: 'n' },
+    facility: '第五代会客厅',
+    family: 'gathering',
+    note: '第五代会客厅，门口无台阶，据说是历次搬迁中第一次考虑到推门而入的便利。',
+  },
+  {
+    key: 'yt-w2021-13',
+    workId: '618e5f6f5885db00016f5250',
+    layout: { x: 42.5, z: 300.5, plot: 4.6, facing: 's' },
+    facility: '继任会客厅',
+    family: 'gathering',
+    note: '上一间会客厅冷清之后，有人接手把它重新点亮。这座楼纪念的是「接力」本身。',
+  },
+  {
+    key: 'yt-w2021-14',
+    workId: '610b370a93c6cf000144d4ee',
+    layout: { x: -46, z: 292, plot: 3.8, facing: 'n' },
+    facility: '冷巷茶室',
+    family: 'tavern',
+    note: '一间公认「不会有多少人来的」茶室。正因如此，它成了想安静说话的人最常去的地方。',
+  },
+  {
+    key: 'yt-w2021-15',
+    workId: '60f442b2cf29060001b519d6',
+    layout: { x: -48, z: 301.5, plot: 3.8, facing: 's' },
+    facility: '著述守则碑',
+    family: 'law',
+    note: '碑上刻的不是处罚，而是「引用与署名」的分界。争论最激烈的那几年，它就立在这里。',
+  },
+  {
+    key: 'yt-w2021-16',
+    workId: '61af53d10a9ec000018df109',
+    layout: { x: -38, z: 301.5, plot: 4.2, facing: 's' },
+    facility: '第七代会客厅',
+    family: 'gathering',
+    note: '会客厅的第七代，也是潮声镇最后一代。门一直开着，等一个不会再来的旧人。',
+  },
+];

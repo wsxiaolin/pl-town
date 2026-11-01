@@ -11,6 +11,7 @@ export const YEAR_TOWN_SURFACE_Y = {
   plazaRing: 0.043,
   innerRing: 0.047,
   innerDisc: 0.051,
+  villageGreen: 0.055,
   plot: 0.06,
   dock: 0.065,
   dockCap: 0.07,

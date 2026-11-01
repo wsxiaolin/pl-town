@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { TRANSIT_STATION_IDS, SCENE_INTEREST_POINT_IDS } from '../../src/gameplay/world/sceneInteractions';
 import { YEAR_ISLAND_SPECS, yearTownById } from '../../src/city/data/year-towns/towns';
-import { YEAR_TOWN_LAYOUT_CONFIGS } from '../../src/city/yearTownBuildings';
+import { YEAR_TOWN_BUILDING_DEFS } from '../../src/city/yearTownBuildings';
 import { SOUTH_TRAIL_NODES } from '../../src/city/data/terrain/heightfield/worldReliefField';
 import {
   BRIDGE_CORRIDOR_HALF,
@@ -213,10 +213,12 @@ test('桥站发车不瞬移：路线首点贴近出发月台，枢纽段高度�
   assert.ok(maxJump < 0.35, `环线→桥站纵断面跳变 ${maxJump.toFixed(2)}`);
 });
 
-test('环线与布局后的年份建筑保持结构净距（中心距 ≥5.5u）', () => {
+test('环线与布局后的年份建筑（含外城生活建筑）保持结构净距（中心距 ≥5.5u）', () => {
   const loop = [...RING_LOOP_NODES, RING_LOOP_NODES[0]!];
   const conflicts: string[] = [];
-  for (const building of YEAR_TOWN_LAYOUT_CONFIGS) {
+  // 检查对象是全部年份建筑（纪念+地标+外城）：环线梁穿过任何一栋都是
+  // 视觉事故（红队复核发现 4 座外城建筑被旧检查范围漏掉）。
+  for (const building of YEAR_TOWN_BUILDING_DEFS) {
     let best = Number.POSITIVE_INFINITY;
     for (let i = 0; i + 1 < loop.length; i += 1) {
       const a = loop[i]!;

@@ -436,12 +436,17 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         { x0: -18, z0: 220, x1: 62, z1: 220, halfWidth: 2.2, kind: 'street', name: '站前街' },
         { x0: -18, z0: 262, x1: 62, z1: 262, halfWidth: 2.5, kind: 'street', name: '中市街' },
         { x0: -18, z0: 309, x1: 58, z1: 309, halfWidth: 2.1, kind: 'street', name: '鱼市街' },
+        { x0: -68, z0: 336, x1: 104, z1: 336, halfWidth: 2.3, kind: 'street', name: '灯市街' },
         // 两条袋形院巷从滨水侧开口，在街廓边缘止步，院心保持完整。
         { x0: -18, z0: 287, x1: -15, z1: 287, halfWidth: 1.1, kind: 'lane', name: '秤砣巷' },
         { x0: 58, z0: 287, x1: 62, z1: 287, halfWidth: 1.1, kind: 'lane', name: '缆绳巷' },
-        // 滨水步道：沿内湾东缘，接渔港阶地
-        { x0: -20, z0: 225, x1: -18, z1: 260, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
-        { x0: -18, z0: 260, x1: -16, z1: 306, halfWidth: 1.5, kind: 'promenade', name: '南岸步道' },
+        // 滨水步道：沿内湾东缘接渔港阶地；在启明/回响两座站房处向东绕行
+        // （红队复核：原直线距站房中心 0.4u/-0.2u，步道从楼里过）。
+        { x0: -19, z0: 225, x1: -14, z1: 236, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
+        { x0: -14, z0: 236, x1: -18, z1: 252, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
+        { x0: -18, z0: 252, x1: -18, z1: 260, halfWidth: 1.5, kind: 'promenade', name: '渔港步道' },
+        { x0: -18, z0: 260, x1: -13, z1: 284, halfWidth: 1.5, kind: 'promenade', name: '南岸步道' },
+        { x0: -13, z0: 284, x1: -16, z1: 306, halfWidth: 1.5, kind: 'promenade', name: '南岸步道' },
         // 斜街：市区东南角通往东滩
         { x0: 62, z0: 262, x1: 68, z1: 294, halfWidth: 1.8, kind: 'street', name: '东滩街' },
       ],
@@ -458,13 +463,29 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         { x: 20, z: 428, radius: 7, kind: 'water' },
       ],
       blocks: [
-        { x0: -14, x1: 14, z0: 225, z1: 255, fronts: ['n', 's', 'e', 'w'], use: 'civic', courtyard: 6 },
-        { x0: 28, x1: 58, z0: 225, z1: 257, fronts: ['n', 's', 'e', 'w'], use: 'commercial', courtyard: 7 },
-        { x0: -14, x1: 14, z0: 270, z1: 305, fronts: ['n', 's', 'e', 'w'], use: 'works', courtyard: 6 },
-        { x0: 28, x1: 58, z0: 270, z1: 305, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
-        { x0: -60, x1: 96, z0: 178, z1: 200, fronts: ['n', 's'], use: 'commercial', courtyard: 10 },
-        { x0: -60, x1: 96, z0: 382, z1: 400, fronts: ['n', 's'], use: 'residential', courtyard: 12 },
-        { x0: 14, x1: 26, z0: 409, z1: 421, fronts: ['s'], use: 'civic' },
+        // 全部街廓按岛心 (-5,302) 半径 ≤114 裁剪（谐波下限 0.94×124=116.6，留 2u 余量）。
+        // ── 北岸（学院街↔站前街之间为滨海缓坡带，不设街廓；建筑集中于站前以南）──
+        // ── 站前厢（站前街↔中市街）：西城厢 / 东商肆（站前广场在东厢西北角）──
+        { x0: -62, x1: 13, z0: 225.5, z1: 256, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 7 },
+        { x0: 27, x1: 79, z0: 225.5, z1: 256, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        // ── 中市厢（中市街↔鱼市街）：鱼市西排两段 / 中央工坊 / 东宅 / 东滩里 ──
+        { x0: -62, x1: -22, z0: 268, z1: 283, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        { x0: -62, x1: -22, z0: 291, z1: 303, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        { x0: -8, x1: 13, z0: 268, z1: 303, fronts: ['n', 's', 'e', 'w'], use: 'works', courtyard: 6 },
+        { x0: 27, x1: 58, z0: 268, z1: 303, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
+        { x0: 74, x1: 98, z0: 268, z1: 303, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        // ── 灯市厢（鱼市街↔灯市街）：两排大街廓，中央留 avenue 绿带 ──
+        { x0: -62, x1: 13, z0: 314.5, z1: 330, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
+        { x0: 28, x1: 98, z0: 314.5, z1: 330, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 7 },
+        // ── 灯市南（灯市街↔海堤街）：西馆区 / 三排宅里（两处市集广场在廓内留白）──
+        { x0: -62, x1: -26, z0: 341.5, z1: 358, fronts: ['n', 's', 'e', 'w'], use: 'civic' },
+        { x0: -8, x1: 13, z0: 341.5, z1: 358, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        { x0: 27, x1: 58, z0: 341.5, z1: 358, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        { x0: 66, x1: 94, z0: 341.5, z1: 358, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        // ── 南端（海堤街/南市街↔南码头）──
+        { x0: -62, x1: 13, z0: 372, z1: 396, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 9 },
+        { x0: 27, x1: 59, z0: 372, z1: 396, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 8 },
+        { x0: 14, x1: 26, z0: 405, z1: 411, fronts: ['s'], use: 'civic' },
       ],
     },
   },
@@ -549,9 +570,32 @@ export const YEAR_DISTRICTS: readonly YearDistrictSpec[] = [
         { x: -320, z: 380, radius: 9, kind: 'water' },
       ],
       blocks: [
-        { x0: -247, x1: -221, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
-        { x0: -247, x1: -221, z0: 263, z1: 295, fronts: ['n', 's', 'e', 'w'], use: 'works', courtyard: 6 },
-        { x0: -209, x1: -183, z0: 224, z1: 295, fronts: ['n', 's', 'e', 'w'], use: 'civic', courtyard: 8 },
+        // 全部街廓按岛心 (-285,262) 半径 ≤116 裁剪（谐波下限 0.94×130=122.2，留余量）。
+        // ── 北岸（天幕街↔科研街）：西港北岸 / 大道东商业长排 ──
+        { x0: -368, x1: -327, z0: 182, z1: 192.5, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        { x0: -313, x1: -203, z0: 182, z1: 192.5, fronts: ['n', 's', 'e', 'w'], use: 'commercial', courtyard: 10 },
+        // ── 科研带（科研街↔货站街）：西湾宿区 / 科研西院 / 科研东院 ──
+        { x0: -382, x1: -327, z0: 199.5, z1: 212, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        { x0: -313, x1: -256, z0: 199.5, z1: 212, fronts: ['n', 's', 'e', 'w'], use: 'civic' },
+        { x0: -246, x1: -188, z0: 199.5, z1: 212, fronts: ['n', 's', 'e', 'w'], use: 'works' },
+        // ── 货站带（货站街↔夜航街）：泊位后场两组 / 西宅 / 市集广场两侧 ──
+        { x0: -395, x1: -370, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'works' },
+        { x0: -360, x1: -327, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'works' },
+        { x0: -313, x1: -256, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 6 },
+        { x0: -246, x1: -228, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        { x0: -202, x1: -184, z0: 224, z1: 251, fronts: ['n', 's', 'e', 'w'], use: 'civic', courtyard: 6 },
+        // ── 夜航带（夜航街↔南港街）：西宅 / 西工坊（站前广场在西缘）/ 东工坊 ──
+        { x0: -396, x1: -327, z0: 263, z1: 294, fronts: ['n', 's', 'e', 'w'], use: 'residential', courtyard: 7 },
+        { x0: -313, x1: -256, z0: 263, z1: 294, fronts: ['n', 's', 'e', 'w'], use: 'works', courtyard: 6 },
+        { x0: -246, x1: -184, z0: 263, z1: 294, fronts: ['n', 's', 'e', 'w'], use: 'works' },
+        // ── 南港带（南港街↔夜市街）──
+        { x0: -379, x1: -327, z0: 306, z1: 330, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        { x0: -313, x1: -256, z0: 306, z1: 330, fronts: ['n', 's', 'e', 'w'], use: 'residential' },
+        { x0: -246, x1: -192, z0: 306, z1: 330, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        // ── 夜市带（夜市街↔远航街）：西排 / 中排 / 东排（两处市集广场留白）──
+        { x0: -368, x1: -344, z0: 342, z1: 362, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        { x0: -313, x1: -270, z0: 342, z1: 366, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
+        { x0: -246, x1: -228, z0: 342, z1: 358, fronts: ['n', 's', 'e', 'w'], use: 'commercial' },
       ],
     },
   },
