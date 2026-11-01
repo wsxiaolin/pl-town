@@ -563,6 +563,7 @@ function init() {
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
     setActiveStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
     zoo: { getPlayerPosition: () => cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : null, getDialogs: () => cityDialogs },
+    chatRuins: { claimReward: (rewardId) => multiplayerHousing?.progression.claimReward(rewardId) ?? false, hasItem: (itemId) => (multiplayerHousing?.progression.getProgress().inventory[itemId] ?? 0) > 0, getPlayerPosition: () => cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : null, getDialogs: () => cityDialogs },
   });
   stories.setupEcho(scene);
   mapController = createMapController({
@@ -761,7 +762,7 @@ function init() {
     awardAchievement: awardDirectAchievement,
     showToast: showUnlockToast,
     interactWithTransit: (id) => yearTown.interactTransit(id),
-    interactWithStory: (id) => cityDialogs ? stories.echo.interactInterestPoint(id, cityDialogs) || stories.zoo.interactInterestPoint(id, cityDialogs) : false,
+    interactWithStory: (id) => !cityDialogs ? false : stories.echo.interactInterestPoint(id, cityDialogs) || stories.chatRuins.interactInterestPoint(id, cityDialogs),
     interactWithFeature: (id) => iceKingFeature?.iceWall.interact(id) ?? false,
     setWellPhase: (phase) => iceHooks.setWellPhase(phase),
     setBeachEncounterPhase: (phase) => iceHooks.setBeachEncounterPhase(phase),

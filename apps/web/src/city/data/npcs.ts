@@ -1,4 +1,4 @@
-import { ECHO_OBSERVATORY_AREA, ZOO_AREA } from './cityConfig';
+import { CHATRUINS_AREA, ECHO_OBSERVATORY_AREA, ZOO_AREA } from './cityConfig';
 import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
 import type { NpcProfile } from "../npcSystem";
@@ -64,6 +64,41 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
       { text:'「老地方都得有人来看。看一眼，就算数。」', options:[
         { text:'（点头）', next:null },
       ]},
+    ],
+  },
+  {
+    // S001 会沉的城：考古向导，常驻遗迹入口。S0-S3 态对话由
+    // chatRuinsStoryController 状态机接管，此处 dialog 仅为兜底（S3 闲聊池）。
+    id:'laxy', name:'laxy 瓦', role:'考古向导', core:false, spawnChance:1,
+    npcType:'story', type:'story', behavior:'field', workHours:[0,24], guaranteedSpawn:true,
+    head:0xE3C09E, body:0x8A6F55, patrolRadius:1.1,
+    home:[...CHATRUINS_AREA.laxy], work:[...CHATRUINS_AREA.laxy],
+    dialog:[
+      { text:'「考古这个词，谁发明的已经考不出来了。所以我说它是『人民的发明』。」', options:[
+        { text:'和 laxy 瓦 聊聊', next:null },
+      ]},
+      { text:'「我在这儿发迎新词好几年了。来的每一个人我都欢迎过，虽然他们大多没注意到我。」', options:[
+        { text:'（点头）', next:null },
+      ]},
+      { text:'「那笔两支持的债？威龙是龙前几天又来问过一次。楼主还是没出现。挺好，还活着就能一直问。」', options:[
+        { text:'（告辞）', next:null },
+      ]},
+    ],
+  },
+  {
+    // S001 会沉的城：月满西楼的墓碑——碑旁静立的人。零坟场意象、零死亡
+    // 隐喻（分寸条款 2）；未完成态台词仅「……」「墓碑。」「刑啊。」三句。
+    id:'tombstone', name:'墓碑先生', role:'碑旁静立的人', core:false, spawnChance:1,
+    npcType:'story', type:'story', behavior:'field', workHours:[0,24], guaranteedSpawn:true,
+    head:0xC9C2B8, body:0x5F6570, patrolRadius:0.2,
+    home:[...CHATRUINS_AREA.tombstone], work:[...CHATRUINS_AREA.tombstone],
+    dialog:[
+      { text:'「……」', options:[
+        { text:'你是谁？', next:1 },
+        { text:'这地方值得守吗？', next:2 },
+      ]},
+      { text:'「墓碑。」', options:[{ text:'（退开一点）', next:null }]},
+      { text:'「刑啊。」', options:[{ text:'（退开一点）', next:null }]},
     ],
   },
   {

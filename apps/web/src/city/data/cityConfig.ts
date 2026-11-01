@@ -174,6 +174,24 @@ export const ZOO_AREA = Object.freeze({
   proxySign: Object.freeze([-5.6, 30.2] as const),
 });
 
+/** S001 第一聊天室遗迹（会沉的城）：chatruins 建筑 (-33,-47.5) 周边的剧情
+ *  兴趣点与 NPC 坐标，渲染（chatRuinsPoints）与 NPC 档案（npcs.ts）共用。
+ *  自北向南 = 自上而下五层地层，⑤为中央地基石；涂鸦墙在西侧。 */
+export const CHATRUINS_AREA = Object.freeze({
+  /** 遗迹中心（地基石⑤）。 */
+  foundation: Object.freeze([-33, -47.5] as const),
+  /** 发掘点①-⑤（自上而下）。 */
+  digPoints: Object.freeze([
+    [-31.2, -45.9], [-34.8, -45.9], [-31.2, -49.1], [-34.8, -49.1], [-33, -47.5],
+  ] as readonly Coord2[]),
+  /** 涂鸦墙（西侧矮墙）。 */
+  wall: Object.freeze([-30.1, -47.5] as const),
+  /** laxy 瓦 站位（遗迹入口北侧）。 */
+  laxy: Object.freeze([-32.2, -44.7] as const),
+  /** 墓碑先生 站位（地基石西南侧）。 */
+  tombstone: Object.freeze([-34.1, -48.5] as const),
+});
+
 /** 星语北城：主城北侧的扩建城区（黑洞热门作品 Top100 城市化）。
  *  设计文档见仓库外 design/master-plan.md；本配置是渲染、导航与民居
  *  批次的唯一事实来源。路网分层：中央大道（x=0，沥青，与主城南北主轴

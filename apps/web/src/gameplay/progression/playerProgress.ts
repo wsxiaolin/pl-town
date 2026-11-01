@@ -119,6 +119,7 @@ export const ITEM_LABELS: Readonly<Record<string, string>> = Object.freeze({
   shared_meal: '热炖牛肉',
   tea_service: '龙井茶席',
   memory_parcel: '夜谈礼盒',
+  iou_two_supports: '两支持欠条',
   [ICE_KING_ITEMS.wetCrown.id]: ICE_KING_ITEMS.wetCrown.name,
   [ICE_KING_ITEMS.lemonade.id]: ICE_KING_ITEMS.lemonade.name,
 });
@@ -129,6 +130,8 @@ export const ITEM_DETAILS: Readonly<Record<string, string>> = Object.freeze({
   shared_meal: '热炖牛肉 · 可交付社区厨房或在交易所出售',
   tea_service: '龙井茶席 · 可交付图书馆或在交易所出售',
   memory_parcel: '夜谈礼盒 · 可交付音乐厅或在交易所出售',
+  // S001 道具卡文本逐字照录（不可交易 · 永久 · 背包分类：纪念品）。
+  iou_two_supports: '一张 2024 年的口头债务凭证：「给这个作品一支持，我给你两支持。」债务人下落不明，讨债人仍在人间。（不可交易 · 永久 · 背包分类：纪念品）',
 });
 
 const validStringArray = (value: unknown): string[] => Array.isArray(value)

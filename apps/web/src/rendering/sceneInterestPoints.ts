@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
-import { ZOO_STORY_POINT_IDS, type SceneInterestPointId } from '../gameplay/world/sceneInteractions';
+import { CHATRUINS_STORY_POINT_IDS, ZOO_STORY_POINT_IDS, type SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 export type { SceneInterestPointId };
 import { createWestBeach } from './westBeach';
 import { createCatCafeIceWall } from './iceKing/catCafeIceWall';
 import { createTransitStationSigns } from './terrain/transitStationSigns';
 import { createZooInterestPoints } from '../city/zoo/zooInterestPoints';
+import { createChatRuinsInterestPoints } from '../city/chatRuins/chatRuinsInterestPoints';
 
 export interface SceneInterestPointEntity {
   id: SceneInterestPointId;
@@ -384,11 +385,15 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
   // 直接可用，tag 语义同 tag()。
   const stationSigns = createTransitStationSigns(options);
   const zoo = createZooInterestPoints(options);
-  const list = [createCatCafeNote(options), catCafeIceWall, createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options), ...stationSigns.entities, ...zoo.entities];
+  // S001 会沉的城（2026-10-31）：遗迹发掘点①-⑤与涂鸦墙。底座常显（叙事
+  // 前提「遗迹一直在那里」），marker/hitbox 走 storyActivationVisual 按层激活；
+  // update 驱动地基石夜间微光。story 集合与 echo 共用 setActiveStoryPoints。
+  const chatRuins = createChatRuinsInterestPoints(options);
+  const list = [createCatCafeNote(options), catCafeIceWall, createOrangeTree(options), createLongjingWell(options), westBeach.entity, createEchoStonePile(options), createEchoTable(options), createEchoCabin(options), createEchoDiary(options), createEchoPhotoWall(options), createEchoCabinDoor(options), ...stationSigns.entities, ...zoo.entities, ...chatRuins.entities];
   const entities = new Map(list.map((entity) => [entity.id, entity]));
-  const STORY_POINT_IDS: readonly SceneInterestPointId[] = [...ECHO_STORY_POINT_IDS, ...ZOO_STORY_POINT_IDS];
+  const STORY_POINT_IDS: readonly string[] = [...ECHO_STORY_POINT_IDS, ...ZOO_STORY_POINT_IDS, ...CHATRUINS_STORY_POINT_IDS];
   const storyEntities = STORY_POINT_IDS
-    .map((id) => entities.get(id))
+    .map((id) => entities.get(id as SceneInterestPointId))
     .filter((entity): entity is SceneInterestPointEntity => Boolean(entity));
   const baseRaycastTargets = list
     .filter((entity) => !entity.object.userData.autoTrigger && !STORY_POINT_IDS.includes(entity.id))
@@ -425,6 +430,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
     update(elapsedSeconds) {
       westBeach.update(elapsedSeconds);
       zoo.update(elapsedSeconds);
+      chatRuins.update(elapsedSeconds);
       for (const object of orangeFruits) {
         const index = object.userData.orangeFruitIndex as number;
         const baseY = object.userData.orangeFruitBaseY as number;
@@ -491,6 +497,7 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       // ResourcePool 与下方材质缓存既有路径释放）。
       stationSigns.dispose();
       zoo.dispose();
+      chatRuins.dispose();
       materialCache.forEach((material) => material.dispose());
       materialCache.clear();
     },

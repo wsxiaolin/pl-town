@@ -378,6 +378,10 @@ try {
       // 小城动物园（2026-11-01.zoo.1）：进入 legacy 保留清单以满足覆盖断言；
       // 实际落成走 DEFAULT_COMPLETED_BUILDING_IDS 的赠礼补全。
       'zoo',
+      // 第一聊天室遗迹（2026-10-31.chatruins.1）：S001 剧情场景建筑，同
+      // fireworks_shop——进 legacy 保留清单满足覆盖断言，实际落成走
+      // DEFAULT_COMPLETED_BUILDING_IDS 赠礼补全，不设众筹项目。
+      'chatruins',
     ];
     const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
     assert.deepEqual([...LEGACY_UNLOCK_PRESERVATION_BUILDINGS].sort(), [...legacyPendingBuildings].sort());

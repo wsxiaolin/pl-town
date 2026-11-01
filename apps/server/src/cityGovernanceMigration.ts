@@ -40,6 +40,10 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   // 小城动物园（2026-11-01.zoo.1）：S014 剧情场景建筑，进入 legacy
   // 保留清单以满足覆盖断言；实际落成走 DEFAULT_COMPLETED_BUILDING_IDS。
   'zoo',
+  // 第一聊天室遗迹（2026-10-31.chatruins.1）：S001 剧情场景建筑，进入
+  // legacy 保留清单以满足覆盖断言；实际落成走 DEFAULT_COMPLETED_BUILDING_IDS
+  // 的赠礼补全（见下），不设众筹项目（用户参数：不再新增众筹）。
+  'chatruins',
 ]);
 
 // 2026-10-04 default-standing policy: 参议院与星语北城 11 栋作品建筑在
@@ -60,6 +64,10 @@ export const DEFAULT_COMPLETED_BUILDING_IDS = Object.freeze([
   // 2026-11-01 zoo policy: 小城动物园是 S014 支线剧情的场景建筑（园区
   // 「重新开园」是叙事前提），boot 时赠礼补全直接建成，不设众筹项目。
   'zoo',
+  // 2026-10-31 chatruins policy: 第一聊天室遗迹是 S001 支线剧情的场景
+  // 建筑（遗迹「一直在那里」是叙事前提），boot 时赠礼补全直接建成，
+  // 不设众筹项目；个人解锁=城市建成后即可访问，无集体筹资门槛。
+  'chatruins',
 ]);
 
 // Read-only reconciliation runs inside initializeCityGovernance's caller-owned

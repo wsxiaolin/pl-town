@@ -6,6 +6,11 @@ export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'cat-cafe-ice-wall', '
   // 后续切片（rendering/sceneInterestPoints.ts + city/zoo/zooStoryController）。
   'zoo-pigeon', 'zoo-cat', 'zoo-monkey', 'zoo-beast', 'zoo-waterfowl', 'zoo-museum',
   'zoo-office', 'zoo-stand', 'zoo-signin', 'zoo-borrow-note', 'zoo-doorplate', 'zoo-phone', 'zoo-proxy-sign',
+  // S001 会沉的城（2026-10-31）：第一聊天室遗迹地层发掘点①-⑤与涂鸦墙。
+  // 场景实体在 rendering/sceneInterestPoints.ts（chatRuins 兴趣点组），
+  // 交互路由走 interactWithStory → chatRuinsStoryController（story 兴趣点，
+  // 激活显隐走 setActiveStoryPoints，与 echo 剧情共用通道）。
+  'chatruins-dig-1', 'chatruins-dig-2', 'chatruins-dig-3', 'chatruins-dig-4', 'chatruins-dig-5', 'chatruins-wall',
   // 年份群岛车站站牌（T4 跨海交通，设计 §5.2）：泊位坐标与线路数据唯一
   // 事实源在 city/data/year-towns/transit.ts（单测锁两表一致）；此处仅注册
   // 交互路由 ID——点站牌走 interactWithInterestPointController 既有路由。
@@ -17,6 +22,11 @@ export type SceneInterestPointId = (typeof SCENE_INTEREST_POINT_IDS)[number];
 export const ZOO_STORY_POINT_IDS = [
   'zoo-pigeon', 'zoo-cat', 'zoo-monkey', 'zoo-beast', 'zoo-waterfowl', 'zoo-museum',
   'zoo-office', 'zoo-stand', 'zoo-signin', 'zoo-borrow-note', 'zoo-doorplate', 'zoo-phone', 'zoo-proxy-sign',
+] as const;
+
+/** S001 剧情兴趣点 ID（SCENE_INTEREST_POINT_IDS 的 chatruins 子集）。 */
+export const CHATRUINS_STORY_POINT_IDS = [
+  'chatruins-dig-1', 'chatruins-dig-2', 'chatruins-dig-3', 'chatruins-dig-4', 'chatruins-dig-5', 'chatruins-wall',
 ] as const;
 
 /** 年份群岛车站站牌 ID（SCENE_INTEREST_POINT_IDS 的交通子集）。 */

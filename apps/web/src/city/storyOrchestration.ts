@@ -6,6 +6,7 @@ import { createYesterdaySongController } from './yesterday/yesterdaySongControll
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
 import { createZooStoryController } from './zoo/zooStoryController';
+import { createChatRuinsStoryController } from './chatRuins/chatRuinsStoryController';
 import { createStoryEntryGate } from './storyEntryGate';
 import { createStoryRouter } from './storyRouting';
 import { showUnlockToast } from './toast';
@@ -42,6 +43,14 @@ export function createStoryOrchestration(options: {
     getPlayerPosition?: () => { x: number; z: number } | null;
     getDialogs?: () => CityDialogController | null;
   };
+  /** S001 会沉的城端口（涂鸦欠条领取/玩家位置/对话框惰性引用）。 */
+  chatRuins?: {
+    claimReward?: (rewardId: string) => boolean | Promise<boolean>;
+    hasItem?: (itemId: string) => boolean;
+    getPlayerPosition?: () => { x: number; z: number } | null;
+    getDialogs?: () => CityDialogController | null;
+  };
+  /** 场景 story 兴趣点激活集合统一出口（echo 与 S001 并集后下发）。 */
   setActiveStoryPoints: (ids: readonly string[]) => void;
 }) {
   let echoActiveActors = new Set<string>();
@@ -55,10 +64,12 @@ export function createStoryOrchestration(options: {
     options.updateNpcSchedules();
   }
 
+  // 场景 story 兴趣点（echo / zoo / S001 各自上报，并集后统一下发渲染层）。
   let echoStoryPoints: ReadonlySet<string> = new Set();
   let zooStoryPoints: ReadonlySet<string> = new Set();
+  let chatRuinsStoryPoints: ReadonlySet<string> = new Set();
   function mergeStoryPoints() {
-    options.setActiveStoryPoints([...echoStoryPoints, ...zooStoryPoints]);
+    options.setActiveStoryPoints([...echoStoryPoints, ...zooStoryPoints, ...chatRuinsStoryPoints]);
   }
 
   // 「回声」槽位：暂停期间由占位控制器顶上（剧情内容不进包）。开关翻转后
@@ -130,6 +141,20 @@ export function createStoryOrchestration(options: {
   zoo.announceGuide();
   zoo.syncActiveActors();
   zoo.start();
+  // S001 会沉的城（2026-10-31）：静态挂载（laxy 瓦/墓碑先生是常驻 NPC，
+  // 不走 actor 显隐合并）。兴趣点上报与 echo 并集下发；接近触发由控制器
+  // 内部 800ms 轮询驱动（start() 启动）。
+  const chatRuins = createChatRuinsStoryController({
+    ...shared,
+    claimReward: options.chatRuins?.claimReward,
+    hasItem: options.chatRuins?.hasItem,
+    getPlayerPosition: options.chatRuins?.getPlayerPosition,
+    getDialogs: options.chatRuins?.getDialogs,
+    setStoryPoints: (ids) => { chatRuinsStoryPoints = new Set(ids); mergeStoryPoints(); },
+  });
+  chatRuins.announceGuide();
+  chatRuins.syncActiveActors();
+  chatRuins.start();
 
   const listControllers = () => [
     ['echo', echo.current],
@@ -137,6 +162,7 @@ export function createStoryOrchestration(options: {
     ['magi', magi],
     ['overcoat', overcoat],
     ['zoo', zoo],
+    ['chatruins', chatRuins],
   ] as const;
 
   const gate = createStoryEntryGate(listControllers);
@@ -157,6 +183,7 @@ export function createStoryOrchestration(options: {
     magi,
     overcoat,
     zoo,
+    chatRuins,
     router,
     getActiveStoryActorIds: () => activeStoryActorIds,
     announceGuide() {
@@ -165,6 +192,7 @@ export function createStoryOrchestration(options: {
       magi.announceGuide();
       overcoat.announceGuide();
       zoo.announceGuide();
+      chatRuins.announceGuide();
     },
     setupEcho(scene: Scene) {
       echoBootScene = scene;
@@ -180,6 +208,7 @@ export function createStoryOrchestration(options: {
       magi.dispose();
       overcoat.dispose();
       zoo.dispose();
+      chatRuins.dispose();
     },
   };
 }
