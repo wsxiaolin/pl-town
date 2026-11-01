@@ -554,6 +554,9 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     'chatruins-wall', 'longjing-well', 'origin-orange-tree',
     'station-2019-bridge', 'station-2019-ring', 'station-2020', 'station-2021', 'station-2022',
     'station-2023', 'station-2024', 'station-2025', 'station-2026', 'station-stargate',
+    'zoo-beast', 'zoo-borrow-note', 'zoo-cat', 'zoo-doorplate', 'zoo-monkey', 'zoo-museum',
+    'zoo-office', 'zoo-phone', 'zoo-pigeon', 'zoo-proxy-sign', 'zoo-signin', 'zoo-stand',
+    'zoo-waterfowl',
   ]);
   expect(worldAudit.interactivePlot).toBe(true);
   expect(worldAudit.hasStoryNpc).toBe(true);

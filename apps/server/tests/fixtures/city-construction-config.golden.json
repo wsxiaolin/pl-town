@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-31.chatruins.1",
+  "version": "2026-11-01.zoo.1",
   "projects": [
     {
       "id": "build-catcafe",
@@ -567,6 +567,14 @@
       "buildingId": "north_genshin_institute",
       "name": "原神研究院",
       "description": "共同筹建原神研究院",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-zoo",
+      "buildingId": "zoo",
+      "name": "小城动物园",
+      "description": "共同筹建小城动物园",
       "kind": "building",
       "cost": 3000
     },

@@ -590,6 +590,14 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     storyLocked: false
   },
   {
+    id: "zoo",
+    label: "小城动物园",
+    num: "71",
+    x: -9,
+    z: 29.8,
+    storyLocked: false
+  },
+  {
     id: "chatruins",
     label: "第一聊天室遗迹",
     num: "60",

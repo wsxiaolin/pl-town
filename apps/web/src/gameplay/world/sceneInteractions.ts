@@ -1,6 +1,11 @@
 export { WORLD_ACHIEVEMENTS } from '../progression/worldAchievements';
 
 export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'cat-cafe-ice-wall', 'origin-orange-tree', 'longjing-well', 'west-beach', 'echo-stone-pile', 'echo-table', 'echo-cabin', 'echo-diary', 'echo-photo-wall', 'echo-cabin-door',
+  // S014 动物园怪谈（2026-11-01）：五个展区、园史馆、办公室与留言簿等
+  // 自定义兴趣点。本切片仅注册交互路由 ID；场景实体与剧情控制器留给
+  // 后续切片（rendering/sceneInterestPoints.ts + city/zoo/zooStoryController）。
+  'zoo-pigeon', 'zoo-cat', 'zoo-monkey', 'zoo-beast', 'zoo-waterfowl', 'zoo-museum',
+  'zoo-office', 'zoo-stand', 'zoo-signin', 'zoo-borrow-note', 'zoo-doorplate', 'zoo-phone', 'zoo-proxy-sign',
   // S001 会沉的城（2026-10-31）：第一聊天室遗迹地层发掘点①-⑤与涂鸦墙。
   // 场景实体在 rendering/sceneInterestPoints.ts（chatRuins 兴趣点组），
   // 交互路由走 interactWithStory → chatRuinsStoryController（story 兴趣点，
@@ -12,6 +17,12 @@ export const SCENE_INTEREST_POINT_IDS = ['cat-cafe-note', 'cat-cafe-ice-wall', '
   'station-stargate', 'station-2019-bridge', 'station-2019-ring', 'station-2020', 'station-2021', 'station-2022', 'station-2023', 'station-2024', 'station-2025', 'station-2026'] as const;
 
 export type SceneInterestPointId = (typeof SCENE_INTEREST_POINT_IDS)[number];
+
+/** S014 动物园剧情兴趣点 ID（SCENE_INTEREST_POINT_IDS 的 zoo 子集）。 */
+export const ZOO_STORY_POINT_IDS = [
+  'zoo-pigeon', 'zoo-cat', 'zoo-monkey', 'zoo-beast', 'zoo-waterfowl', 'zoo-museum',
+  'zoo-office', 'zoo-stand', 'zoo-signin', 'zoo-borrow-note', 'zoo-doorplate', 'zoo-phone', 'zoo-proxy-sign',
+] as const;
 
 /** S001 剧情兴趣点 ID（SCENE_INTEREST_POINT_IDS 的 chatruins 子集）。 */
 export const CHATRUINS_STORY_POINT_IDS = [

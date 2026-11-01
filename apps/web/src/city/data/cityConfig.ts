@@ -133,6 +133,47 @@ export const ECHO_OBSERVATORY_AREA = Object.freeze({
   depth: 17,
 });
 
+/** S014 动物园怪谈：zoo 建筑 (-9,29.8) 与园区兴趣点/NPC 坐标。
+ *  原计划的 (-9,39.4) 落在「南侧花海」保留装饰带与南门步行道保护范围内
+ *  （cityAreaPlacement / cityGovernanceSchema 禁止建筑与保留景观、项目道路
+ *  重叠），因此整组坐标沿 z 轴北移 9.6 个单位，落在环城道路内圈内侧的
+ *  住宅街块；x 与园区内部的相对布局保持计划原样（大门在北、展馆向东/西
+ *  铺开、园史馆在南）。 */
+export const ZOO_AREA = Object.freeze({
+  /** 园区中心。 */
+  center: Object.freeze([-9.0, 31.7] as const),
+  /** zoo 建筑 / 大门 / 售票亭。 */
+  gate: Object.freeze([-9.0, 29.8] as const),
+  /** 园长白班锚点（售票亭）。 */
+  ticket: Object.freeze([-6.0, 30.4] as const),
+  /** 园长夜间窗口。 */
+  office: Object.freeze([-12.0, 30.4] as const),
+  /** 留言簿展台。 */
+  stand: Object.freeze([-10.6, 30.2] as const),
+  /** 鸽馆。 */
+  pigeon: Object.freeze([-15.5, 30.9] as const),
+  /** 猫馆。 */
+  cat: Object.freeze([-12.8, 32.4] as const),
+  /** 猿猴街。 */
+  monkey: Object.freeze([-2.0, 31.2] as const),
+  /** 兽舍分馆。 */
+  beast: Object.freeze([-5.2, 32.4] as const),
+  /** 水禽池。 */
+  waterfowl: Object.freeze([-9.0, 31.4] as const),
+  /** 园史馆 / Echo Layer。 */
+  museum: Object.freeze([-9.0, 33.6] as const),
+  /** 点名簿。 */
+  signin: Object.freeze([-10.8, 33.6] as const),
+  /** 借条展品。 */
+  borrowNote: Object.freeze([-7.2, 33.6] as const),
+  /** 旧门牌。 */
+  doorplate: Object.freeze([-9.0, 33.9] as const),
+  /** 黄色电话亭。 */
+  phone: Object.freeze([-2.0, 33.0] as const),
+  /** 代理园长铭牌。 */
+  proxySign: Object.freeze([-5.6, 30.2] as const),
+});
+
 /** S001 第一聊天室遗迹（会沉的城）：chatruins 建筑 (-33,-47.5) 周边的剧情
  *  兴趣点与 NPC 坐标，渲染（chatRuinsPoints）与 NPC 档案（npcs.ts）共用。
  *  自北向南 = 自上而下五层地层，⑤为中央地基石；涂鸦墙在西侧。 */

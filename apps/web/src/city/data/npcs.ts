@@ -1,4 +1,4 @@
-import { CHATRUINS_AREA, ECHO_OBSERVATORY_AREA } from './cityConfig';
+import { CHATRUINS_AREA, ECHO_OBSERVATORY_AREA, ZOO_AREA } from './cityConfig';
 import { COMMUNITY_NPCS } from './communityNpcs';
 // ── NPC 档案 ─────────────────────────────────────────────────────────────────
 import type { NpcProfile } from "../npcSystem";
@@ -24,6 +24,45 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
       { text:'「呃……在家和朋友们聊天？打游戏？狗是新的剧情？应该就这些了吧。」', options:[
         { text:'那还挺酷', next:null },
         { text:'来日再会', next:null },
+      ]},
+    ],
+  },
+  {
+    // S014 动物园怪谈：园长白班守售票亭，21:00 后站到亮着灯的办公室窗口。
+    // 对话由 zooStoryController 接管，此处 dialog 仅作未接线时的兜底。
+    id:'zoo_keeper', name:'园长·逐影', role:'小城动物园园长', core:false, spawnChance:1,
+    npcType:'story', behavior:'field', workHours:[8,21], guaranteedSpawn:true,
+    head:0xD9B48E, body:0x5B6E7A, patrolRadius:0.8,
+    home:[...ZOO_AREA.office], work:[...ZOO_AREA.ticket],
+    dialog:[
+      { text:'「欢迎来到小城动物园——重新开园第一天。」', options:[
+        { text:'和园长聊聊', next:null },
+      ]},
+    ],
+  },
+  {
+    // S014 动物园怪谈：老毕登，军武解法收藏家（低概率出现在园区中心附近）。
+    id:'laobideng', name:'老毕登', role:'军武解法收藏家', core:false, spawnChance:0.35,
+    npcType:'story', behavior:'rare', workHours:[9,18], patrolRadius:2.5,
+    spawnArea:[ZOO_AREA.center[0], ZOO_AREA.center[1], 2.5],
+    head:0xC9A882, body:0x6B6A55,
+    home:[...ZOO_AREA.center], work:[...ZOO_AREA.center],
+    dialog:[
+      { text:'「小伙子，看你盯着守则第四条发愁。要解法吗？我这儿有的是。」', options:[
+        { text:'听他说说', next:null },
+      ]},
+    ],
+  },
+  {
+    // S014 动物园怪谈：2026 地层访客，站在园史馆最老的展柜前写「烤咕」。
+    id:'zoo_kaogu_visitor', name:'考古的访客', role:'游客', core:false, spawnChance:0.2,
+    npcType:'story', behavior:'rare', workHours:[10,17], patrolRadius:0,
+    spawnArea:[ZOO_AREA.museum[0], ZOO_AREA.museum[1], 0],
+    head:0xD7C2A6, body:0x7A7D86,
+    home:[...ZOO_AREA.museum], work:[...ZOO_AREA.museum],
+    dialog:[
+      { text:'「老地方都得有人来看。看一眼，就算数。」', options:[
+        { text:'（点头）', next:null },
       ]},
     ],
   },

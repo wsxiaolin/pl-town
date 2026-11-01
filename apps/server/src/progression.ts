@@ -29,6 +29,8 @@ const BUILDING_IDS = [
   'fireworks_shop', 'observation_deck',
   'painting_ai',
   'north_genshin_institute',
+  // S014 动物园怪谈（2026-11-01.zoo.1）：剧情场景建筑，赠礼补全直接建成。
+  'zoo',
   // S001 第一聊天室遗迹（2026-10-31.chatruins.1）：剧情场景建筑，赠礼补全
   // 直接建成（见 cityGovernanceMigration DEFAULT_COMPLETED_BUILDING_IDS），
   // 不设众筹项目；玩家个人可访问。
@@ -84,6 +86,10 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   murder_chain: 0,
   murder_flirt: 0,
   murder_contact: 0,
+  zoo_physics_solution: 0,
+  zoo_roll_call: 0,
+  zoo_child_heart: 0,
+  zoo_rule_eight: 0,
 });
 
 export type ShopProductEntry = { itemId: string; name: string; unitPrice: number };

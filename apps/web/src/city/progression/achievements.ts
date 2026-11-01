@@ -29,6 +29,11 @@ export const ACHIEVEMENTS: readonly AchievementMeta[] = [
   { id:'yesterday_witness',name:'见证者',desc:'把三十年前未说出口的故事接住' },
   { id:'yesterday_silence',name:'沉默是金',desc:'选择让故事停留在沉默里' },
   { id:'yesterday_true_dawn',name:'昨日之歌',desc:'完成昨日之歌的尾声' },
+  // S014 动物园怪谈：四个零奖励剧情成就；zoo_rule_eight 同时是 S014 完成标记。
+  { id:'zoo_physics_solution',name:'物理解',desc:'集齐八张民间解法，怪谈进了物理社区就会长出物理解' },
+  { id:'zoo_roll_call',name:'代答到',desc:'在例会夜替一位缺席者答了一声到' },
+  { id:'zoo_child_heart',name:'童心免检',desc:'认真回答了园长的问题，得到童心手环' },
+  { id:'zoo_rule_eight',name:'守则第八版·合著者',desc:'把守则翻到第七条，写下自己的那一条' },
   // S001 会沉的城：主成就 s001_sunken_city 兼作跨案旗标 s001_completed
   // （S028 迎新处的 laxy 瓦 隐藏对话由该成就解锁——achievement.unlocked 消费）。
   { id:'s001_relic_key',   name:'会沉的城', desc:'读到了全城最早的那块门禁' },

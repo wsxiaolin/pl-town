@@ -5,6 +5,7 @@ import { createEchoSuspendedController, type EchoStoryHandle } from './echo/echo
 import { createYesterdaySongController } from './yesterday/yesterdaySongController';
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
+import { createZooStoryController } from './zoo/zooStoryController';
 import { createChatRuinsStoryController } from './chatRuins/chatRuinsStoryController';
 import { createStoryEntryGate } from './storyEntryGate';
 import { createStoryRouter } from './storyRouting';
@@ -38,6 +39,10 @@ export function createStoryOrchestration(options: {
   awardAchievement: (id: string, name: string) => void;
   showToast?: (message: string) => void;
   updateNpcSchedules: () => void;
+  zoo?: {
+    getPlayerPosition?: () => { x: number; z: number } | null;
+    getDialogs?: () => CityDialogController | null;
+  };
   /** S001 会沉的城端口（涂鸦欠条领取/玩家位置/对话框惰性引用）。 */
   chatRuins?: {
     claimReward?: (rewardId: string) => boolean | Promise<boolean>;
@@ -59,11 +64,12 @@ export function createStoryOrchestration(options: {
     options.updateNpcSchedules();
   }
 
-  // 场景 story 兴趣点（echo 与 S001 各自上报，并集后统一下发渲染层）。
+  // 场景 story 兴趣点（echo / zoo / S001 各自上报，并集后统一下发渲染层）。
   let echoStoryPoints: ReadonlySet<string> = new Set();
+  let zooStoryPoints: ReadonlySet<string> = new Set();
   let chatRuinsStoryPoints: ReadonlySet<string> = new Set();
   function mergeStoryPoints() {
-    options.setActiveStoryPoints([...echoStoryPoints, ...chatRuinsStoryPoints]);
+    options.setActiveStoryPoints([...echoStoryPoints, ...zooStoryPoints, ...chatRuinsStoryPoints]);
   }
 
   // 「回声」槽位：暂停期间由占位控制器顶上（剧情内容不进包）。开关翻转后
@@ -126,6 +132,15 @@ export function createStoryOrchestration(options: {
     ...shared,
     onActorsChanged: (ids) => { overcoatActiveActors = ids; mergeActiveStoryActorIds(); },
   });
+  const zoo = createZooStoryController({
+    ...shared,
+    getPlayerPosition: options.zoo?.getPlayerPosition,
+    getDialogs: options.zoo?.getDialogs,
+    setStoryPoints: (ids) => { zooStoryPoints = new Set(ids); mergeStoryPoints(); },
+  });
+  zoo.announceGuide();
+  zoo.syncActiveActors();
+  zoo.start();
   // S001 会沉的城（2026-10-31）：静态挂载（laxy 瓦/墓碑先生是常驻 NPC，
   // 不走 actor 显隐合并）。兴趣点上报与 echo 并集下发；接近触发由控制器
   // 内部 800ms 轮询驱动（start() 启动）。
@@ -146,6 +161,7 @@ export function createStoryOrchestration(options: {
     ['yesterday', yesterday],
     ['magi', magi],
     ['overcoat', overcoat],
+    ['zoo', zoo],
     ['chatruins', chatRuins],
   ] as const;
 
@@ -166,6 +182,7 @@ export function createStoryOrchestration(options: {
     yesterday,
     magi,
     overcoat,
+    zoo,
     chatRuins,
     router,
     getActiveStoryActorIds: () => activeStoryActorIds,
@@ -174,6 +191,8 @@ export function createStoryOrchestration(options: {
       yesterday.announceGuide();
       magi.announceGuide();
       overcoat.announceGuide();
+      zoo.announceGuide();
+      chatRuins.announceGuide();
     },
     setupEcho(scene: Scene) {
       echoBootScene = scene;
@@ -188,6 +207,7 @@ export function createStoryOrchestration(options: {
       yesterday.dispose();
       magi.dispose();
       overcoat.dispose();
+      zoo.dispose();
       chatRuins.dispose();
     },
   };
