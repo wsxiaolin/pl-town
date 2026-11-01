@@ -35,7 +35,11 @@ export default defineConfig({
   // Default to a single worker for interactive `npm run test:web`; CI raises
   // this via PLAYWRIGHT_WORKERS / matrix sharding for throughput.
   workers: Number(process.env.PLAYWRIGHT_WORKERS) || 1,
-  timeout: 60_000,
+  // 90 s (bumped from 60 s after #273 fireworks + #275 story batch raised
+  // per-frame load: map/modal/city-map specs burned both retries on shared
+  // runners with "session closed" protocol errors — the tests themselves
+  // pass locally).
+  timeout: 90_000,
   // Web assertions ride the main thread, and under SwiftShader one stalled
   // frame can hold a class/CSS-transition/geometry flip for many seconds —
   // the 5 s default produced rotating hard-fails across shards (late votes,
