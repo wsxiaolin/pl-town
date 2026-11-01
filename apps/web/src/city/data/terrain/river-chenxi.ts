@@ -1,6 +1,9 @@
 import type { TerrainFeatureConfig } from './_types';
 
-// Source to sea: [x, z, water half-width, water elevation].
+export const CHENXI_MOUTH_LEVEL = 0.05;
+
+// Source to sea: [x, z, water half-width, water elevation]. The final station
+// stays slightly below the sea sheet so the overlapping water surfaces do not z-fight.
 // The source stays west of the north trail; the mouth remains inside the sea.
 export const CHENXI_RIVER_STATIONS: ReadonlyArray<readonly [number, number, number, number]> = [
   [64, -101, 0.65, 0.5],
@@ -12,7 +15,7 @@ export const CHENXI_RIVER_STATIONS: ReadonlyArray<readonly [number, number, numb
   [-40, -102, 5, 0.055],
   [-44, -101, 5.5, 0.053],
   [-50, -99.5, 5.8, 0.052],
-  [-58, -98, 6, 0.05],
+  [-58, -98, 6, CHENXI_MOUTH_LEVEL],
 ];
 
 // Compatibility data for scenery exclusion, following the same mouth stations.

@@ -39,6 +39,9 @@ test('world cells exclude alpine bounds and share exact flat, colored perimeter 
     }
     alpine.dispose();
   }
+  for (const [x, z] of [[x0, z0 - 1], [x1, z1 + 1]]) {
+    assert.ok(vertices.has(`${x}:${z}`), `outer apron shares alpine seam sample ${x},${z}`);
+  }
   const mesh = new THREE.Mesh(world, new THREE.MeshBasicMaterial());
   const ray = new THREE.Raycaster();
   for (const [x, z] of [[0, 0], [220, 80], [0, -298], [-130, 0], [0, 160], [-60, -70]]) {

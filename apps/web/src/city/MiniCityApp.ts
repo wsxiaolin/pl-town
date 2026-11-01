@@ -363,7 +363,7 @@ const { eventBindings } = createCityEventBindingsWiring({
   openMemorial: (beforeOpen) => cityDialogs?.openMemorial(beforeOpen),
   closeNpcDialog: () => cityDialogs?.closeNpc(),
   getLoginController: () => loginController,
-  isMovementOnlyMode: () => Boolean(iceKingFeature?.sanctum.isActive()),
+  isZoomLocked: () => Boolean(iceKingFeature?.sanctum.isActive()) || view.isCinematic(),
 });
 
 let UNLOCK_TIERS = createUnlockTiers(
