@@ -6,6 +6,7 @@ import type { SceneInterestPoints } from '../rendering/sceneInterestPoints';
 import type { SceneInterestPointController } from './sceneInterestPointController';
 import { createAdaptivePixelRatioController } from '../rendering/adaptivePixelRatio';
 import { createLabelUpdateGate } from '../rendering/labelUpdateCadence';
+import { clampResolutionForViewport } from '../rendering/renderResolutionPolicy';
 
 type NpcEntity = Npc;
 
@@ -162,7 +163,15 @@ export function createFrameLoop(options: FrameLoopOptions) {
     const burn = options.getBurnOverlay();
     if (burn?.isActive()) burn.render(renderer);
     const renderMs = performance.now() - renderStartedAt;
-    adaptivePixelRatio ??= createAdaptivePixelRatioController({ initialRatio: renderer.getPixelRatio() });
+    if (!adaptivePixelRatio) {
+      // 自适应起点钳制：手机上「已保存档位」可能是 3.75+ 的历史值，让降档
+      // 从天花板 2 起步，而不是先在 16 倍像素量里煎熬几十秒。钳制值低于
+      // 渲染器当前档位时排入 pending，下一帧渲染前立即生效，保证首帧起
+      // 控制器与渲染器口径一致。
+      const clampedRatio = clampResolutionForViewport(renderer.getPixelRatio(), window.innerWidth);
+      adaptivePixelRatio = createAdaptivePixelRatioController({ initialRatio: clampedRatio });
+      if (clampedRatio !== renderer.getPixelRatio()) pendingPixelRatio = clampedRatio;
+    }
     // Frame delta carries vsync/panel cadence; pass the render cost too so a
     // 30 Hz display (33 ms frames, 5 ms renders) never sacrifices resolution.
     const nextRatio = adaptivePixelRatio.sample(frameMs, renderMs);

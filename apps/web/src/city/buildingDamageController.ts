@@ -77,8 +77,10 @@ export function createBuildingDamageController(options: BuildingDamageController
     allBuildings().forEach(item => {
       if (destroyedIds.has(item.id) && reapplyBuildingDestroyedPresentation(item)) updateResidenceVisual(item, false);
     });
-    // Model loading also replays this state during construction broadcasts;
-    // only explicit damage/repair should request a fresh visible map image.
+    // A replay can finish construction or swap in freshly loaded meshes after the
+    // map already captured the undamaged scene, so the map must reconcile. The
+    // map controller owns the captured fingerprint and only clears shots/cache
+    // when availability actually drifted from what it observed.
     options.invalidateMap('availability');
   }
 

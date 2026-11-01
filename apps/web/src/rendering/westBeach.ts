@@ -4,6 +4,7 @@ import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH, shorelineX, westBeachWaterlineMaxX } from '../city/data/cityConfig';
 import { seaBedCutAt, shoreSandLiftAt } from '../city/data/terrain/heightfield/worldReliefField';
 import { createArchipelagoWaterGeometry, mergeWaterSheets } from './terrain/archipelagoWater';
+import { SURFACE_Y } from './layers';
 
 const DAY_WATER_COLOR = new THREE.Color(0x0d3b5e);
 const NIGHT_WATER_COLOR = new THREE.Color(0x061a2c);
@@ -23,7 +24,7 @@ const SURF_LIFT = 0.26;
 // above it so the opaque sea covers the join. Both the mesh position and the
 // vertex shader read these, so a change can't silently make the two coplanar
 // and reintroduce z-fighting (Agents.md asks for a ≥0.004 y separation).
-const SEA_SURFACE_Y = 0.06;
+const SEA_SURFACE_Y = SURFACE_Y.water;
 const SURF_ROOT_LIFT = 0.005;
 const SURF_SURFACE_Y = SEA_SURFACE_Y + SURF_ROOT_LIFT;
 // Surf strip extents, in world units from the coastline: how far it reaches
