@@ -13,7 +13,7 @@ export const ORCA_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "north_chat_plaza", nodeId: "orca.start", choiceId: "say-hello" },
+    { buildingId: "orca_pier", nodeId: "orca.start", choiceId: "say-hello" },
   ],
 
   nodes: {

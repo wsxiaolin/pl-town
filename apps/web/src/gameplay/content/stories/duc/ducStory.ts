@@ -22,7 +22,7 @@ export const DUC_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "laws", nodeId: "duc.start", choiceId: "enter-pavilion" },
+    { buildingId: "duc_pavilion", nodeId: "duc.start", choiceId: "enter-pavilion" },
   ],
 
   nodes: {

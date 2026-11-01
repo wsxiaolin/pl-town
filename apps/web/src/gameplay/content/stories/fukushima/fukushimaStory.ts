@@ -13,7 +13,7 @@ export const FUKUSHIMA_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "north_singularity", nodeId: "fukushima.start", choiceId: "read-wall" },
+    { buildingId: "fukushima_reactor", nodeId: "fukushima.start", choiceId: "read-wall" },
   ],
 
   nodes: {

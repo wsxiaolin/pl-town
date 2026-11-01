@@ -22,7 +22,7 @@ export const HUMAN_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "knowledgebaseD", nodeId: "human.start", choiceId: "read-wall" },
+    { buildingId: "human_greenhouse", nodeId: "human.start", choiceId: "read-wall" },
   ],
 
   nodes: {

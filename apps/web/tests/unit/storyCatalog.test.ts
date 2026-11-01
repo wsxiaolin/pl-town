@@ -45,6 +45,7 @@ import { LETTER_STORY } from '../../src/gameplay/content/stories/letter/letterSt
 import { HUMAN_STORY } from '../../src/gameplay/content/stories/human/humanStory';
 import { BEAUTY_STORY } from '../../src/gameplay/content/stories/beauty/beautyStory';
 import { ZILAN_STORY } from '../../src/gameplay/content/stories/zilan/zilanStory';
+import { BUILDING_DEFS } from '../../src/city/data/buildings/_registry';
 import { BIRCH_STORY } from '../../src/gameplay/content/stories/birch/birchStory';
 import { DEMOCRACY_STORY } from '../../src/gameplay/content/stories/democracy/democracyStory';
 import { CITYIN_STORY } from '../../src/gameplay/content/stories/cityin/cityinStory';
@@ -102,5 +103,14 @@ test('every side story node is reachable from its start node', () => {
     }
     const orphans = Object.keys(story.nodes).filter((id) => !seen.has(id));
     assert.deepEqual(orphans, [], `${story.id}: unreachable nodes ${orphans.join(', ')}`);
+  }
+});
+
+test('side story building entries reference registered buildings', () => {
+  const buildingIds = new Set(BUILDING_DEFS.map((building) => building.id));
+  for (const story of ALL_SIDE_STORIES) {
+    for (const interaction of story.buildingInteractions ?? []) {
+      assert(buildingIds.has(interaction.buildingId), `${story.id}: unregistered building ${interaction.buildingId}`);
+    }
   }
 });

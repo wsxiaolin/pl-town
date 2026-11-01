@@ -26,7 +26,7 @@ export const CITYIN_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "commons", nodeId: "cityin.well", choiceId: "look-down" },
+    { buildingId: "cityin_well", nodeId: "cityin.well", choiceId: "look-down" },
   ],
 
   nodes: {

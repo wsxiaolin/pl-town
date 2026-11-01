@@ -13,7 +13,7 @@ export const TOUR_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "culturehall", nodeId: "tour-start", choiceId: "ask-what" },
+    { buildingId: "library", nodeId: "tour-start", choiceId: "ask-what" },
   ],
 
   nodes: {

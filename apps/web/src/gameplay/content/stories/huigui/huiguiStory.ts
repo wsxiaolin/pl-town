@@ -13,7 +13,7 @@ export const HUIGUI_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "shrine", nodeId: "huigui.enter", choiceId: "push-door" },
+    { buildingId: "huigui_hostel", nodeId: "huigui.enter", choiceId: "push-door" },
   ],
 
   nodes: {

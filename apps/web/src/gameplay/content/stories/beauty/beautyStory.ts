@@ -23,7 +23,7 @@ export const BEAUTY_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "photostudio", nodeId: "beauty.start", choiceId: "read-first" },
+    { buildingId: "beauty_mailbox", nodeId: "beauty.start", choiceId: "read-first" },
   ],
 
   nodes: {

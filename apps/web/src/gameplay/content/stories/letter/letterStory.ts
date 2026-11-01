@@ -23,7 +23,7 @@ export const LETTER_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "records", nodeId: "letter.arrival", choiceId: "approach" },
+    { buildingId: "letter_post", nodeId: "letter.arrival", choiceId: "approach" },
   ],
 
   nodes: {

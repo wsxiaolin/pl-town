@@ -24,7 +24,7 @@ export const DIAN_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "north_api_memorial", nodeId: "dian.arrival", choiceId: "approach" },
+    { buildingId: "dian_stele", nodeId: "dian.arrival", choiceId: "approach" },
   ],
 
   nodes: {

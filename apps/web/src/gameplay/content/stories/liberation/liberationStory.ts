@@ -23,7 +23,7 @@ export const LIBERATION_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "beacon", nodeId: "liberation.arrival", choiceId: "listen" },
+    { buildingId: "liberation_keyshop", nodeId: "liberation.arrival", choiceId: "listen" },
   ],
 
   nodes: {

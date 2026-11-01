@@ -22,7 +22,7 @@ export const REDDOT_STORY: StoryDefinition = {
     { actorId: "reddot_dudu", nodeId: "pavilion_door", choiceId: "ask-dudu" },
   ],
   buildingInteractions: [
-    { buildingId: "techhalf", nodeId: "pavilion_door", choiceId: "enter-pavilion" },
+    { buildingId: "reddot_pavilion", nodeId: "pavilion_door", choiceId: "enter-pavilion" },
   ],
   nodes: {
     /* ───────────────────── 第一幕：亭子进门 ───────────────────── */

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-10.festival-painting.1",
+  "version": "2026-11-01.stories.1",
   "projects": [
     {
       "id": "build-catcafe",
@@ -159,6 +159,182 @@
       "buildingId": "tavern",
       "name": "科特维酒馆",
       "description": "共同筹建科特维酒馆",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-reddot_pavilion",
+      "buildingId": "reddot_pavilion",
+      "name": "红点亭",
+      "description": "共同筹建红点亭",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-singlestep_room",
+      "buildingId": "singlestep_room",
+      "name": "单步机房",
+      "description": "共同筹建单步机房",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-west_research_dept",
+      "buildingId": "west_research_dept",
+      "name": "西山研究部",
+      "description": "共同筹建西山研究部",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-duc_pavilion",
+      "buildingId": "duc_pavilion",
+      "name": "立约亭",
+      "description": "共同筹建立约亭",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-youxuepai_hut",
+      "buildingId": "youxuepai_hut",
+      "name": "通关木屋",
+      "description": "共同筹建通关木屋",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-dian_stele",
+      "buildingId": "dian_stele",
+      "name": "奠碑",
+      "description": "共同筹建奠碑",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-orca_pier",
+      "buildingId": "orca_pier",
+      "name": "深夜鲸栈",
+      "description": "共同筹建深夜鲸栈",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-letter_post",
+      "buildingId": "letter_post",
+      "name": "慢递邮亭",
+      "description": "共同筹建慢递邮亭",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-human_greenhouse",
+      "buildingId": "human_greenhouse",
+      "name": "未刊温室",
+      "description": "共同筹建未刊温室",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-beauty_mailbox",
+      "buildingId": "beauty_mailbox",
+      "name": "同题信箱",
+      "description": "共同筹建同题信箱",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-zilan_shrine",
+      "buildingId": "zilan_shrine",
+      "name": "紫兰丛祠",
+      "description": "共同筹建紫兰丛祠",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-birch_pavilion",
+      "buildingId": "birch_pavilion",
+      "name": "赌约亭",
+      "description": "共同筹建赌约亭",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-democracy_wall",
+      "buildingId": "democracy_wall",
+      "name": "民主墙",
+      "description": "共同筹建民主墙",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-cityin_well",
+      "buildingId": "cityin_well",
+      "name": "枯井",
+      "description": "共同筹建枯井",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-fukushima_reactor",
+      "buildingId": "fukushima_reactor",
+      "name": "新闻反应堆",
+      "description": "共同筹建新闻反应堆",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-wandering_observatory",
+      "buildingId": "wandering_observatory",
+      "name": "问天台",
+      "description": "共同筹建问天台",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-youth_bridge",
+      "buildingId": "youth_bridge",
+      "name": "半句桥",
+      "description": "共同筹建半句桥",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-weekly_news",
+      "buildingId": "weekly_news",
+      "name": "星辉报社",
+      "description": "共同筹建星辉报社",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-huigui_hostel",
+      "buildingId": "huigui_hostel",
+      "name": "会归寮",
+      "description": "共同筹建会归寮",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-reverberate_wall",
+      "buildingId": "reverberate_wall",
+      "name": "回音壁",
+      "description": "共同筹建回音壁",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-askway_booth",
+      "buildingId": "askway_booth",
+      "name": "问路处",
+      "description": "共同筹建问路处",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-liberation_keyshop",
+      "buildingId": "liberation_keyshop",
+      "name": "钥匙铺",
+      "description": "共同筹建钥匙铺",
       "kind": "building",
       "cost": 3000
     },

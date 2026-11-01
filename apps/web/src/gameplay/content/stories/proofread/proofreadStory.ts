@@ -12,9 +12,6 @@ export const PROOFREAD_STORY: StoryDefinition = {
     { actorId: "proofread_youmang", nodeId: "proofread.start", choiceId: "enter-desk" },
   ],
 
-  buildingInteractions: [
-    { buildingId: "knowledgebaseE", nodeId: "proofread.start", choiceId: "enter-desk" },
-  ],
 
   nodes: {
     "proofread.start": {

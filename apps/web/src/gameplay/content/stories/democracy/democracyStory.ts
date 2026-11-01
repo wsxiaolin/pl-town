@@ -11,7 +11,7 @@ export const DEMOCRACY_STORY: StoryDefinition = {
     { actorId: "democracy_moderator", nodeId: "democracy-start", choiceId: "ask-wall" },
   ],
   buildingInteractions: [
-    { buildingId: "bulletin", nodeId: "democracy-start", choiceId: "ask-wall" },
+    { buildingId: "democracy_wall", nodeId: "democracy-start", choiceId: "ask-wall" },
   ],
   nodes: {
     "democracy-start": {

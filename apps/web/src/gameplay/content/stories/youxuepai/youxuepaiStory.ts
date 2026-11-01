@@ -13,7 +13,7 @@ export const YOUXUEPAI_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "academy", nodeId: "youxuepai.start", choiceId: "open-tablet" },
+    { buildingId: "youxuepai_hut", nodeId: "youxuepai.start", choiceId: "open-tablet" },
   ],
 
   nodes: {

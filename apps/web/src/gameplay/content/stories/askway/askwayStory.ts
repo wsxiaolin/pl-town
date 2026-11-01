@@ -23,7 +23,7 @@ export const ASKWAY_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "north_night_kiosk", nodeId: "askway.arrival", choiceId: "approach" },
+    { buildingId: "askway_booth", nodeId: "askway.arrival", choiceId: "approach" },
   ],
 
   nodes: {

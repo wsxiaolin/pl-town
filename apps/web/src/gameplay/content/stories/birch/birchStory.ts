@@ -13,7 +13,7 @@ export const BIRCH_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "tavern", nodeId: "birch.pavilion", choiceId: "look-poster" },
+    { buildingId: "birch_pavilion", nodeId: "birch.pavilion", choiceId: "look-poster" },
   ],
 
   nodes: {

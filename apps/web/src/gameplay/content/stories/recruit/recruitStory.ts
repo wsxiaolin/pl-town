@@ -8,7 +8,7 @@ export const RECRUIT_STORY: StoryDefinition = {
   startNode: "lobby_arrival",
   entryActorId: "recruit_youmang",
   interactions: [{ actorId: "recruit_youmang", nodeId: "lobby_arrival", choiceId: "enter-front-desk" }],
-  buildingInteractions: [{ buildingId: "research", nodeId: "lobby_arrival", choiceId: "enter-front-desk" }],
+  buildingInteractions: [{ buildingId: "west_research_dept", nodeId: "lobby_arrival", choiceId: "enter-front-desk" }],
   nodes: {
     "lobby_arrival": {
       id: "lobby_arrival",

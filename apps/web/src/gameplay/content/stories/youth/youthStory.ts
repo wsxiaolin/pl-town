@@ -13,7 +13,7 @@ export const YOUTH_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "school_east", nodeId: "youth.school-gate", choiceId: "ask-teacher" },
+    { buildingId: "youth_bridge", nodeId: "youth.school-gate", choiceId: "ask-teacher" },
   ],
 
   nodes: {

@@ -375,6 +375,29 @@ try {
       'painting_ai',
       // 原神研究院（2026-10-07）：同上，保持待建。
       'north_genshin_institute',
+      // S031–S055 支线剧情建筑（2026-11-01）：保持待建，不进入 legacy 赠礼。
+      'reddot_pavilion',
+      'singlestep_room',
+      'west_research_dept',
+      'duc_pavilion',
+      'youxuepai_hut',
+      'dian_stele',
+      'orca_pier',
+      'letter_post',
+      'human_greenhouse',
+      'beauty_mailbox',
+      'zilan_shrine',
+      'birch_pavilion',
+      'democracy_wall',
+      'cityin_well',
+      'fukushima_reactor',
+      'wandering_observatory',
+      'youth_bridge',
+      'weekly_news',
+      'huigui_hostel',
+      'reverberate_wall',
+      'askway_booth',
+      'liberation_keyshop',
     ];
     const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
     assert.deepEqual([...LEGACY_UNLOCK_PRESERVATION_BUILDINGS].sort(), [...legacyPendingBuildings].sort());

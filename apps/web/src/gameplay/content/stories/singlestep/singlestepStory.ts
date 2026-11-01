@@ -8,7 +8,7 @@ export const SINGLESTEP_STORY: StoryDefinition = {
   startNode: "door",
   entryActorId: "singlestep_laxywa",
   interactions: [{ actorId: "singlestep_laxywa", nodeId: "door", choiceId: "enter-room" }],
-  buildingInteractions: [{ buildingId: "lab", nodeId: "door", choiceId: "enter-room" }],
+  buildingInteractions: [{ buildingId: "singlestep_room", nodeId: "door", choiceId: "enter-room" }],
   nodes: {
     door: {
       id: "door", title: "单步机房", role: "序章", savepoint: true,

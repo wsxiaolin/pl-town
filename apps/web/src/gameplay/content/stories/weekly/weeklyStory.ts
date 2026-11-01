@@ -20,7 +20,7 @@ export const WEEKLY_STORY: StoryDefinition = {
     { actorId: "weekly_editor", nodeId: "newsstand", choiceId: "buy-paper" },
   ],
   buildingInteractions: [
-    { buildingId: "news", nodeId: "newsstand", choiceId: "buy-paper" },
+    { buildingId: "weekly_news", nodeId: "newsstand", choiceId: "buy-paper" },
   ],
   nodes: {
 

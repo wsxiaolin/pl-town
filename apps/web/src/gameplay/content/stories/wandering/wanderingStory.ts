@@ -13,7 +13,7 @@ export const WANDERING_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "north_stellar_hall", nodeId: "wandering.gate", choiceId: "greet" },
+    { buildingId: "wandering_observatory", nodeId: "wandering.gate", choiceId: "greet" },
   ],
 
   nodes: {

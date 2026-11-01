@@ -13,7 +13,7 @@ export const ZILAN_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "guesthouse", nodeId: "zilan.gate", choiceId: "approach" },
+    { buildingId: "zilan_shrine", nodeId: "zilan.gate", choiceId: "approach" },
   ],
 
   nodes: {

@@ -24,7 +24,7 @@ export const REVERBERATE_STORY: StoryDefinition = {
   ],
 
   buildingInteractions: [
-    { buildingId: "conservatory", nodeId: "arrival", choiceId: "approach-wall" },
+    { buildingId: "reverberate_wall", nodeId: "arrival", choiceId: "approach-wall" },
   ],
 
   nodes: {
