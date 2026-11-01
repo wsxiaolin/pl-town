@@ -448,7 +448,14 @@ export function createChatRuinsStoryController(options: {
         return;
       }
       settled = true;
-      writeJsonStore(MY_GRAFFITI_KEY, text);
+      try {
+        writeJsonStore(MY_GRAFFITI_KEY, text);
+      } catch {
+        settled = false;
+        hint.textContent = "没写上——再落一次笔。";
+        return;
+      }
+      settled = true;
       overlay.remove();
       flow.syncWorldInteractions();
     }

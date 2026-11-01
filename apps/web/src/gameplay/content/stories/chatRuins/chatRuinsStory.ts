@@ -298,11 +298,17 @@ export const CHATRUINS_STORY: StoryDefinition = {
           id: "continue-close",
           label: "",
           autoAdvance: true,
-          next: "ending-settle",
+          next: "ending-close",
           ending: "sunken-city",
           effects: [{ type: "event.publish", eventType: "s001.achievement.sunken-city" }],
         },
       ],
+    },
+    "ending-close": {
+      id: "ending-close",
+      terminal: true,
+      guide: null,
+      text: "欠条收进兜里。身后，遗迹安安静静地沉在水里——而留言墙最上面的那格，已经是你的字了。",
     },
   },
   sourceText: `S001 · 聊天室世代史：会沉的城，不散的人（故事文档 2026-10-22 修订①）。
