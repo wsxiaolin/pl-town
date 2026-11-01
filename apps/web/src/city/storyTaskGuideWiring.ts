@@ -4,6 +4,7 @@ import { ECHO_STORY_ID } from '../gameplay/content/stories/echo/echoStoryMeta';
 import { YESTERDAY_SONG } from '../gameplay/content/stories/yesterday/yesterdaySong';
 import { MAGI_STORY } from '../gameplay/content/stories/magi/magiStory';
 import { OVERCOAT_STORY } from '../gameplay/content/stories/overcoat/overcoatStory';
+import { ZOO_STORY } from '../gameplay/content/stories/zoo/zooStory';
 import type { BuildingEntity } from './buildingEntity';
 
 type EchoGuideNavigator = {
@@ -56,7 +57,9 @@ export function initStoryTaskGuideWiring(options: {
       if (storyId === OVERCOAT_STORY.id) {
         const akaki = options.getNpcPosition('akaki');
         if (akaki) panTo(akaki.x, akaki.z);
+        return;
       }
+      if (storyId === ZOO_STORY.id) panToBuilding('zoo');
     },
   });
 }

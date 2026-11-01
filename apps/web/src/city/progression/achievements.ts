@@ -170,6 +170,17 @@ export const ACHIEVEMENTS: readonly AchievementMeta[] = [
   { id:'askway_names_walk',name:'名字会走，路还在',desc:'问路处——接受名字的离开' },
   { id:'askway_never_gonna',name:'Never gonna give you up',desc:'问路处——听完整段广播' },
   { id:'askway_archaeology',name:'例行考古',desc:'问路处——在留言簿写下「考古」' },
+  // S014 动物园怪谈：四个零奖励剧情成就；zoo_rule_eight 同时是 S014 完成标记。
+  { id:'zoo_physics_solution',name:'物理解',desc:'集齐八张民间解法，怪谈进了物理社区就会长出物理解' },
+  { id:'zoo_roll_call',name:'代答到',desc:'在例会夜替一位缺席者答了一声到' },
+  { id:'zoo_child_heart',name:'童心免检',desc:'认真回答了园长的问题，得到童心手环' },
+  { id:'zoo_rule_eight',name:'守则第八版·合著者',desc:'把守则翻到第七条，写下自己的那一条' },
+  // S001 会沉的城：主成就 s001_sunken_city 兼作跨案旗标 s001_completed
+  // （S028 迎新处的 laxy 瓦 隐藏对话由该成就解锁——achievement.unlocked 消费）。
+  { id:'s001_relic_key',   name:'会沉的城', desc:'读到了全城最早的那块门禁' },
+  { id:'s001_archaeologist',name:'考古学家', desc:'挖穿 26532 层沉积，抵达开国那天' },
+  { id:'s001_iou_holder',  name:'两支持欠条', desc:'在涂鸦墙留下自己的字，接下 2024 年的那笔债' },
+  { id:'s001_sunken_city', name:'不散的人', desc:'「孩子们……都长大啦。」' },
   { id:'murder_wanderer',name:'闲逛者',desc:'跟着莫得一起在城里散步' },
   { id:'murder_watcher',name:'视奸者',desc:'听莫得说他观察着每个人的一举一动' },
   { id:'murder_chain',name:'再串大四',desc:'和莫得对上了黑洞区的暗号' },

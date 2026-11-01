@@ -51,6 +51,12 @@ const BUILDING_IDS = [
   'reverberate_wall',
   'askway_booth',
   'liberation_keyshop',
+  // S014 动物园怪谈（2026-11-01.zoo.1）：剧情场景建筑，赠礼补全直接建成。
+  'zoo',
+  // S001 第一聊天室遗迹（2026-10-31.chatruins.1）：剧情场景建筑，赠礼补全
+  // 直接建成（见 cityGovernanceMigration DEFAULT_COMPLETED_BUILDING_IDS），
+  // 不设众筹项目；玩家个人可访问。
+  'chatruins',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
@@ -243,6 +249,10 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   murder_chain: 0,
   murder_flirt: 0,
   murder_contact: 0,
+  zoo_physics_solution: 0,
+  zoo_roll_call: 0,
+  zoo_child_heart: 0,
+  zoo_rule_eight: 0,
 });
 
 export type ShopProductEntry = { itemId: string; name: string; unitPrice: number };
@@ -330,6 +340,9 @@ export const DAILY_REWARDS = Object.freeze({
 
 export const ONE_TIME_REWARDS = Object.freeze({
   tirpitz_beach: { itemId: 'tirpitz_card', quantity: 1 },
+  // S001 会沉的城：涂鸦墙提交成功即得「两支持欠条」（道具卡文本在客户端
+  // ITEM_DETAILS 逐字照录；物品不在任何交易/合成目录，天然不可交易）。
+  s001_iou: { itemId: 'iou_two_supports', quantity: 1 },
 });
 
 export const REPEATABLE_REWARDS = Object.freeze({

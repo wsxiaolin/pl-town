@@ -747,6 +747,22 @@
       "cost": 3000
     },
     {
+      "id": "build-zoo",
+      "buildingId": "zoo",
+      "name": "小城动物园",
+      "description": "共同筹建小城动物园",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
+      "id": "build-chatruins",
+      "buildingId": "chatruins",
+      "name": "第一聊天室遗迹",
+      "description": "共同筹建第一聊天室遗迹",
+      "kind": "building",
+      "cost": 3000
+    },
+    {
       "id": "greenbelt-path",
       "name": "北侧绿道",
       "description": "公共步行绿道",

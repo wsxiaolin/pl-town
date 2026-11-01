@@ -28,6 +28,7 @@ export const SHAPE_FACADES: Record<string, string> = {
   school: 'facade_school_cream',
   banana: 'facade_residence_cream',
   qipai: 'facade_community_brick',
+  zoo: 'facade_school_cream',
 };
 
 /** 地块规格：按 shape 索引的默认值（纹理 / 半径 / 颜色）。 */
@@ -65,6 +66,7 @@ export const SHAPE_PLOTS: Record<string, BuildingPlotSpec> = {
   fried_chicken_shop: { tex: 'ground2', size: 4.6, color: 0xE6D2B2 },
   tavern: { tex: 'ground4', size: 4.8, color: 0xC6B18C },
   painting_ai: { tex: 'ground5', size: 3.6, color: 0xE4E3E0 },
+  zoo: { tex: 'ground4', size: 2.2, color: 0xC8D8A8 },
 };
 
 export const DEFAULT_PLOT: BuildingPlotSpec = { tex: 'ground5', size: 3.5, color: 0xE4E3E0 };

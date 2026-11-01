@@ -74,6 +74,8 @@ import northKomorebi from './north_komorebi';
 import fireworksShop from './fireworks_shop';
 import observationDeck from './observation_deck';
 import northGenshinInstitute from './north_genshin_institute';
+import zoo from './zoo';
+import chatruins from './chatruins';
 
 import reddotPavilion from './reddot_pavilion';
 import singlestepRoom from './singlestep_room';
@@ -197,6 +199,8 @@ export const BUILDING_REGISTRY: readonly BuildingConfig[] = [
   reverberateWall,
   askwayBooth,
   liberationKeyshop,
+  zoo,
+  chatruins,
 ];
 
 export { inferFacade, inferPlot, SHAPE_FACADES, SHAPE_PLOTS } from './_shapeDefaults';

@@ -133,6 +133,65 @@ export const ECHO_OBSERVATORY_AREA = Object.freeze({
   depth: 17,
 });
 
+/** S014 动物园怪谈：zoo 建筑 (-9,29.8) 与园区兴趣点/NPC 坐标。
+ *  原计划的 (-9,39.4) 落在「南侧花海」保留装饰带与南门步行道保护范围内
+ *  （cityAreaPlacement / cityGovernanceSchema 禁止建筑与保留景观、项目道路
+ *  重叠），因此整组坐标沿 z 轴北移 9.6 个单位，落在环城道路内圈内侧的
+ *  住宅街块；x 与园区内部的相对布局保持计划原样（大门在北、展馆向东/西
+ *  铺开、园史馆在南）。 */
+export const ZOO_AREA = Object.freeze({
+  /** 园区中心。 */
+  center: Object.freeze([-9.0, 31.7] as const),
+  /** zoo 建筑 / 大门 / 售票亭。 */
+  gate: Object.freeze([-9.0, 29.8] as const),
+  /** 园长白班锚点（售票亭）。 */
+  ticket: Object.freeze([-6.0, 30.4] as const),
+  /** 园长夜间窗口。 */
+  office: Object.freeze([-12.0, 30.4] as const),
+  /** 留言簿展台。 */
+  stand: Object.freeze([-10.6, 30.2] as const),
+  /** 鸽馆。 */
+  pigeon: Object.freeze([-15.5, 30.9] as const),
+  /** 猫馆。 */
+  cat: Object.freeze([-12.8, 32.4] as const),
+  /** 猿猴街。 */
+  monkey: Object.freeze([-2.0, 31.2] as const),
+  /** 兽舍分馆。 */
+  beast: Object.freeze([-5.2, 32.4] as const),
+  /** 水禽池。 */
+  waterfowl: Object.freeze([-9.0, 31.4] as const),
+  /** 园史馆 / Echo Layer。 */
+  museum: Object.freeze([-9.0, 33.6] as const),
+  /** 点名簿。 */
+  signin: Object.freeze([-10.8, 33.6] as const),
+  /** 借条展品。 */
+  borrowNote: Object.freeze([-7.2, 33.6] as const),
+  /** 旧门牌。 */
+  doorplate: Object.freeze([-9.0, 33.9] as const),
+  /** 黄色电话亭。 */
+  phone: Object.freeze([-2.0, 33.0] as const),
+  /** 代理园长铭牌。 */
+  proxySign: Object.freeze([-5.6, 30.2] as const),
+});
+
+/** S001 第一聊天室遗迹（会沉的城）：chatruins 建筑 (-33,-47.5) 周边的剧情
+ *  兴趣点与 NPC 坐标，渲染（chatRuinsPoints）与 NPC 档案（npcs.ts）共用。
+ *  自北向南 = 自上而下五层地层，⑤为中央地基石；涂鸦墙在西侧。 */
+export const CHATRUINS_AREA = Object.freeze({
+  /** 遗迹中心（地基石⑤）。 */
+  foundation: Object.freeze([-33, -47.5] as const),
+  /** 发掘点①-⑤（自上而下）。 */
+  digPoints: Object.freeze([
+    [-31.2, -45.9], [-34.8, -45.9], [-31.2, -49.1], [-34.8, -49.1], [-33, -47.5],
+  ] as readonly Coord2[]),
+  /** 涂鸦墙（西侧矮墙）。 */
+  wall: Object.freeze([-30.1, -47.5] as const),
+  /** laxy 瓦 站位（遗迹入口北侧）。 */
+  laxy: Object.freeze([-32.2, -44.7] as const),
+  /** 墓碑先生 站位（地基石西南侧）。 */
+  tombstone: Object.freeze([-34.1, -48.5] as const),
+});
+
 /** 星语北城：主城北侧的扩建城区（黑洞热门作品 Top100 城市化）。
  *  设计文档见仓库外 design/master-plan.md；本配置是渲染、导航与民居
  *  批次的唯一事实来源。路网分层：中央大道（x=0，沥青，与主城南北主轴
