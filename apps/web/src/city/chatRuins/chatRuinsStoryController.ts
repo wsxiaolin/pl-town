@@ -46,6 +46,8 @@ export function createChatRuinsStoryController(options: {
   onActorsChanged?: () => void;
   /** 涂鸦提交成功后领取「两支持欠条」（服务端 ONE_TIME_REWARDS.s001_iou）。 */
   claimReward?: (rewardId: string) => boolean | Promise<boolean>;
+  /** 核对欠条物品是否已到账（断线重试时避免重复领取）。 */
+  hasItem?: (itemId: string) => boolean;
   /** 玩家当前位置（接近触发用）。 */
   getPlayerPosition?: () => { x: number; z: number } | null;
   /** 城市对话框惰性引用（接近触发自动开对话用）。 */
@@ -75,6 +77,9 @@ export function createChatRuinsStoryController(options: {
   const PRESETS_CACHE_KEY = "chatruins.wall.presets";
   const MY_GRAFFITI_KEY = "chatruins.my-graffiti";
   const TOMBSTONE_ANSWERED_KEY = "chatruins.tombstone-answered";
+  const IOU_PENDING_KEY = "chatruins.iou-pending";
+  const IOU_AWARDED_KEY = "chatruins.iou-awarded";
+  const IOU_ITEM_ID = "iou_two_supports";
 
   let lastRevealAttemptAt = 0;
   let tickTimer: ReturnType<typeof setInterval> | undefined = undefined;
@@ -92,22 +97,37 @@ export function createChatRuinsStoryController(options: {
     if (event.type === "s001.achievement.relic-key") award("s001_relic_key");
     if (event.type === "s001.achievement.archaeologist") award("s001_archaeologist");
     if (event.type === "s001.achievement.sunken-city") award("s001_sunken_city");
-    if (event.type === "s001.reward.iou") void grantIou();
+    if (event.type === "s001.reward.iou") {
+      // 先落盘待领取标记：断线/超时后刷新或重新联网仍能重试。
+      writeJsonStore(IOU_PENDING_KEY, true);
+      void grantIou();
+    }
+  }
+
+  function awardIouOnce(): void {
+    if (readJsonStore<boolean>(IOU_AWARDED_KEY)) return;
+    // 成就只在欠条真正到账后授予；领取失败时保持未解锁。
+    options.awardAchievement?.("s001_iou_holder", ACHIEVEMENT_NAMES.s001_iou_holder ?? "s001_iou_holder");
+    writeJsonStore(IOU_AWARDED_KEY, true);
   }
 
   async function grantIou(): Promise<void> {
+    if (!readJsonStore<boolean>(IOU_PENDING_KEY)) return;
+    // 断线重连后先核对物品：服务端可能已处理，只是响应丢了。
+    if (options.hasItem?.(IOU_ITEM_ID)) {
+      writeJsonStore(IOU_PENDING_KEY, false);
+      awardIouOnce();
+      return;
+    }
     if (!options.claimReward) {
       options.showToast?.("离线时无法领取「两支持欠条」。");
       return;
     }
     try {
       const claimed = await options.claimReward("s001_iou");
-      if (!claimed) {
-        options.showToast?.("离线时无法领取「两支持欠条」。");
-        return;
-      }
-      // 成就只在欠条真正到账后授予；领取失败时保持未解锁。
-      options.awardAchievement?.("s001_iou_holder", ACHIEVEMENT_NAMES.s001_iou_holder ?? "s001_iou_holder");
+      if (!claimed) return; // 保留 pending，等 online/刷新后重试。
+      writeJsonStore(IOU_PENDING_KEY, false);
+      awardIouOnce();
     } catch {
       options.showToast?.("领取「两支持欠条」失败，请稍后再试。");
     }
@@ -444,6 +464,13 @@ export function createChatRuinsStoryController(options: {
     if (!player) return;
     const nodeId = flow.state().nodeId;
 
+    // 刷新可能停在涂鸦反应节点（cg 自动推进尚未发生）：重新打开剧情，
+    // 让 StoryDialogFlow 继续播完并触发欠条/结局。
+    if (nodeId === "wall-archaeology" || nodeId === "wall-variant" || nodeId === "wall-free") {
+      flow.open(dialogs);
+      return;
+    }
+
     // laxy 瓦 10m：S0 强制开场（门楣未读 → 渲染门楣；已读 → 开场白 A）。
     if ((nodeId === "lintel" || nodeId === "meet-laxy") && within(player, LAXY_POSITION, LAXY_FORCE_RADIUS)) {
       flow.open(dialogs);
@@ -479,6 +506,8 @@ export function createChatRuinsStoryController(options: {
     const dz = player.z - target.z;
     return dx * dx + dz * dz <= radius * radius;
   }
+
+  let onlineHandler: (() => void) | undefined = undefined;
 
   function ensureTicking(): void {
     if (tickTimer) return;
@@ -547,10 +576,23 @@ export function createChatRuinsStoryController(options: {
     state: () => flow.state(),
     phase: () => flow.phase(),
     ownsEntry: flow.ownsEntry,
-    start: () => ensureTicking(),
+    start: () => {
+      ensureTicking();
+      // 恢复当前节点的兴趣点激活（wall-open 会补上涂鸦墙 hitbox）。
+      flow.syncWorldInteractions();
+      if (!onlineHandler) {
+        onlineHandler = () => { void grantIou(); };
+        window.addEventListener("online", onlineHandler);
+      }
+      // 兼容修复前已领到欠条但没拿到成就的老存档。
+      if (options.hasItem?.(IOU_ITEM_ID)) awardIouOnce();
+      void grantIou();
+    },
     dispose: () => {
       if (tickTimer) clearInterval(tickTimer);
       tickTimer = undefined;
+      if (onlineHandler) window.removeEventListener("online", onlineHandler);
+      onlineHandler = undefined;
     },
   };
 }

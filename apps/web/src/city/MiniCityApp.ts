@@ -637,7 +637,7 @@ function init() {
     showToast: showUnlockToast,
     updateNpcSchedules: () => npcSystem?.updateNpcSchedules(),
     setActiveStoryPoints: (ids) => sceneInterestPoints?.setActiveStoryPoints(ids as readonly SceneInterestPointId[]),
-    chatRuins: { claimReward: (rewardId) => multiplayerHousing?.progression.claimReward(rewardId) ?? false, getPlayerPosition: () => cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : null, getDialogs: () => cityDialogs },
+    chatRuins: { claimReward: (rewardId) => multiplayerHousing?.progression.claimReward(rewardId) ?? false, hasItem: (itemId) => (multiplayerHousing?.progression.getProgress().inventory[itemId] ?? 0) > 0, getPlayerPosition: () => cursorChar ? { x: cursorChar.position.x, z: cursorChar.position.z } : null, getDialogs: () => cityDialogs },
   });
   stories.setupEcho(scene);
   mapController = createMapController({

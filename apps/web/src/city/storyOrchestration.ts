@@ -41,6 +41,7 @@ export function createStoryOrchestration(options: {
   /** S001 会沉的城端口（涂鸦欠条领取/玩家位置/对话框惰性引用）。 */
   chatRuins?: {
     claimReward?: (rewardId: string) => boolean | Promise<boolean>;
+    hasItem?: (itemId: string) => boolean;
     getPlayerPosition?: () => { x: number; z: number } | null;
     getDialogs?: () => CityDialogController | null;
   };
@@ -131,6 +132,7 @@ export function createStoryOrchestration(options: {
   const chatRuins = createChatRuinsStoryController({
     ...shared,
     claimReward: options.chatRuins?.claimReward,
+    hasItem: options.chatRuins?.hasItem,
     getPlayerPosition: options.chatRuins?.getPlayerPosition,
     getDialogs: options.chatRuins?.getDialogs,
     setStoryPoints: (ids) => { chatRuinsStoryPoints = new Set(ids); mergeStoryPoints(); },
