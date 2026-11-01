@@ -1,0 +1,275 @@
+/* S014 动物园怪谈：留言簿、图鉴与守则第七条面板。 */
+
+.zoo-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 92;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(16, 22, 20, 0.46);
+  backdrop-filter: blur(2px);
+}
+
+.zoo-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 94vw);
+  max-height: min(78vh, 680px);
+  overflow: hidden;
+  border: 1px solid #c9c2ad;
+  border-radius: 16px;
+  background: #f7f3e7;
+  color: #2b2f2a;
+  box-shadow: 0 22px 60px rgba(10, 16, 12, 0.38);
+  font-family: inherit;
+}
+
+.zoo-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid #e0d8c4;
+}
+
+.zoo-panel-title {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.zoo-panel-version {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e7dfc8;
+  color: #6f6248;
+  font-size: 12px;
+}
+
+.zoo-panel-close,
+.zoo-panel-secondary,
+.zoo-panel-primary,
+.zoo-panel-tab,
+.zoo-rule-direction {
+  border: 1px solid #c9c2ad;
+  border-radius: 9px;
+  background: #fffdf6;
+  color: #4a4a40;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.zoo-panel-close {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+.zoo-panel-close:hover,
+.zoo-panel-secondary:hover {
+  background: #f0e9d8;
+}
+
+.zoo-panel-bracelet {
+  margin: 10px 18px 0;
+  color: #8a6d2f;
+  font-size: 12px;
+}
+
+.zoo-panel-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 18px 0;
+  overflow-x: auto;
+}
+
+.zoo-panel-tab {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  font-size: 13px;
+}
+
+.zoo-panel-tab.is-active {
+  border-color: #6d8a5b;
+  background: #e4ecd9;
+  color: #3d5432;
+  font-weight: 700;
+}
+
+.zoo-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 18px 18px;
+}
+
+.zoo-panel-note {
+  margin: 0 0 12px;
+  color: #7b7462;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.zoo-panel-subtitle {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.zoo-rule-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.zoo-rule-list li + li {
+  margin-top: 8px;
+}
+
+.zoo-rule-written {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-left: 3px solid #6d8a5b;
+  background: #eef2e4;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.zoo-interpretation {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid #c9a45c;
+  background: #fffaf0;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-line;
+}
+
+.zoo-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zoo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px dashed #d2cab4;
+  border-radius: 11px;
+  background: #fbf8ee;
+  color: #8d8776;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.zoo-card-owned {
+  border-style: solid;
+  border-color: #b9c9a3;
+  background: #f3f7ea;
+  color: #3f4a36;
+}
+
+.zoo-card strong {
+  font-size: 13px;
+}
+
+.zoo-card-layer {
+  color: #8f7f5a;
+  font-size: 11px;
+}
+
+.zoo-card p {
+  margin: 0;
+}
+
+.zoo-form-gallery {
+  grid-template-columns: 1fr;
+}
+
+.zoo-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.zoo-panel-footer:empty {
+  display: none;
+}
+
+.zoo-panel-primary {
+  padding: 8px 18px;
+  border-color: #4f6d43;
+  background: #5f7d50;
+  color: #fffdf6;
+  font-size: 13px;
+}
+
+.zoo-panel-primary:hover {
+  background: #506b43;
+}
+
+.zoo-panel-secondary {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.zoo-rule-directions {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.zoo-rule-direction {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.zoo-rule-direction strong {
+  font-size: 13px;
+}
+
+.zoo-rule-direction span {
+  color: #817a66;
+  font-size: 12px;
+}
+
+.zoo-rule-direction.is-active {
+  border-color: #6d8a5b;
+  background: #e7eedd;
+}
+
+.zoo-rule-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #6f6755;
+  font-size: 12px;
+}
+
+.zoo-rule-input {
+  padding: 9px 12px;
+  border: 1px solid #c9c2ad;
+  border-radius: 9px;
+  background: #fffdf6;
+  color: #2b2f2a;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  .zoo-gallery {
+    grid-template-columns: 1fr;
+  }
+}

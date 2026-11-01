@@ -5,6 +5,7 @@ import { createEchoSuspendedController, type EchoStoryHandle } from './echo/echo
 import { createYesterdaySongController } from './yesterday/yesterdaySongController';
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
+import { createZooStoryController } from './zoo/zooStoryController';
 import { createStoryEntryGate } from './storyEntryGate';
 import { createStoryRouter } from './storyRouting';
 import { showUnlockToast } from './toast';
@@ -32,11 +33,16 @@ function createTrackedSideStory(
 }
 
 export function createStoryOrchestration(options: {
-  echo: Omit<EchoStoryControllerOptions, 'setActiveActors' | 'awardAchievement' | 'showToast' | 'getQuestContext' | 'updateNpcSchedules'>;
+  echo: Omit<EchoStoryControllerOptions, 'setStoryPoints' | 'setActiveActors' | 'awardAchievement' | 'showToast' | 'getQuestContext' | 'updateNpcSchedules'>;
   getQuestContext: EchoStoryControllerOptions['getQuestContext'];
   awardAchievement: (id: string, name: string) => void;
   showToast?: (message: string) => void;
   updateNpcSchedules: () => void;
+  zoo?: {
+    getPlayerPosition?: () => { x: number; z: number } | null;
+    getDialogs?: () => CityDialogController | null;
+  };
+  setActiveStoryPoints: (ids: readonly string[]) => void;
 }) {
   let echoActiveActors = new Set<string>();
   let yesterdayActiveActors = new Set<string>();
@@ -49,10 +55,17 @@ export function createStoryOrchestration(options: {
     options.updateNpcSchedules();
   }
 
+  let echoStoryPoints: ReadonlySet<string> = new Set();
+  let zooStoryPoints: ReadonlySet<string> = new Set();
+  function mergeStoryPoints() {
+    options.setActiveStoryPoints([...echoStoryPoints, ...zooStoryPoints]);
+  }
+
   // 「回声」槽位：暂停期间由占位控制器顶上（剧情内容不进包）。开关翻转后
   // esbuild 保留动态加载分支——真控制器按需加载并替换占位，同时补跑启动序列。
   const echoOptions: EchoStoryControllerOptions = {
     ...options.echo,
+    setStoryPoints: (ids) => { echoStoryPoints = new Set(ids); mergeStoryPoints(); },
     getQuestContext: options.getQuestContext,
     awardAchievement: options.awardAchievement,
     showToast: options.showToast,
@@ -108,12 +121,22 @@ export function createStoryOrchestration(options: {
     ...shared,
     onActorsChanged: (ids) => { overcoatActiveActors = ids; mergeActiveStoryActorIds(); },
   });
+  const zoo = createZooStoryController({
+    ...shared,
+    getPlayerPosition: options.zoo?.getPlayerPosition,
+    getDialogs: options.zoo?.getDialogs,
+    setStoryPoints: (ids) => { zooStoryPoints = new Set(ids); mergeStoryPoints(); },
+  });
+  zoo.announceGuide();
+  zoo.syncActiveActors();
+  zoo.start();
 
   const listControllers = () => [
     ['echo', echo.current],
     ['yesterday', yesterday],
     ['magi', magi],
     ['overcoat', overcoat],
+    ['zoo', zoo],
   ] as const;
 
   const gate = createStoryEntryGate(listControllers);
@@ -133,6 +156,7 @@ export function createStoryOrchestration(options: {
     yesterday,
     magi,
     overcoat,
+    zoo,
     router,
     getActiveStoryActorIds: () => activeStoryActorIds,
     announceGuide() {
@@ -140,6 +164,7 @@ export function createStoryOrchestration(options: {
       yesterday.announceGuide();
       magi.announceGuide();
       overcoat.announceGuide();
+      zoo.announceGuide();
     },
     setupEcho(scene: Scene) {
       echoBootScene = scene;
@@ -154,6 +179,7 @@ export function createStoryOrchestration(options: {
       yesterday.dispose();
       magi.dispose();
       overcoat.dispose();
+      zoo.dispose();
     },
   };
 }

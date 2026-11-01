@@ -66,3 +66,14 @@ export function isZooMeetingWindow(clock: ZooMeetingClock = {}): boolean {
 export function isZooRain(weather: string | null | undefined): boolean {
   return weather === 'rain';
 }
+
+/** 下一次例会夜的北京日期键（YYYY-MM-DD），供暂停提示使用。 */
+export function nextZooMeetingDayKey(timestamp = Date.now()): string {
+  const parts = beijingDateParts(timestamp);
+  for (let offset = 0; offset <= 40; offset += 1) {
+    const candidate = Date.UTC(parts.year, parts.month - 1, parts.day + offset, 4, 0, 0);
+    if (!isFirstFriday(candidate)) continue;
+    return new Date(candidate + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
+  }
+  return new Date(timestamp + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
+}
