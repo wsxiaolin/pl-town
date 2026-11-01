@@ -74,6 +74,7 @@ import northKomorebi from './north_komorebi';
 import fireworksShop from './fireworks_shop';
 import observationDeck from './observation_deck';
 import northGenshinInstitute from './north_genshin_institute';
+import zoo from './zoo';
 
 import type { BuildingConfig, BuildingContentLike } from './_types';
 import type { BuildingDefinition } from '../../buildingEntity';
@@ -152,6 +153,7 @@ export const BUILDING_REGISTRY: readonly BuildingConfig[] = [
   fireworksShop,
   observationDeck,
   northGenshinInstitute,
+  zoo,
 ];
 
 export { inferFacade, inferPlot, SHAPE_FACADES, SHAPE_PLOTS } from './_shapeDefaults';

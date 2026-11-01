@@ -29,6 +29,11 @@ export const ACHIEVEMENTS: readonly AchievementMeta[] = [
   { id:'yesterday_witness',name:'见证者',desc:'把三十年前未说出口的故事接住' },
   { id:'yesterday_silence',name:'沉默是金',desc:'选择让故事停留在沉默里' },
   { id:'yesterday_true_dawn',name:'昨日之歌',desc:'完成昨日之歌的尾声' },
+  // S014 动物园怪谈：四个零奖励剧情成就；zoo_rule_eight 同时是 S014 完成标记。
+  { id:'zoo_physics_solution',name:'物理解',desc:'集齐八张民间解法，怪谈进了物理社区就会长出物理解' },
+  { id:'zoo_roll_call',name:'代答到',desc:'在例会夜替一位缺席者答了一声到' },
+  { id:'zoo_child_heart',name:'童心免检',desc:'认真回答了园长的问题，得到童心手环' },
+  { id:'zoo_rule_eight',name:'守则第八版·合著者',desc:'把守则翻到第七条，写下自己的那一条' },
   { id:'murder_wanderer',name:'闲逛者',desc:'跟着莫得一起在城里散步' },
   { id:'murder_watcher',name:'视奸者',desc:'听莫得说他观察着每个人的一举一动' },
   { id:'murder_chain',name:'再串大四',desc:'和莫得对上了黑洞区的暗号' },

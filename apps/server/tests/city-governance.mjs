@@ -375,6 +375,9 @@ try {
       'painting_ai',
       // 原神研究院（2026-10-07）：同上，保持待建。
       'north_genshin_institute',
+      // 小城动物园（2026-11-01.zoo.1）：进入 legacy 保留清单以满足覆盖断言；
+      // 实际落成走 DEFAULT_COMPLETED_BUILDING_IDS 的赠礼补全。
+      'zoo',
     ];
     const catalogBuildingIds = new Set(BUILDING_CATALOG.map((building) => building.id));
     assert.deepEqual([...LEGACY_UNLOCK_PRESERVATION_BUILDINGS].sort(), [...legacyPendingBuildings].sort());

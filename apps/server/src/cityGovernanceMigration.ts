@@ -37,6 +37,9 @@ export const LEGACY_UNLOCK_PRESERVATION_BUILDINGS = Object.freeze([
   'painting_ai',
   // 原神研究院（2026-10-07）：同上，保持待建。
   'north_genshin_institute',
+  // 小城动物园（2026-11-01.zoo.1）：S014 剧情场景建筑，进入 legacy
+  // 保留清单以满足覆盖断言；实际落成走 DEFAULT_COMPLETED_BUILDING_IDS。
+  'zoo',
 ]);
 
 // 2026-10-04 default-standing policy: 参议院与星语北城 11 栋作品建筑在
@@ -54,6 +57,9 @@ export const DEFAULT_COMPLETED_BUILDING_IDS = Object.freeze([
   // （烟花设计云端保存 / 观景轮播），boot 时赠礼补全直接建成，对新城镇
   // 与既有城镇一视同仁——与参议院/北城 11 栋的 2026-10-04 政策同款。
   'fireworks_shop', 'observation_deck',
+  // 2026-11-01 zoo policy: 小城动物园是 S014 支线剧情的场景建筑（园区
+  // 「重新开园」是叙事前提），boot 时赠礼补全直接建成，不设众筹项目。
+  'zoo',
 ]);
 
 // Read-only reconciliation runs inside initializeCityGovernance's caller-owned

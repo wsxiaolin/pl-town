@@ -29,6 +29,8 @@ const BUILDING_IDS = [
   'fireworks_shop', 'observation_deck',
   'painting_ai',
   'north_genshin_institute',
+  // S014 动物园怪谈（2026-11-01.zoo.1）：剧情场景建筑，赠礼补全直接建成。
+  'zoo',
 ] as const;
 
 export const BUILDING_PRICES: Readonly<Record<string, number>> = Object.freeze(
@@ -80,6 +82,10 @@ export const ACHIEVEMENT_REWARDS: Readonly<Record<string, number>> = Object.free
   murder_chain: 0,
   murder_flirt: 0,
   murder_contact: 0,
+  zoo_physics_solution: 0,
+  zoo_roll_call: 0,
+  zoo_child_heart: 0,
+  zoo_rule_eight: 0,
 });
 
 export type ShopProductEntry = { itemId: string; name: string; unitPrice: number };

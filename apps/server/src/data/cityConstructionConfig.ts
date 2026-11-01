@@ -72,7 +72,11 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // （原神研究院彩蛋，北城作品街坊）。目录重生成后自动追加为治理项目；
   // painting_ai 与 north_genshin_institute 保持待建不赠礼。既有项目定义与
   // initialBuiltBuildingIds 零改动。
-  version: '2026-10-10.festival-painting.1',
+  // 2026-11-01.zoo.1: S014 支线剧情「动物园怪谈」场景建筑 zoo（小城
+  // 动物园，(-9,29.8)）。按 2026-10-04 赠礼补全政策直接建成，不设
+  // 众筹；目录重生成后自动追加 build-zoo 项目。既有项目定义与
+  // initialBuiltBuildingIds 零改动。
+  version: '2026-11-01.zoo.1',
   projects: [
     ...constructionIds.map((buildingId) => buildingProject(buildingId)),
     ...BUILDING_CATALOG.filter((building) => building.id !== 'commons' && !constructionIds.includes(building.id))
