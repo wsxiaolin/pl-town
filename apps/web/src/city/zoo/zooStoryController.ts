@@ -465,6 +465,15 @@ export function createZooStoryController(options: ZooStoryControllerOptions) {
 
   function interactBuilding(buildingId: string, dialogs: CityDialogController): boolean {
     if (buildingId !== ZOO_BUILDING_ID) return false;
+    // 园区开放后回售票亭：墙上海报是火箭炮攻略卡（第 8 张）的入口。
+    if (
+      flow.state().nodeId === 'exhibits-open' &&
+      getStoryEventCount(flow.state(), ZOO_EVENTS.cardRocketArtillery) === 0 &&
+      flow.choose(dialogs, 'poster-rocket')
+    ) {
+      refreshState();
+      return true;
+    }
     flow.open(dialogs);
     refreshState();
     return true;

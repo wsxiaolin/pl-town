@@ -454,7 +454,11 @@ export const ZOO_STORY: StoryDefinition = {
           label: '',
           autoAdvance: true,
           next: 'exhibits-open',
-          effects: [event(ZOO_EVENTS.cardUniversalMap)],
+          effects: [
+            event(ZOO_EVENTS.cardUniversalMap),
+            { type: 'flag.set', flagId: ZOO_FLAGS.exhibitWaterfowl, value: true },
+            event(ZOO_EVENTS.cardJ20),
+          ],
         },
       ],
     },
