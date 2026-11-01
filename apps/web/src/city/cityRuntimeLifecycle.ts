@@ -13,6 +13,7 @@ import { configureMomentSplash, showMomentHeavy, showMomentSplash, stopMomentPre
 import { disposeCityGovernance, loadCityGovernance } from './cityGovernanceClient';
 import { disposeCityVoting } from './cityVotingClient';
 import { closeCityGovernancePanel, disposeCityGovernancePanel } from '../adapters/ui/cityGovernancePanel';
+import { installViewportZoomGuard } from '../core/viewportZoomGuard';
 
 // Governance fetch started before the boot decision (mode-independent,
 // 8 s self-timeout) so the light path never serializes behind the probe.
@@ -72,6 +73,9 @@ export function createCityRuntimeLifecycle(options: {
     booting = false;
     eventController = new AbortController();
     window.addEventListener('minicity:login-required', options.showLogin, { signal: eventController.signal });
+    // Page-level zoom guard must be live before the splash paints; the
+    // listeners die with the session when destroy() aborts the controller.
+    installViewportZoomGuard(eventController.signal);
     document.body.classList.remove('day', 'night');
     document.body.classList.add(options.isNight() ? 'night' : 'day');
     // Dev visual-verification portal enters without the login gate; the normal

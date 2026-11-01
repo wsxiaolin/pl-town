@@ -56,6 +56,7 @@ export function createThemeClock(options: ThemeClockOptions) {
       : new THREE.Color(night ? palette.NIGHT_BG : palette.DAY_BG);
   }
 
+  let syncedOnce = false;
   function syncTimeAndTheme() {
     const gameClock = townGameHour();
     options.setGameClock(gameClock);
@@ -65,14 +66,17 @@ export function createThemeClock(options: ThemeClockOptions) {
       options.setIsNight(night);
       document.body.classList.toggle('night', night);
       document.body.classList.toggle('day', !night);
-      applyTheme(night, false);
-      setTimeout(() => options.invalidateMapShot(), 1000);
+      // 首次同步只是把启动占位状态对齐到当前时刻，立即落位（不做 0.72s 渐变），
+      // 避免预加载在过渡中途截出半程画面；此后运行期切换才走渐变并失效地图。
+      applyTheme(night, !syncedOnce);
+      if (syncedOnce) setTimeout(() => options.invalidateMapShot(), 1000);
       if (night) {
         const s = options.getStats();
         s.nightToggles = (s.nightToggles || 0) + 1;
         options.saveStats(s);
       }
     }
+    syncedOnce = true;
     const el = document.getElementById('communityTime');
     if (el) {
       const h = Math.floor(gameClock), m = Math.floor((gameClock - h) * 60);
@@ -81,5 +85,11 @@ export function createThemeClock(options: ThemeClockOptions) {
     options.updateNpcSchedules();
   }
 
-  return { applyTheme, restoreSky, syncTimeAndTheme };
+  /** 新会话启动时复位首次同步标记：每个会话的第一次同步都按「对齐启动状态」
+   *  处理，不触发地图缓存失效。 */
+  function resetSession(): void {
+    syncedOnce = false;
+  }
+
+  return { applyTheme, restoreSky, syncTimeAndTheme, resetSession };
 }

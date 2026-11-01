@@ -1,5 +1,14 @@
 import { expect, type Page } from '@playwright/test';
 
+/**
+ * Budget for "the render loop advanced N frames" polls. A frame on a
+ * software-GL CI runner costs 80–220 ms of CPU (the city draws ~1.1 M
+ * triangles), so the 5 s default only covers a handful of frames and flakes
+ * whenever a shard shares the runner with another worker. The repo's other
+ * frame-based tests already budget 10–60 s (movement.spec, landscape-rendering).
+ */
+export const FRAME_ADVANCE_TIMEOUT = 30_000;
+
 // Shared default localStorage seed used by the smoke + movement suites. The CG
 // intro is skipped, a stable resident identity is set, and the renderer is put
 // into the cheapest software-GL-friendly preset so tests stay fast on CI.

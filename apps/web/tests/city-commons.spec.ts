@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
-import { stubCityWebSocket, waitForCityReady } from './helpers';
+import { FRAME_ADVANCE_TIMEOUT, stubCityWebSocket, waitForCityReady } from './helpers';
 
 const config = {
   schemaVersion: 1, version: 'commons-v1', initialBuiltBuildingIds: ['commons', 'commons_outer'],
@@ -353,6 +353,7 @@ test('a rejected vote leaves its closed dialog clear while login takes focus', a
 });
 
 test('commons cancels an active city route and camera drag while its modal is open', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await fixture(page);
   await page.keyboard.press('Escape');
@@ -370,10 +371,10 @@ test('commons cancels an active city route and camera drag while its modal is op
   const panel = page.getByRole('dialog', { name: '众议院', exact: true });
   await expect(panel).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as any)._mini.getPlayerPath().length)).toBe(0);
-  await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame)).toBeGreaterThan(started.frame + 8);
+  await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame), { timeout: FRAME_ADVANCE_TIMEOUT }).toBeGreaterThan(started.frame + 8);
   expect(await page.evaluate(() => (window as any)._mini.player.position.toArray())).toEqual(started.position);
   await page.keyboard.press('Escape');
-  await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame)).toBeGreaterThan(started.frame + 16);
+  await expect.poll(() => page.evaluate(() => (window as any)._mini.renderer.info.render.frame), { timeout: FRAME_ADVANCE_TIMEOUT }).toBeGreaterThan(started.frame + 16);
   expect(await page.evaluate(() => (window as any)._mini.getPlayerPath().length)).toBe(0);
 
   await page.mouse.move(640, 400);

@@ -29,7 +29,9 @@ export type EventBindingsOptions = {
   isWalkModeActive?: () => boolean;
   closeModal: () => void;
   closeNpcDialog: () => void;
-  getLoginController: () => { login: () => void; showLogin: () => void; signResidentCard: () => void } | null;  isMovementOnlyMode?: () => boolean;
+  getLoginController: () => { login: () => void; showLogin: () => void; signResidentCard: () => void } | null;
+  /** 只允许移动、不允许改 zoom 的模式（冰窖 / 影院式运镜），滚轮与捏合都不生效。 */
+  isZoomLocked?: () => boolean;
 };
 
 export function createEventBindings(options: EventBindingsOptions) {
@@ -67,7 +69,7 @@ export function createEventBindings(options: EventBindingsOptions) {
 
     canvas.addEventListener('wheel', e => {
       e.preventDefault();
-      if (options.isMovementOnlyMode?.()) return;
+      if (options.isZoomLocked?.()) return;
       const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
       const zoom = options.clamp(options.getCameraZoom() * factor, options.getConfig().cameraZoomMin, options.getConfig().cameraZoomMax);
       options.setCameraZoom(zoom);
@@ -82,11 +84,11 @@ export function createEventBindings(options: EventBindingsOptions) {
       return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     };
     canvas.addEventListener('touchstart', e => {
-      if (options.isMovementOnlyMode?.()) return;
+      if (options.isZoomLocked?.()) return;
       if (e.touches.length === 2) pinchDist = pinchDistance(e.touches);
     }, { passive: true, signal });
     canvas.addEventListener('touchmove', e => {
-      if (options.isMovementOnlyMode?.()) return;
+      if (options.isZoomLocked?.()) return;
       if (e.touches.length === 2) {
         e.preventDefault();
         const d = pinchDistance(e.touches);

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForCityReady } from './helpers';
+import { FRAME_ADVANCE_TIMEOUT, waitForCityReady } from './helpers';
 
 test('Cat Death CG is available only through the hidden cinematic debug API', async ({ page }) => {
   await waitForCityReady(page, 'cat-death-cg-tester');
@@ -27,11 +27,14 @@ test('Cat Death CG is available only through the hidden cinematic debug API', as
   expect(handleShape).toEqual({ hasFinished: true, hasStop: true, active: true });
 
   const overlay = page.locator('[data-cat-death-cg="death-of-a-cat"]');
-  await expect(overlay).toHaveClass(/is-active/);
+  // is-active lands on the next animation frame (catDeathCGController), and
+  // software-GL runners can stall frames for seconds — the 5 s default
+  // budgeted out on CI (shard 1 hard-fail on #268's run).
+  await expect(overlay).toHaveClass(/is-active/, { timeout: FRAME_ADVANCE_TIMEOUT });
   await expect(overlay.locator('canvas')).toBeVisible();
   await expect(overlay.getByText('自由从来不是死亡的反义词')).toHaveCount(0);
   await expect(overlay.locator('.cat-death-cg__end-blackout')).toHaveCount(1);
-  await expect(overlay.locator('.cat-death-cg__caption.is-current')).toBeVisible({ timeout: 3_000 });
+  await expect(overlay.locator('.cat-death-cg__caption.is-current')).toBeVisible({ timeout: 8_000 });
 
   const viewport = await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-cat-death-cg] canvas')!;

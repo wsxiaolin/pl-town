@@ -82,7 +82,7 @@ const connect = (name, password = RESIDENT_PASSWORD) => new Promise((resolve, re
 const waitFor = (client, type, predicate = () => true, since = 0) => new Promise((resolve, reject) => {
   const existing = client.messages.slice(Math.max(0, since)).find((message) => message.type === type && predicate(message));
   if (existing) return resolve(existing);
-  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${type} (recent=[${client.messages.slice(-4).map((message) => message.type).join(' | ')}])`)), 8_000);
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${type} (recent=[${client.messages.slice(-4).map((message) => message.type === 'error' ? `error: ${message.message}` : message.type).join(' | ')}])`)), 8_000);
   const listener = (raw) => {
     const message = JSON.parse(raw);
     if (message.type !== type || !predicate(message)) return;
@@ -104,9 +104,22 @@ function encodeCells(onCells) {
 }
 
 const baseDesign = {
+  v: 2, height: 55, shape: 'peony',
+  colors: { primary: '#ffd76e', secondary: '#ff5f8a', trail: '#ffe9b0' },
+  breakCharge: 30, sparkle: 35,
+  caliber: 150, liftCharge: 68, launchAngle: 3,
+  starCount: 300, starSize: 9, burnTime: 3, trail: 'comet',
+};
+// v1 旧设计：服务端读取/保存时必须升级为 v2，旧作品继续可放。
+const legacyDesign = {
   v: 1, height: 55, shape: 'peony',
   colors: { primary: '#ffd76e', secondary: '#ff5f8a', trail: '#ffe9b0' },
-  size: 100, sparkle: 35,
+  size: 120, sparkle: 35,
+};
+const baseCraft = {
+  formula: 'kp-gold', additive: 'none', additivePercent: 0,
+  casing: 'paper-sphere', burst: 'black-powder', ignition: 'time-fuse',
+  mortarBore: 154, fuseOffset: 0,
 };
 
 let failures = 0;
@@ -119,12 +132,18 @@ async function main() {
   const startingBalance = alice.hello.progress.currency;
 
   // ── 保存烟花：扣 30 金币 ──
-  send(alice, { type: 'fireworks.save', requestId: 'fw-save-1', name: '  第一朵  ', design: baseDesign });
+  send(alice, { type: 'fireworks.save', requestId: 'fw-save-1', name: '  第一朵  ', design: legacyDesign });
   const saved = await waitFor(alice, 'fireworks.saved');
   assert.equal(saved.pricePaid, 30);
   assert.equal(saved.replayed, false);
   assert.equal(saved.record.name, '第一朵', 'name is trimmed');
   assert.equal(saved.record.authorNickname, 'alice');
+  assert.equal(saved.record.design.v, 2, 'v1 designs are upgraded before storage');
+  assert.equal(saved.record.design.caliber, 150, 'v1 upgrade gets the default caliber');
+  assert.equal(saved.record.design.liftCharge, 68, 'v1 upgrade gets the recommended lift charge');
+  assert.equal(saved.record.design.breakCharge, 42, 'v1 upgrade preserves the legacy burst radius');
+  assert.equal(saved.record.design.craft.formula, 'kp-gold', 'legacy designs receive the default craft');
+  assert.equal(saved.record.design.craft.casing, 'paper-sphere');
   assert.equal(saved.progress.currency, startingBalance - 30, 'save charges 30 coins');
   const designId = saved.record.id;
   // 客户端只认标准 progress.updated（HUD/设计台余额），保存成功后必须补发，
@@ -133,7 +152,7 @@ async function main() {
   assert.equal(progressAfterSave.progress.currency, startingBalance - 30, 'save pushes standard progress.updated');
 
   // ── 同 requestId 重放：不重复扣款 ──
-  send(alice, { type: 'fireworks.save', requestId: 'fw-save-1', name: '第一朵', design: baseDesign });
+  send(alice, { type: 'fireworks.save', requestId: 'fw-save-1', name: '第一朵', design: legacyDesign });
   const replayed = await waitFor(alice, 'fireworks.saved', (message) => message.replayed === true);
   assert.equal(replayed.record.id, designId, 'replay returns the same design');
   assert.equal(replayed.progress.currency, startingBalance - 30, 'replay does not double charge');
@@ -148,7 +167,13 @@ async function main() {
     { type: 'fireworks.save', requestId: 'fw-bad-6', name: '坏点阵', design: { ...baseDesign, shape: 'pattern', pattern: { cols: 21, rows: 21, cells: '!!!' } } },
     { type: 'fireworks.save', requestId: 'fw-bad-7', name: '实心块', design: { ...baseDesign, shape: 'pattern', pattern: { cols: 21, rows: 21, cells: encodeCells([...Array(21 * 21).keys()]) } } },
     { type: 'fireworks.save', name: '无幂等键', design: baseDesign },
-    { type: 'fireworks.save', requestId: 'fw-bad-9', name: '太密', design: { ...baseDesign, size: 999 } },
+    { type: 'fireworks.save', requestId: 'fw-bad-8', name: '坏弹径', design: { ...baseDesign, caliber: 10 } },
+    { type: 'fireworks.save', requestId: 'fw-bad-9', name: '坏发射药', design: { ...baseDesign, liftCharge: 999 } },
+    { type: 'fireworks.save', requestId: 'fw-bad-10', name: '坏尾迹', design: { ...baseDesign, trail: 'spark' } },
+    { type: 'fireworks.save', requestId: 'fw-bad-11', name: '坏星数', design: { ...baseDesign, starCount: 5000 } },
+    { type: 'fireworks.save', requestId: 'fw-bad-12', name: '太密', design: { ...legacyDesign, size: 999 } },
+    { type: 'fireworks.save', requestId: 'fw-bad-13', name: '坏配方', design: { ...baseDesign, craft: { ...baseCraft, formula: 'dynamite' } } },
+    { type: 'fireworks.save', requestId: 'fw-bad-14', name: '炮筒过紧', design: { ...baseDesign, craft: { ...baseCraft, mortarBore: 150 } } },
   ];
   let marked = 0;
   for (const invalid of invalidCases) {
@@ -158,15 +183,30 @@ async function main() {
     assert.ok(error.message, `invalid payload must be rejected: ${JSON.stringify(invalid).slice(0, 60)}`);
   }
 
+  // 连续 14 条非法载荷会吃满 40 次/10 秒的防刷预算，等窗口翻页再测正常保存。
+  await new Promise((resolve) => setTimeout(resolve, 10_500));
+
   // ── 点阵拼字烟花保存成功 ──
   marked = alice.messages.length;
   const patternCells = [];
   // 在 21×21 网格上画一个「十」字：中列 + 中行。
   for (let row = 0; row < 21; row += 1) patternCells.push(row * 21 + 10);
   for (let col = 0; col < 21; col += 1) patternCells.push(10 * 21 + col);
-  send(alice, { type: 'fireworks.save', requestId: 'fw-save-2', name: '十字星', design: { ...baseDesign, shape: 'pattern', pattern: { cols: 21, rows: 21, cells: encodeCells([...new Set(patternCells)]) } } });
+  const craftDesign = {
+    ...baseCraft,
+    formula: 'strontium-red', additive: 'titanium', additivePercent: 9,
+    casing: 'paper-canister', burst: 'flash-powder', ignition: 'electric-match',
+    mortarBore: 158, fuseOffset: 0.2,
+  };
+  send(alice, { type: 'fireworks.save', requestId: 'fw-save-2', name: '十字星', design: { ...baseDesign, shape: 'pattern', breakCharge: 45, starCount: 420, trail: 'glitter', craft: craftDesign, pattern: { cols: 21, rows: 21, cells: encodeCells([...new Set(patternCells)]) } } });
   const patternSaved = await waitFor(alice, 'fireworks.saved', (message) => message.record?.name === '十字星', marked);
   assert.equal(patternSaved.record.design.shape, 'pattern');
+  assert.equal(patternSaved.record.design.breakCharge, 45);
+  assert.equal(patternSaved.record.design.trail, 'glitter');
+  assert.equal(patternSaved.record.design.craft.formula, 'strontium-red');
+  assert.equal(patternSaved.record.design.craft.casing, 'paper-canister');
+  assert.equal(patternSaved.record.design.craft.additivePercent, 9);
+  assert.equal(patternSaved.record.design.craft.fuseOffset, 0.2);
   assert.equal(patternSaved.progress.currency, startingBalance - 60);
 
   // ── 清单：own 与 community ──
@@ -210,6 +250,8 @@ async function main() {
   marked = alice.messages.length;
   send(alice, { type: 'fireworks.list' });
   await waitFor(alice, 'fireworks.listed', () => true, marked);
+  // 存满 24 份的过程中会消耗 40 次/10 秒的防刷预算；等窗口翻页再测仓库上限。
+  await new Promise((resolve) => setTimeout(resolve, 10_500));
   marked = alice.messages.length;
   send(alice, { type: 'fireworks.save', requestId: 'fw-cap-overflow', name: '超编', design: baseDesign });
   const overflowError = await waitFor(alice, 'error', () => true, marked);
