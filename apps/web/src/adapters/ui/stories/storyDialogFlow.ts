@@ -136,8 +136,15 @@ export function createStoryDialogFlow(
 
   const interactBuilding = (buildingId: string, dialogs: CityDialogController): boolean => {
     const interaction = definition.buildingInteractions?.find((item) => item.buildingId === buildingId && item.nodeId === runtime.state().nodeId);
-    if (!interaction) return false;
-    return choose(dialogs, interaction.choiceId);
+    if (interaction) return choose(dialogs, interaction.choiceId);
+    // 精确节点不匹配但该建筑登记过交互：进行中的剧情重开当前节点续播
+    // （关闭对话后再次点建筑可恢复，而非入口失效+互斥门锁死）。
+    const registered = definition.buildingInteractions?.some((item) => item.buildingId === buildingId);
+    if (registered && getStoryPhase(definition, runtime.state()) !== 'concluded') {
+      open(dialogs);
+      return true;
+    }
+    return false;
   };
 
   const ownsEntry = (kind: 'actor' | 'building', targetId: string): boolean =>

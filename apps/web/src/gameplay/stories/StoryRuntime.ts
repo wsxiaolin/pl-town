@@ -37,7 +37,8 @@ export function storyConditionMatches(
   context: StoryConditionContext = {},
 ): boolean {
   switch (condition.type) {
-    case 'flag.equals': return state.flags[condition.flagId] === condition.value;
+    // Unset flags read as false: keeps boolean conditions total (proofread.note.read starts unset).
+    case 'flag.equals': return (state.flags[condition.flagId] ?? false) === (condition.value ?? false);
     case 'event.occurred': return getStoryEventCount(state, condition.eventType) >= (condition.atLeast ?? 1);
     case 'building.state': return getStoryBuildingState(state, condition.buildingId) === condition.state;
     case 'inventory.count': return (context.inventory?.[condition.itemId] ?? 0) >= condition.atLeast;

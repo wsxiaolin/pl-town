@@ -597,7 +597,7 @@ export const ZILAN_STORY: StoryDefinition = {
       choices: [
         { id: "stay", label: "留下，接过这把扫帚。", next: "zilan.ending-keeper" },
         { id: "leave-recite", label: "离开，把这段文字记住。", next: "zilan.ending-recite" },
-        { id: "leave-lamp", label: "离开，但让那盏灯一直亮着。", next: "zilan.ending-lamp" },
+        { id: "leave-lamp", label: "离开，但让那盏灯一直亮着。", next: "zilan.ending-lamp", availableWhen: [{ type: "flag.equals", flagId: "zilan.chair.answered", value: true }] },
         { id: "come-back", label: "现在离开，明年今日再回来。", next: "zilan.ending-revisit" },
         { id: "back", label: "还没想好，再走走。", next: "zilan.courtyard" },
       ],

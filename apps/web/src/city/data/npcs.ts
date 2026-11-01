@@ -454,7 +454,7 @@ export const NPC_PROFILES: NpcProfile[] = [...COMMUNITY_NPCS,
   {
     id:'recruit_youmang', name:'溯叶悠芒', role:'研究部前台登记官', core:false, spawnChance:1, storyOnly:true,
     npcType:'story', type:'story', behavior:'field', workHours:[0,24],
-    head:0xC8B39A, body:0x5A6F8A, home:[-39,-44], work:[-39,-44], patrolRadius:0.8,
+    head:0xC8B39A, body:0x5A6F8A, home:[-37.5,-43.2], work:[-37.5,-43.2], patrolRadius:0.8,
     dialog:[{ text:'「名字写在这面墙上。写上去，就算数。」', options:[{ text:'询问入册', next:null }] }],
   },
   {

@@ -12,10 +12,6 @@ export const TOUR_STORY: StoryDefinition = {
     { actorId: "tour_guide", nodeId: "tour-start", choiceId: "ask-what" },
   ],
 
-  buildingInteractions: [
-    { buildingId: "library", nodeId: "tour-start", choiceId: "ask-what" },
-  ],
-
   nodes: {
     "tour-start": {
       id: "tour-start",
