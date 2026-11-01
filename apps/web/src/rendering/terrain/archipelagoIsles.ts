@@ -14,8 +14,7 @@ import { SURFACE_Y } from '../layers';
 //   = 干净折面；
 // - 逐面顶点色按绝对高度分带（水下岩青 → 湿沙 → 干沙 → 镇主题台面色），
 //   逐面 ±6% 明度抖动 + 朝北/东坡面轻微冷色偏移（明澜屿同款）；
-// - 沙线盘：半径 beachR + 1.5、y = 0.085（高过水面 0.06 的 0.025 间隔
-//   ≥ AGENTS.md 的 0.004 防共面要求），从水线穿越环到滩缘读作沙滩台。
+// - 沙线盘：beachR 外侧 1.5u 环带、y = 0.085，遮住岛体与水面接缝。
 //
 // LOD 说明（施工修订 #2）：明澜屿代码现实为单级网格（无运行时 LOD），本
 // 渲染器保持同构——8 岛各为独立 Object3D，正交视锥窗口外整岛剔除（远镇
@@ -145,21 +144,27 @@ function buildIslandBody(
  */
 function sandRimGeometry(town: YearDistrictSpec): THREE.BufferGeometry {
   const segments = town.outline ? 192 : town.shape ? 128 : (town.plateauR >= 40 ? 64 : 32);
-  const baseR = town.beachR + SAND_RIM_MARGIN;
+  const innerR = town.beachR;
+  const outerR = town.beachR + SAND_RIM_MARGIN;
   const positions: number[] = [];
   const indices: number[] = [];
 
-  // 顶点：中心 + 外缘（逐角度调制半径）。
-  positions.push(0, 0, 0);
+  // Annular band only: a center fan would paint the whole island at rim height.
   for (let i = 0; i < segments; i += 1) {
     const theta = (i / segments) * Math.PI * 2;
     const k = islandRadiusScaleAt(town, theta);
-    positions.push(Math.cos(theta) * baseR * k, 0, Math.sin(theta) * baseR * k);
+    positions.push(
+      Math.cos(theta) * innerR * k, 0, Math.sin(theta) * innerR * k,
+      Math.cos(theta) * outerR * k, 0, Math.sin(theta) * outerR * k,
+    );
   }
   for (let i = 0; i < segments; i += 1) {
-    const a = 1 + i;
-    const b = 1 + ((i + 1) % segments);
-    indices.push(0, b, a);
+    const next = (i + 1) % segments;
+    const inner = i * 2;
+    const outer = inner + 1;
+    const nextInner = next * 2;
+    const nextOuter = nextInner + 1;
+    indices.push(inner, nextInner, nextOuter, inner, nextOuter, outer);
   }
 
   const geometry = new THREE.BufferGeometry();

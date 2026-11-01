@@ -47,14 +47,15 @@ export const YEAR_ISLANDS: readonly TerrainFeatureConfig[] = YEAR_ISLAND_SPECS.m
 
 /** 南带贴陆缘的下沉带宽度（水面北缘 = 南陆缘 − 12，落在下沉海岸之下）。 */
 export const SOUTH_SEA_COAST_TUCK = 12;
+export const SOUTH_SEA_COAST_END_Z = 168;
 /** 南带/西臂的世界范围（设计 §6.1）。 */
 export const SOUTH_SEA = Object.freeze({
   bandXMin: -150,
-  bandXMax: 220,
-  bandZMax: 470,
+  bandXMax: 320,
+  bandZMax: 600,
   armXMin: -490,
   armZMin: 40,
-  armZMax: 470,
+  armZMax: 600,
 });
 
 /** farGround 南陆缘（z_edge(x)，worldGroundMesh edgeDistance 第 4 项反解）。 */

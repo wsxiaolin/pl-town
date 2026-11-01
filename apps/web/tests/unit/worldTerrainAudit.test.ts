@@ -8,7 +8,7 @@ import { WORLD_TERRAIN } from '../../src/city/data/terrain/_world';
 import { CITY_LIMIT, ECHO_OBSERVATORY_AREA, NORTH_DISTRICT_AREA, shorelineX } from '../../src/city/data/cityConfig';
 import { YEAR_ISLAND_SPECS, islandRadiusScaleAt } from '../../src/city/data/year-towns/towns';
 import { bridgeDeckBlendAt, stationPadBlendAt } from '../../src/city/data/terrain/heightfield/transitField';
-import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
+import { YEAR_ISLANDS, SOUTH_SEA, SOUTH_SEA_COAST_END_Z, SOUTH_SEA_COAST_TUCK, isArchipelagoWaterAt, southLandEdgeZ } from '../../src/city/data/terrain/sea-archipelago';
 import { ISLAND_SKIRT_W, islandSurfaceYAt } from '../../src/city/data/terrain/heightfield/islandField';
 import { PLATEAU_MAIN } from '../../src/city/data/terrain/heightfield/plateauField';
 import { sampleCitysideMeadowY } from '../../src/rendering/terrain/meadowField';
@@ -211,6 +211,15 @@ test('晨溪河口低于海面并保持水位间距', () => {
   assert.ok(SURFACE_Y.water - CHENXI_MOUTH_LEVEL >= 0.004, '河口需低于海面以避免近共面闪烁');
   assert.equal(mouth.waterY, CHENXI_MOUTH_LEVEL);
   assert.equal(riverWaterYAt(mouth.x, mouth.z), CHENXI_MOUTH_LEVEL);
+});
+
+test('晨溪共享地形场包含可见深河床样本', () => {
+  const samples = RIVER_SAMPLES.filter((_, index) => index % 40 === 0);
+  for (const sample of samples) {
+    const bed = terrainHeight(sample.x, sample.z);
+    assert.ok(Math.abs(bed - (sample.waterY - 0.5)) < 1e-8);
+    assert.ok(bed < sample.waterY - 0.49, `river bed must sit below water at ${sample.x},${sample.z}`);
+  }
 });
 
 test('明澜岛屿/岬角与西海滩既有道具保持 ≥12 间距', () => {
@@ -497,6 +506,17 @@ test('南海水面守卫与西海条带零重叠（waterGuard 域口径）', () 
       );
     }
   }
+});
+
+test('南海岸线拼接处守卫连续，开阔海域延伸越过可见地面', () => {
+  for (let z = 132; z <= SOUTH_SEA_COAST_END_Z; z += 0.25) {
+    for (let x = SOUTH_SEA.bandXMin; x <= SOUTH_SEA.bandXMax; x += 0.25) {
+      const coastWater = z >= southLandEdgeZ(x) - SOUTH_SEA_COAST_TUCK;
+      if (coastWater) assert.ok(isArchipelagoWaterAt(x, z), `water guard gap at ${x},${z}`);
+    }
+  }
+  assert.ok(SOUTH_SEA.bandXMax > 270 && SOUTH_SEA.bandZMax > 180, 'open sea extends past the land horizon');
+  assert.ok(SOUTH_SEA.armZMax > 180, 'western arm extends past the land horizon');
 });
 
 test('WORLD_TERRAIN 聚合包含年份群岛 3 岛（新地形必须进世界清单）', () => {

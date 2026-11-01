@@ -19,51 +19,13 @@
 //   西缘 (shorelineX−96) 对接并 ≤4u 搭叠（max 保证永不留缝）。
 import * as THREE from 'three';
 import { shorelineX } from '../../city/data/cityConfig';
-import { SOUTH_SEA, SOUTH_SEA_COAST_TUCK, southLandEdgeZ, westLandEdgeX } from '../../city/data/terrain/sea-archipelago';
+import { SOUTH_SEA, SOUTH_SEA_COAST_TUCK, southLandEdgeZ, westArmEastX } from '../../city/data/terrain/sea-archipelago';
 
 /** 行距（世界单位）：南缘贴陆缘的下沉带曲率按 2u 分辨率跟随。 */
 const ROW_STEP = 2;
 /** 西海条带西缘的防裂缝搭叠宽度（uv 同色 → 不可见）。 */
 const STRIP_OVERLAP = 4;
 /** 南带北缘的南陆缘贴边（下沉带内收，水面从淹住的下沉海岸开始）。 */
-const ARC_SIN_CLAMP = 1;
-
-const SOUTH_BAND_MIN_Z = Math.min(
-  134,
-  ...Array.from({ length: 64 }, (_, index) => {
-    const x = THREE.MathUtils.lerp(SOUTH_SEA.bandXMin, SOUTH_SEA.bandXMax, index / 63);
-    return southLandEdgeZ(x) - SOUTH_SEA_COAST_TUCK;
-  }),
-);
-
-/** 南带东瓣西缘（z<168 时沿南陆缘东侧；z≥168 整带西缘配置边界）。 */
-function bandEastLobeWestX(z: number): number {
-  if (z >= 168) return SOUTH_SEA.bandXMin;
-  const t = Math.min(ARC_SIN_CLAMP, Math.max(-ARC_SIN_CLAMP, (150 - z) / 18));
-  return 47 * Math.asin(t);
-}
-
-/** 南带东瓣东缘（z<168 时沿南陆缘西侧回落，clip 到配置边界）。 */
-function bandEastLobeEastX(z: number): number {
-  if (z >= 168) return SOUTH_SEA.bandXMax;
-  const t = Math.min(ARC_SIN_CLAMP, Math.max(-ARC_SIN_CLAMP, (150 - z) / 18));
-  return Math.min(SOUTH_SEA.bandXMax, 47 * (Math.PI - Math.asin(t)));
-}
-
-/** 南带西瓣东缘（z∈[150,168] 西南陆缘凸起以西的水域；168 处与东瓣拼接）。 */
-function bandWestLobeEastX(z: number): number {
-  const t = Math.min(ARC_SIN_CLAMP, Math.max(-ARC_SIN_CLAMP, (150 - z) / 18));
-  return 47 * (-Math.PI - Math.asin(t));
-}
-
-/** 西臂东缘：贴西陆缘内收 2（z≤112 与西海条带西缘对接，永不留缝）。 */
-function westArmEastX(z: number): number {
-  const tuckX = westLandEdgeX(z) + 2;
-  if (z > 112) return tuckX;
-  const stripWest = shorelineX(z) - 96;
-  return Math.max(Math.min(tuckX, stripWest - STRIP_OVERLAP), stripWest);
-}
-
 type SheetSpec = {
   /** 西缘（x 较小侧）。 */
   innerX: (z: number) => number;
@@ -98,6 +60,43 @@ function buildSheet(spec: SheetSpec): THREE.BufferGeometry {
       const b = a + 1;
       const c = a + spec.columns + 1;
       const d = c + 1;
+      if (Math.hypot(
+        positions[a * 3]! - positions[d * 3]!,
+        positions[a * 3 + 2]! - positions[d * 3 + 2]!,
+      ) < 1e-5) continue;
+      indices.push(a, c, d, a, d, b);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function buildSouthBand(): THREE.BufferGeometry {
+  const columns = Math.ceil((SOUTH_SEA.bandXMax - SOUTH_SEA.bandXMin) / 3);
+  const rows = Math.ceil((SOUTH_SEA.bandZMax - 132) / ROW_STEP);
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const t = row / rows;
+    for (let column = 0; column <= columns; column += 1) {
+      const x = THREE.MathUtils.lerp(SOUTH_SEA.bandXMin, SOUTH_SEA.bandXMax, column / columns);
+      const coastZ = southLandEdgeZ(x) - SOUTH_SEA_COAST_TUCK;
+      const z = coastZ + (SOUTH_SEA.bandZMax - coastZ) * t;
+      positions.push(x, 0, z);
+      uvs.push(0, row / rows);
+    }
+  }
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const a = row * (columns + 1) + column;
+      const b = a + 1;
+      const c = a + columns + 1;
+      const d = c + 1;
       indices.push(a, c, d, a, d, b);
     }
   }
@@ -119,29 +118,12 @@ export function createArchipelagoWaterGeometry(): THREE.BufferGeometry {
     // 西臂：星港/长风/微光一带的西外海，范围由共享配置定义。
     buildSheet({
       innerX: () => SOUTH_SEA.armXMin,
-      outerX: westArmEastX,
+      outerX: (z) => westArmEastX(z, z <= 112 ? shorelineX(z) - 96 : Number.POSITIVE_INFINITY),
       minZ: SOUTH_SEA.armZMin,
       maxZ: SOUTH_SEA.armZMax,
-      columns: 12,
+      columns: 64,
     }),
-    // 南带东瓣：起源村/启明/潮声/盛夏一带，北缘沿南陆缘。
-    buildSheet({
-      innerX: bandEastLobeWestX,
-      outerX: bandEastLobeEastX,
-      minZ: SOUTH_BAND_MIN_Z,
-      maxZ: SOUTH_SEA.bandZMax,
-      columns: 28,
-      rowStep: 1,
-    }),
-    // 南带西瓣：回响镇以西、西南陆缘凸起以南的过渡水域（z 150..168，
-    // 168 行与东瓣共享 x=−73.8 拼接点，行距同 2u → 顶点重合、水密）。
-    buildSheet({
-      innerX: () => SOUTH_SEA.bandXMin,
-      outerX: bandWestLobeEastX,
-      minZ: 150,
-      maxZ: 168,
-      columns: 4,
-    }),
+    buildSouthBand(),
   ];
   const merged = mergeWaterSheets(sheets);
   for (const sheet of sheets) sheet.dispose();
