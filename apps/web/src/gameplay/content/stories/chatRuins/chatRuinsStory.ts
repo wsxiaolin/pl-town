@@ -194,7 +194,12 @@ export const CHATRUINS_STORY: StoryDefinition = {
         objective: "在涂鸦墙留一句自己的字",
       },
       text: "涂鸦墙高亮了起来。26532 层字迹的最上面，空着一格——那是留给你的位置。",
-      choices: [],
+      // 涂鸦面板提交时按内容选隐藏分支；玩家看不到这三个选项。
+      choices: [
+        { id: "wall-archaeology", label: "", hidden: true, next: "wall-archaeology" },
+        { id: "wall-variant", label: "", hidden: true, next: "wall-variant" },
+        { id: "wall-free", label: "", hidden: true, next: "wall-free" },
+      ],
     },
     "wall-archaeology": {
       id: "wall-archaeology",

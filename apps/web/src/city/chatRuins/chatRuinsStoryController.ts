@@ -15,6 +15,7 @@ import type { StoryConditionContext, StoryEvent } from "../../gameplay/stories/t
 import { LocalStorageStoryRepository } from "../../adapters/storage/stories/LocalStorageStoryRepository";
 import { createStoryDialogFlow } from "../../adapters/ui/stories/storyDialogFlow";
 import type { CityDialogController } from "../../adapters/ui/cityDialogController";
+import { CHATRUINS_AREA } from "../data/cityConfig";
 
 /**
  * S001 会沉的城 · 支线剧情适配器
@@ -56,12 +57,16 @@ export function createChatRuinsStoryController(options: {
   const flow = createStoryDialogFlow(CHATRUINS_STORY, repository, {
     getContext: options.getQuestContext,
     onEvent: (event) => handleEvent(event),
-    onWorldInteractionsChanged: (ids) => options.setStoryPoints?.(ids),
+    // 涂鸦墙不在 worldInteractions 表里：到 wall-open 时把它一并激活，
+    // 玩家才看得到 hitbox 并把点击交给 interactWall。
+    onWorldInteractionsChanged: (ids) => options.setStoryPoints?.(
+      flow.state().nodeId === "wall-open" ? [...ids, "chatruins-wall"] : ids,
+    ),
   });
 
-  // ── 常量（遗迹场景坐标，与 building chatruins (-26,-40) 对齐）──
-  const LAXY_POSITION = { x: -26, z: -37.4 };
-  const TOMBSTONE_POSITION = { x: -27.3, z: -39.2 };
+  // ── 常量（与建筑 chatruins (-33,-47.5) 和 CHATRUINS_AREA 共用坐标）──
+  const LAXY_POSITION = { x: CHATRUINS_AREA.laxy[0], z: CHATRUINS_AREA.laxy[1] };
+  const TOMBSTONE_POSITION = { x: CHATRUINS_AREA.tombstone[0], z: CHATRUINS_AREA.tombstone[1] };
   const LAXY_FORCE_RADIUS = 10;
   const TOMBSTONE_REVEAL_RADIUS = 5;
   const TOMBSTONE_COOLDOWN_MS = 60_000;
@@ -86,15 +91,26 @@ export function createChatRuinsStoryController(options: {
     const award = (id: string) => options.awardAchievement?.(id, ACHIEVEMENT_NAMES[id] ?? id);
     if (event.type === "s001.achievement.relic-key") award("s001_relic_key");
     if (event.type === "s001.achievement.archaeologist") award("s001_archaeologist");
-    if (event.type === "s001.achievement.iou") award("s001_iou_holder");
     if (event.type === "s001.achievement.sunken-city") award("s001_sunken_city");
     if (event.type === "s001.reward.iou") void grantIou();
   }
 
   async function grantIou(): Promise<void> {
-    if (!options.claimReward) return;
-    const claimed = await options.claimReward("s001_iou");
-    if (!claimed) options.showToast?.("离线时无法领取「两支持欠条」。");
+    if (!options.claimReward) {
+      options.showToast?.("离线时无法领取「两支持欠条」。");
+      return;
+    }
+    try {
+      const claimed = await options.claimReward("s001_iou");
+      if (!claimed) {
+        options.showToast?.("离线时无法领取「两支持欠条」。");
+        return;
+      }
+      // 成就只在欠条真正到账后授予；领取失败时保持未解锁。
+      options.awardAchievement?.("s001_iou_holder", ACHIEVEMENT_NAMES.s001_iou_holder ?? "s001_iou_holder");
+    } catch {
+      options.showToast?.("领取「两支持欠条」失败，请稍后再试。");
+    }
   }
 
   // ── 阶段判定（文档状态机 S0-S3）──
@@ -401,15 +417,19 @@ export function createChatRuinsStoryController(options: {
         hint.textContent = CHATRUINS_EMPTY_INPUT_HINT;
         return;
       }
-      settled = true;
-      writeJsonStore(MY_GRAFFITI_KEY, text);
-      overlay.remove();
       const choiceId = text === "考古"
         ? "wall-archaeology"
         : CHATRUINS_VARIANT_TABLE.includes(text)
           ? "wall-variant"
           : "wall-free";
-      flow.choose(dialogs, choiceId);
+      // 先推进剧情；跳转失败时保留面板和输入，不写本地存档。
+      if (!flow.choose(dialogs, choiceId)) {
+        hint.textContent = "提交失败，请重试。";
+        return;
+      }
+      settled = true;
+      writeJsonStore(MY_GRAFFITI_KEY, text);
+      overlay.remove();
       flow.syncWorldInteractions();
     }
 

@@ -42,9 +42,7 @@ function lintelSignTexture(): THREE.CanvasTexture {
 
 export function buildChatRuins(options: ChatRuinsOptions, definition: BuildingDefinition): BuildingEntity {
   const { addPart, makeMaterial, makeMesh, platformHeight: PLH } = options;
-  const outer = new THREE.Group();
   const g = new THREE.Group();
-  outer.add(g);
 
   // 半埋体块：遗迹主体沉入坡地，只露出顶部一线（地层剖面的"已沉没"部分）。
   const bodyMat = makeMaterial({ color: STONE, roughness: 0.88, tex: 'ruin', rx: 1, ry: 1 });
@@ -81,7 +79,6 @@ export function buildChatRuins(options: ChatRuinsOptions, definition: BuildingDe
   addPart(g, new THREE.CylinderGeometry(0.13, 0.13, 0.04, 16), { color: 0x4a90d9, emissive: 0x2a60a9, emissiveIntensity: 0.28 }, [0, PLH + 0.045, 0.62], false);
 
   g.position.set(definition.x, 0, definition.z);
-  outer.add(g);
-  outer.traverse((object) => { if (object instanceof THREE.Mesh) object.userData.buildingId = definition.id; });
-  return { ...definition, group: outer, body, bodyMat, labelEl: null, labelY: PLH + 1.9 };
+  g.traverse((object) => { if (object instanceof THREE.Mesh) object.userData.buildingId = definition.id; });
+  return { ...definition, group: g, body, bodyMat, labelEl: null, labelY: PLH + 1.9 };
 }

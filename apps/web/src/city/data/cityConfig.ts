@@ -133,7 +133,7 @@ export const ECHO_OBSERVATORY_AREA = Object.freeze({
   depth: 17,
 });
 
-/** S001 第一聊天室遗迹（会沉的城）：chatruins 建筑 (-26,-40) 周边的剧情
+/** S001 第一聊天室遗迹（会沉的城）：chatruins 建筑 (-33,-47.5) 周边的剧情
  *  兴趣点与 NPC 坐标，渲染（chatRuinsPoints）与 NPC 档案（npcs.ts）共用。
  *  自北向南 = 自上而下五层地层，⑤为中央地基石；涂鸦墙在西侧。 */
 export const CHATRUINS_AREA = Object.freeze({
