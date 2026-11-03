@@ -459,7 +459,13 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 4');
   await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
-  await page.evaluate(() => (window as any)._mini.interactBuilding('mall_south'));
+  const __diag = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    let r: unknown; let err: string | null = null;
+    try { r = mini.interactBuilding('mall_south'); } catch (e) { err = String(e); }
+    return { r, err, cls: document.getElementById('shopPanel')?.className ?? 'no-panel', online: Boolean((window as any).__mpOnline) };
+  });
+  console.log('INTERACT_DIAG', JSON.stringify(__diag));
   await expect(page.locator('#shopPanel')).toHaveClass(/open/);
   await expect(page.locator('#shopPanel')).toContainText('物实市集');
   await expect(page.locator('[data-daily-board]')).toContainText('今日城市委托');
