@@ -410,7 +410,10 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
           }
           return;
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) {
+          ((window as any).__recvLog = (window as any).__recvLog || []).push(response.type + (response.event ? ':' + response.event.type : ''));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        }
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
@@ -472,6 +475,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await page.waitForTimeout(2500);
   const __diag2 = await page.evaluate(() => ({
     sent: ((window as any).__sentLog || []).slice(-8),
+    recv: ((window as any).__recvLog || []).slice(-10),
     cls: document.getElementById('shopPanel')?.className ?? 'no-panel',
   }));
   console.log('SENT_LOG_DIAG', JSON.stringify(__diag2));
@@ -1122,7 +1126,10 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
         } else if (request.type === 'progress.building.visit') {
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) {
+          ((window as any).__recvLog = (window as any).__recvLog || []).push(response.type + (response.event ? ':' + response.event.type : ''));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        }
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
@@ -1335,7 +1342,10 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
           (window as any).__unlockedAchievements = [...this.progress.achievements];
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'achievement.unlocked', achievementId: request.achievementId, reward: 0 } };
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) {
+          ((window as any).__recvLog = (window as any).__recvLog || []).push(response.type + (response.event ? ':' + response.event.type : ''));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        }
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
