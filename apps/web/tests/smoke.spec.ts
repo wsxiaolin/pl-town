@@ -30,6 +30,7 @@ test('resident phone loads the newest 100 chat messages on first open', async ({
       readyState = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         if (request.type === 'hello') {
           queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
@@ -77,6 +78,7 @@ test('live chat that lands during a history backfill is preserved', async ({ pag
       readyState = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         if (request.type === 'hello') {
           socket = this;
@@ -289,6 +291,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
       };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         const catalog = {
           initialCurrency: 1200, buildingPrices: { mall_south: 0, academy_library: 0 },
@@ -466,6 +469,12 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
     return { r, err, cls: document.getElementById('shopPanel')?.className ?? 'no-panel', online: Boolean((window as any).__mpOnline) };
   });
   console.log('INTERACT_DIAG', JSON.stringify(__diag));
+  await page.waitForTimeout(2500);
+  const __diag2 = await page.evaluate(() => ({
+    sent: ((window as any).__sentLog || []).slice(-8),
+    cls: document.getElementById('shopPanel')?.className ?? 'no-panel',
+  }));
+  console.log('SENT_LOG_DIAG', JSON.stringify(__diag2));
   await expect(page.locator('#shopPanel')).toHaveClass(/open/);
   await expect(page.locator('#shopPanel')).toContainText('物实市集');
   await expect(page.locator('[data-daily-board]')).toContainText('今日城市委托');
@@ -911,6 +920,7 @@ test('NPC side quest flows from offer to building objective to delivery', async 
       readyState: number = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         const progress = { currency: 1200, inventory: {}, achievements: ['citizen'], unlockedBuildings: ['research'], visitedBuildings: request.type === 'progress.building.visit' ? ['research'] : [] };
         const catalog = { initialCurrency: 1200, buildingPrices: { research: 20 }, achievementRewards: { citizen: 20 }, products: {} };
@@ -1004,6 +1014,7 @@ test('an expired session returns the resident to the email login overlay', async
         });
       }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         if (request.type !== 'hello') return;
         // The expired token is rejected; the renewed one signs the resident in.
@@ -1099,6 +1110,7 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
       catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
@@ -1305,6 +1317,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
       catalog = { initialCurrency: 1200, buildingPrices: {}, achievementRewards: { citizen: 20 }, products: {} };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
