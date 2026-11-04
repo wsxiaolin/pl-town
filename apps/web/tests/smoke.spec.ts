@@ -30,6 +30,7 @@ test('resident phone loads the newest 100 chat messages on first open', async ({
       readyState = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         if (request.type === 'hello') {
           queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
@@ -77,6 +78,7 @@ test('live chat that lands during a history backfill is preserved', async ({ pag
       readyState = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         if (request.type === 'hello') {
           socket = this;
@@ -262,7 +264,10 @@ test('server weather messages update the visible weather state', async ({ page }
 });
 
 test('cloud inventory and scene discoveries work in the rendered city', async ({ page }) => {
-  test.setTimeout(120_000);
+  // #275 boot weight: boot precompile + two building walkthroughs (unlock→
+  // visit→continuation chain, pathing at software-GL frame rates) outgrow
+  // 120 s on 2-core runners; 240 s leaves room without masking regressions.
+  test.setTimeout(240_000);
   await page.addInitScript(() => {
     localStorage.setItem('minicityCGSeenV3', 'true');
     localStorage.setItem('minicityUser', 'world-tester');
@@ -286,6 +291,7 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
       };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         const catalog = {
           initialCurrency: 1200, buildingPrices: { mall_south: 0, academy_library: 0 },
@@ -404,7 +410,10 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
           }
           return;
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) {
+          ((window as any).__recvLog = (window as any).__recvLog || []).push(response.type + (response.event ? ':' + response.event.type : ''));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        }
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
@@ -415,9 +424,11 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
 
   await page.goto('/');
   // Heavy boot (full download + shader precompile) on a slow CI runner with
-  // software GL needs well past the 5 s default — 60 s matches the is-ready
-  // budget every other boot-waiting suite uses (boot-gate, onboarding).
-  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 60_000 });
+  // software GL needs well past the 5 s default — 60 s matched the is-ready
+  // budget until the S031-S055 story batch (#275) added 22 buildings to the
+  // precompile set; a 2-core software-GL runner now grazes 60 s, so widen to
+  // 120 s to keep the budget honest instead of rotating on this line.
+  await expect(page.locator('#bootScreen')).toHaveClass(/is-ready/, { timeout: 120_000 });
   // 世界地形端到端守护（review #218：新增大幅用户可见地形需有浏览器侧
   // 断言）：岚屏岭山体、晨溪河（水面/河口湾）与承载城缘草甸起伏的全域
   // 地形网格必须挂在场景里。低配软件 GL 下不做像素断言，只验"地形被
@@ -454,7 +465,20 @@ test('cloud inventory and scene discoveries work in the rendered city', async ({
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('龙井茶');
   await expect(page.locator('#onlineInventoryView [data-inventory-list]')).toContainText('× 4');
   await expect(page.locator('#onlineInventoryView .sp-ul-name').first()).toHaveCSS('white-space', 'nowrap');
-  await page.evaluate(() => (window as any)._mini.interactBuilding('mall_south'));
+  const __diag = await page.evaluate(() => {
+    const mini = (window as any)._mini;
+    let r: unknown; let err: string | null = null;
+    try { r = mini.interactBuilding('mall_south'); } catch (e) { err = String(e); }
+    return { r, err, cls: document.getElementById('shopPanel')?.className ?? 'no-panel', online: Boolean((window as any).__mpOnline) };
+  });
+  console.log('INTERACT_DIAG', JSON.stringify(__diag));
+  await page.waitForTimeout(2500);
+  const __diag2 = await page.evaluate(() => ({
+    sent: ((window as any).__sentLog || []).slice(-8),
+    recv: ((window as any).__recvLog || []).slice(-10),
+    cls: document.getElementById('shopPanel')?.className ?? 'no-panel',
+  }));
+  console.log('SENT_LOG_DIAG', JSON.stringify(__diag2));
   await expect(page.locator('#shopPanel')).toHaveClass(/open/);
   await expect(page.locator('#shopPanel')).toContainText('物实市集');
   await expect(page.locator('[data-daily-board]')).toContainText('今日城市委托');
@@ -900,6 +924,7 @@ test('NPC side quest flows from offer to building objective to delivery', async 
       readyState: number = NativeWebSocket.CONNECTING;
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         const progress = { currency: 1200, inventory: {}, achievements: ['citizen'], unlockedBuildings: ['research'], visitedBuildings: request.type === 'progress.building.visit' ? ['research'] : [] };
         const catalog = { initialCurrency: 1200, buildingPrices: { research: 20 }, achievementRewards: { citizen: 20 }, products: {} };
@@ -993,6 +1018,7 @@ test('an expired session returns the resident to the email login overlay', async
         });
       }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         if (request.type !== 'hello') return;
         // The expired token is rejected; the renewed one signs the resident in.
@@ -1088,6 +1114,7 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
       catalog = { initialCurrency: 0, buildingPrices: {}, achievementRewards: {}, products: {} };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
@@ -1099,7 +1126,10 @@ test('culture hall opens the writer catalog drawer from the right', async ({ pag
         } else if (request.type === 'progress.building.visit') {
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'building.visited', buildingId: request.buildingId } };
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) {
+          ((window as any).__recvLog = (window as any).__recvLog || []).push(response.type + (response.event ? ':' + response.event.type : ''));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        }
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }
@@ -1294,6 +1324,7 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
       catalog = { initialCurrency: 1200, buildingPrices: {}, achievementRewards: { citizen: 20 }, products: {} };
       constructor() { super(); queueMicrotask(() => { this.readyState = NativeWebSocket.OPEN; this.dispatchEvent(new Event('open')); }); }
       send(raw: string) {
+        ((window as any).__sentLog = (window as any).__sentLog || []).push(JSON.parse(raw).type);
         const request = JSON.parse(raw);
         let response: Record<string, unknown> | null = null;
         if (request.type === 'hello') {
@@ -1311,7 +1342,10 @@ test('wild mushroom restaurant three-visit story unlocks both achievements', asy
           (window as any).__unlockedAchievements = [...this.progress.achievements];
           response = { type: 'progress.updated', progress: this.progress, catalog: this.catalog, event: { type: 'achievement.unlocked', achievementId: request.achievementId, reward: 0 } };
         }
-        if (response) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        if (response) {
+          ((window as any).__recvLog = (window as any).__recvLog || []).push(response.type + (response.event ? ':' + response.event.type : ''));
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(response) })));
+        }
       }
       close() { this.readyState = NativeWebSocket.CLOSED; this.dispatchEvent(new Event('close')); }
     }

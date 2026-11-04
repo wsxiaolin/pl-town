@@ -590,6 +590,182 @@ export const BUILDING_CATALOG: readonly BuildingCatalogEntry[] = Object.freeze(
     storyLocked: false
   },
   {
+    id: "reddot_pavilion",
+    label: "红点亭",
+    num: "73",
+    x: 17,
+    z: -4,
+    storyLocked: false
+  },
+  {
+    id: "singlestep_room",
+    label: "单步机房",
+    num: "74",
+    x: 20,
+    z: 5,
+    storyLocked: false
+  },
+  {
+    id: "west_research_dept",
+    label: "西山研究部",
+    num: "75",
+    x: -39,
+    z: -45,
+    storyLocked: false
+  },
+  {
+    id: "duc_pavilion",
+    label: "立约亭",
+    num: "76",
+    x: -30,
+    z: -4,
+    storyLocked: false
+  },
+  {
+    id: "youxuepai_hut",
+    label: "通关木屋",
+    num: "77",
+    x: -36,
+    z: -47,
+    storyLocked: false
+  },
+  {
+    id: "dian_stele",
+    label: "奠碑",
+    num: "78",
+    x: -36,
+    z: 15,
+    storyLocked: false
+  },
+  {
+    id: "orca_pier",
+    label: "深夜鲸栈",
+    num: "79",
+    x: -39,
+    z: 29,
+    storyLocked: false
+  },
+  {
+    id: "letter_post",
+    label: "慢递邮亭",
+    num: "80",
+    x: -38,
+    z: 10,
+    storyLocked: false
+  },
+  {
+    id: "human_greenhouse",
+    label: "未刊温室",
+    num: "81",
+    x: -6,
+    z: 19,
+    storyLocked: false
+  },
+  {
+    id: "beauty_mailbox",
+    label: "同题信箱",
+    num: "82",
+    x: 4,
+    z: 19,
+    storyLocked: false
+  },
+  {
+    id: "zilan_shrine",
+    label: "紫兰丛祠",
+    num: "83",
+    x: -34,
+    z: -59.5,
+    storyLocked: false
+  },
+  {
+    id: "birch_pavilion",
+    label: "赌约亭",
+    num: "84",
+    x: -30,
+    z: 6,
+    storyLocked: false
+  },
+  {
+    id: "democracy_wall",
+    label: "民主墙",
+    num: "85",
+    x: -30,
+    z: 12,
+    storyLocked: false
+  },
+  {
+    id: "cityin_well",
+    label: "枯井",
+    num: "86",
+    x: -14,
+    z: -5,
+    storyLocked: false
+  },
+  {
+    id: "fukushima_reactor",
+    label: "新闻反应堆",
+    num: "87",
+    x: 2,
+    z: -41,
+    storyLocked: false
+  },
+  {
+    id: "wandering_observatory",
+    label: "问天台",
+    num: "88",
+    x: 31,
+    z: -33,
+    storyLocked: false
+  },
+  {
+    id: "youth_bridge",
+    label: "半句桥",
+    num: "89",
+    x: 6,
+    z: 27,
+    storyLocked: false
+  },
+  {
+    id: "weekly_news",
+    label: "星辉报社",
+    num: "90",
+    x: -11,
+    z: 21,
+    storyLocked: false
+  },
+  {
+    id: "huigui_hostel",
+    label: "会归寮",
+    num: "91",
+    x: -4,
+    z: 25,
+    storyLocked: false
+  },
+  {
+    id: "reverberate_wall",
+    label: "回音壁",
+    num: "92",
+    x: -24,
+    z: -4,
+    storyLocked: false
+  },
+  {
+    id: "askway_booth",
+    label: "问路处",
+    num: "93",
+    x: 26,
+    z: -4,
+    storyLocked: false
+  },
+  {
+    id: "liberation_keyshop",
+    label: "钥匙铺",
+    num: "94",
+    x: 28,
+    z: 25,
+    storyLocked: false
+  },
+  {
     id: "zoo",
     label: "小城动物园",
     num: "71",

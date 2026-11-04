@@ -77,6 +77,29 @@ import northGenshinInstitute from './north_genshin_institute';
 import zoo from './zoo';
 import chatruins from './chatruins';
 
+import reddotPavilion from './reddot_pavilion';
+import singlestepRoom from './singlestep_room';
+import westResearchDept from './west_research_dept';
+import ducPavilion from './duc_pavilion';
+import youxuepaiHut from './youxuepai_hut';
+import dianStele from './dian_stele';
+import orcaPier from './orca_pier';
+import letterPost from './letter_post';
+import humanGreenhouse from './human_greenhouse';
+import beautyMailbox from './beauty_mailbox';
+import zilanShrine from './zilan_shrine';
+import birchPavilion from './birch_pavilion';
+import democracyWall from './democracy_wall';
+import cityinWell from './cityin_well';
+import fukushimaReactor from './fukushima_reactor';
+import wanderingObservatory from './wandering_observatory';
+import youthBridge from './youth_bridge';
+import weeklyNews from './weekly_news';
+import huiguiHostel from './huigui_hostel';
+import reverberateWall from './reverberate_wall';
+import askwayBooth from './askway_booth';
+import liberationKeyshop from './liberation_keyshop';
+
 import type { BuildingConfig, BuildingContentLike } from './_types';
 import type { BuildingDefinition } from '../../buildingEntity';
 
@@ -154,6 +177,28 @@ export const BUILDING_REGISTRY: readonly BuildingConfig[] = [
   fireworksShop,
   observationDeck,
   northGenshinInstitute,
+  reddotPavilion,
+  singlestepRoom,
+  westResearchDept,
+  ducPavilion,
+  youxuepaiHut,
+  dianStele,
+  orcaPier,
+  letterPost,
+  humanGreenhouse,
+  beautyMailbox,
+  zilanShrine,
+  birchPavilion,
+  democracyWall,
+  cityinWell,
+  fukushimaReactor,
+  wanderingObservatory,
+  youthBridge,
+  weeklyNews,
+  huiguiHostel,
+  reverberateWall,
+  askwayBooth,
+  liberationKeyshop,
   zoo,
   chatruins,
 ];

@@ -5,6 +5,32 @@ import { createEchoSuspendedController, type EchoStoryHandle } from './echo/echo
 import { createYesterdaySongController } from './yesterday/yesterdaySongController';
 import { createMagiStoryController } from './magi/magiStoryController';
 import { createOvercoatStoryController } from './overcoat/overcoatStoryController';
+import {
+  createAskwayStoryController,
+  createBeautyStoryController,
+  createBirchStoryController,
+  createCityinStoryController,
+  createHuiguiStoryController,
+  createLiberationStoryController,
+  createDianStoryController,
+  createDemocracyStoryController,
+  createDucStoryController,
+  createReverberateStoryController,
+  createTourStoryController,
+  createWeeklyStoryController,
+  createWanderingStoryController,
+  createFukushimaStoryController,
+  createHumanStoryController,
+  createLetterStoryController,
+  createOrcaStoryController,
+  createRecruitStoryController,
+  createReddotStoryController,
+  createProofreadStoryController,
+  createSinglestepStoryController,
+  createYouxuepaiStoryController,
+  createYouthStoryController,
+  createZilanStoryController,
+} from './stories/sideStoryControllers';
 import { createZooStoryController } from './zoo/zooStoryController';
 import { createChatRuinsStoryController } from './chatRuins/chatRuinsStoryController';
 import { createStoryEntryGate } from './storyEntryGate';
@@ -57,10 +83,63 @@ export function createStoryOrchestration(options: {
   let yesterdayActiveActors = new Set<string>();
   let magiActiveActors = new Set<string>();
   let overcoatActiveActors = new Set<string>();
+  let reddotActiveActors = new Set<string>();
+  let singlestepActiveActors = new Set<string>();
+  let proofreadActiveActors = new Set<string>();
+  let recruitActiveActors = new Set<string>();
+  let ducActiveActors = new Set<string>();
+  let youxuepaiActiveActors = new Set<string>();
+  let dianActiveActors = new Set<string>();
+  let orcaActiveActors = new Set<string>();
+  let letterActiveActors = new Set<string>();
+  let humanActiveActors = new Set<string>();
+  let beautyActiveActors = new Set<string>();
+  let zilanActiveActors = new Set<string>();
+  let birchActiveActors = new Set<string>();
+  let democracyActiveActors = new Set<string>();
+  let cityinActiveActors = new Set<string>();
+  let fukushimaActiveActors = new Set<string>();
+  let wanderingActiveActors = new Set<string>();
+  let tourActiveActors = new Set<string>();
+  let youthActiveActors = new Set<string>();
+  let liberationActiveActors = new Set<string>();
+  let weeklyActiveActors = new Set<string>();
+  let huiguiActiveActors = new Set<string>();
+  let reverberateActiveActors = new Set<string>();
+  let askwayActiveActors = new Set<string>();
   let activeStoryActorIds = new Set<string>();
 
   function mergeActiveStoryActorIds() {
-    activeStoryActorIds = new Set([...echoActiveActors, ...yesterdayActiveActors, ...magiActiveActors, ...overcoatActiveActors]);
+    activeStoryActorIds = new Set([
+      ...echoActiveActors,
+      ...yesterdayActiveActors,
+      ...magiActiveActors,
+      ...overcoatActiveActors,
+      ...reddotActiveActors,
+      ...singlestepActiveActors,
+      ...proofreadActiveActors,
+      ...recruitActiveActors,
+      ...ducActiveActors,
+      ...youxuepaiActiveActors,
+      ...dianActiveActors,
+      ...orcaActiveActors,
+      ...letterActiveActors,
+      ...humanActiveActors,
+      ...beautyActiveActors,
+      ...zilanActiveActors,
+      ...birchActiveActors,
+      ...democracyActiveActors,
+      ...cityinActiveActors,
+      ...fukushimaActiveActors,
+      ...wanderingActiveActors,
+      ...tourActiveActors,
+      ...youthActiveActors,
+      ...liberationActiveActors,
+      ...weeklyActiveActors,
+      ...huiguiActiveActors,
+      ...reverberateActiveActors,
+      ...askwayActiveActors,
+    ]);
     options.updateNpcSchedules();
   }
 
@@ -132,6 +211,102 @@ export function createStoryOrchestration(options: {
     ...shared,
     onActorsChanged: (ids) => { overcoatActiveActors = ids; mergeActiveStoryActorIds(); },
   });
+  const reddot = createTrackedSideStory(createReddotStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { reddotActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const singlestep = createTrackedSideStory(createSinglestepStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { singlestepActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const proofread = createTrackedSideStory(createProofreadStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { proofreadActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const recruit = createTrackedSideStory(createRecruitStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { recruitActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const duc = createTrackedSideStory(createDucStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { ducActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const youxuepai = createTrackedSideStory(createYouxuepaiStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { youxuepaiActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const dian = createTrackedSideStory(createDianStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { dianActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const orca = createTrackedSideStory(createOrcaStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { orcaActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const letter = createTrackedSideStory(createLetterStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { letterActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const human = createTrackedSideStory(createHumanStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { humanActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const beauty = createTrackedSideStory(createBeautyStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { beautyActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const zilan = createTrackedSideStory(createZilanStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { zilanActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const birch = createTrackedSideStory(createBirchStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { birchActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const democracy = createTrackedSideStory(createDemocracyStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { democracyActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const cityin = createTrackedSideStory(createCityinStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { cityinActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const fukushima = createTrackedSideStory(createFukushimaStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { fukushimaActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const wandering = createTrackedSideStory(createWanderingStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { wanderingActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const tour = createTrackedSideStory(createTourStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { tourActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const youth = createTrackedSideStory(createYouthStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { youthActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const liberation = createTrackedSideStory(createLiberationStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { liberationActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const weekly = createTrackedSideStory(createWeeklyStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { weeklyActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const huigui = createTrackedSideStory(createHuiguiStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { huiguiActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const reverberate = createTrackedSideStory(createReverberateStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { reverberateActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
+  const askway = createTrackedSideStory(createAskwayStoryController, {
+    ...shared,
+    onActorsChanged: (ids) => { askwayActiveActors = ids; mergeActiveStoryActorIds(); },
+  });
   const zoo = createZooStoryController({
     ...shared,
     getPlayerPosition: options.zoo?.getPlayerPosition,
@@ -161,6 +336,30 @@ export function createStoryOrchestration(options: {
     ['yesterday', yesterday],
     ['magi', magi],
     ['overcoat', overcoat],
+    ['reddot', reddot],
+    ['singlestep', singlestep],
+    ['proofread', proofread],
+    ['recruit', recruit],
+    ['duc', duc],
+    ['youxuepai', youxuepai],
+    ['dian', dian],
+    ['orca', orca],
+    ['letter', letter],
+    ['human', human],
+    ['beauty', beauty],
+    ['zilan', zilan],
+    ['birch', birch],
+    ['democracy', democracy],
+    ['cityin', cityin],
+    ['fukushima', fukushima],
+    ['wandering', wandering],
+    ['tour', tour],
+    ['youth', youth],
+    ['liberation', liberation],
+    ['weekly', weekly],
+    ['huigui', huigui],
+    ['reverberate', reverberate],
+    ['askway', askway],
     ['zoo', zoo],
     ['chatruins', chatRuins],
   ] as const;
@@ -182,6 +381,30 @@ export function createStoryOrchestration(options: {
     yesterday,
     magi,
     overcoat,
+    reddot,
+    singlestep,
+    proofread,
+    recruit,
+    duc,
+    youxuepai,
+    dian,
+    orca,
+    letter,
+    human,
+    beauty,
+    zilan,
+    birch,
+    democracy,
+    cityin,
+    fukushima,
+    wandering,
+    tour,
+    youth,
+    liberation,
+    weekly,
+    huigui,
+    reverberate,
+    askway,
     zoo,
     chatRuins,
     router,
@@ -191,6 +414,30 @@ export function createStoryOrchestration(options: {
       yesterday.announceGuide();
       magi.announceGuide();
       overcoat.announceGuide();
+      reddot.announceGuide();
+      singlestep.announceGuide();
+      proofread.announceGuide();
+      recruit.announceGuide();
+      duc.announceGuide();
+      youxuepai.announceGuide();
+      dian.announceGuide();
+      orca.announceGuide();
+      letter.announceGuide();
+      human.announceGuide();
+      beauty.announceGuide();
+      zilan.announceGuide();
+      birch.announceGuide();
+      democracy.announceGuide();
+      cityin.announceGuide();
+      fukushima.announceGuide();
+      wandering.announceGuide();
+      tour.announceGuide();
+      youth.announceGuide();
+      liberation.announceGuide();
+      weekly.announceGuide();
+      huigui.announceGuide();
+      reverberate.announceGuide();
+      askway.announceGuide();
       zoo.announceGuide();
       chatRuins.announceGuide();
     },
@@ -207,6 +454,30 @@ export function createStoryOrchestration(options: {
       yesterday.dispose();
       magi.dispose();
       overcoat.dispose();
+      reddot.dispose();
+      singlestep.dispose();
+      proofread.dispose();
+      recruit.dispose();
+      duc.dispose();
+      youxuepai.dispose();
+      dian.dispose();
+      orca.dispose();
+      letter.dispose();
+      human.dispose();
+      beauty.dispose();
+      zilan.dispose();
+      birch.dispose();
+      democracy.dispose();
+      cityin.dispose();
+      fukushima.dispose();
+      wandering.dispose();
+      tour.dispose();
+      youth.dispose();
+      liberation.dispose();
+      weekly.dispose();
+      huigui.dispose();
+      reverberate.dispose();
+      askway.dispose();
       zoo.dispose();
       chatRuins.dispose();
     },

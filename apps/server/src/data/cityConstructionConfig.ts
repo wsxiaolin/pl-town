@@ -44,6 +44,28 @@ const constructionIds = [
   'tradingpost', 'guildhall', 'conservatory', 'arena', 'school_north', 'teahouse',
   'teahouse_outer', 'writingclub', 'senate', 'musichall', 'banana_palace', 'qipai_hall',
   'wushi_restaurant', 'tavern',
+  'reddot_pavilion',
+  'singlestep_room',
+  'west_research_dept',
+  'duc_pavilion',
+  'youxuepai_hut',
+  'dian_stele',
+  'orca_pier',
+  'letter_post',
+  'human_greenhouse',
+  'beauty_mailbox',
+  'zilan_shrine',
+  'birch_pavilion',
+  'democracy_wall',
+  'cityin_well',
+  'fukushima_reactor',
+  'wandering_observatory',
+  'youth_bridge',
+  'weekly_news',
+  'huigui_hostel',
+  'reverberate_wall',
+  'askway_booth',
+  'liberation_keyshop',
 ];
 
 export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
@@ -72,11 +94,16 @@ export const CITY_CONSTRUCTION_CONFIG: CityConstructionConfig = {
   // （原神研究院彩蛋，北城作品街坊）。目录重生成后自动追加为治理项目；
   // painting_ai 与 north_genshin_institute 保持待建不赠礼。既有项目定义与
   // initialBuiltBuildingIds 零改动。
+  // 2026-11-01.stories.1: S031–S055 支线剧情专属建筑——22 栋剧情场地
+  // （红点亭/单步机房/西山研究部/立约亭/通关木屋/奠碑/深夜鲸栈/慢递邮亭/
+  // 未刊温室/同题信箱/紫兰丛祠/赌约亭/民主墙/枯井/新闻反应堆/问天台/
+  // 半句桥/星辉报社/会归寮/回音壁/问路处/钥匙铺）。全部沿用既有 shape
+  // 建造器、保持集体筹建；既有项目与 initialBuiltBuildingIds 零改动。
+  version: '2026-11-01.stories.1',
   // 2026-11-01.zoo.1: S014 支线剧情「动物园怪谈」场景建筑 zoo（小城
   // 动物园，(-9,29.8)）。按 2026-10-04 赠礼补全政策直接建成，不设
   // 众筹；目录重生成后自动追加 build-zoo 项目。既有项目定义与
   // initialBuiltBuildingIds 零改动。
-  version: '2026-11-01.zoo.1',
   // 2026-10-31.chatruins.1: S001 支线剧情「聊天室世代史·会沉的城」场景
   // 建筑 chatruins（第一聊天室遗迹，(-33,-47.5) 半埋遗迹，老城区坡地）。
   // 按用户参数（不再新增众筹）：剧情场景建筑走 2026-10-04 赠礼补全政策
