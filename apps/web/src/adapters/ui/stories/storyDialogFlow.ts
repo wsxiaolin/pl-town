@@ -139,8 +139,10 @@ export function createStoryDialogFlow(
     if (interaction) return choose(dialogs, interaction.choiceId);
     // 精确节点不匹配但该建筑登记过交互：进行中的剧情重开当前节点续播
     // （关闭对话后再次点建筑可恢复，而非入口失效+互斥门锁死）。
+    // 只在 active 时续播——untouched 的剧情（玩家从未接触）不得吞掉
+    // 建筑的默认交互（如商城面板），否则剧情入口会静默劫持日常建筑。
     const registered = definition.buildingInteractions?.some((item) => item.buildingId === buildingId);
-    if (registered && getStoryPhase(definition, runtime.state()) !== 'concluded') {
+    if (registered && getStoryPhase(definition, runtime.state()) === 'active') {
       open(dialogs);
       return true;
     }
