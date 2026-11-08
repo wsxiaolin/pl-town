@@ -43,10 +43,12 @@ export default defineConfig({
   // Web assertions ride the main thread, and under SwiftShader one stalled
   // frame can hold a class/CSS-transition/geometry flip for many seconds —
   // the 5 s default produced rotating hard-fails across shards (late votes,
-  // toasts, crosshair fade, newspaper reader). 20 s absorbs those stalls
-  // while genuine regressions still fail fast; frame-advance-heavy spots
-  // budget their own wider FRAME_ADVANCE_TIMEOUT instead.
-  expect: { timeout: 20_000 },
+  // toasts, crosshair fade, newspaper reader). 20 s absorbed those stalls
+  // until the S031–S055 story batch (#275) raised boot weight again and the
+  // rotation came back on panel-open assertions (shop/newsstand). 30 s keeps
+  // genuine regressions failing fast; frame-advance-heavy spots budget their
+  // own wider FRAME_ADVANCE_TIMEOUT instead.
+  expect: { timeout: 30_000 },
   // Surface shard env vars set by `playwright test --shard=x/y` / CI matrix.
   shard: process.env.PLAYWRIGHT_SHARD
     ? {

@@ -374,7 +374,10 @@ test.describe('touch-capable tablet', () => {
     await client.send('Input.dispatchTouchEvent', {
       type: 'touchStart', touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2 }],
     });
-    await expect(page.locator('body')).toHaveClass(/camera-pan-active/, { timeout: 2_000 });
+    // Touch handling and camera ticks ride the render loop; under the #275
+    // story batch a loaded software-GL runner can leave both unanswered for
+    // seconds — 8 s keeps the budget honest without masking regressions.
+    await expect(page.locator('body')).toHaveClass(/camera-pan-active/, { timeout: 8_000 });
     await client.send('Input.dispatchTouchEvent', {
       type: 'touchMove', touchPoints: [{ x: start.x + 90, y: start.y + 24, id: 1, radiusX: 2, radiusY: 2 }],
     });
@@ -383,7 +386,7 @@ test.describe('touch-capable tablet', () => {
     await expect.poll(async () => page.evaluate((initial) => {
       const mini = (window as any)._mini;
       return Math.hypot(mini.camera.position.x - initial[0], mini.camera.position.z - initial[2]);
-    }, before), { timeout: 2_000, intervals: [50, 100] }).toBeGreaterThan(1);
+    }, before), { timeout: 8_000, intervals: [50, 100] }).toBeGreaterThan(1);
     await expect(page.locator('body')).not.toHaveClass(/camera-pan-active/);
     expect(await page.evaluate(() => (window as any)._mini.getPlayerPath().length)).toBe(0);
   });
