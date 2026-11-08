@@ -29,7 +29,9 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
   const overlay = page.locator('[data-lanyu-cg="blood-mark-prelude"]');
   await expect(overlay).toHaveClass(/is-active/);
   await expect(overlay.locator('canvas')).toBeVisible();
-  await expect(overlay.locator('.lanyu-cg__caption.is-current')).toBeVisible({ timeout: 3_000 });
+  // Caption paints on the software-GL canvas; #275 boot weight pushed first
+  // paint past the old 3 s budget on loaded runners.
+  await expect(overlay.locator('.lanyu-cg__caption.is-current')).toBeVisible({ timeout: 10_000 });
 
   const viewport = await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-lanyu-cg] canvas')!;
@@ -45,7 +47,8 @@ test('LanYu prelude is available only through the hidden cinematic debug API', a
 
   expect(await page.evaluate(() => (window as any)._mini.cinematics.stopLanYuPrelude())).toBe(true);
   // The overlay fades out (is-closing) and is removed on a 620ms timer; under a
-  // loaded software-GL runner that timer can slip well past 2s.
-  await expect(overlay).toHaveCount(0, { timeout: 15_000 });
+  // loaded software-GL runner that timer can slip well past 2s — and past 15 s
+  // once the #275 story batch raised boot weight, so budget 30 s here.
+  await expect(overlay).toHaveCount(0, { timeout: 30_000 });
   expect(await page.evaluate(() => (window as any)._mini.cinematics.isLanYuPreludeActive())).toBe(false);
 });
