@@ -62,6 +62,14 @@ function parseWeather(value: unknown): WeatherConfig {
   };
 }
 
+export function getSceneMode() {
+  return { minimal: readRow('scene-mode') === true };
+}
+
+export function setSceneMode(minimal: boolean) {
+  writeRow('scene-mode', minimal);
+}
+
 function parseOverrides(value: unknown): BuildingOverrides {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const overrides: BuildingOverrides = {};

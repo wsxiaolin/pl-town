@@ -1,4 +1,5 @@
 import { ACTIVITY_ENTRIES, type ActivityBackgroundKey, type ActivityEntry } from '../../city/data/activities';
+import { isMinimalScene } from '../../core/sceneMode';
 
 // Local placeholder artwork; replace these files with generated event artwork later.
 const ACTIVITY_BACKGROUND_URLS: Record<ActivityBackgroundKey, string> = {
@@ -41,6 +42,8 @@ export function createActivityPanelController(options: ActivityPanelControllerOp
 
   let opened = false;
   let activeId = ACTIVITY_ENTRIES[0]?.id ?? '';
+  const minimal = isMinimalScene();
+  toggleButton.hidden = minimal;
 
   function backgroundUrl(entry: ActivityEntry): string {
     return ACTIVITY_BACKGROUND_URLS[entry.backgroundKey];
@@ -100,7 +103,7 @@ export function createActivityPanelController(options: ActivityPanelControllerOp
   }
 
   function open(): void {
-    if (opened) return;
+    if (minimal || opened) return;
     opened = true;
     overlay.classList.add('open');
     toggleButton.setAttribute('aria-expanded', 'true');
@@ -122,7 +125,7 @@ export function createActivityPanelController(options: ActivityPanelControllerOp
     if (event.key === 'Escape' && opened) close();
   }, { signal: options.signal });
 
-  renderList();
+  if (!minimal) renderList();
 
   return { open, close, toggle: () => (opened ? close() : open()), isOpen: () => opened, select };
 }

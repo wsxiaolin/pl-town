@@ -1,6 +1,7 @@
 import './styles/index.css';
 import { destroyMiniCity, startMiniCity } from './city/MiniCityApp';
 import { initTelemetry } from './core/telemetryClient';
+import { loadSceneMode } from './core/sceneMode';
 import { notifyCityReady, stopMomentPresentation, whenBootRevealAllowed } from './adapters/ui/momentSplashView';
 
 void initTelemetry();
@@ -26,7 +27,8 @@ window.addEventListener('minicity:city-ready', () => {
   notifyCityReady();
 }, { once: true });
 
-startMiniCity();
+let disposed = false;
+void loadSceneMode().then(() => { if (!disposed) startMiniCity(); });
 
 // The boot screen fades only when the city is ready AND the moment splash has
 // had its breath (or the visitor clicked through it).
@@ -39,8 +41,13 @@ void whenBootRevealAllowed().then(() => {
   });
 });
 
-window.addEventListener('pagehide', destroyMiniCity, { once: true });
+function dispose() {
+  disposed = true;
+  destroyMiniCity();
+}
+
+window.addEventListener('pagehide', dispose, { once: true });
 
 if (import.meta.hot) {
-  import.meta.hot.dispose(destroyMiniCity);
+  import.meta.hot.dispose(dispose);
 }

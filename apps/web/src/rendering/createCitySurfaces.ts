@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isMinimalScene } from '../core/sceneMode';
 import { RENDER_ORDER, SURFACE_Y } from './layers';
 import { EAST_RING_ROAD_END_X, ECHO_OBSERVATORY_AREA, MAIN_ROAD_WIDTH, NORTH_DISTRICT_AREA, RING_ARM_INNER_X, RING_ROAD_RADII, WEST_RING_ROAD_END_X } from '../city/data/cityConfig';
 import { BUILDING_DEFS } from '../city/data/buildings';
@@ -137,6 +138,14 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     pavingStones.renderOrder = RENDER_ORDER.cityGroundDetail;
     scene.add(pavingStones);
 
+    groundMaterials.push(
+      { mat: farMat, day: WORLD_GROUND_GRASS_COLOR, night: 0x527d38 },
+      { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
+      { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
+      { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
+      { mat: pavingMat, day: paving.dayColor, night: paving.nightColor },
+    );
+    if (isMinimalScene()) return;
     const echoGroundMat = createLayerMaterial({ color: isNight ? 0x667256 : 0xb8c99d, roughness: 1, tex: 'ground4', rx: 8, ry: 6 });
     const echoGround = createMesh(new THREE.PlaneGeometry(ECHO_OBSERVATORY_AREA.width, ECHO_OBSERVATORY_AREA.depth), echoGroundMat);
     echoGround.rotation.x = -Math.PI / 2;
@@ -144,15 +153,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     echoGround.receiveShadow = true;
     echoGround.renderOrder = RENDER_ORDER.northDistrict;
     scene.add(echoGround);
-
-    groundMaterials.push(
-      { mat: farMat, day: WORLD_GROUND_GRASS_COLOR, night: 0x527d38 },
-      { mat: districtMat, day: 0xe0d8cc, night: 0xb4b0a4 },
-      { mat: plazaMat, day: 0xe8e7e4, night: 0xb0afa8 },
-      { mat: grassMat, day: 0xc0d0a0, night: 0x6a7a50 },
-      { mat: pavingMat, day: paving.dayColor, night: paving.nightColor },
-      { mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 },
-    );
+    groundMaterials.push({ mat: echoGroundMat, day: 0xb8c99d, night: 0x667256 });
   }
 
   function addPaths(): void {
@@ -195,7 +196,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
     addRoadSegment(2.0, MAIN_ROAD_WIDTH, -RING_ROAD_RADII.outer, 0, false, 'pavement');
     addRoadSegment(2.0, MAIN_ROAD_WIDTH, RING_ROAD_RADII.outer, 0, false, 'pavement');
 
-    ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
+    if (!isMinimalScene()) ECHO_OBSERVATORY_AREA.roadSegments.forEach((segment) => {
       const [x1, z1, x2, z2] = segment as [number, number, number, number];
       const dx = x2 - x1;
       const dz = z2 - z1;
@@ -214,7 +215,7 @@ export function createCitySurfaces(options: CitySurfaceOptions): void {
       road.userData.district = 'echo-observatory-road';
       scene.add(road);
     });
-    addLamps([[44, 0, -1.3], [52, 0, 1.3], [60, 0, -1.3], [66, 0, 1.3]]);
+    if (!isMinimalScene()) addLamps([[44, 0, -1.3], [52, 0, 1.3], [60, 0, -1.3], [66, 0, 1.3]]);
 
     const lineMat = createLayerMaterial({ color: 0xe8b34b, roughness: 0.6, metalness: 0.1 });
     trackPathMaterial(lineMat);

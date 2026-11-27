@@ -19,7 +19,7 @@ import { getNpcCatalogEntry, NPC_CATALOG } from './npcCatalog.js';
 import type { ClientMessage, Position, PublicUser, ServerMessage, User, Weather } from './types.js';
 import { authenticateAccount, getPublicWorks, queryPublicWorks } from './physicsLab.js';
 import { ACHIEVEMENT_REWARDS, BUILDING_PRICES, CONSUMABLE_ITEM_IDS, DAILY_CHECK_IN, DAILY_DEAL_DISCOUNT_PERCENT, DAILY_MISSIONS, DAILY_REWARDS, DAILY_SUPPLY_ORDERS, FILM_CITY_EXPERIENCE_PRICE, getProgressionCatalog, initShopCatalog, isBuildingGloballyUnlocked, isBuildingUnlockable, isMarketTradeableItemId, MARKET_RECIPES, MAX_ACTIVE_MARKET_LISTINGS, MAX_MARKET_LISTING_PRICE, MAX_MARKET_LISTING_QUANTITY, ONE_TIME_REWARDS, REPEATABLE_REWARDS, shanghaiDayKey, SHOP_PRODUCTS, verifiedAchievementReward } from './progression.js';
-import { getWeatherConfig, resetWorldConfig, setWeatherConfig, getThemeConfig, setThemeConfig } from './worldConfig.js';
+import { getWeatherConfig, resetWorldConfig, setWeatherConfig, getThemeConfig, setThemeConfig, getSceneMode } from './worldConfig.js';
 import { handleFireworksMessage, type FireworksClientMessage } from './fireworksService.js';
 import { FixedWindowRateLimiter } from './rateLimit.js';
 import { clientIp, corsHeaders, jsonSecurityHeaders, requestOriginAllowed } from './requestSecurity.js';
@@ -206,7 +206,7 @@ async function handle(client: Client, raw: string) {
     if (previous && previous.socket !== client.socket) previous.socket.close(4001, 'Signed in elsewhere');
     client.user = result.user; client.ready = true; clients.set(client.user.id, client);
     logger.info('Resident joined', { id: client.user.id, nickname: client.user.nickname, online: clients.size, ip: address });
-    send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, theme: getThemeConfig(), ...progressState(client.user.id) });
+    send(client.socket, { type: 'hello', token: result.token, user: publicUser(client.user), players: [...clients.values()].map((item) => publicUser(item.user)), houses: db.listHouses(), requests: db.listHousingRequestsForUser(client.user.id), weather: serverWeather, theme: getThemeConfig(), sceneMode: getSceneMode(), ...progressState(client.user.id) });
     send(client.socket, { type: 'city.updated', state: getCityState() });
     broadcast({ type: 'player.joined', player: publicUser(client.user) }, client.user.id); client.authInProgress = false; return;
   }
@@ -533,6 +533,7 @@ const http = createServer(async (request, response) => {
     getThemeConfig,
     setThemeConfig,
     broadcastTheme,
+    broadcastSceneMode: (minimal) => broadcast({ type: 'world.scene-mode', minimal }),
   })) return;
   if (await handleDeploySnapshot(request, response)) return;
   const headers = { ...jsonSecurityHeaders, ...corsHeaders(request) };
@@ -573,6 +574,10 @@ const http = createServer(async (request, response) => {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
     response.end(JSON.stringify({ items: npcEditCatalogItems }));
     return;
+  }
+  if (request.method === 'GET' && request.url === '/town-api/scene-mode') {
+    response.writeHead(200, { ...headers, 'cache-control': 'no-store' });
+    response.end(JSON.stringify(getSceneMode())); return;
   }
   if (request.method === 'GET' && request.url === '/town-api/version') {
     response.writeHead(200, { ...headers, 'cache-control': 'no-store' });

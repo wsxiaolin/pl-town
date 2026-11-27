@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MiniCity 管理后台</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/admin/styles.css" />
 </head>
 <body>
@@ -63,6 +64,10 @@
       <section class="view" data-page="world" hidden>
         <div class="two-column world-columns">
           <div class="world-col">
+            <article class="panel">
+              <header><h2>场景模式</h2></header>
+              <label class="world-switch"><input type="checkbox" id="worldMinimal" disabled /><span>一键极简</span></label>
+            </article>
             <section class="panel">
               <header><div><p class="eyebrow">WEATHER</p><h2>天气全局广播</h2></div><span class="status" id="worldWeatherState">—</span></header>
               <p class="hint">设置全服天气。开启自动广播后每分钟推送一次；关闭后只在登录或手动广播时下发。</p>

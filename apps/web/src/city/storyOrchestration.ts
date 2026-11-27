@@ -1,4 +1,5 @@
 import type { Scene } from 'three';
+import { isMinimalScene } from '../core/sceneMode';
 import type { CityDialogController } from '../adapters/ui/cityDialogController';
 import type { EchoStoryControllerOptions } from './echo/echoStoryController';
 import { createEchoSuspendedController, type EchoStoryHandle } from './echo/echoSuspendedController';
@@ -172,7 +173,7 @@ export function createStoryOrchestration(options: {
   // replaced expression non-foldable for rollup's DCE and the story chunk
   // could sneak back into the build. Absent-flag node contexts are expected
   // to throw ReferenceError (see global.d.ts) — the flag is a build contract.
-  if (!__ECHO_STORY_SUSPENDED__) {
+  if (!__ECHO_STORY_SUSPENDED__ && !isMinimalScene()) {
     void import('./echo/echoStoryController').then(({ createEchoStoryController }) => {
       if (echoDisposed) return;
       const real = createEchoStoryController(echoOptions);

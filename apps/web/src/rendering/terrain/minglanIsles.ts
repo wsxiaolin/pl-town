@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isMinimalScene } from '../../core/sceneMode';
 import { MINGLAN_ISLES } from '../../city/data/terrain/sea-minglan';
 import type { TerrainFeatureConfig } from '../../city/data/terrain/_types';
 
@@ -739,7 +740,7 @@ function buildIsland(
       seed + 200 + index * 10,
     );
   });
-  if (decor.lighthouse) {
+  if (decor.lighthouse && !isMinimalScene()) {
     const baseY = surfaceAt(decor.lighthouse.offsetX, decor.lighthouse.offsetZ) - PROP_SINK + 0.05;
     const x = centerX + decor.lighthouse.offsetX;
     const z = centerZ + decor.lighthouse.offsetZ;
