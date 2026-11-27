@@ -18,6 +18,7 @@ test.beforeEach(async ({ page }) => {
     if (path.endsWith('/city/config')) return route.fulfill({ json: config });
     if (path.endsWith('/city/state')) return route.fulfill({ json: state });
     if (path.endsWith('/city/votes')) return route.fulfill({ json: { epoch: state.epoch, projectIds: [] } });
+    if (path.endsWith('/scene-mode')) return route.fulfill({ json: { minimal: false } });
     if (path.endsWith('/telemetry/event')) return route.fulfill({ status: 204, body: '' });
     return route.continue();
   });
