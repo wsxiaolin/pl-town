@@ -8,8 +8,19 @@ const viewports = [
   { name: 'se-landscape', width: 667, height: 375 },
 ];
 
+test('minimal city boots with the map accessible and the activity panel hidden', async ({ page }) => {
+  await page.route('**/town-api/scene-mode', (route) => route.fulfill({ json: { minimal: true } }));
+  await waitForCityReady(page, 'minimal-activity');
+  await expect(page.locator('#activityPanelToggle')).toBeHidden();
+  await expect(page.locator('#activityPanelOverlay')).toBeHidden();
+  await page.locator('#mapToggle').click();
+  await expect(page.locator('#mapOverlay')).toHaveClass(/show/);
+});
+
 for (const viewport of viewports) {
   test(`activity panel works at ${viewport.name} size`, async ({ page }) => {
+    // Allow for both city boot and panel transitions on a software renderer.
+    test.setTimeout(150_000);
     await page.setViewportSize(viewport);
     await waitForCityReady(page, `activity-${viewport.name}`);
 
@@ -25,9 +36,10 @@ for (const viewport of viewports) {
           const boxOf = (selector: string) =>
             document.querySelector(selector)?.getBoundingClientRect() ?? null;
           const shell = boxOf('.activity-panel-shell');
-          const copy = boxOf('.activity-panel-hero-copy');
+          const copyElement = document.querySelector('.activity-panel-hero-copy');
+          const copy = copyElement?.getBoundingClientRect();
           const list = boxOf('#activityPanelList');
-          if (!shell || !copy || !list) {
+          if (!shell || !copyElement || !copy || !list) {
             return null;
           }
           return {
@@ -41,7 +53,7 @@ for (const viewport of viewports) {
               shell.left >= -1 &&
               shell.bottom <= window.innerHeight + 1 &&
               shell.right <= window.innerWidth + 1,
-            copyClipped: copy.scrollHeight > copy.clientHeight + 1,
+            copyClipped: copyElement.scrollHeight > copyElement.clientHeight + 1,
           };
         }),
         // Shell geometry settles only after the open transition advances a

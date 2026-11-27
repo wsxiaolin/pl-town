@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isMinimalScene } from '../core/sceneMode';
 import { gsap } from 'gsap';
 import type { BuildingEntity } from '../city/buildingEntity';
 import { restoreBuildingPresentation } from '../city/buildingDamage';
@@ -210,7 +211,7 @@ export function createCityConstructionScene(options: {
       }
     }
     // Retain existing visuals until a trusted snapshot can replace them.
-    if (config && state && state.configVersion === config.version) {
+    if (!isMinimalScene() && config && state && state.configVersion === config.version) {
       const items: Item[] = [];
       const built = new Set(state.projects.filter((project) => project.built).map((project) => project.id));
       for (const project of config.projects) {

@@ -1,6 +1,7 @@
 import { RESIDENT_TOKEN_KEY as TOKEN_KEY } from '../core/residentToken';
 import { setTelemetryUser, trackClientMessage, trackEvent } from '../core/telemetryClient';
 import { isWeather, type Weather } from '../city/weather';
+import { syncSceneMode } from '../core/sceneMode';
 import { applyCityState, refreshCityGovernanceSession } from '../city/cityGovernanceClient';
 
 export type NetPosition = { x: number; y: number; z: number; rotation?: number };
@@ -71,7 +72,8 @@ export type NetTheme = { id: string };
 export type NetFireworksMessage = { type: string; [key: string]: unknown };
 
 type ServerMessage =
-  | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather; theme?: NetTheme }
+  | { type: 'hello'; token?: string; user?: NetUser; players?: NetUser[]; houses?: House[]; requests?: HousingRequest[]; progress?: NetPlayerProgress; catalog?: NetProgressionCatalog; weather?: NetWeather; theme?: NetTheme; sceneMode?: { minimal: boolean } }
+  | { type: 'world.scene-mode'; minimal: boolean }
   | { type: 'player.joined'; player: NetUser }
   | { type: 'player.updated'; player: NetUser }
   | { type: 'player.moved'; playerId: string; position: NetPosition }
@@ -154,6 +156,8 @@ export class MultiplayerClient {
   private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => this.connect(), 2500); }
   private handle(raw: string) {
     let message: ServerMessage; try { message = JSON.parse(raw) as ServerMessage; } catch { return; }
+    if (message.type === 'world.scene-mode') return syncSceneMode(message.minimal);
+    if (message.type === 'hello') syncSceneMode(message.sceneMode?.minimal);
     if (message.type === 'hello') { if (message.token) localStorage.setItem(TOKEN_KEY, message.token); refreshCityGovernanceSession(); this.authorized = true; this.user = message.user ?? null; setTelemetryUser(message.user?.id ?? null); this.callbacks.connection?.('connected'); this.callbacks.connected?.(message.user as NetUser, message.players ?? [], message.houses ?? []); this.callbacks.requests?.(message.requests ?? []); this.callbacks.progress?.(message.progress as NetPlayerProgress, message.catalog as NetProgressionCatalog); if (isWeather(message.weather)) this.callbacks.weather?.(message.weather); this.callbacks.theme?.(message.theme ?? { id: 'default' }); trackEvent('player.connect', { nickname: message.user?.nickname }); }
     else if (message.type === 'player.joined') this.callbacks.playerJoined?.(message.player);
     else if (message.type === 'player.updated') this.callbacks.playerUpdated?.(message.player);

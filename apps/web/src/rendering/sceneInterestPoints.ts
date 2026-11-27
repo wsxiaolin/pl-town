@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isMinimalScene } from '../core/sceneMode';
 import { ECHO_OBSERVATORY_AREA } from '../city/data/cityConfig';
 import { CHATRUINS_STORY_POINT_IDS, ZOO_STORY_POINT_IDS, type SceneInterestPointId } from '../gameplay/world/sceneInteractions';
 export type { SceneInterestPointId };
@@ -378,6 +379,21 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
     },
   };
   const westBeach = createWestBeach(options);
+  function disposeCoast() {
+    westBeach.entity.object.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.userData.dynamicMaterial instanceof THREE.Material) {
+        child.userData.dynamicMaterial.dispose();
+      }
+    });
+    materialCache.forEach((material) => material.dispose());
+    materialCache.clear();
+  }
+  if (isMinimalScene()) return {
+    entities: new Map(), raycastTargets: [], obstacleRoots: [],
+    update: westBeach.update, setWaterDaylight: westBeach.setDaylight,
+    setBeachEncounterPhase() {}, setWellPhase() {}, setActiveStoryPoints() {},
+    dispose: disposeCoast,
+  };
   const catCafeIceWall = createCatCafeIceWall(options);
   // 年份群岛站牌（T4b-c2，docs/t4b-ride-plan.md §2 编辑④）：与 yearTownTransit
   // 同批装配/同批销毁；实体并入 entities + baseRaycastTargets（非 story、
@@ -488,18 +504,12 @@ export function createSceneInterestPoints(input: SceneInterestPointOptionsInput)
       );
     },
     dispose() {
-      westBeach.entity.object.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.userData.dynamicMaterial instanceof THREE.Material) {
-          child.userData.dynamicMaterial.dispose();
-        }
-      });
       // 站牌摘除场景节点（生命周期对齐 yearTownTransit；几何/材质由
       // ResourcePool 与下方材质缓存既有路径释放）。
       stationSigns.dispose();
       zoo.dispose();
       chatRuins.dispose();
-      materialCache.forEach((material) => material.dispose());
-      materialCache.clear();
+      disposeCoast();
     },
   };
 }

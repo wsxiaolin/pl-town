@@ -503,6 +503,8 @@ async function reviewNpcRequest(id, action) {
 
 async function loadWorld() {
   const world = await api('/world');
+  $('#worldMinimal').checked = world.sceneMode.minimal;
+  $('#worldMinimal').disabled = false;
   const weather = world.weather || {};
   state.worldWeather = weather.value || '';
   state.worldWeatherAuto = Boolean(weather.autoBroadcast);
@@ -772,6 +774,19 @@ $('#worldWeatherSelect').addEventListener('change', (event) => { state.worldWeat
 $('#worldWeatherAuto').addEventListener('change', (event) => { state.worldWeatherAutoDraft = event.target.checked; renderWorldWeather(); });
 $('#worldBuildingSelect').addEventListener('change', (event) => selectWorldBuilding(event.target.value));
 $('#worldWeatherApply').addEventListener('click', () => void applyWorldWeather());
+$('#worldMinimal').addEventListener('change', async (event) => {
+  const toggle = event.currentTarget;
+  const minimal = toggle.checked;
+  toggle.disabled = true;
+  try {
+    const saved = await api('/world/scene-mode', { method: 'POST', body: JSON.stringify({ minimal }) });
+    toggle.checked = saved.minimal;
+    showNotice(saved.minimal ? '已开启全服极简模式' : '已关闭全服极简模式', true);
+  } catch (error) {
+    toggle.checked = !minimal;
+    showNotice(error.message);
+  } finally { toggle.disabled = false; }
+});
 $('#worldBuildingsSave').addEventListener('click', () => void saveWorldBuildings());
 $('#worldBuildingsReset').addEventListener('click', resetWorldBuildings);
 $('#worldShopAdd').addEventListener('click', () => shopEditor.addRow());

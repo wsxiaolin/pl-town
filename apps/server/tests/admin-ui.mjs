@@ -132,6 +132,14 @@ try {
   await page.locator('[data-view="world"]').click();
   await page.locator('#worldBuildingSelect').waitFor();
   await page.waitForFunction(() => document.querySelectorAll('#worldBuildingSelect option').length > 0);
+  for (const minimal of [true, false]) {
+    const [saved] = await Promise.all([
+      page.waitForResponse((response) => response.url() === `${origin}/admin/api/world/scene-mode`),
+      page.locator('#worldMinimal').setChecked(minimal),
+    ]);
+    const current = await context.request.get(`${origin}/town-api/scene-mode`);
+    if (!saved.ok() || (await current.json()).minimal !== minimal) throw new Error('Scene mode switch must save on a single click');
+  }
   await page.locator('#worldMap .world-marker').first().waitFor();
   const worldMarkerCount = await page.locator('#worldMap .world-marker').count();
   const worldOptionCount = await page.locator('#worldBuildingSelect option').count();

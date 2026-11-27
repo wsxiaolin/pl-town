@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isMinimalScene } from '../core/sceneMode';
 import type { SceneInterestPointEntity } from './sceneInterestPoints';
 import { createAnimatedWaterSurface } from './animatedWater';
 import { WEST_BEACH, shorelineX, westBeachWaterlineMaxX } from '../city/data/cityConfig';
@@ -383,6 +384,19 @@ export function createWestBeach(options: BeachOptions): {
       )
     : null;
   if (shoreSurf) object.add(shoreSurf.mesh);
+  options.scene.add(object);
+  const coast = {
+    entity: { id: 'west-beach' as const, object, interactionPosition: WEST_BEACH_EVENT_POSITION.clone() },
+    update(elapsedSeconds: number) {
+      waterSurface?.update(elapsedSeconds);
+      shoreSurf?.update(elapsedSeconds);
+    },
+    setDaylight(value: number, instant = false) {
+      waterSurface?.setDaylight(value, instant);
+      shoreSurf?.setDaylight(value, instant);
+    },
+  };
+  if (isMinimalScene()) return { ...coast, setPhase() {} };
   const palms = [-1, 1].map((side) => {
     const palm = new THREE.Group();
     addMesh(palm, options, new THREE.CylinderGeometry(0.09, 0.14, 1.8, 9), { color: 0x765139, roughness: 0.9, tex: 'wood', rx: 1, ry: 2 }, [0, 0.9, 0]);
@@ -426,10 +440,8 @@ export function createWestBeach(options: BeachOptions): {
   rewardCard.visible = false;
   const cardStripe = addMesh(object, options, new THREE.BoxGeometry(0.35, 0.07, 0.052), { color: 0xe0c06b, roughness: 0.48, metalness: 0.25 }, [-40.15, 1.18, 11.5]);
   cardStripe.visible = false;
-  options.scene.add(object);
-
   return {
-    entity: { id: 'west-beach', object, interactionPosition: WEST_BEACH_EVENT_POSITION.clone() },
+    ...coast,
     update(elapsedSeconds) {
       bismarck.position.z = -4 + Math.sin(elapsedSeconds * 0.16) * 12;
       hipper.position.z = 25 - Math.sin(elapsedSeconds * 0.13) * 9;
@@ -439,8 +451,7 @@ export function createWestBeach(options: BeachOptions): {
         bird.position.z = 10 + Math.cos(elapsedSeconds * 0.3 + index * 2.1) * 25;
         bird.rotation.y = elapsedSeconds * 0.25 + index;
       }
-      if (waterSurface) waterSurface.update(elapsedSeconds);
-      if (shoreSurf) shoreSurf.update(elapsedSeconds);
+      coast.update(elapsedSeconds);
       if (seaGod.visible) seaGod.position.y = Math.sin(elapsedSeconds * 2.1) * 0.035;
       if (rewardCard.visible) {
         rewardCard.rotation.y = elapsedSeconds * 0.8;
@@ -451,10 +462,6 @@ export function createWestBeach(options: BeachOptions): {
       seaGod.visible = phase !== 'hidden';
       rewardCard.visible = phase === 'reward';
       cardStripe.visible = phase === 'reward';
-    },
-    setDaylight(value, instant = false) {
-      waterSurface?.setDaylight(value, instant);
-      shoreSurf?.setDaylight(value, instant);
     },
   };
 }

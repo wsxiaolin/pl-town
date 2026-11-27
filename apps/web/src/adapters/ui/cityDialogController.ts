@@ -70,6 +70,7 @@ export interface CityDialogControllerOptions {
   performQuestAction: (action: NpcQuestAction, at: number) => QuestTransition;
   isConstructionPending?: (buildingId: string) => boolean;
   onNpcInteracted: (npcId: string) => void;
+  hasNavigationTarget?: (buildingId: string) => boolean;
   onDialogueAction?: (action: string, sourceId: string) => void;
   pauseNpcs: () => void;
   resumeNpcs: () => void;
@@ -195,7 +196,9 @@ export function createCityDialogController(options: CityDialogControllerOptions)
     setIdentityField(document, 'npcName', node.speaker ?? activeNpc.profile.name);
     renderLine(node.text);
     const visitor = options.document.defaultView?.localStorage.getItem('minicityUser') || '旅人';
-    const dialogOptions = node.options.map((option) => ({
+    const visibleOptions = node.options.filter(({ action }) =>
+      !action?.startsWith('teleport:') || options.hasNavigationTarget?.(action.slice('teleport:'.length)) !== false);
+    const dialogOptions = visibleOptions.map((option) => ({
       text: option.text,
       onPick: (selectedButton: HTMLButtonElement) => {
         const sourceNpc = activeNpc;

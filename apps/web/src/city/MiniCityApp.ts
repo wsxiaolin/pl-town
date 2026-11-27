@@ -72,6 +72,7 @@ import { createFireworksPlaykit, fireworksDebug, fireworksHandlers, type Firewor
 import { readQuestProgressView } from './cityQuestProgress';
 import { assembleCityWorld } from './cityWorldAssembly';
 import { createCityHudPanels, type CityHudPanels } from './cityHudPanels';
+import { isMinimalScene } from '../core/sceneMode';
 import { createCityRuntimeLifecycle } from './cityRuntimeLifecycle';
 import { warmupFirstFrame } from '../rendering/firstFrameWarmup';
 import { forceRevealBootScreen } from '../adapters/ui/momentSplashView';
@@ -673,6 +674,7 @@ function init() {
     getQuestAction: (npcId) => questRuntime.getNpcAction(npcId, readQuestProgressView(multiplayerHousing)),
     performQuestAction: (action, at) => questRuntime.performNpcAction(action, at),
     onNpcInteracted: (npcId) => interactionTracker.recordNpcInteraction(npcId),
+    hasNavigationTarget: (id) => !isMinimalScene() || buildings.some((building) => building.id === id),
     onDialogueAction: (action) => {
       if (action.startsWith('teleport:')) mapController?.teleportToBuilding(action.slice(9));
       if (action.startsWith('open-url:')) window.location.href = action.slice(9);
@@ -700,7 +702,7 @@ function init() {
   });
   graphics.setWeatherVisual(weatherEffect);
   weatherEffect.set(graphics.weather.get());
-  fireworksPlaykit = createFireworksPlaykit({
+  fireworksPlaykit = isMinimalScene() ? null : createFireworksPlaykit({
     scene, view, camera: cameraController, movement: movementInputController, decorHelpers: graphics.mesh, document,
     getViewportHeight: () => renderer.domElement.height, getIsNight: () => isNight, getDialogs: () => cityDialogs, signal: lifecycle.signal,
     getMultiplayer: () => multiplayerHousing, showToast: showUnlockToast, registry: buildingFeatureRegistry,
@@ -736,7 +738,7 @@ function init() {
     setWellPhaseVisual: (phase) => sceneInterestPoints?.setWellPhase(phase),
     setBeachEncounterPhase: (phase) => sceneInterestPoints?.setBeachEncounterPhase(phase),
   });
-  iceKingFeature = createIceKingFeatureExperience({
+  iceKingFeature = isMinimalScene() ? null : createIceKingFeatureExperience({
     scene, makeCharacter: (head, body) => npcSystem.makeCharacter(head, body),
     makeMaterial: (parameters) => resources.material({ kind: 'ice-sanctum', ...parameters }, () => stdMat(parameters)),
     getCursor: () => cursorChar, dialogs: () => cityDialogs,

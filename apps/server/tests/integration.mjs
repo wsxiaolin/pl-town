@@ -458,6 +458,23 @@ try {
   const worldPayload = await worldState.json();
   if (!worldState.ok || worldPayload.weather?.value !== 'clear' || typeof worldPayload.weather?.autoBroadcast !== 'boolean') throw new Error('Admin world GET must expose the persisted weather config');
   const yearTownCatalog = worldPayload.yearTownCatalog;
+  const sceneUrl = `${adminOrigin}/town-api/scene-mode`;
+  const writeMode = (minimal, authHeaders) => fetch(`${adminBase}/world/scene-mode`, {
+    method: 'POST', headers: { origin: adminOrigin, 'content-type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ minimal }),
+  });
+  const adminHeaders = { cookie, 'x-csrf-token': loginPayload.csrf };
+  const initialScene = await fetch(sceneUrl);
+  assert.equal(initialScene.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await initialScene.json(), { minimal: false });
+  assert.deepEqual(alice.hello.sceneMode, { minimal: false });
+  assert.deepEqual(worldPayload.sceneMode, { minimal: false });
+  assert.equal((await writeMode(true, {})).status, 401);
+  assert.equal((await writeMode(true, { cookie })).status, 403);
+  assert.deepEqual(await (await writeMode(true, adminHeaders)).json(), { minimal: true });
+  assert.equal((await writeMode('false', adminHeaders)).status, 400);
+  assert.deepEqual(await (await fetch(sceneUrl)).json(), { minimal: true });
+  await waitFor(alice, 'world.scene-mode', (message) => message.minimal === true);
   if (!Array.isArray(yearTownCatalog) || yearTownCatalog.length !== 115) throw new Error('Admin world GET must expose the 115-entry year-town catalog');
   const townSample = yearTownCatalog.find((entry) => entry.id === 'yt-w2022-01');
   if (!townSample || townSample.townId !== 'island-2022' || townSample.num !== '2201' || typeof townSample.x !== 'number' || typeof townSample.z !== 'number' || typeof townSample.storyLocked !== 'boolean') throw new Error('Admin world year-town catalog entries must keep the YearTownCatalogEntry structure');
@@ -1235,6 +1252,8 @@ try {
   });
   const probeBackupPayload = await probeBackup.json();
   if (!probeBackup.ok || !probeBackupPayload.backup?.name) throw new Error('Integration setup must create a backup carrying the probe shop catalog');
+  assert.deepEqual(await (await writeMode(false, adminHeaders)).json(), { minimal: false });
+  assert.deepEqual(await (await fetch(sceneUrl)).json(), { minimal: false });
   // A catalog that drops story-referenced items is accepted, but the handler
   // names them so the console can warn the operator.
   const storyDrop = await fetch(`${adminBase}/world/shop`, {
@@ -1270,6 +1289,8 @@ try {
     throw new Error('Restoring a backup must re-apply the persisted shop catalog');
   }
   const restoredShopClient = await connect('Alice');
+  assert.deepEqual(restoredShopClient.hello.sceneMode, { minimal: true });
+  assert.deepEqual(await (await fetch(sceneUrl)).json(), { minimal: true });
   if (restoredShopClient.hello.catalog?.products?.beef?.unitPrice !== 123) {
     throw new Error('A freshly connected client must receive the restored shop catalog');
   }

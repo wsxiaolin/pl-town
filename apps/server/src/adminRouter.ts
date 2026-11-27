@@ -19,7 +19,7 @@ import { STORY_CATALOG, getStorySummary, getStoryTopology } from './storyCatalog
 import { NPC_CATALOG } from './npcCatalog.js';
 import { YEAR_TOWN_CATALOG } from './data/yearTownCatalog.js';
 import { applyShopCatalog, resolveBuildingUnlockStates } from './progression.js';
-import { getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, getThemeConfig, setThemeConfig, sanitizeThemeId, type ThemeConfig, type WeatherConfig } from './worldConfig.js';
+import { getSceneMode, setSceneMode, getShopProducts, sanitizeShopProducts, sanitizeOverrides, setBuildingOverrides, setShopProducts, getThemeConfig, setThemeConfig, sanitizeThemeId, type ThemeConfig, type WeatherConfig } from './worldConfig.js';
 import { missingStoryReferencedItems, SHOP_NAME_MAX, SHOP_PRICE_MAX, SHOP_PRODUCT_MAX } from './shopCatalog.js';
 import { handleTelemetryAdmin } from './telemetry.js';
 import { sanitizeHouseName, validateNickname } from './textLimits.js';
@@ -42,6 +42,7 @@ type Context = {
   getThemeConfig: () => ThemeConfig;
   setThemeConfig: (config: ThemeConfig) => ThemeConfig;
   broadcastTheme: () => void;
+  broadcastSceneMode: (minimal: boolean) => void;
 };
 
 type AdminAsset = { type: string; body: Buffer };
@@ -176,6 +177,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     respond(response, 200, {
       weather: context.getWeatherConfig(),
       theme: context.getThemeConfig(),
+      sceneMode: getSceneMode(),
       states: resolveBuildingUnlockStates(),
       yearTownCatalog: YEAR_TOWN_CATALOG,
       shop: getShopProducts(),
@@ -211,6 +213,14 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
     const config = context.setWeatherConfig({ value: weather, autoBroadcast });
     db.recordAdminAudit(principal.actor, 'world.weather.update', undefined, { weather, autoBroadcast });
     respond(response, 200, { ok: true, weather: config }); return true;
+  }
+  if (request.method === 'POST' && path === '/admin/api/world/scene-mode') {
+    const { minimal } = await readJson(request, 1_024);
+    if (typeof minimal !== 'boolean') { error(response, 400, 'INVALID_SCENE_MODE', '极简模式需要布尔值'); return true; }
+    setSceneMode(minimal);
+    db.recordAdminAudit(principal.actor, 'world.scene-mode.update', undefined, { minimal });
+    context.broadcastSceneMode(minimal);
+    respond(response, 200, { minimal }); return true;
   }
   if (request.method === 'POST' && path === '/admin/api/world/theme') {
     const body = await readJson(request, 1_024);
